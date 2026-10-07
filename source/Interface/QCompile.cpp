@@ -61,7 +61,8 @@ void QCompile::DoDataExchange(CDataExchange* pDX) {
 	//}}AFX_DATA_MAP
 	Game *pGame = pQMainFrame->GetDeskTopDocument()->GetGame();
 	int numUtils = pGame->GetNumUtils();
-	for(int i = 0; i < numUtils - 1; i++) {
+	int i;
+	for(i = 0; i < numUtils - 1; i++) {
 		DDX_Check(pDX, IDC_CMPL_UTIL1 + i, m_bUtils[i]);
 	}
 	DDX_Check(pDX, IDC_CMPL_GAME, m_bUtils[i]);

@@ -262,7 +262,7 @@ BOOL CSizableMiniDockFrameWnd::PreCreateWindow(CREATESTRUCT &cs)
 
 
 //-------------------------------------------------------------------
-UINT CSizableMiniDockFrameWnd::OnNcHitTest(CPoint point)
+LRESULT CSizableMiniDockFrameWnd::OnNcHitTest(CPoint point)
 // over-ridden so we can find out the type of the bar in this window
 //-------------------------------------------------------------------
 {
@@ -290,7 +290,6 @@ void CSizableMiniDockFrameWnd::OnNcLButtonDown(UINT nHitTest, CPoint point)
 		else if (nHitTest == HTSYSMENU)
 		{
 			// do the system menu - ie give move,size,hide, etc options as would Win95.						
-			InvertSysMenu();
 			CPoint pt(0,0);
 			ClientToScreen(&pt);
 			CRect rcSysIcon;
@@ -300,7 +299,6 @@ void CSizableMiniDockFrameWnd::OnNcLButtonDown(UINT nHitTest, CPoint point)
 			
 			CMenu * pSysMenu = GetSystemMenu(FALSE);
 			int nCmd = pSysMenu->TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD, pt.x, pt.y, this, & rcSysIcon);
-			InvertSysMenu();
 			if (nCmd != 0)
 			{
 				SendMessage(WM_SYSCOMMAND, nCmd, 0);
@@ -1432,7 +1430,7 @@ LRESULT CSizeDockBar::OnSizeParent(WPARAM wParam, LPARAM lParam)
 	
 	// construct new array of bars that are hidden in this dockbar
 	m_arrHiddenBars.RemoveAll();
-	for (i = 0; i < m_arrBars.GetSize(); i++)
+	for (int i = 0; i < m_arrBars.GetSize(); i++)
     {
 		CControlBar* pBar = GetDockedControlBar(i);
 		if (pBar != NULL && ! pBar->IsVisible())

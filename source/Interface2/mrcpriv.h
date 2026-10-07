@@ -247,7 +247,7 @@ protected:
     afx_msg void OnSize(UINT nType, int cx, int cy);
     afx_msg void OnClose();
 	afx_msg void OnNcLButtonDown(UINT nHitTest, CPoint pt);
-	afx_msg UINT OnNcHitTest(CPoint point);
+	afx_msg LRESULT OnNcHitTest(CPoint point);
 	afx_msg int OnMouseActivate(CWnd* pDesktopWnd, UINT nHitTest, UINT message);
     afx_msg void OnGetMinMaxInfo(MINMAXINFO FAR* lpMMI); 
 //}}AFX_MSG

@@ -153,7 +153,7 @@ QDrawMGL::RealizePal(void) {
 			bmi->bmiColors[i].rgbBlue = pal[i].blue;
 		}
 
-		for(i = 0; i < numBufs; i++) {
+		for(int i = 0; i < numBufs; i++) {
 			MGL_setPalette(drawDC[i], pal, 256, 0);
 			MGL_realizePalette(drawDC[i], 256, 0, false);
 		}

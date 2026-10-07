@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{DAF54D8A-B534-5049-89A3-5CC01938FA20}</ProjectGuid>
+    <RootNamespace>Qoole</RootNamespace>
+    <Keyword>MFCProj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseOfMfc>Dynamic</UseOfMfc>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseOfMfc>Dynamic</UseOfMfc>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(SolutionDir)Exec\</OutDir>
+    <IntDir>$(SolutionDir)Build\$(ProjectName)\$(Configuration)\</IntDir>
+    <TargetName>Qoole99D</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(SolutionDir)Exec\</OutDir>
+    <IntDir>$(SolutionDir)Build\$(ProjectName)\$(Configuration)\</IntDir>
+    <TargetName>Qoole99</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;__MSC__;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;Basic;Objects;Render;Game;Interface;Interface2;Qoole;res;Interface\Glide3;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ConformanceMode>false</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>libc.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+    </Link>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0409</Culture>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;__MSC__;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;Basic;Objects;Render;Game;Interface;Interface2;Qoole;res;Interface\Glide3;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ConformanceMode>false</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>libc.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+    </Link>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0409</Culture>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Qoole\Qoole.cpp" />
+    <ClCompile Include="Qoole\QooleDoc.cpp" />
+    <ClCompile Include="Qoole\QooleOp.cpp" />
+    <ClCompile Include="Interface\QConf2DV.cpp" />
+    <ClCompile Include="Interface\QConf3DV.cpp" />
+    <ClCompile Include="Interface\QConfDrw.cpp" />
+    <ClCompile Include="Interface\QConfGen.cpp" />
+    <ClCompile Include="Interface\QConfGms.cpp" />
+    <ClCompile Include="Interface\QConfSht.cpp" />
+    <ClCompile Include="Interface\QPropCnt.cpp" />
+    <ClCompile Include="Interface\QPropEnt.cpp" />
+    <ClCompile Include="Interface\QPropLst.cpp" />
+    <ClCompile Include="Interface\QPropMsc.cpp" />
+    <ClCompile Include="Interface\QPropPg.cpp" />
+    <ClCompile Include="Interface\QPropSht.cpp" />
+    <ClCompile Include="Interface\QPropSrf.cpp" />
+    <ClCompile Include="Interface\QPropTex.cpp" />
+    <ClCompile Include="Interface\QDraw.cpp" />
+    <ClCompile Include="Interface\QDrawDX.cpp" />
+    <ClCompile Include="Interface\QDrawGld.cpp" />
+    <ClCompile Include="Interface\QDrawMFC.cpp" />
+    <ClCompile Include="Interface\QDrawMGL.cpp" />
+    <ClCompile Include="Interface\QDrawOGL.cpp" />
+    <ClCompile Include="Interface\QDrawVir.cpp" />
+    <ClCompile Include="Interface\QColrWnd.cpp" />
+    <ClCompile Include="Interface\QCompile.cpp" />
+    <ClCompile Include="Interface\QCtrlBar.cpp" />
+    <ClCompile Include="Interface\QEntSel.cpp" />
+    <ClCompile Include="Interface\QMainFrm.cpp" />
+    <ClCompile Include="Interface\QPrefbVw.cpp" />
+    <ClCompile Include="Interface\QPrefMgr.cpp" />
+    <ClCompile Include="Interface\QProcWnd.cpp" />
+    <ClCompile Include="Interface\QSetColor.cpp" />
+    <ClCompile Include="Interface\QTexDraw.cpp" />
+    <ClCompile Include="Interface\QTexMgr.cpp" />
+    <ClCompile Include="Interface\QTexRep.cpp" />
+    <ClCompile Include="Interface\QTexView.cpp" />
+    <ClCompile Include="Interface\QTrView.cpp" />
+    <ClCompile Include="Interface\QVFrame.cpp" />
+    <ClCompile Include="Interface\QView.cpp" />
+    <ClCompile Include="Interface2\CreditStatic.cpp" />
+    <ClCompile Include="Interface2\DirDialog.cpp" />
+    <ClCompile Include="Interface2\dragdock.cpp" />
+    <ClCompile Include="Interface2\framewnd.cpp" />
+    <ClCompile Include="Interface2\mdifloat.cpp" />
+    <ClCompile Include="Interface2\ProgressWnd.cpp" />
+    <ClCompile Include="Interface2\sizecont.cpp" />
+    <ClCompile Include="Interface2\sizedock.cpp" />
+    <ClCompile Include="Interface2\ToolBarEx.cpp" />
+    <ClCompile Include="Game\HalfLife.cpp" />
+    <ClCompile Include="Game\Heretic2.cpp" />
+    <ClCompile Include="Game\Hexen2.cpp" />
+    <ClCompile Include="Game\MapIO.cpp" />
+    <ClCompile Include="Game\paks2wad.cpp" />
+    <ClCompile Include="Game\Quake.cpp" />
+    <ClCompile Include="Game\Quake2.cpp" />
+    <ClCompile Include="Game\Sin.cpp" />
+    <ClCompile Include="Render\Clip.cpp" />
+    <ClCompile Include="Render\Selector.cpp" />
+    <ClCompile Include="Render\View.cpp" />
+    <ClCompile Include="Objects\Entity.cpp" />
+    <ClCompile Include="Objects\EntList.cpp" />
+    <ClCompile Include="Objects\Game.cpp" />
+    <ClCompile Include="Objects\Geometry.cpp" />
+    <ClCompile Include="Objects\Objects.cpp" />
+    <ClCompile Include="Objects\Texture.cpp" />
+    <ClCompile Include="Basic\LCommon.cpp" />
+    <ClCompile Include="Basic\Math3D.cpp" />
+    <ClCompile Include="res\StdAfx.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Qoole\Qoole.h" />
+    <ClInclude Include="Qoole\QooleDoc.h" />
+    <ClInclude Include="Qoole\QooleOp.h" />
+    <ClInclude Include="Qoole\QVersion.h" />
+    <ClInclude Include="Interface\QConf2DV.h" />
+    <ClInclude Include="Interface\QConf3DV.h" />
+    <ClInclude Include="Interface\QConfDrw.h" />
+    <ClInclude Include="Interface\QConfGen.h" />
+    <ClInclude Include="Interface\QConfGms.h" />
+    <ClInclude Include="Interface\QConfSht.h" />
+    <ClInclude Include="Interface\QPropCnt.h" />
+    <ClInclude Include="Interface\QPropEnt.h" />
+    <ClInclude Include="Interface\QPropLst.h" />
+    <ClInclude Include="Interface\QPropMsc.h" />
+    <ClInclude Include="Interface\QPropPg.h" />
+    <ClInclude Include="Interface\QPropSht.h" />
+    <ClInclude Include="Interface\QPropSrf.h" />
+    <ClInclude Include="Interface\QPropTex.h" />
+    <ClInclude Include="Interface\QDraw.h" />
+    <ClInclude Include="Interface\QDrawDX.h" />
+    <ClInclude Include="Interface\QDrawGld.h" />
+    <ClInclude Include="Interface\QDrawMFC.h" />
+    <ClInclude Include="Interface\QDrawMGL.h" />
+    <ClInclude Include="Interface\QDrawOGL.h" />
+    <ClInclude Include="Interface\QColrWnd.h" />
+    <ClInclude Include="Interface\QCompile.h" />
+    <ClInclude Include="Interface\QCtrlBar.h" />
+    <ClInclude Include="Interface\QEntSel.h" />
+    <ClInclude Include="Interface\QMainFrm.h" />
+    <ClInclude Include="Interface\QPrefbVw.h" />
+    <ClInclude Include="Interface\QPrefMgr.h" />
+    <ClInclude Include="Interface\QProcWnd.h" />
+    <ClInclude Include="Interface\QSetColor.h" />
+    <ClInclude Include="Interface\QTexDraw.h" />
+    <ClInclude Include="Interface\QTexMgr.h" />
+    <ClInclude Include="Interface\QTexRep.h" />
+    <ClInclude Include="Interface\QTexView.h" />
+    <ClInclude Include="Interface\QTrView.h" />
+    <ClInclude Include="Interface\QVFrame.h" />
+    <ClInclude Include="Interface\QView.h" />
+    <ClInclude Include="Interface2\CreditStatic.h" />
+    <ClInclude Include="Interface2\DirDialog.h" />
+    <ClInclude Include="Interface2\mrcext.h" />
+    <ClInclude Include="Interface2\mrcpriv.h" />
+    <ClInclude Include="Interface2\mrcresrc.h" />
+    <ClInclude Include="Interface2\mrcstafx.h" />
+    <ClInclude Include="Interface2\ProgressWnd.h" />
+    <ClInclude Include="Interface2\ToolBarEx.h" />
+    <ClInclude Include="Game\HalfLife.h" />
+    <ClInclude Include="Game\Heretic2.h" />
+    <ClInclude Include="Game\Hexen2.h" />
+    <ClInclude Include="Game\Mapio.h" />
+    <ClInclude Include="Game\Quake.h" />
+    <ClInclude Include="Game\Quake2.h" />
+    <ClInclude Include="Game\Sin.h" />
+    <ClInclude Include="Render\Clip.h" />
+    <ClInclude Include="Render\Selector.h" />
+    <ClInclude Include="Render\View.h" />
+    <ClInclude Include="Objects\Entity.h" />
+    <ClInclude Include="Objects\EntList.h" />
+    <ClInclude Include="Objects\Game.h" />
+    <ClInclude Include="Objects\Geometry.h" />
+    <ClInclude Include="Objects\Objects.h" />
+    <ClInclude Include="Objects\Texture.h" />
+    <ClInclude Include="Basic\LCommon.h" />
+    <ClInclude Include="Basic\List.h" />
+    <ClInclude Include="Basic\Math3D.h" />
+    <ClInclude Include="Resource.h" />
+    <ClInclude Include="res\StdAfx.h" />
+    <ClInclude Include="res\Timer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Qoole.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Interface2\mrcext.rc1" />
+    <None Include="Qoole.rc2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\pviewico.bmp" />
+    <Image Include="res\qcredits.bmp" />
+    <Image Include="res\Qoole.ico" />
+    <Image Include="res\Scissors.bmp" />
+    <Image Include="res\tbalign.bmp" />
+    <Image Include="res\tbcmpl.bmp" />
+    <Image Include="res\tbedit.bmp" />
+    <Image Include="res\tbfile.bmp" />
+    <Image Include="res\tbgroup.bmp" />
+    <Image Include="res\tbguide.bmp" />
+    <Image Include="res\tbmain.bmp" />
+    <Image Include="res\tbmode.bmp" />
+    <Image Include="res\tbrendr.bmp" />
+    <Image Include="res\tbwnds.bmp" />
+    <Image Include="res\tdown1.bmp" />
+    <Image Include="res\tleft1.bmp" />
+    <Image Include="res\tright1.bmp" />
+    <Image Include="res\tup1.bmp" />
+    <Image Include="res\tviewico.bmp" />
+    <Image Include="res\workspce.bmp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

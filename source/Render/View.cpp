@@ -918,7 +918,7 @@ View::DisplayManipPts(void) const {
 //===== Solid Rendering: Z Buffer =====
 
 // Hack.
-static renderTMap = false;
+static int renderTMap = false;
 static Matrix44 svTrans;
 
 static void

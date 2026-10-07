@@ -3,6 +3,13 @@ This is the complete source code for Qoole 99 v0.99.
 The projects have been tested with Visual C++ 6.0, and Intel C/C++ Compiler 4.5
 (but the last one is not needed, you can compile with Visual C++ 6.0 compiler).
 
+Building with Visual Studio 2026:
+Open source/Qoole.slnx (requires the "Desktop development with C++" workload
+and the "C++ MFC for latest build tools (x86 & x64)" component). Build the
+x86 platform; Qoole99.exe (Qoole99D.exe for Debug) and the QDraw*.dll renderer
+plugins are written to source/Exec. The original VC6 .dsp/.dsw files are kept
+for reference.
+
 The code is all licensed under the terms of the GPL (gnu public license).
 You should read the entire license, but the gist of it is that you can do
 anything you want with the code, including sell your new version. The catch

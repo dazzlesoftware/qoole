@@ -1774,7 +1774,8 @@ void QMainFrame::DestroyPopupMenus(void) {
 }
 
 void QMainFrame::AddMenuEntry(CMenu &menu, char *text, int type, char *data) {
-	for(int i = 0; i < ID_MENUENTRY_END - ID_MENUENTRY_START; i++)
+	int i;
+	for(i = 0; i < ID_MENUENTRY_END - ID_MENUENTRY_START; i++)
 		if(!menuEntry[i])
 			break;
 
@@ -2164,8 +2165,8 @@ void QMainFrame::OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized) {
 */
 }
 
-void QMainFrame::OnActivateApp(BOOL bActive, HTASK hTask) {
-	CMRCMDIFrameWndSizeDock::OnActivateApp(bActive, hTask);
+void QMainFrame::OnActivateApp(BOOL bActive, DWORD dwThreadID) {
+	CMRCMDIFrameWndSizeDock::OnActivateApp(bActive, dwThreadID);
 /*
 	CWnd *pWnd = GetPrefabManager()->pPreviewWnd;
 	if (pWnd == NULL || bActive)

@@ -1,0 +1,17 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Renderers/">
+    <Project Path="Interface/QDrawMFC/QDrawMFC.vcxproj" Id="5f452404-f8d2-5ecf-9d02-892e70900df9" />
+    <Project Path="Interface/QDrawOGL/QDrawOGL.vcxproj" Id="2c23f0f3-fd82-57e1-b3bc-298cf61b053f" />
+    <Project Path="Interface/QDrawMGL/QDrawMGL.vcxproj" Id="77eeafcd-9f84-5e48-8be1-771a97dd727a" />
+    <Project Path="Interface/QDrawGld/QDrawGld.vcxproj" Id="b6212c18-f101-52e5-ae58-bf355abf6156" />
+  </Folder>
+  <Project Path="Qoole.vcxproj" Id="daf54d8a-b534-5049-89a3-5cc01938fa20">
+    <BuildDependency Project="Interface/QDrawMFC/QDrawMFC.vcxproj" />
+    <BuildDependency Project="Interface/QDrawOGL/QDrawOGL.vcxproj" />
+    <BuildDependency Project="Interface/QDrawMGL/QDrawMGL.vcxproj" />
+    <BuildDependency Project="Interface/QDrawGld/QDrawGld.vcxproj" />
+  </Project>
+</Solution>

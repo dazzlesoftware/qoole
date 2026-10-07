@@ -212,7 +212,7 @@ void QPropertyList::OnPaint() {
 	GetClientRect(&rect);
 	int width = rect.right;
 
-	for(i = 1; i <= GetCountPerPage(); i++) {
+	for(int i = 1; i <= GetCountPerPage(); i++) {
 		dc.MoveTo(0, top + rowHeight * i);
 		dc.LineTo(width, top + rowHeight * i);
 	}

@@ -518,7 +518,8 @@ Entity::NewEntity(const char *keys[], int numKeys) {
 	Entity *rtnVal = NULL;
 
 	// Find the class name first.
-	for(int cIndex = 0; cIndex < numKeys; cIndex++) {
+	int cIndex;
+	for(cIndex = 0; cIndex < numKeys; cIndex++) {
 		if (ParseKeys(keys[cIndex], &key, &arg) && strcmp(key, "classname") == 0)
 			break;
 	}

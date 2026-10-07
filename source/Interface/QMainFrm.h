@@ -136,7 +136,7 @@ protected:
 	afx_msg void OnObjectLoadPrefab();
 	afx_msg void OnUpdateObjectLoadPrefab(CCmdUI* pCmdUI);
 	afx_msg void OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized);
-	afx_msg void OnActivateApp(BOOL bActive, HTASK hTask);
+	afx_msg void OnActivateApp(BOOL bActive, DWORD dwThreadID);
 	afx_msg void OnEditTexmgr();
 	afx_msg void OnEditTexRep();
 	//}}AFX_MSG
