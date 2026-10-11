@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <string.h>
 #include "mapio.h"
 #include "LCommon.h"
-#include "QDraw.h"
+#include "Draw.h"
 
 //==================== MapIO ====================
 
@@ -55,10 +55,10 @@ MapIO::ReadMap(const char *fName, bool (*_ProgressFunc)(int percent)) {
 	numBrushError = numEntError = 0;
 	tmpError[0] = '\0';
 
-	QDraw::OutputText("Loading %s... ", (char *)fName);
+	FDraw::OutputText("Loading %s... ", (char *)fName);
 	if (!inFile->Open(fName))
 	{
-		QDraw::OutputText("Error.\nUnable to load map sucessfully.\n");
+		FDraw::OutputText("Error.\nUnable to load map sucessfully.\n");
 		sprintf(tmpError, "Can't open file %60s", fName);
 		goto ERROR_READMAP;
 	}
@@ -76,7 +76,7 @@ MapIO::ReadMap(const char *fName, bool (*_ProgressFunc)(int percent)) {
 
 	if (!ReadEntities(inFile, objList))
 	{
-		QDraw::OutputText("Error. Unable to load the entities.\n");
+		FDraw::OutputText("Error. Unable to load the entities.\n");
 		goto ERROR_READMAP;
 	}
 
@@ -94,7 +94,7 @@ MapIO::ReadMap(const char *fName, bool (*_ProgressFunc)(int percent)) {
 
 	if (rtnVal == NULL)
 	{
-		QDraw::OutputText("Error. Can't find Worldspawn entity.\n");
+		FDraw::OutputText("Error. Can't find Worldspawn entity.\n");
 		sprintf(tmpError, "Can't find Worldspawn entity.");
 		goto ERROR_READMAP;
 	}
@@ -108,7 +108,7 @@ MapIO::ReadMap(const char *fName, bool (*_ProgressFunc)(int percent)) {
 
 	if (numBrushError > 0 || numEntError > 0)
 	{
-		QDraw::OutputText("Error. Ignored %d bad brushes and %d bad entities in %s.\n", numBrushError, numEntError, fName);
+		FDraw::OutputText("Error. Ignored %d bad brushes and %d bad entities in %s.\n", numBrushError, numEntError, fName);
 		sprintf(tmpError, "Ignored %d bad brushes and %d bad entities in %s.", numBrushError, numEntError, fName);
 		// QERROR(tmpError);
 		// Dialog_NoticeMsg(tmpError);
@@ -160,7 +160,7 @@ MapIO::ReadEntities(LFile *inFile, LinkList<Object> &objList) {
 			//== Ignore the Entity ==
 			if (!ignore)
 			{
-				QDraw::OutputText("Error loading entity before line %d.\n", inFile->GetLineNumber());
+				FDraw::OutputText("Error loading entity before line %d.\n", inFile->GetLineNumber());
 				sprintf(tmpError, "Error loading entity before line %d.  Ignore and continue?", inFile->GetLineNumber());
 				// stat = LoadErrorPrompt(tmpError);
 				
@@ -180,7 +180,7 @@ MapIO::ReadEntities(LFile *inFile, LinkList<Object> &objList) {
 				//== Ignore the brushes ==
 				if (!ignore)
 				{
-					QDraw::OutputText("Error loading entity before line %d.\n", inFile->GetLineNumber());
+					FDraw::OutputText("Error loading entity before line %d.\n", inFile->GetLineNumber());
 					sprintf(tmpError, "Error loading entity before line %d.  Ignore and continue?",	inFile->GetLineNumber());
 					// stat = LoadErrorPrompt(tmpError);
 					stat = -1;
@@ -251,7 +251,7 @@ MapIO::ReadBrush(LFile *inFile)
 	{
 		if (!ignore)
 		{
-			QDraw::OutputText("Error loading brush before line %d.\n", inFile->GetLineNumber());
+			FDraw::OutputText("Error loading brush before line %d.\n", inFile->GetLineNumber());
 			sprintf(tmpError, "Error loading brush before line %d.  Ignore and continue?", inFile->GetLineNumber());
 			// stat = LoadErrorPrompt(tmpError);
 			stat = 1;
@@ -289,7 +289,7 @@ MapIO::WriteMap(const char *fName, Object &rootObj, bool (*_ProgressFunc)(int pe
 		return false;
 
 	fprintf(outFile, "// %s generated MAP\n", AfxGetAppName());
-	fprintf(outFile, "// http://qoole.gamedesign.net\n");
+	fprintf(outFile, "// Genesis Editor\n");
 	fprintf(outFile, "\n");
   
 	// Transform the object tree to absolute coord first.

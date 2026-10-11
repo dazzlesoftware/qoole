@@ -35,7 +35,7 @@ LError(const char *fmt, ...) {
 		va_end(arglist);
 	}
 
-	MessageBox(NULL, buf, "Qoole 99 Error", MB_OK | MB_TOPMOST);
+	MessageBox(NULL, buf, "Genesis Editor Error", MB_OK | MB_TOPMOST);
 }
 
 void
@@ -49,7 +49,7 @@ LFatal(const char *fmt, ...) {
 		va_end(arglist);
 	}
 
-	MessageBox(NULL, buf, "Qoole 99 Fatal Error", MB_OK | MB_TOPMOST);
+	MessageBox(NULL, buf, "Genesis Editor Fatal Error", MB_OK | MB_TOPMOST);
 
 	AfxGetMainWnd()->PostMessage(WM_QUIT);
 }

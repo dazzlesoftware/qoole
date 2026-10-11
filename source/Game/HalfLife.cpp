@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "QDraw.h"
+#include "Draw.h"
 #include <direct.h>
 
 HalfLife::HalfLife(void) : Game(GetNumUtils()) {
@@ -35,7 +35,7 @@ HalfLife::HalfLife(void) : Game(GetNumUtils()) {
 
 	cfg = new LConfig(gameName);
 
-	QDraw::OutputText("Loading %s settings... ", gameName);
+	FDraw::OutputText("Loading %s settings... ", gameName);
 
 	strcpy(gameDir, "");
 	cfg->RegisterVar("GameDir", gameDir, LVAR_STR);
@@ -81,7 +81,7 @@ HalfLife::HalfLife(void) : Game(GetNumUtils()) {
 	strcpy(utilsParams[4], "-console -dev +map %file%");
 	cfg->RegisterVar("GameParam", utilsParams[4], LVAR_STR);
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 }
 
 HalfLife::~HalfLife(void) {
@@ -144,10 +144,10 @@ HalfLife::LoadTexture(Texture *texture, char *filename, int offset) {
 	int					i;
 
 	LFile file;
-	QDraw::OutputText("Loading texture: %s... ", texture->GetName());
+	FDraw::OutputText("Loading texture: %s... ", texture->GetName());
 	if(!file.Open(filename))
 	{
-		QDraw::OutputText("Error. Couldn't open file.\n");
+		FDraw::OutputText("Error. Couldn't open file.\n");
 		return false;
 	}
 
@@ -156,12 +156,12 @@ HalfLife::LoadTexture(Texture *texture, char *filename, int offset) {
 
 	if(header.width <= 0 || header.width > 1024)
 	{
-		QDraw::OutputText("Error. The texture width is erroneous.\n", filename);
+		FDraw::OutputText("Error. The texture width is erroneous.\n", filename);
 		return false;
 	}
 	if(header.height <= 0 || header.height > 1024)
 	{
-		QDraw::OutputText("Error. The texture height is erroneous.\n", filename);
+		FDraw::OutputText("Error. The texture height is erroneous.\n", filename);
 		return false;
 	}
 			
@@ -201,7 +201,7 @@ HalfLife::LoadTexture(Texture *texture, char *filename, int offset) {
 		g = pal[i].g;
 		b = pal[i].b;
 
-		LPalette::GammaCorrect(r, g, b, QDraw::textureGamma);
+		LPalette::GammaCorrect(r, g, b, FDraw::textureGamma);
 
 		pal565[i] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
 	}
@@ -232,7 +232,7 @@ HalfLife::LoadTexture(Texture *texture, char *filename, int offset) {
 	texture->realHeight = header.height;
 	texture->bits = 16;
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	return true;
 }
 
@@ -285,11 +285,11 @@ const char *HalfLife::GetLeakFile(const char *docName) const {
 
 Object *HalfLife::LoadLeakFile(const char *docName) const {
 	LFile leakFile;
-	QDraw::OutputText("Loading leak information: %s... ", GetLeakFile(docName));
+	FDraw::OutputText("Loading leak information: %s... ", GetLeakFile(docName));
 
 	if (!leakFile.Open(GetLeakFile(docName)))
 	{
-		QDraw::OutputText("Error.\nThere's no leak file.\n");
+		FDraw::OutputText("Error.\nThere's no leak file.\n");
 		return NULL;
 	}
 
@@ -334,6 +334,6 @@ Object *HalfLife::LoadLeakFile(const char *docName) const {
 		rtnVal->SetBoundRadius();
 	}
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	return rtnVal;
 }

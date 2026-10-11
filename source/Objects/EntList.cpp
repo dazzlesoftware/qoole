@@ -324,11 +324,11 @@ EntInfo::EntInfo(char hbuf[LINE_MAX], char lbuf[][LINE_MAX], int lnum, EntList *
 	}
 
 	entries = real_lnum;
-	qentry = new QEntEntry[entries];
+	qentry = new FEntEntry[entries];
 
 	for(i = 0; i < lnum; i++) {
 		if(!strlen(lbuf[i])) continue;
-		QEntEntry *entry = &qentry[real++];
+		FEntEntry *entry = &qentry[real++];
 		String_Split(sbuf, lbuf[i], 5);
 		entry->name = new char[strlen(sbuf[0]) + 1];
 		strcpy(entry->name, sbuf[0]);
@@ -379,7 +379,7 @@ EntInfo::~EntInfo(void) {
 }
 
 #include "Game.h"
-#include "QMainFrm.h"
+#include "MainFrm.h"
 
 WireFrameGeom *
 EntInfo::Use(bool &ret_isModel, bool &ret_isAdjust) {
@@ -439,8 +439,8 @@ EntInfo::AddUserEntry(char *name) {
 			return false;
 
 	entries++;
-	qentry = (QEntEntry *)realloc(qentry, sizeof(QEntEntry) * entries);
-	QEntEntry *entry = &qentry[entries - 1];
+	qentry = (FEntEntry *)realloc(qentry, sizeof(FEntEntry) * entries);
+	FEntEntry *entry = &qentry[entries - 1];
 
 	entry->name = (char *)malloc(strlen(name) + 1);
 	strcpy(entry->name, name);
@@ -487,10 +487,10 @@ EntDef::EntDef(char hbuf[LINE_MAX], char lbuf[][LINE_MAX], int lnum, EntList *en
 	}
 		
 	entries = lnum;
-	qdefentry = new QDefEntry[lnum];
+	qdefentry = new FDefEntry[lnum];
 
 	for(i = 0; i < lnum; i++) {
-		QDefEntry *defentry = &qdefentry[i];
+		FDefEntry *defentry = &qdefentry[i];
 		String_Split(sbuf, lbuf[i], 4);
 		defentry->name = new char[strlen(sbuf[1]) + 1];
 		strcpy(defentry->name, sbuf[1]);

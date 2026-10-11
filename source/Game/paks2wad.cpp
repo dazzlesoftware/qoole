@@ -185,9 +185,9 @@ bool paks2wad(char *quake_root, char *wad_output, bool (*ProgFunc)(int p)) {
 		strcat(quake_dir, "\\");
 
 	/*
-	if(qoole_game == GAME_QUAKE)
+	if(editor_game == GAME_QUAKE)
 		strcat(quake_dir, "\\id1\\");
-	else if(qoole_game == GAME_HEXEN2) {
+	else if(editor_game == GAME_HEXEN2) {
 		strcpy(quake_dir, hexen2_pak);
 		char *c = strrchr(quake_dir, '\\');
 		if(c)

@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "QDraw.h"
+#include "Draw.h"
 #include <direct.h>
 
 Heretic2::Heretic2(void) : Game(GetNumUtils()) {
@@ -33,7 +33,7 @@ Heretic2::Heretic2(void) : Game(GetNumUtils()) {
 	strcpy(texExt, ".m8");
 
 	cfg = new LConfig(gameName);
-	QDraw::OutputText("Loading %s settings... ", gameName);
+	FDraw::OutputText("Loading %s settings... ", gameName);
 	strcpy(gameDir, "");
 	cfg->RegisterVar("GameDir", gameDir, LVAR_STR);
 
@@ -70,7 +70,7 @@ Heretic2::Heretic2(void) : Game(GetNumUtils()) {
 	
 	strcpy(utilsParams[3], "+map %file%");
 	cfg->RegisterVar("GameParam", utilsParams[3], LVAR_STR);
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 }
 
 Heretic2::~Heretic2(void) {
@@ -149,10 +149,10 @@ Heretic2::LoadModel(char *filename) {
 	verts = 0;
 
 	LFile file;
-	QDraw::OutputText("Loading model: %s... ", filename);
+	FDraw::OutputText("Loading model: %s... ", filename);
 	if(!file.Open(filename))
 	{
-		QDraw::OutputText("Error. Coudln't open file.\n");
+		FDraw::OutputText("Error. Coudln't open file.\n");
 		return NULL;
 	}
 
@@ -335,7 +335,7 @@ Heretic2::LoadModel(char *filename) {
 	edgeList.AppendNode(*newEdge);
 	*/
 	
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	// it is WireFrameGeom's job to delete [] vert
 	return new WireFrameGeom(verts, (GeomWFVertex *)vert, edgeList);
 }
@@ -351,7 +351,7 @@ Heretic2::ExtractTextures(void) {
 	beenHere = true;
 
 	char text[256];
-	sprintf(text, "Some Heretic 2 textures not found.  Qoole 99 can extract them\nto '%s' for you.  Do that now?", texdir);
+	sprintf(text, "Some Heretic 2 textures not found.  Genesis Editor can extract them\nto '%s' for you.  Do that now?", texdir);
 	if(MessageBox(AfxGetMainWnd()->m_hWnd, text, AfxGetAppName(), MB_YESNO) != IDYES)
 		return;
 
@@ -419,11 +419,11 @@ Heretic2::LoadTexture(Texture *texture, char *filename, int offset) {
 	int i;
 
 	LFile file;
-	QDraw::OutputText("Loading texture: %s... ", texture->GetName());
+	FDraw::OutputText("Loading texture: %s... ", texture->GetName());
 
 	if(!file.Open(filename))
 	{
-		QDraw::OutputText("Error. Couldn't open file.\n");
+		FDraw::OutputText("Error. Couldn't open file.\n");
 		return false;
 	}
 
@@ -432,12 +432,12 @@ Heretic2::LoadTexture(Texture *texture, char *filename, int offset) {
 
 	if(header.width[0] <= 0 || header.width[0] > 1024)
 	{
-		QDraw::OutputText("Error. The texture width is erroneous.\n", filename);
+		FDraw::OutputText("Error. The texture width is erroneous.\n", filename);
 		return false;
 	}
 	if(header.height[0] <= 0 || header.height[0] > 1024)
 	{
-		QDraw::OutputText("Error. The texture height is erroneous.\n", filename);
+		FDraw::OutputText("Error. The texture height is erroneous.\n", filename);
 		return false;
 	}
 			
@@ -469,7 +469,7 @@ Heretic2::LoadTexture(Texture *texture, char *filename, int offset) {
 		g = header.palette[i * 3 + 1];
 		b = header.palette[i * 3 + 2];
 
-		LPalette::GammaCorrect(r, g, b, QDraw::textureGamma);
+		LPalette::GammaCorrect(r, g, b, FDraw::textureGamma);
 
 		pal565[i] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
 	}
@@ -500,13 +500,13 @@ Heretic2::LoadTexture(Texture *texture, char *filename, int offset) {
 	texture->realHeight = header.height[0];
 	texture->bits = 16;
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	return true;
 }
 
 //===== Additional properties pages. =====
 #include "resource.h"
-#include "QPropSht.h"
+#include "PropSht.h"
 
 DWORD Heretic2::GetExtraPropPages(void) const {
 	return (PROPPAGE_ADDSURFACE | PROPPAGE_ADDCONTENT);
@@ -534,11 +534,11 @@ const char *Heretic2::GetLeakFile(const char *docName) const {
 
 Object *Heretic2::LoadLeakFile(const char *docName) const {
 	LFile leakFile;
-	QDraw::OutputText("Loading leak information: %s... ", GetLeakFile(docName));
+	FDraw::OutputText("Loading leak information: %s... ", GetLeakFile(docName));
 
 	if (!leakFile.Open(GetLeakFile(docName)))
 	{
-		QDraw::OutputText("Error.\nThere's no leak file.\n");
+		FDraw::OutputText("Error.\nThere's no leak file.\n");
 		return NULL;
 	}
 
@@ -583,6 +583,6 @@ Object *Heretic2::LoadLeakFile(const char *docName) const {
 		rtnVal->SetBoundRadius();
 	}
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	return rtnVal;
 }

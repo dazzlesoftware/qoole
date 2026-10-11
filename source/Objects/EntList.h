@@ -53,7 +53,7 @@ public:
 	int models;
 };
 
-struct QDefEntry {
+struct FDefEntry {
 	int val;
 	char *str;
 	char *name;
@@ -68,16 +68,16 @@ public:
 	char *GetName(void) { return name; }
 	int GetDefType(void) { return deftype; }
 	int GetNumEntries(void) { return entries; }
-	QDefEntry *GetEntryNum(int i) { ASSERT(i >= 0 && i < entries); return &qdefentry[i]; }
+	FDefEntry *GetEntryNum(int i) { ASSERT(i >= 0 && i < entries); return &qdefentry[i]; }
 
 private:
 	char name[80];
 	int deftype;
 	int entries;
-	QDefEntry *qdefentry;
+	FDefEntry *qdefentry;
 };
 
-struct QEntEntry {
+struct FEntEntry {
 	char *name;
 	int vartype;
 	char *desc;
@@ -103,7 +103,7 @@ public:
 	void DoneUse(void);
 
 	int GetNumEntries(void) { return entries; }
-	QEntEntry *GetEntryNum(int i) { ASSERT(i >= 0 && i < entries); return &qentry[i]; }
+	FEntEntry *GetEntryNum(int i) { ASSERT(i >= 0 && i < entries); return &qentry[i]; }
 
 	bool AddUserEntry(char *name);
 
@@ -117,7 +117,7 @@ private:
 	char filename[80];
 
 	int entries;
-	QEntEntry *qentry;
+	FEntEntry *qentry;
 
 	bool isModel;
 	bool isAdjust;

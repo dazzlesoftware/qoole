@@ -1443,7 +1443,7 @@ Object::LoadObjFile(const char *fName,
   inFile->ResetLineNumber();
 
   brushNum = entNum = objNum = 0;
-  // if (strncmp(inFile->GetNextLine(), "// QOOLE", 8) != 0)
+  // if (strncmp(inFile->GetNextLine(), "// GENESIS", 8) != 0)
   //   goto ERROR_LOAD_OBJFILE;
   while (sscanf(inFile->GetNextLine(), "// Brushes: %d", &brushNum) != 1) {
     if (inFile->EndOfFile())
@@ -1591,7 +1591,7 @@ Object::SaveObjFile(const char *fName, bool append,
   entNum = CountEntities();
   objNum = CountNodes();
 
-  // fprintf(fOutPtr, "// QOOLE\n");
+  // fprintf(fOutPtr, "// GENESIS\n");
   fprintf(fOutPtr, "// Brushes: %d\n", brushNum);
   fprintf(fOutPtr, "// Entities: %d\n", entNum);
   fprintf(fOutPtr, "// Objects: %d\n", objNum);

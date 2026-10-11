@@ -1,14 +1,14 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Developer Studio generated include file.
-// Used by Qoole.rc
+// Used by Genesis.rc
 //
 #define IDR_TOOLBAR1                    23
 #define IDD_REGISTER                    32
-#define IDR_QOOLETYPE                   100
+#define IDR_GENESISTYPE                   100
 #define IDR_MAINFRAME                   200
 #define IDR_MAINFRAME_MENU              210
 #define IDR_MAINFRAME_CONTEXT           220
-#define IDR_QVIEW_CONTEXT_MB            230
+#define IDR_MAPVIEW_CONTEXT_MB            230
 #define IDR_MAINFRAME_ACCEL             300
 #define IDB_TVIEWICO                    400
 #define IDB_PVIEWICO                    410
@@ -98,12 +98,12 @@
 #define ID_RCMTV_DRAGCANCEL             2022
 #define ID_RCMPC_COPY                   2030
 #define ID_RCMPC_CLEAR                  2031
-#define ID_RCMQV_PERFORMCLIP            2040
-#define ID_RCMQV_REMOVELEFT             2041
-#define ID_RCMQV_REMOVERIGHT            2042
-#define ID_RCMQV_SPLITATLINE            2043
-#define ID_RCMQV_PERFORMFLIP            2050
-#define ID_RCMQV_PERFORMMIRROR          2051
+#define ID_RCMMV_PERFORMCLIP            2040
+#define ID_RCMMV_REMOVELEFT             2041
+#define ID_RCMMV_REMOVERIGHT            2042
+#define ID_RCMMV_SPLITATLINE            2043
+#define ID_RCMMV_PERFORMFLIP            2050
+#define ID_RCMMV_PERFORMMIRROR          2051
 #define ID_RCMPV_ADDPREFAB              2060
 #define ID_RCMPV_VIEWPREFAB             2061
 #define ID_RCMPV_REFRESHDIR             2062
@@ -123,10 +123,10 @@
 #define ID_PREFABPREVIEW                2290
 #define ID_MENUENTRY_START              3000
 #define ID_MENUENTRY_END                3999
-#define ID_QVIEW_UPDATEFLYTHROUGH       5000
-#define ID_QVIEW_ZOOMIN                 5010
-#define ID_QVIEW_ZOOMOUT                5011
-#define ID_QPROCWND_PROCFINISH          5100
+#define ID_MAPVIEW_UPDATEFLYTHROUGH       5000
+#define ID_MAPVIEW_ZOOMIN                 5010
+#define ID_MAPVIEW_ZOOMOUT                5011
+#define ID_PROCWND_PROCFINISH          5100
 #define ID_TEXWND_APPLY                 6000
 #define ID_INDICATOR_STATUS             10000
 #define ID_INDICATOR_GRIDSIZE           10001
@@ -273,7 +273,7 @@
 #define IDD_TEXMGR_NEWLIST              21010
 #define IDD_TEXREP                      21011
 #define IDD_COLORWND                    21012
-#define IDB_QCREDITS                    21019
+#define IDB_CREDITS                    21019
 #define IDD_DIALOG1                     21020
 #define IDD_COLORCONFIG                 21021
 #define ID_EDIT_TEXMGR                  22011
@@ -306,7 +306,6 @@
 #define IDC_COLORWND_GRNVAL             23031
 #define IDC_COLORWND_BLUVAL             23032
 #define IDC_COLORWND_COLOR              23033
-#define IDC_EMAIL                       23034
 #define IDC_DISPLAY_STATIC              23036
 #define IDC_SETCOLOR_COLOR              23038
 #define IDC_SETCOLOR_RED                23039
@@ -315,7 +314,6 @@
 #define IDC_SETCOLOR_REDVAL             23042
 #define IDC_SETCOLOR_GRNVAL             23043
 #define IDC_SETCOLOR_BLUVAL             23044
-#define IDC_QPOP                        32020
 
 // Next default values for new objects
 // 

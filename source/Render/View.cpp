@@ -38,7 +38,7 @@ const GPolygon *View::manipFace = NULL;
 int View::renderColors[VRC_NUMRENDERCOLORS];
 
 const View *View::renderView = NULL;
-QDraw *View::renderQDraw = NULL;
+FDraw *View::renderDraw = NULL;
 bool View::skipRender = false;
 bool View::skipSlctObjs = false;
 Points3d View::vBuffer;
@@ -51,7 +51,7 @@ Object *View::pLeakObj = NULL;
 bool View::aprxWFRender = false;
 
 
-View::View(QDraw *pQdraw, Object &viewObject, const Selector &selector) {
+View::View(FDraw *pQdraw, Object &viewObject, const Selector &selector) {
   selectorPtr = &selector;
 
   SetWindowWidth(1);
@@ -939,7 +939,7 @@ View::RenderSolid(bool tmap) const {
   ASSERT(viewObj != NULL);
 
   renderView = this;
-  renderQDraw = qdraw;
+  renderDraw = qdraw;
   renderTMap = tmap;
 
   CalSVTrans(*viewObj);
@@ -959,7 +959,7 @@ View::RenderSolid(bool tmap) const {
   }
 
   renderView = NULL;
-  renderQDraw = NULL;
+  renderDraw = NULL;
 }
 
 extern bool *ent_texd;
@@ -1082,7 +1082,7 @@ View::RenderObjSolid(Object &objNode) {
     }
 
     bool texd =
-      renderQDraw->ZBufSetup(&objNode, (pNodePtr->GetPolygon()).GetTexturePtr(), nVec);
+      renderDraw->ZBufSetup(&objNode, (pNodePtr->GetPolygon()).GetTexturePtr(), nVec);
 
     // Copy the vertices to local buffer.
     numPts = (pNodePtr->GetPolygon()).GetNumSides();
@@ -1115,7 +1115,7 @@ View::RenderObjSolid(Object &objNode) {
       else
         svTrans.Transform(pVec, *vPtr);
 
-      renderQDraw->ZBufCalcST(pVec.GetX(), pVec.GetY(), pVec.GetZ(), zpts[0].s, zpts[0].t);
+      renderDraw->ZBufCalcST(pVec.GetX(), pVec.GetY(), pVec.GetZ(), zpts[0].s, zpts[0].t);
     }
     fvPtr++;
 
@@ -1130,7 +1130,7 @@ View::RenderObjSolid(Object &objNode) {
       else
         svTrans.Transform(pVec, *fvPtr);
 
-      renderQDraw->ZBufCalcST(pVec.GetX(), pVec.GetY(), pVec.GetZ(), zpts[2].s, zpts[2].t);
+      renderDraw->ZBufCalcST(pVec.GetX(), pVec.GetY(), pVec.GetZ(), zpts[2].s, zpts[2].t);
     }
     fvPtr++;
 
@@ -1156,10 +1156,10 @@ View::RenderObjSolid(Object &objNode) {
         else
           svTrans.Transform(pVec, *fvPtr);
 
-        renderQDraw->ZBufCalcST(pVec.GetX(), pVec.GetY(), pVec.GetZ(), zpts[2].s, zpts[2].t);
+        renderDraw->ZBufCalcST(pVec.GetX(), pVec.GetY(), pVec.GetZ(), zpts[2].s, zpts[2].t);
 	  }
 
-      renderQDraw->ZBufTriangle(zpts);
+      renderDraw->ZBufTriangle(zpts);
     }
   }
   delete planeIter;

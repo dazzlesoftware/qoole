@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "stdafx.h"
 #include <direct.h>
 #include "Game.h"
-#include "QDraw.h"
+#include "Draw.h"
 
 Game *Game::game = NULL;
 LinkList<Game> Game::games;
@@ -263,7 +263,7 @@ void ExtractTexsFromPak(LPak *pak, char *baseDir) {
 
 	CProgressWnd progressWnd(AfxGetMainWnd(), "Progress");
 	progressWnd.SetText("Extracting Textures");
-	QDraw::OutputText("Extracting textures from Pak... ");
+	FDraw::OutputText("Extracting textures from Pak... ");
 
 	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT)));
 
@@ -286,13 +286,13 @@ void ExtractTexsFromPak(LPak *pak, char *baseDir) {
 
 			if(progressWnd.Cancelled())
 			{
-				QDraw::OutputText("Cancelled.\n");
+				FDraw::OutputText("Cancelled.\n");
 				break;
 			}
 		}
 	}
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	progressWnd.Clear();
 	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_ARROW)));
 }

@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "stdafx.h"
 #include "Texture.h"
 #include "Game.h"
-#include "QDraw.h"
+#include "Draw.h"
 
 // ===========================================================================
 // Texture
@@ -79,7 +79,7 @@ Texture::Cache(void) {
 
 	// =======================================================
 	// force the width and height to be a power of 2
-	// (all the QDraw render libraries require this)
+	// (all the FDraw render libraries require this)
 	// texture surface is stretched appropiately here
 	// divWidth, divHeight keep track of stretch ratio
 	// width, height keep track of memory dimensions
@@ -278,7 +278,7 @@ void TexList::Save(void) {
 	LFile file;
 	char buf[256];
 
-	QDraw::OutputText("Loading TexList: %s... ", filename);
+	FDraw::OutputText("Loading TexList: %s... ", filename);
 	TRY {
 		if(LFile::Exist(filename))
 		{
@@ -289,12 +289,12 @@ void TexList::Save(void) {
 			CFile::Remove(filename);
 		}
 		else
-			QDraw::OutputText("Error. Couldn't open TexList.\n");
+			FDraw::OutputText("Error. Couldn't open TexList.\n");
 	}
 	CATCH(CFileException, e)
 	{
 		char buf[256];
-		QDraw::OutputText("Error. Couldn't save TexList.\n");
+		FDraw::OutputText("Error. Couldn't save TexList.\n");
 		sprintf(buf, "Error saving TexList '%s'", filename);
 		MessageBox(NULL, buf, NULL, MB_ICONERROR | MB_TOPMOST);
 		return;
@@ -307,7 +307,7 @@ void TexList::Save(void) {
 		sprintf(buf, "%s\r\n", texture->GetTexListName(texDB));
 		file.Write(buf, strlen(buf));
 	}
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 }
 
 
@@ -331,17 +331,17 @@ TexDB::TexDB(Game *_game) {
 	tryExtract = true;
 
 	LFile file;
-	QDraw::OutputText("Loading textures database: %s ... ", filename);
+	FDraw::OutputText("Loading textures database: %s ... ", filename);
 	if(!file.Open(filename))
 	{
-		QDraw::OutputText("Error. Couldn't open the database.\n");
+		FDraw::OutputText("Error. Couldn't open the database.\n");
 		return;
 	}
 
 	file.Read(&ver, sizeof(ver));
 	if(ver != TEXDB_VER)
 	{
-		QDraw::OutputText("Error.\nDB version is %s, should be %s.\n", ver, TEXDB_VER);
+		FDraw::OutputText("Error.\nDB version is %s, should be %s.\n", ver, TEXDB_VER);
 		return;
 	}
 
@@ -361,7 +361,7 @@ TexDB::TexDB(Game *_game) {
 
 	for(i = 0; i < texEntries; i++)
 		texture[i] = new Texture(&texEntry[i], game);
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 }
 
 TexDB::~TexDB() {

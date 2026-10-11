@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "QDraw.h"
+#include "Draw.h"
 #include <direct.h>
 
 Sin::Sin(void) : Game(GetNumUtils()) {
@@ -33,7 +33,7 @@ Sin::Sin(void) : Game(GetNumUtils()) {
 	strcpy(texExt, ".swl");
 
 	cfg = new LConfig(gameName);
-	QDraw::OutputText("Loading %s settings... ", gameName);
+	FDraw::OutputText("Loading %s settings... ", gameName);
 
 	strcpy(gameDir, "");
 	cfg->RegisterVar("GameDir", gameDir, LVAR_STR);
@@ -72,7 +72,7 @@ Sin::Sin(void) : Game(GetNumUtils()) {
 	strcpy(utilsParams[3], "+map %file%");
 	cfg->RegisterVar("GameParam", utilsParams[3], LVAR_STR);
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 }
 
 Sin::~Sin(void) {
@@ -213,11 +213,11 @@ Sin::LoadTexture(Texture *texture, char *filename, int offset) {
 	int i;
 
 	LFile file;
-	QDraw::OutputText("Loading texture: %s... ", texture->GetName());
+	FDraw::OutputText("Loading texture: %s... ", texture->GetName());
 
 	if(!file.Open(filename))
 	{
-		QDraw::OutputText("Error. Couldn't open the file.\n");
+		FDraw::OutputText("Error. Couldn't open the file.\n");
 		return false;
 	}
 
@@ -226,12 +226,12 @@ Sin::LoadTexture(Texture *texture, char *filename, int offset) {
 
 	if(header.width <= 0 || header.width > 1024)
 	{
-		QDraw::OutputText("Error. The texture width is erroneous.\n", filename);
+		FDraw::OutputText("Error. The texture width is erroneous.\n", filename);
 		return false;
 	}
 	if(header.height <= 0 || header.height > 1024)
 	{
-		QDraw::OutputText("Error. The texture height is erroneous.\n", filename);
+		FDraw::OutputText("Error. The texture height is erroneous.\n", filename);
 		return false;
 	}
 			
@@ -264,7 +264,7 @@ Sin::LoadTexture(Texture *texture, char *filename, int offset) {
 		g = header.palette[i * 4 + 1];
 		b = header.palette[i * 4 + 2];
 
-		LPalette::GammaCorrect(r, g, b, QDraw::textureGamma);
+		LPalette::GammaCorrect(r, g, b, FDraw::textureGamma);
 
 		pal565[i] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
 	}
@@ -309,7 +309,7 @@ Sin::ExtractTextures(void) {
 	beenHere = true;
 
 	char text[256];
-	sprintf(text, "Some Sin textures not found.  Qoole 99 can extract them\nto '%s' for you.  Do that now?", texdir);
+	sprintf(text, "Some Sin textures not found.  Genesis Editor can extract them\nto '%s' for you.  Do that now?", texdir);
 	if(MessageBox(AfxGetMainWnd()->m_hWnd, text, AfxGetAppName(), MB_YESNO) != IDYES)
 		return;
 

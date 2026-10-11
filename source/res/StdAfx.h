@@ -24,7 +24,7 @@
 #ifndef _AFX_NO_AFXCMN_SUPPORT
 #endif // _AFX_NO_AFXCMN_SUPPORT
 
-#ifndef IS_QDRAWDLL
+#ifndef IS_DRAWDLL
 
 #include <afxcmn.h>			// MFC support for Windows Common Controls
 #include <AFXCVIEW.H>		// CTreeView.
@@ -39,7 +39,7 @@
 
 #include <mmsystem.h>
 
-#endif // IS_QDRAWDLL
+#endif // IS_DRAWDLL
 
 // MegaGraphics Library
 //#include "mgl.h"

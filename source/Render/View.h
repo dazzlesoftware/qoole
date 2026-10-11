@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef _VIEW_H_
 #define _VIEW_H_
 
-#include "QDraw.h"
+#include "Draw.h"
 #include "math.h"
 #include "clip.h"
 #include "objects.h"
@@ -52,7 +52,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 class View : public ElmNode, public TransSpace {
  public:
-  View(QDraw *qdraw, Object &viewObject, const Selector &selector);
+  View(FDraw *qdraw, Object &viewObject, const Selector &selector);
   View(const View &src) { *this = src; };
   virtual ~View(void);
   View &operator=(const View &src);
@@ -60,7 +60,7 @@ class View : public ElmNode, public TransSpace {
   // Info
   Object *GetViewObjPtr(void) { return viewObj; };
 
-  void SetQDraw(QDraw *pQDraw) { qdraw = pQDraw; }
+  void SetDraw(FDraw *pDraw) { qdraw = pDraw; }
 
   //===== View Settings =====
   void SetNewView(Object &viewObject, const Selector &selector,
@@ -150,7 +150,7 @@ class View : public ElmNode, public TransSpace {
   void RenderSlctFaceOutline(Object &objNode) const;
   void DisplayManipPts(void) const;
 
-  QDraw *qdraw;
+  FDraw *qdraw;
   Object *viewObj;
   bool perspective;
   Clip clipView;
@@ -174,7 +174,7 @@ class View : public ElmNode, public TransSpace {
   static int renderColors[VRC_NUMRENDERCOLORS];
 
   static const View *renderView;
-  static QDraw *renderQDraw;
+  static FDraw *renderDraw;
   static bool skipSlctObjs;
   static bool skipRender;
   static Points3d vBuffer;  // Used for wireframe.

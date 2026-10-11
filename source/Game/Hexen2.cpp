@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "QDraw.h"
+#include "Draw.h"
 #include <direct.h>
 
 Hexen2::Hexen2(void) : Game(GetNumUtils()) {
@@ -36,7 +36,7 @@ Hexen2::Hexen2(void) : Game(GetNumUtils()) {
 	strcpy(palName, palDef);
 
 	cfg = new LConfig(gameName);
-	QDraw::OutputText("Loading %s settings... ", gameName);
+	FDraw::OutputText("Loading %s settings... ", gameName);
 
 	strcpy(gameDir, "");
 	cfg->RegisterVar("GameDir", gameDir, LVAR_STR);
@@ -75,7 +75,7 @@ Hexen2::Hexen2(void) : Game(GetNumUtils()) {
 	strcpy(utilsParams[3], "+map %file%");
 	cfg->RegisterVar("GameParam", utilsParams[3], LVAR_STR);
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 }
 
 Hexen2::~Hexen2(void) {
@@ -148,10 +148,10 @@ Hexen2::LoadModel(char *filename) {
 	verts = 0;
 
 	LFile file;
-	QDraw::OutputText("Loading model: %s... ", filename);
+	FDraw::OutputText("Loading model: %s... ", filename);
 	if(!file.Open(filename))
 	{
-		QDraw::OutputText("Error. Couldn't open the file.\n");
+		FDraw::OutputText("Error. Couldn't open the file.\n");
 		return NULL;
 	}
 
@@ -258,7 +258,7 @@ Hexen2::LoadModel(char *filename) {
 	delete [] edge;
 	delete [] edgenum;
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	// it is WireFrameGeom's job to delete [] vert
 	return new WireFrameGeom(verts, (GeomWFVertex *)vert, edgeList);
 }
@@ -269,11 +269,11 @@ Hexen2::LoadTexture(Texture *texture, char *filename, int offset) {
 	int size;
 
 	LFile file;
-	QDraw::OutputText("Loading texture: %s... ", texture->GetName());
+	FDraw::OutputText("Loading texture: %s... ", texture->GetName());
 
 	if(!file.Open(filename))
 	{
-		QDraw::OutputText("Error. Couldn't open the file.\n");
+		FDraw::OutputText("Error. Couldn't open the file.\n");
 		return false;
 	}
 
@@ -282,12 +282,12 @@ Hexen2::LoadTexture(Texture *texture, char *filename, int offset) {
 
 	if(header.width <= 0 || header.width > 1024)
 	{
-		QDraw::OutputText("Error. The texture width is erroneous.\n", filename);
+		FDraw::OutputText("Error. The texture width is erroneous.\n", filename);
 		return false;
 	}
 	if(header.height <= 0 || header.height > 1024)
 	{
-		QDraw::OutputText("Error. The texture height is erroneous.\n", filename);
+		FDraw::OutputText("Error. The texture height is erroneous.\n", filename);
 		return false;
 	}
 			
@@ -314,7 +314,7 @@ Hexen2::LoadTexture(Texture *texture, char *filename, int offset) {
 	texture->realHeight = header.height;
 	texture->bits = 8;
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	return true;
 }
 
@@ -365,11 +365,11 @@ const char *Hexen2::GetLeakFile(const char *docName) const {
 
 Object *Hexen2::LoadLeakFile(const char *docName) const {
 	LFile leakFile;
-	QDraw::OutputText("Loading leak information: %s... ", GetLeakFile(docName));
+	FDraw::OutputText("Loading leak information: %s... ", GetLeakFile(docName));
 	
 	if (!leakFile.Open(GetLeakFile(docName)))
 	{
-		QDraw::OutputText("Error. There's no leak file.\n");
+		FDraw::OutputText("Error. There's no leak file.\n");
 		return NULL;
 	}
 
@@ -430,6 +430,6 @@ Object *Hexen2::LoadLeakFile(const char *docName) const {
 		rtnVal->SetBoundRadius();
 	}
 
-	QDraw::OutputText("OK.\n");
+	FDraw::OutputText("OK.\n");
 	return rtnVal;
 }

@@ -582,7 +582,7 @@ void
 Entity::Check(void) {
 	int i;
 	const char *key;
-	QEntEntry *entry;
+	FEntEntry *entry;
 
 	if(!entInfo)
 		return;
