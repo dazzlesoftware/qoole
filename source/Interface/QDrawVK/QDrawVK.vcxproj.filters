@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\QDrawVK.cpp" />
+    <ClCompile Include="..\QDrawGPU.cpp" />
+    <ClCompile Include="..\QDrawVir.cpp" />
+    <ClInclude Include="..\QDrawVK.h" />
+    <ClInclude Include="..\QDrawGPU.h" />
+    <ClInclude Include="..\QDrawShaders_VK_VS.h" />
+    <ClInclude Include="..\QDrawShaders_VK_PSColor.h" />
+    <ClInclude Include="..\QDrawShaders_VK_PSTexture.h" />
+    <None Include="..\QDrawShaders.hlsl" />
+    <None Include="..\BuildVulkanShaders.cmd" />
+    <None Include="QDraw.def" />
+  </ItemGroup>
+</Project>

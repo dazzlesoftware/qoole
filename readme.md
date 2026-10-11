@@ -10,6 +10,14 @@ x86 platform; Qoole99.exe (Qoole99D.exe for Debug) and the QDraw*.dll renderer
 plugins are written to source/Exec. The original VC6 .dsp/.dsw files are kept
 for reference.
 
+Renderers: besides the original MFC, MGL, Glide and OpenGL plugins there are
+DX12 (QDrawDX12.dll, Direct3D 12) and Vulkan (QDrawVulkan.dll) plugins; pick
+them per view type in the Render Library options. Both need only the Windows
+SDK to build: the Vulkan headers are vendored in source/External, vulkan-1.dll
+is loaded at runtime from the graphics driver, and the SPIR-V shaders are
+pre-generated (rerun source/Interface/BuildVulkanShaders.cmd after editing
+QDrawShaders.hlsl).
+
 The code is all licensed under the terms of the GPL (gnu public license).
 You should read the entire license, but the gist of it is that you can do
 anything you want with the code, including sell your new version. The catch

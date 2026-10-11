@@ -7,11 +7,15 @@
     <Project Path="Interface/QDrawOGL/QDrawOGL.vcxproj" Id="2c23f0f3-fd82-57e1-b3bc-298cf61b053f" />
     <Project Path="Interface/QDrawMGL/QDrawMGL.vcxproj" Id="77eeafcd-9f84-5e48-8be1-771a97dd727a" />
     <Project Path="Interface/QDrawGld/QDrawGld.vcxproj" Id="b6212c18-f101-52e5-ae58-bf355abf6156" />
+    <Project Path="Interface/QDrawDX12/QDrawDX12.vcxproj" Id="569087a6-d729-52f7-a8b8-ab3eec19362a" />
+    <Project Path="Interface/QDrawVK/QDrawVK.vcxproj" Id="8c944c7b-db71-5b51-9a46-86f1bab400df" />
   </Folder>
   <Project Path="Qoole.vcxproj" Id="daf54d8a-b534-5049-89a3-5cc01938fa20">
     <BuildDependency Project="Interface/QDrawMFC/QDrawMFC.vcxproj" />
     <BuildDependency Project="Interface/QDrawOGL/QDrawOGL.vcxproj" />
     <BuildDependency Project="Interface/QDrawMGL/QDrawMGL.vcxproj" />
     <BuildDependency Project="Interface/QDrawGld/QDrawGld.vcxproj" />
+    <BuildDependency Project="Interface/QDrawDX12/QDrawDX12.vcxproj" />
+    <BuildDependency Project="Interface/QDrawVK/QDrawVK.vcxproj" />
   </Project>
 </Solution>
