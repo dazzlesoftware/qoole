@@ -277,7 +277,7 @@ class CCustomDrawInfo {
 			m_CDRW.dwItemSpec = DWORD(m_pToolBar->GetItemID(nItem));
 			UINT uStyle = m_pToolBar->GetButtonStyle(nItem);
 			BOOL bEnable = m_pToolBar->GetToolBarCtrl()
-							.IsButtonEnabled(m_CDRW.dwItemSpec);
+							.IsButtonEnabled(int(m_CDRW.dwItemSpec));
 			m_CDRW.uItemState = (bEnable ? 0 : CDIS_DISABLED) |
 								(((uStyle & TBBS_PRESSED) || (uStyle & TBBS_CHECKED)) ?
 									CDIS_CHECKED : 0);
@@ -897,7 +897,7 @@ void CToolBarEx :: Draw3DBorders(CDC * pDC, CRect & rect) {
 		DrawBorders(pDC, rect);
 }
 
-void CToolBarEx::OnTimer(UINT nIDEvent) 
+void CToolBarEx::OnTimer(UINT_PTR nIDEvent) 
 {
 	if( nIDEvent == m_uTimerEvent ) {
 		if( m_nLastBtn >= 0 ) {
@@ -1207,7 +1207,7 @@ void CToolBarEx :: RecalcLayout() {
 }
 
 HBITMAP CToolBarEx :: GetBitmap(int nBtnID) {
-	int nBitmap = SendMessage(TB_GETBITMAP, WPARAM(nBtnID));
+	int nBitmap = int(SendMessage(TB_GETBITMAP, WPARAM(nBtnID)));
 	return GetBitmap(nBitmap, m_sizeImage);
 }
 
@@ -1323,7 +1323,7 @@ LRESULT CToolBarEx::OnAddBitmap(WPARAM wParam, LPARAM lParam) {
 
 		VERIFY(bmpNew.GetObject(sizeof(BITMAP), &bitmap));
 
-		HRESULT hRes = DefWindowProc(TB_ADDBITMAP, wParam, lParam);
+		LRESULT hRes = DefWindowProc(TB_ADDBITMAP, wParam, lParam);
 
 		// syncronize toolbarcontrol's bitmap with our's
 		AddReplaceBitmap(HBITMAP(bmpNew.Detach()));
@@ -2018,7 +2018,7 @@ BOOL CToolBarEx :: QueryDeleteInsert(TBBUTTON & tbButton, BOOL bDelete, int nInd
 	ASSERT(GetParentFrame() != 0);
 	ASSERT(::IsWindow(GetParentFrame()->GetSafeHwnd()));
 
-	BOOL bRet = GetParentFrame()->SendMessage(
+	BOOL bRet = (BOOL)GetParentFrame()->SendMessage(
 					WM_NOTIFY,
 					WPARAM(tbn.hdr.idFrom),
 					LPARAM(&tbn)
@@ -2122,7 +2122,7 @@ CSize CToolDockBar::CalcFixedLayout(BOOL bStretch, BOOL bHorz)
 	// prepare for layout
 	AFX_SIZEPARENTPARAMS layout;
 	layout.hDWP = m_bLayoutQuery ?
-		NULL : ::BeginDeferWindowPos(m_arrBars.GetSize());
+		NULL : ::BeginDeferWindowPos(int(m_arrBars.GetSize()));
 	int cxBorder = 2, cyBorder = 2;
 	CPoint pt(-cxBorder, -cyBorder);
 	int nWidth = 0;

@@ -141,7 +141,7 @@ public:
 private:
 	char name[256];
 	struct _finddata_t fileinfo;
-	int rc;
+	intptr_t rc;
 };
 
 
@@ -154,7 +154,7 @@ public:
 private:
 	char name[256];
 	struct _finddata_t fileinfo;
-	int rc;
+	intptr_t rc;
 };
 
 

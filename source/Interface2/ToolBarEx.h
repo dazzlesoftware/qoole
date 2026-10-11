@@ -49,7 +49,7 @@ protected:
 	COLORREF	m_clrBtnShadow;
 	COLORREF	m_clrBtnLight;
 	int			m_nLastBtn;			// index of last formed button
-	UINT		m_uTimerEvent;
+	UINT_PTR	m_uTimerEvent;
 	CUIntArray	m_Styles;
 	HWND		m_hwndParent;		// "real" parent (even in floating mode)
 	BOOL		m_bDeleteImgList;	// remember the way we've built the image list
@@ -183,7 +183,7 @@ protected:
 	afx_msg void OnNcCalcSize(BOOL bCalcValidRects, NCCALCSIZE_PARAMS FAR* lpncsp);
 	afx_msg void OnMouseMove(UINT nFlags, CPoint point);
 	afx_msg void OnNcPaint();
-	afx_msg void OnTimer(UINT nIDEvent);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
 	afx_msg void OnLButtonUp(UINT nFlags, CPoint point);

@@ -240,7 +240,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     }
     *toPtr = *bgn;
     *toRc = *rcBgn;
-    numPts = toPtr - bgn;
+    numPts = (int)(toPtr - bgn);
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x04) {  // all points outside.
@@ -283,7 +283,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     }
     *toPtr = *bgn;
     *toRc = *rcBgn;
-    numPts = toPtr - bgn;
+    numPts = (int)(toPtr - bgn);
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x08) {  // all points outside.
@@ -325,7 +325,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     }
     *toPtr = *bgn;
     *toRc = *rcBgn;
-    numPts = toPtr - bgn;
+    numPts = (int)(toPtr - bgn);
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x01) {  // all points outside.
@@ -367,7 +367,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     }
     *toPtr = *bgn;
     *toRc = *rcBgn;
-    numPts = toPtr - bgn;
+    numPts = (int)(toPtr - bgn);
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x02) {  // all points outside.
@@ -409,7 +409,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     }
     *toPtr = *bgn;
     *toRc = *rcBgn;
-    numPts = toPtr - bgn;
+    numPts = (int)(toPtr - bgn);
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x10) {  // all points outside.
@@ -451,7 +451,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     }
     *toPtr = *bgn;
     *toRc = *rcBgn;
-    numPts = toPtr - bgn;
+    numPts = (int)(toPtr - bgn);
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x20) {  // all points outside.

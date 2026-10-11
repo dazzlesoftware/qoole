@@ -243,7 +243,7 @@ bool FProcessWnd::IsProcessRunning(void) const {
 }
 
 //===== Update output content =====
-void FProcessWnd::OnTimer(UINT nIDEvent) {
+void FProcessWnd::OnTimer(UINT_PTR nIDEvent) {
 	CRichEditCtrl::OnTimer(nIDEvent);
 
 	// static int ucount = 0;
@@ -258,7 +258,7 @@ void FProcessWnd::OnIdleUpdateContent(void) {
 
 	if (bufSize > 0) {
 		EDITSTREAM es;
-		es.dwCookie = (DWORD) this;
+		es.dwCookie = (DWORD_PTR) this;
 		es.pfnCallback = GetInputFromBuffer;
 
 		// Disable repaints.
@@ -278,7 +278,7 @@ void FProcessWnd::OnIdleUpdateContent(void) {
 	lockBuffer.Unlock();
 }
 
-DWORD CALLBACK FProcessWnd::GetInputFromBuffer(DWORD dwCookie, LPBYTE bpBuff,
+DWORD CALLBACK FProcessWnd::GetInputFromBuffer(DWORD_PTR dwCookie, LPBYTE bpBuff,
 											   LONG cb, LONG FAR *pcb) {
 	FProcessWnd *pPWnd = (FProcessWnd *) dwCookie;
 	int index = 0;
@@ -337,11 +337,11 @@ UINT FProcessWnd::ThreadFunc(LPVOID pParam) {
 	pPWnd->lockBuffer.Lock();
 	if (pPWnd->terminateFlag) {
 		strcpy(pPWnd->childStdinBuf + pPWnd->bufSize, pMesg1);
-		pPWnd->bufSize += strlen(pMesg1);
+		pPWnd->bufSize += (int)strlen(pMesg1);
 		pPWnd->terminateFlag = false;
 	}
 	strcpy(pPWnd->childStdinBuf + pPWnd->bufSize, pMesg2);
-	pPWnd->bufSize += strlen(pMesg2);
+	pPWnd->bufSize += (int)strlen(pMesg2);
 	pPWnd->lockBuffer.Unlock();
 
 	// Refresh once more.
@@ -383,7 +383,7 @@ void FProcessWnd::OutputText(char *pText) {
 	
 	lockBuffer.Lock();
 
-	int len = strlen(pText);
+	int len = (int)strlen(pText);
 	if (len + bufSize >= PIPEBUFSIZE) {  // Clean up the buffer first.
 		lockBuffer.Unlock();
 		OnIdleUpdateContent();

@@ -121,7 +121,7 @@ void FPropertyList::FillGrids(CStringList &propNameList, CStringList &valList) {
 
 	DeleteAllItems();
 
-	int i, num = propNameList.GetCount();
+	int i, num = (int)propNameList.GetCount();
 	POSITION posName = propNameList.GetHeadPosition();
 	POSITION posVal = valList.GetHeadPosition();
 
@@ -989,7 +989,7 @@ void FInPlaceBitFlagCombo::OnSelBitFlag() {
 	}
 
 	sprintf(newFlag, "%d", flags);
-	selNewFlag = m_lstItems.GetCount();
+	selNewFlag = (int)m_lstItems.GetCount();
 }
 
 
@@ -1002,7 +1002,7 @@ void FInPlaceBitFlagCombo::OnSelChange() {
 	// Redisplay the right text.
 	if (selNewFlag != -1) {
 		// Add the new text into list box.
-		int index = m_lstItems.GetCount();
+		int index = (int)m_lstItems.GetCount();
 		ASSERT(index == selNewFlag);
 
 		if (comboCtrl.GetCount() > index)

@@ -383,7 +383,7 @@ CString *FPropPageEntity::DlgProcCallBack(CString &sInitText) {
 	clrDlg.m_cc.Flags |= CC_RGBINIT;
 	clrDlg.m_cc.rgbResult  = clr;
 
-	int rtnVal = clrDlg.DoModal();
+	int rtnVal = (int)clrDlg.DoModal();
 	if (rtnVal == IDOK) {
 		sInitText.Format("(%d %d %d)",
 						 (clrDlg.GetColor() & 0x000000FF),

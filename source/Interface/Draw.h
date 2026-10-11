@@ -68,6 +68,8 @@ public:
 	static void Exit(void);
 
 	static FDraw *New(char *driver, int bits, CWnd *pWnd, int numBufs = 1);
+	static bool IsKnownDriver(const char *driver);
+	static void ValidateDriver(char *driver, const char *defDriver);
 	void UseBuf(int bufNum) { ASSERT(bufNum < numBufs); useBuf = bufNum; }
 	int GetNumBufs(void) { return numBufs; }
 	void SetZoomPtr(float *_pZoomVal) { pZoomVal = _pZoomVal; }
@@ -151,9 +153,6 @@ protected:
 };
 
 #include "DrawMFC.h"
-#include "DrawMGL.h"
-#include "DrawGld.h"
-#include "DrawDX.h"
 #include "DrawOGL.h"
 
 #endif

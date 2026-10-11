@@ -359,7 +359,7 @@ BOOL FEditorDoc::OnSaveDocument(LPCTSTR lpszPathName) {
 
 	char saving[256];
 	c = strrchr(lpszPathName, '\\');
-	FDraw::OutputText("Saving map: %s... ", (char) (c != NULL ? c + 1 : lpszPathName));
+	FDraw::OutputText("Saving map: %s... ", (c != NULL ? c + 1 : lpszPathName));
 	sprintf(saving, "Saving %s", (c != NULL ? c + 1 : lpszPathName));
 
 	pProgressWnd = new CProgressWnd(AfxGetMainWnd());

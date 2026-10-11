@@ -170,7 +170,7 @@ void CMRCMDIFrameWndSizeDock::ArrangeFloatingBars(DWORD dwOrient)
 	ArrangeWindowsInWindow (pMDIClientWnd, arrWnd, dwOrient);
 
 	// clear all the MOVED flags for sizeable windows...
-	for (int i = arrWnd.GetUpperBound(); i >= 0; i--)
+	for (int i = (int)arrWnd.GetUpperBound(); i >= 0; i--)
 	{
         CSizableMiniDockFrameWnd * pFloatFrame = (CSizableMiniDockFrameWnd *) arrWnd[i]; 
         
@@ -246,7 +246,7 @@ void CMRCFrameWndSizeDock::DestroyDynamicBars()
 	}
 
 	// now destroy these bars...
-	for (int i = arrBars.GetUpperBound(); i >= 0; i--)
+	for (int i = (int)arrBars.GetUpperBound(); i >= 0; i--)
 	{
 		pBar = (CMRCSizeControlBar *) arrBars[i];
 		pBar->DestroyWindow();
@@ -681,7 +681,7 @@ void ArrangeWindowsInWindow (CWnd * pParentWnd, CObArray & arrWnd, DWORD dwOrien
 	qsort(pArrData, arrWnd.GetSize(), sizeof(CObject *), CompareWndRect); 	
 	
 	
-	HDWP hDWP = BeginDeferWindowPos(arrWnd.GetSize());	   // defer window moves to save on refresh
+	HDWP hDWP = BeginDeferWindowPos((int)arrWnd.GetSize());	   // defer window moves to save on refresh
 
 	// iterate thru all the windows in the list looking for a position to put it
 	for (int nWndNo = 0; nWndNo < arrWnd.GetSize(); nWndNo++)

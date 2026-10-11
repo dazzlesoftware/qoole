@@ -193,7 +193,7 @@ LFile::SeekCur(int offset) {
 int
 LFile::Read(void *buf, int size, int count) {
 	if(file)
-		return fread(buf, size, count, file);
+		return (int)fread(buf, size, count, file);
 
 	if(pak) {
 		Seek(fileOffset);
@@ -209,7 +209,7 @@ LFile::Read(void *buf, int size, int count) {
 int
 LFile::Write(void *buf, int size, int count) {
 	if(file)
-		return fwrite(buf, size, count, file);
+		return (int)fwrite(buf, size, count, file);
 
 	return 0;
 }
@@ -663,7 +663,7 @@ FormatFloat(float number) {
 
   // Strip the trailing 0's
   sprintf(rtnVal, "%f", number);
-  len = strlen(rtnVal);
+  len = (int)strlen(rtnVal);
   for(i = len - 1;
       i > 0 && rtnVal[i] == '0' && rtnVal[i - 1] != '.';
       i--) {
@@ -825,7 +825,7 @@ void String_Crop(char *str) {
 }
 
 void String_Chop(char *str) {
-	int i = strlen(str);
+	int i = (int)strlen(str);
 	if(i)
 		str[i - 1] = '\0';
 }
@@ -853,7 +853,7 @@ int strstri(char *str1, char *str2) {
 	strcpy(buf2, str2);
 	strupr(buf1);
 	strupr(buf2);
-	result = (int)strstr(buf1, buf2);
+	result = (strstr(buf1, buf2) != NULL);
 	free(buf1);
 	free(buf2);
 	return result;

@@ -231,7 +231,7 @@ BOOL CCreditStatic::OnEraseBkgnd(CDC* pDC)
 //	return CStatic::OnEraseBkgnd(pDC);
 }
 
-void CCreditStatic::OnTimer(UINT nIDEvent) 
+void CCreditStatic::OnTimer(UINT_PTR nIDEvent) 
 {
 	if (nIDEvent != DISPLAY_TIMER_ID)
 	{
@@ -830,7 +830,7 @@ void CCreditStatic::OnDestroy()
 
 BOOL CCreditStatic::SetBkImage(UINT nIDResource)
 {
-    return SetBkImage( (LPCTSTR)nIDResource );
+    return SetBkImage( MAKEINTRESOURCE(nIDResource) );
 }
 
 BOOL CCreditStatic::SetBkImage(LPCTSTR lpszResourceName)

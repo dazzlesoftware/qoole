@@ -182,7 +182,7 @@ public:
 	void OnHide();
 	void OnToggleAllowDocking();
 	void OnFloatAsMDI();
-	afx_msg LONG OnAfterFloatMessage(UINT, LONG);
+	afx_msg LRESULT OnAfterFloatMessage(WPARAM, LPARAM);
 	
 	// Overrides
 	// ClassWizard generated virtual function overrides
@@ -201,7 +201,7 @@ public:
 protected:
     // Overridable functions
     virtual void OnSizedOrDocked(int cx, int cy, BOOL bFloating, int flags);
-	virtual LONG OnAddContextMenuItems(UINT wParam, LPARAM lParam);
+	virtual LRESULT OnAddContextMenuItems(WPARAM wParam, LPARAM lParam);
 	
     //{{AFX_MSG(CMRCSizeControlBar)
     afx_msg void OnWindowPosChanged(WINDOWPOS FAR* lpwndpos);
@@ -209,7 +209,7 @@ protected:
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
 	afx_msg void OnSetFocus( CWnd* pOldWnd );
     //}}AFX_MSG
-	afx_msg LONG OnSetMessageString(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnSetMessageString(WPARAM wParam, LPARAM lParam);
     DECLARE_MESSAGE_MAP()
 };
 

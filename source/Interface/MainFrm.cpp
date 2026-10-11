@@ -1308,7 +1308,7 @@ void FMainFrame::DestroyAllVFrames(void) {
 
 FMapView *FMainFrame::IsMapViewValid(FMapView *pView) const {
 
-	UINT nID = (UINT) pView;
+	UINT_PTR nID = (UINT_PTR) pView;
 	if (nID >= 0 && nID <= 3) {
 		if (qvFrames[nID] == NULL)
 			return NULL;
@@ -1960,22 +1960,22 @@ void FMainFrame::BuildBrushMenu(void) {
 	AddMenuEntry(pmBrushMenu, "Cube (medium)", PME_OBJLOAD, "brushes/cube2.qle");
 	AddMenuEntry(pmBrushMenu, "Cube (large)", PME_OBJLOAD, "brushes/cube3.qle");
 
-	pmBrushMenu.AppendMenu(MF_POPUP, (UINT) pmSub[0].Detach(), "Misc");
-	pmBrushMenu.AppendMenu(MF_POPUP, (UINT) pmSub[1].Detach(), "Cylinder");
-	pmBrushMenu.AppendMenu(MF_POPUP, (UINT) pmSub[2].Detach(), "Pyramid");
-	pmBrushMenu.AppendMenu(MF_POPUP, (UINT) pmSub[3].Detach(), "Lumber");
-	pmBrushMenu.AppendMenu(MF_POPUP, (UINT) pmSub[4].Detach(), "Sphere");
+	pmBrushMenu.AppendMenu(MF_POPUP, (UINT_PTR) pmSub[0].Detach(), "Misc");
+	pmBrushMenu.AppendMenu(MF_POPUP, (UINT_PTR) pmSub[1].Detach(), "Cylinder");
+	pmBrushMenu.AppendMenu(MF_POPUP, (UINT_PTR) pmSub[2].Detach(), "Pyramid");
+	pmBrushMenu.AppendMenu(MF_POPUP, (UINT_PTR) pmSub[3].Detach(), "Lumber");
+	pmBrushMenu.AppendMenu(MF_POPUP, (UINT_PTR) pmSub[4].Detach(), "Sphere");
 
 	// add to right-click menu
 	pmView.ModifyMenu(0, MF_BYPOSITION | MF_POPUP,
-		(UINT)pmBrushMenu.m_hMenu, "Add Brush");
+		(UINT_PTR)pmBrushMenu.m_hMenu, "Add Brush");
 
 	// add to top menu bar
 	CMenu *menu = GetMenu();
 	menu = menu->GetSubMenu(3);
 
 	menu->ModifyMenu(0, MF_BYPOSITION | MF_POPUP,
-		(UINT)pmBrushMenu.m_hMenu, "Add Brush");
+		(UINT_PTR)pmBrushMenu.m_hMenu, "Add Brush");
 
 	FDraw::OutputText("OK.\n");
 	pmBrushMenu.Detach();
@@ -2001,7 +2001,7 @@ void FMainFrame::BuildAddPrefabMenu(CMenu *menu, char *dir) {
 		sprintf(newdir, "%s\\%s", dir, name);
 		BuildAddPrefabMenu(&subMenu, newdir);
 
-		menu->AppendMenu(MF_POPUP, (UINT) subMenu.Detach(), name);
+		menu->AppendMenu(MF_POPUP, (UINT_PTR) subMenu.Detach(), name);
 	}
 }
 */
@@ -2059,27 +2059,27 @@ void FMainFrame::BuildEntityMenus(void) {
 		entClass = iterClass.GetNext();
 		if(entClass->nonmodels)
 			pmAddMenu.AppendMenu(MF_POPUP, 
-				(UINT) pmAdd[cnt].Detach(), entClass->name);
+				(UINT_PTR) pmAdd[cnt].Detach(), entClass->name);
 		if(entClass->models && strcmp(entClass->name, "Null"))
 			pmApplyMenu.AppendMenu(MF_POPUP, 
-				(UINT) pmApply[cnt].Detach(), entClass->name);
+				(UINT_PTR) pmApply[cnt].Detach(), entClass->name);
 		cnt++;
 	}		
 
 	// add to right-click menu
 	pmView.ModifyMenu(2, MF_BYPOSITION | MF_POPUP,
-		(UINT)pmAddMenu.m_hMenu, "Add Entity");
+		(UINT_PTR)pmAddMenu.m_hMenu, "Add Entity");
 	pmView.ModifyMenu(3, MF_BYPOSITION | MF_POPUP,
-		(UINT)pmApplyMenu.m_hMenu, "Apply Entity");
+		(UINT_PTR)pmApplyMenu.m_hMenu, "Apply Entity");
 
 	// add to top menu bar
 	CMenu *menu = GetMenu();
 	menu = menu->GetSubMenu(3);
 
 	menu->ModifyMenu(1, MF_BYPOSITION | MF_POPUP,
-		(UINT)pmAddMenu.m_hMenu, "Add Entity");
+		(UINT_PTR)pmAddMenu.m_hMenu, "Add Entity");
 	menu->ModifyMenu(2, MF_BYPOSITION | MF_POPUP,
-		(UINT)pmApplyMenu.m_hMenu, "Apply Entity");
+		(UINT_PTR)pmApplyMenu.m_hMenu, "Apply Entity");
 
 	pmAddMenu.Detach();
 	pmApplyMenu.Detach();
@@ -2205,7 +2205,7 @@ FMapViewsState::FMapViewsState(void) {
 	int i;
 	FMapView *p4Views[4];
 	for(i = 0; i < 4; i++)
-		p4Views[i] = GMainFrame->IsMapViewValid((FMapView *) i);
+		p4Views[i] = GMainFrame->IsMapViewValid((FMapView *)(INT_PTR) i);
 
 	int count = 0;
 	FMapView *pMapView;
@@ -2232,7 +2232,7 @@ FMapViewsState::FMapViewsState(void) {
 				break;
 		}
 		if (i < 4) // Yes it is.
-			qvArray[count] = (FMapView *) i;
+			qvArray[count] = (FMapView *)(INT_PTR) i;
 		else
 			qvArray[count] = pMapView;
 		posArray[count] = pNewPos;

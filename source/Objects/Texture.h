@@ -54,6 +54,14 @@ struct TexDir {
 	Game *game;
 };
 
+// TexDir as stored in a texture database file. The game pointer slot is
+// kept 32 bits wide so the file layout is the same on x86 and x64.
+struct TexDirFile {
+	char dirName[128];
+	char gameName[16];
+	int unused;
+};
+
 struct TexEntry {
 	WadEntry wadEntry;
 	char name[24];
@@ -137,7 +145,7 @@ public:
 	void Remove(char *texName);
 	void Save(void);
 
-	int GetNumTexs(void) { return textures.GetSize(); }
+	int GetNumTexs(void) { return (int)textures.GetSize(); }
 	Texture *GetTexNum(int texNum) { return textures.GetAt(texNum); }
 
 	char filename[256];

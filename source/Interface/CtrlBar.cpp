@@ -395,7 +395,7 @@ void FTabCtrl::ResizeLabels(int displayWidth) {
 	int i, num = GetItemCount();
 	for(i = 0; i < num; i++) {
 		strcpy(buf, pTabLabels[i]);
-		SqueezeStr(displayWidth, strlen(buf), buf);
+		SqueezeStr(displayWidth, (int)strlen(buf), buf);
 		SetItem(i, &tc_item);
 	}
 }

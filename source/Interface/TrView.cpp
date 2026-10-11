@@ -197,7 +197,7 @@ void FTreeView::AddDocument(FEditorDoc *newDoc) {
 	// Make the root item.
 	HTREEITEM tNode = pTree->InsertItem(rootObj->GetObjName(), iFlag, iFlag);
 	ASSERT(tNode != NULL);
-	pTree->SetItemData(tNode, (DWORD) rootObj);
+	pTree->SetItemData(tNode, (DWORD_PTR) rootObj);
 	pTree->SetItemText(tNode, newDoc->GetTitle());
 
 	// Add a dummy node;
@@ -216,7 +216,7 @@ void FTreeView::RemoveDocument(FEditorDoc *delDoc) {
 
 	// Find delDoc's sub tree.
 	HTREEITEM delItem;
-	DWORD rootObj = (DWORD) delDoc->GetRootObjectPtr();
+	DWORD_PTR rootObj = (DWORD_PTR) delDoc->GetRootObjectPtr();
 	for (delItem = pTree->GetNextItem(NULL, TVGN_CHILD);
 		 delItem != NULL && pTree->GetItemData(delItem) != rootObj;
 		 delItem = pTree->GetNextItem(delItem, TVGN_NEXTVISIBLE));
@@ -482,7 +482,7 @@ HTREEITEM FTreeView::AddItemNode(HTREEITEM parentNode, Object *objPtr) {
 
 	// Insert the tree node.
 	rtnVal = pTree->InsertItem(objPtr->GetObjName(), image, image, parentNode);
-	pTree->SetItemData(rtnVal, (DWORD) objPtr);
+	pTree->SetItemData(rtnVal, (DWORD_PTR) objPtr);
 
 	// Add a dummy child node to create the + line if obj has children.
 	if (objPtr->GetNumChildren() > 0)
@@ -971,7 +971,7 @@ void FTreeView::OnContextMenu(CWnd* pWnd, CPoint point) {
 			ID_RCMTV_SORTYPOS, "By Y Pos");
 		sMenu.AppendMenu(MF_STRING | (listSortType == 4 ? MF_CHECKED : 0), 
 			ID_RCMTV_SORTZPOS, "By Z Pos");
-		rMenu.AppendMenu(MF_POPUP, (UINT) sMenu.Detach(), "Sort Listing");
+		rMenu.AppendMenu(MF_POPUP, (UINT_PTR) sMenu.Detach(), "Sort Listing");
 		rMenu.AppendMenu(MF_SEPARATOR);
 
 		rMenu.AppendMenu(MF_STRING, ID_OBJECT_PROPERTIES, "Properties...");

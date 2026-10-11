@@ -103,6 +103,11 @@ BOOL FConfigDraw::OnKillActive() {
 	strcpy(FMapView::draw3dSolid, m_draw3dSolid.GetBuffer(8));
 	strcpy(FMapView::draw3dTex, m_draw3dTex.GetBuffer(8));
 
+	FDraw::ValidateDriver(FMapView::draw2dWire, "MFC");
+	FDraw::ValidateDriver(FMapView::draw3dWire, "MFC");
+	FDraw::ValidateDriver(FMapView::draw3dSolid, "DX12");
+	FDraw::ValidateDriver(FMapView::draw3dTex, "DX12");
+
 	FMapView::RefreshAll();
 
 	return TRUE;

@@ -45,11 +45,29 @@ FDraw::Exit(void) {
 	delete cfg;
 }
 
-FDraw *
-FDraw::New(char *driver, int bits, CWnd *wnd, int _numBufs) {
-	FDraw *pDraw;
+// Renderer plugins that ship with the editor (GenesisDraw<name>.dll).
+static const char *knownDrivers[] = { "MFC", "OpenGL", "DX12", "Vulkan" };
+
+bool
+FDraw::IsKnownDriver(const char *driver) {
+	for(int i = 0; i < (int)(sizeof(knownDrivers) / sizeof(knownDrivers[0])); i++) {
+		if(!strcmpi(driver, knownDrivers[i]))
+			return true;
+	}
+	return false;
+}
+
+// Settings saved by older versions can name a renderer that no longer
+// exists (MGL, Glide). Replace those with defDriver.
+void
+FDraw::ValidateDriver(char *driver, const char *defDriver) {
+	if(!IsKnownDriver(driver))
+		strcpy(driver, defDriver);
+}
 
 #ifdef USE_DRAWDLL
+static FDraw *
+LoadDrawDLL(const char *driver, CWnd *wnd) {
 	char dllName[MAX_PATH];
 #ifdef _DEBUG
 	sprintf(dllName, "%s\\GenesisDraw%sD.dll", LFile::GetInitDir(), driver);
@@ -61,34 +79,50 @@ FDraw::New(char *driver, int bits, CWnd *wnd, int _numBufs) {
 	if(!drawInst)
 		drawInst = LoadLibrary(dllName);
 
-	OutputText("Loading %s Genesis Editor driver... ", driver);
+	FDraw::OutputText("Loading %s Genesis Editor driver... ", driver);
 
 	if(!drawInst)
 	{
-		OutputText("Error.\nCouldn't load %s\n", dllName);
-		LFatal("Couldn't load %s\n", dllName);
+		FDraw::OutputText("Error.\nCouldn't load %s\n", dllName);
+		return NULL;
 	}
 
 	FDraw *(*drawProc)(CWnd *wnd) = (FDraw *(*)(CWnd *wnd))GetProcAddress(drawInst, "NewDraw");
 	if(!drawProc)
 	{
-		OutputText("error.\nBad DLL: %s\n", dllName);
-		LFatal("Bad %s\n", dllName);
+		FDraw::OutputText("error.\nBad DLL: %s\n", dllName);
+		return NULL;
 	}
-	OutputText("OK.\n");
-	pDraw = drawProc(wnd);
+	FDraw::OutputText("OK.\n");
+	return drawProc(wnd);
+}
+#endif
+
+FDraw *
+FDraw::New(char *driver, int bits, CWnd *wnd, int _numBufs) {
+	FDraw *pDraw;
+
+#ifdef USE_DRAWDLL
+	pDraw = NULL;
+	if(IsKnownDriver(driver))
+		pDraw = LoadDrawDLL(driver, wnd);
+	else
+		OutputText("Unknown Genesis Editor driver %s.\n", driver);
+
+	// Fall back to the MFC (GDI) renderer, which works everywhere.
+	if(!pDraw && strcmpi(driver, "MFC")) {
+		OutputText("Using the MFC driver instead.\n");
+		pDraw = LoadDrawDLL("MFC", wnd);
+	}
+
+	if(!pDraw)
+		LFatal("Couldn't load a Genesis Editor driver.\n");
 
 #else
-	if(!strcmpi(driver, "MFC"))
-		pDraw = new FDrawMFC(wnd);
-	else if(!strcmpi(driver, "MGL"))
-		pDraw = new FDrawMGL(wnd);
-	else if(!strcmpi(driver, "DirectX"))
-		pDraw = new FDrawDirectX(wnd);
-	else if(!strcmpi(driver, "Glide"))
-		pDraw = new FDrawGlide(wnd);
-	else if(!strcmpi(driver, "OpenGL"))
+	if(!strcmpi(driver, "OpenGL"))
 		pDraw = new FDrawOpenGL(wnd);
+	else
+		pDraw = new FDrawMFC(wnd);
 #endif
 
 	strcpy(pDraw->driver, driver);
@@ -390,7 +424,7 @@ FDraw::ZBufSetup(Object *obj, FaceTex *faceTex, Vector3d norm) {
 		toffs /= zbufTex->divHeight;
 	}
 	else
-		zbufColor = (short)(((int)obj + axisAlign * 10) % 255);
+		zbufColor = (short)(((INT_PTR)obj + axisAlign * 10) % 255);
 
 	return (zbufTex && zbufTextured);
 }

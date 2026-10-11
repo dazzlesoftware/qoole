@@ -8,9 +8,12 @@ like that release, is licensed under the GNU GPL (see license.txt).
 
 Open `source/Genesis.slnx` in Visual Studio 2026. It needs the "Desktop
 development with C++" workload and the "C++ MFC for latest build tools
-(x86 & x64)" component. Build the x86 platform; `GenesisEditor.exe`
+(x86 & x64)" component. Build the x64 platform (the default); `GenesisEditor.exe`
 (`GenesisEditorD.exe` for Debug) and the `GenesisDraw*.dll` renderer plugins
-are written to `source/Exec`.
+are written to `source/Exec`. The x86 platform still builds and goes to
+`source/Exec/x86`. From a command line:
+
+    msbuild source\Genesis.slnx -p:Configuration=Release -p:Platform=x64
 
 At startup the editor loads its data from `GenesisEditor.pak` (formerly
 `Qoole99.pak`), looked up in the working directory and then next to the
@@ -18,13 +21,25 @@ executable.
 
 ## Renderers
 
-Each view type picks a renderer in the Render Library options. Besides the
-original MFC, MGL, Glide and OpenGL plugins there are DX12
-(`GenesisDrawDX12.dll`, Direct3D 12) and Vulkan (`GenesisDrawVulkan.dll`)
-plugins. Both need only the Windows SDK to build: the Vulkan headers are
+Each view type picks a renderer in the Render Library options:
+
+- MFC (`GenesisDrawMFC.dll`): GDI software renderer, wireframe only. Default
+  for the 2D and 3D wireframe views.
+- OpenGL (`GenesisDrawOpenGL.dll`).
+- DX12 (`GenesisDrawDX12.dll`): Direct3D 12, falling back to the WARP
+  software rasterizer when no hardware device is available. Default for the
+  solid and textured 3D views.
+- Vulkan (`GenesisDrawVulkan.dll`).
+
+DX12 and Vulkan need only the Windows SDK to build: the Vulkan headers are
 vendored in `source/External`, `vulkan-1.dll` is loaded at runtime from the
 graphics driver, and the SPIR-V shaders are pre-generated (rerun
 `source/Interface/BuildVulkanShaders.cmd` after editing `DrawShaders.hlsl`).
+
+The original MGL and Glide renderers have been removed; their libraries were
+32-bit only. Saved settings that name a renderer that no longer exists are
+reset to the defaults, and if a renderer plugin fails to load the editor falls
+back to MFC.
 
 ## Origins
 

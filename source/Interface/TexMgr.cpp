@@ -314,7 +314,7 @@ void FTexMgr::OnListSel() {
 void FTexMgr::OnPickSel() {
 	char texName[64];
 	m_pickList.GetText(m_pickList.GetCurSel(), texName);
-	SetTexInfo(texName, m_pickList.GetItemData(m_pickList.GetCurSel()));
+	SetTexInfo(texName, (int)m_pickList.GetItemData(m_pickList.GetCurSel()));
 	m_texList.SetSel(-1, false);
 
 	m_add.EnableWindow(true);
@@ -324,7 +324,7 @@ void FTexMgr::OnPickSel() {
 void FTexMgr::OnTexSel() {
 	char texName[64];
 	m_texList.GetText(m_texList.GetCurSel(), texName);
-	SetTexInfo(texName, m_texList.GetItemData(m_texList.GetCurSel()));
+	SetTexInfo(texName, (int)m_texList.GetItemData(m_texList.GetCurSel()));
 	m_pickList.SetSel(-1, false);
 
 	m_add.EnableWindow(false);

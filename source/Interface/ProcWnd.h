@@ -74,7 +74,7 @@ protected:
 	bool IsSelEmpty(void) const;
 
 	static UINT ThreadFunc(LPVOID pParam);
-	static DWORD CALLBACK GetInputFromBuffer(DWORD dwCookie, LPBYTE bpBuff,
+	static DWORD CALLBACK GetInputFromBuffer(DWORD_PTR dwCookie, LPBYTE bpBuff,
 											 LONG cb, LONG FAR *pcb);
 
 
@@ -106,7 +106,7 @@ protected:
 protected:
 	//{{AFX_MSG(FProcessWnd)
 	afx_msg void OnChar(UINT nChar, UINT nRepCnt, UINT nFlags);
-	afx_msg void OnTimer(UINT nIDEvent);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnPaint();
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);

@@ -643,7 +643,7 @@ CSize CSizeDockBar::CalcFixedLayout(BOOL bStretch, BOOL bHorz)
 	// prepare for layout
     AFX_SIZEPARENTPARAMS layout;
     layout.hDWP = m_bLayoutQuery ?
-            NULL : ::BeginDeferWindowPos(m_arrBars.GetSize());
+            NULL : ::BeginDeferWindowPos((int)m_arrBars.GetSize());
 
     // CPoint pt(-afxData.cxBorder2, -afxData.cyBorder2);
     // CPoint pt(-cxBorder, -cyBorder);
@@ -901,7 +901,7 @@ CSize CSizeDockBar::CalcFixedLayout(BOOL bStretch, BOOL bHorz)
 				}
 				nLastVisSep = nPos;			// record separator for last vis position
 			}
-			nFirstSplitterInRow = max(m_SplitArr.GetSize(), 0);
+			nFirstSplitterInRow = max((int)m_SplitArr.GetSize(), 0);
 			nWidth = 0;
 			bDrawBarWithinRow = FALSE;
 			bFirstPaneInRow = TRUE;
@@ -977,7 +977,7 @@ void CSizeDockBar::SetSplitterSizeInRange(int start, int type, int length)
     ASSERT(type == SPLITTER_VERT || type == SPLITTER_HORZ);
     ASSERT(start >= 0 && start <= m_SplitArr.GetSize());
 
-    for (int i = m_SplitArr.GetUpperBound(); i >= start; i--)
+    for (int i = (int)m_SplitArr.GetUpperBound(); i >= start; i--)
     {
         CSplitterRect * pItem = (CSplitterRect *)m_SplitArr[i];
         if (pItem->m_type == type)
@@ -995,7 +995,7 @@ void CSizeDockBar::SetSplitterSizeInRange(int start, int type, int length)
 void CSizeDockBar::DeleteSplitterRects()
 //-----------------------------------------------------------------------------
 {
-    for (int i = m_SplitArr.GetUpperBound(); i >= 0 ; i--)
+    for (int i = (int)m_SplitArr.GetUpperBound(); i >= 0 ; i--)
         delete (m_SplitArr[i]);
     m_SplitArr.RemoveAll();
 }
@@ -1007,7 +1007,7 @@ void CSizeDockBar::OnPaint()
 {
     CPaintDC dc(this); // device context for painting
 
-    for (int i = m_SplitArr.GetUpperBound(); i >= 0; i--)
+    for (int i = (int)m_SplitArr.GetUpperBound(); i >= 0; i--)
         ((CSplitterRect *)(m_SplitArr[i]))->Draw(&dc);
 }
 
@@ -1015,7 +1015,7 @@ void CSizeDockBar::OnPaint()
 CSplitterRect * CSizeDockBar::HitTest(CPoint pt)
 //----------------------------------------------------------------------------
 {
-	for (int i = m_SplitArr.GetUpperBound(); i >= 0; i--)
+	for (int i = (int)m_SplitArr.GetUpperBound(); i >= 0; i--)
     {
     	CSplitterRect *pSplit = GetSplitter(i);
         if (pSplit->m_rect.PtInRect(pt))

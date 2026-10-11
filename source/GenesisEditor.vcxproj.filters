@@ -147,28 +147,10 @@
     <ClInclude Include="Interface\Draw.h">
       <Filter>Interface\FDraw</Filter>
     </ClInclude>
-    <ClCompile Include="Interface\DrawDX.cpp">
-      <Filter>Interface\FDraw</Filter>
-    </ClCompile>
-    <ClInclude Include="Interface\DrawDX.h">
-      <Filter>Interface\FDraw</Filter>
-    </ClInclude>
-    <ClCompile Include="Interface\DrawGld.cpp">
-      <Filter>Interface\FDraw</Filter>
-    </ClCompile>
-    <ClInclude Include="Interface\DrawGld.h">
-      <Filter>Interface\FDraw</Filter>
-    </ClInclude>
     <ClCompile Include="Interface\DrawMFC.cpp">
       <Filter>Interface\FDraw</Filter>
     </ClCompile>
     <ClInclude Include="Interface\DrawMFC.h">
-      <Filter>Interface\FDraw</Filter>
-    </ClInclude>
-    <ClCompile Include="Interface\DrawMGL.cpp">
-      <Filter>Interface\FDraw</Filter>
-    </ClCompile>
-    <ClInclude Include="Interface\DrawMGL.h">
       <Filter>Interface\FDraw</Filter>
     </ClInclude>
     <ClCompile Include="Interface\DrawOGL.cpp">

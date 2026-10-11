@@ -70,10 +70,10 @@ WORD FMapView::keyDown = 'C' - 'A' + 0x41;
 UINT FMapView::snapAlignment = 0;
 UINT FMapView::editConstraint = 0;
 
-char FMapView::draw2dWire[] = "MGL";
-char FMapView::draw3dWire[] = "MGL";
-char FMapView::draw3dSolid[] = "MGL";
-char FMapView::draw3dTex[] = "MGL";
+char FMapView::draw2dWire[] = "MFC";
+char FMapView::draw3dWire[] = "MFC";
+char FMapView::draw3dSolid[] = "DX12";
+char FMapView::draw3dTex[] = "DX12";
 
 IMPLEMENT_DYNCREATE(FMapView, CView)
 
@@ -152,6 +152,11 @@ void FMapView::Init() {
 	cfg->RegisterVar("Draw3DWire", &draw3dWire, LVAR_STR);
 	cfg->RegisterVar("Draw3DSolid", &draw3dSolid, LVAR_STR);
 	cfg->RegisterVar("Draw3DTex", &draw3dTex, LVAR_STR);
+
+	FDraw::ValidateDriver(draw2dWire, "MFC");
+	FDraw::ValidateDriver(draw3dWire, "MFC");
+	FDraw::ValidateDriver(draw3dSolid, "DX12");
+	FDraw::ValidateDriver(draw3dTex, "DX12");
 }
 
 void FMapView::Exit() {
@@ -1308,7 +1313,7 @@ void FMapView::OnContextMenu(CWnd* pWnd, CPoint point) {
 		rMenu.LoadMenu(IDR_MAPVIEW_CONTEXT_MB);
 		CMenu *pEditMenu = rMenu.GetSubMenu(3)->GetSubMenu(0);
 
-		pAddMenu->AppendMenu(MF_POPUP, (UINT) pEditMenu->Detach(), "Edit");
+		pAddMenu->AppendMenu(MF_POPUP, (UINT_PTR) pEditMenu->Detach(), "Edit");
 		pAddMenu->AppendMenu(MF_SEPARATOR);
 		pAddMenu->AppendMenu(MF_STRING, ID_OBJECT_SAVEPREFAB, "Save Prefab...");
 		pAddMenu->AppendMenu(MF_SEPARATOR);
@@ -1396,7 +1401,7 @@ void FMapView::OnRMBUContextMenu(UINT nFlags, CPoint point) {
 // Idle timer to help with rendering.
 //======================================================================
 
-void FMapView::OnTimer(UINT nIDEvent) {
+void FMapView::OnTimer(UINT_PTR nIDEvent) {
 	CView::OnTimer(nIDEvent);
 
 	if (nIDEvent == TIMER_MV_UPDATEDRAGSEL)

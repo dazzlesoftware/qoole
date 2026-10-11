@@ -305,7 +305,7 @@ void TexList::Save(void) {
 	for(int i = 0; i < textures.GetSize(); i++) {
 		Texture *texture = textures.GetAt(i);
 		sprintf(buf, "%s\r\n", texture->GetTexListName(texDB));
-		file.Write(buf, strlen(buf));
+		file.Write(buf, (UINT)strlen(buf));
 	}
 	FDraw::OutputText("OK.\n");
 }
@@ -354,10 +354,13 @@ TexDB::TexDB(Game *_game) {
 	file.Read(texEntry, sizeof(TexEntry), texEntries);
 	file.Read(&texDirs, sizeof(texDirs));
 	texDirs = Min(texDirs, TEXDIR_MAX);
-	file.Read(texDir, sizeof(TexDir), texDirs);
-
-	for(i = 0; i < texDirs; i++)
+	for(i = 0; i < texDirs; i++) {
+		TexDirFile dirFile;
+		file.Read(&dirFile, sizeof(TexDirFile), 1);
+		memcpy(texDir[i].dirName, dirFile.dirName, sizeof(texDir[i].dirName));
+		memcpy(texDir[i].gameName, dirFile.gameName, sizeof(texDir[i].gameName));
 		texDir[i].game = game;
+	}
 
 	for(i = 0; i < texEntries; i++)
 		texture[i] = new Texture(&texEntry[i], game);
@@ -376,7 +379,13 @@ TexDB::~TexDB() {
 	file.Write(texEntry, sizeof(TexEntry), texEntries);
 
 	file.Write(&texDirs, sizeof(texDirs));
-	file.Write(texDir, sizeof(TexDir), texDirs);
+	for(int i = 0; i < texDirs; i++) {
+		TexDirFile dirFile;
+		memset(&dirFile, 0, sizeof(dirFile));
+		memcpy(dirFile.dirName, texDir[i].dirName, sizeof(dirFile.dirName));
+		memcpy(dirFile.gameName, texDir[i].gameName, sizeof(dirFile.gameName));
+		file.Write(&dirFile, sizeof(TexDirFile), 1);
+	}
 
 	for(int i = 0; i < texEntries; i++)
 		delete texture[i];

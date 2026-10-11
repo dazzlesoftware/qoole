@@ -315,11 +315,11 @@ public:
 // Implementation
 protected:
 	CCreditStatic m_static;
-	UINT TimerOn;
+	UINT_PTR TimerOn;
 	UINT bitmapID;
 	//{{AFX_MSG(CAboutDlg)
 	virtual BOOL OnInitDialog();
-	afx_msg void OnTimer(UINT nIDEvent);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
@@ -364,7 +364,7 @@ BOOL CAboutDlg::OnInitDialog()
 	              // EXCEPTION: OCX Property Pages should return FALSE
 }
 
-void CAboutDlg::OnTimer(UINT nIDEvent) 
+void CAboutDlg::OnTimer(UINT_PTR nIDEvent) 
 {
 	if (nIDEvent != DISPLAY_TIMER_ID)
 	{

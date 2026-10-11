@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // virtual FDraw functions that aren't pure
 
-#ifndef USE_DRAWDLL
-pixel_format_t pixelFormat565 = { 31, 63, 31, 0, 11, 3, 5, 2, 0, 3, 0, 0 };
-#endif
-
 FDraw::FDraw(CWnd *wnd) {
 	pWnd = wnd;
 	numBufs = 2;

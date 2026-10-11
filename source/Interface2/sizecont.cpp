@@ -53,7 +53,7 @@ void CMRCSizeControlBar::TidyUp()
 // from the array. 
 	if (m_parrAllocBars != NULL)
 	{
-		for (int i = m_parrAllocBars->GetUpperBound(); i >= 0; i--)
+		for (int i = (int)m_parrAllocBars->GetUpperBound(); i >= 0; i--)
 		{
 			ASSERT((*m_parrAllocBars)[i]->IsKindOf(RUNTIME_CLASS(CMRCSizeControlBar)));
 			delete ((*m_parrAllocBars)[i]);
@@ -88,7 +88,7 @@ CMRCSizeControlBar::~CMRCSizeControlBar()
 	if (m_Style & SZBARF_AUTOTIDY)
 	{
 		int i;
-		for (i = m_parrAllocBars->GetUpperBound(); i >= 0; i--)
+		for (i = (int)m_parrAllocBars->GetUpperBound(); i >= 0; i--)
 			if ((*m_parrAllocBars)[i] == this)	
 			{
 				m_parrAllocBars->RemoveAt(i);
@@ -102,7 +102,7 @@ CMRCSizeControlBar::~CMRCSizeControlBar()
 #ifdef _DEBUG
 	if (m_parrAllocBars != NULL)
 	{
-		for (int i = m_parrAllocBars->GetUpperBound(); i >= 0; i--)
+		for (int i = (int)m_parrAllocBars->GetUpperBound(); i >= 0; i--)
 			ASSERT ((*m_parrAllocBars)[i] != this);	
 	}
 #endif
@@ -238,7 +238,7 @@ void CMRCSizeControlBar::EnableDocking(DWORD dwDockStyle)
 
 
 //--------------------------------------------------------------------------
-afx_msg LONG CMRCSizeControlBar::OnAfterFloatMessage(UINT wParam, LONG lParam)
+afx_msg LRESULT CMRCSizeControlBar::OnAfterFloatMessage(WPARAM wParam, LPARAM lParam)
 // message handler. Force the parent of the control bar to update it's style
 // after floating, otherwise we'll wait till an WM_NCHITTEST.
 //--------------------------------------------------------------------------
@@ -311,7 +311,7 @@ BOOL CMRCSizeControlBar::IsProbablyFloating()
 
 
 //--------------------------------------------------------------------------
-LONG CMRCSizeControlBar::OnAddContextMenuItems(WPARAM wParam, LPARAM lParam)
+LRESULT CMRCSizeControlBar::OnAddContextMenuItems(WPARAM wParam, LPARAM lParam)
 //--------------------------------------------------------------------------
 {
 	HMENU hMenu = (HMENU)lParam;		// handle of menu.
@@ -450,7 +450,7 @@ void CMRCSizeControlBar::OnSetFocus( CWnd* pOldWnd )
 
 
 //--------------------------------------------------------------------------
-LONG CMRCSizeControlBar::OnSetMessageString(WPARAM wParam, LPARAM lParam)
+LRESULT CMRCSizeControlBar::OnSetMessageString(WPARAM wParam, LPARAM lParam)
 // route any WM_SETMESSAGESTRING request thru to the owner of this control bar
 // Prime reason for this is for flyby tooltip text for controlbars embedded
 // on control bars. The embedded CControlBar sends the message to it's owner,

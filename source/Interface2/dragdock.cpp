@@ -555,7 +555,7 @@ BOOL CDragDockContext::Track()
         if (msg.message == WM_QUIT)
 #endif
         {
-            AfxPostQuitMessage(msg.wParam);
+            AfxPostQuitMessage((int)msg.wParam);
             break;
         }
 
