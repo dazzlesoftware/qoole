@@ -8,6 +8,7 @@
     <Project Path="Engine/ApplicationCore/ApplicationCore.vcxproj" />
     <Project Path="Engine/RHI/RHI.vcxproj" />
     <Project Path="Engine/UICore/UICore.vcxproj" />
+    <Project Path="Engine/UI/UI.vcxproj" />
     <Project Path="Engine/UIRenderer/UIRenderer.vcxproj" />
   </Folder>
   <Folder Name="/External/">

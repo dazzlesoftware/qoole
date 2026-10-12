@@ -1,27 +1,35 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// UISandbox: milestone 2 of docs/GenesisUI.md. Two DPI-aware windows (one
-// OS-decorated, one borderless with a UI-drawn title bar) drawing boxes,
-// 9-slices, rounded boxes, lines, clipped regions, shaped text and a
-// render-target viewport through the UI renderer, on D3D12 or Vulkan.
+// UISandbox: the Genesis UI widget gallery (milestone 3 of docs/GenesisUI.md)
+// running on FUIApplication, drawn through the UI renderer on D3D12 or
+// Vulkan. The main window shows every built-in widget; the borderless
+// inspector window has a widget-built title bar and live information.
 //
 // Command line:
 //   -d3d12 | -vulkan       backend (default D3D12)
 //   -appscale=1.25         application scale on top of the monitor DPI
 //   -nodebug / -debug      D3D12 debug layer / Vulkan validation (default: on in Debug builds)
-//   -selftest=<dir>        scripted run: DPI changes, minimize/restore, move
-//                          between monitors, resize; PNG screenshots and a log
-//                          go to <dir>; exits when done
+//   -selftest=<dir>        scripted run: every gallery page, a menu and a
+//                          tooltip, DPI changes, minimize/restore, a move to
+//                          another monitor, resize, app scale; PNG
+//                          screenshots and a log go to <dir>; exits when done
 //
-// Keys: Esc quits, F2 cycles the app scale, F3 simulates a DPI change of the
-// main window (WM_DPICHANGED), the mouse wheel scrolls the clipped list.
+// Keys: F2 cycles the app scale, F3 simulates a DPI change of the main
+// window (WM_DPICHANGED), F4 shows or hides the inspector.
 
+#include "Application/UIApplication.h"
 #include "CoreMinimal.h"
-#include "GenericPlatform/PlatformApplication.h"
+#include "Gallery.h"
 #include "RHI.h"
 #include "SandboxContent.h"
 #include "Screenshot.h"
+#include "Styling/GenesisStyle.h"
 #include "UIRenderer.h"
+#include "UIWindowRenderer.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SBoxPanel.h"
+#include "Widgets/Text/STextBlock.h"
 
 #include <Windows.h>
 #include <objbase.h>
@@ -88,56 +96,39 @@ namespace
 		}
 		return false;
 	}
-
-	struct FSandboxWindow
-	{
-		TSharedPtr<IPlatformWindow> Window;
-		TUniquePtr<FRHISwapChain> SwapChain;
-		FDrawElementList Elements;
-		bool bInspector = false;
-		FVector2 MousePixels{ -1.0f, -1.0f };
-		FUIRenderStats Stats;
-	};
 }
 
-class FSandboxApp final : public IPlatformMessageHandler, public TSharedFromThis<FSandboxApp>
+class FSandboxApp final : public IInputProcessor, public TSharedFromThis<FSandboxApp>
 {
 public:
 	int32 Run(const FString& CommandLine);
 
-	// IPlatformMessageHandler
-	bool OnKeyDown(EKey Key, uint32 CharacterCode, bool bIsRepeat) override;
-	bool OnMouseDown(const TSharedRef<IPlatformWindow>& Window, EMouseButton Button, FVector2 Position) override;
-	bool OnMouseMove(const TSharedRef<IPlatformWindow>& Window, FVector2 Position) override;
-	bool OnMouseLeave(const TSharedRef<IPlatformWindow>& Window) override;
-	bool OnMouseWheel(const TSharedRef<IPlatformWindow>& Window, float Delta, bool bHorizontal, FVector2 Position) override;
-	bool OnGamepadButtonDown(int32 UserIndex, EGamepadButton Button, bool bIsRepeat) override;
-	void OnGamepadConnectionChanged(int32 UserIndex, bool bConnected) override;
-	void OnSizeChanged(const TSharedRef<IPlatformWindow>& Window, int32 Width, int32 Height, bool bWasMinimized) override;
-	void OnMovedWindow(const TSharedRef<IPlatformWindow>& Window, int32 X, int32 Y) override;
-	void OnDpiScaleChanged(const TSharedRef<IPlatformWindow>& Window, float NewScale) override;
-	void OnWindowClose(const TSharedRef<IPlatformWindow>& Window) override;
-	void OnOSPaint(const TSharedRef<IPlatformWindow>& Window) override;
-	EWindowZone GetWindowZoneForPoint(const TSharedRef<IPlatformWindow>& Window, FVector2 Position) override;
+	// IInputProcessor: global keys.
+	bool HandleKeyDownEvent(FUIApplication& App, const FKeyEvent& Event) override;
 
 private:
 	bool Initialize(const FString& CommandLine);
 	void CreateWindows();
-	void RenderFrame();
+	void CreateInspector();
+	void ToggleInspector();
+	TSharedRef<SWidget> MakeInspectorContent();
+	void SetAppScale(float Scale);
+	FSandboxFrameInfo MakeFrameInfo() const;
+	void RenderViewportTarget(FRHICommandList& CommandList);
 	void TickSelfTest();
 	void Capture(const char* Name);
 	void SimulateDpiChange(float NewScale);
-	void CloseInspector();
-	FSandboxWindow* Find(const IPlatformWindow& Window);
-	FSandboxFrameInfo MakeFrameInfo(const FSandboxWindow& Window) const;
-	TArray<FString> InspectorLines(const FSandboxWindow& Window) const;
 
 	TSharedPtr<IPlatformApplication> Platform;
 	TUniquePtr<FRHIDevice> Device;
-	TUniquePtr<FFontCache> FontCache;
+	TSharedPtr<FFontCache> FontCache;
 	TUniquePtr<FUIRenderer> Renderer;
+	TUniquePtr<FUIWindowRenderer> WindowRenderer;
+	TSharedPtr<FUIApplication> App;
 	TUniquePtr<FSandboxContent> Content;
-	TArray<TUniquePtr<FSandboxWindow>> Windows;
+	TSharedPtr<SWindow> MainWindow;
+	TSharedPtr<SWindow> Inspector;
+	TSharedPtr<SWidgetGallery> Gallery;
 	TSharedPtr<FUIRenderTarget> ViewportTarget;
 	FDrawElementList ViewportElements;
 	TUniquePtr<FFileOutputDevice> FileLog;
@@ -148,14 +139,13 @@ private:
 	double LastFpsTime = 0.0;
 	int32 FramesSinceFps = 0;
 	float FramesPerSecond = 0.0f;
-	float ListScroll = 0.0f;
-	bool bQuit = false;
-	bool bInFrame = false;
-	FString LastEvent = "none yet";
 
 	FString SelfTestDir;
-	int32 FrameNumber = 0;
+	int32 SelfTestFrame = 0;
 };
+
+// ---------------------------------------------------------------------------
+// Setup
 
 bool FSandboxApp::Initialize(const FString& CommandLine)
 {
@@ -180,7 +170,6 @@ bool FSandboxApp::Initialize(const FString& CommandLine)
 	}
 
 	Platform = CreatePlatformApplication().ToSharedPtr();
-	Platform->SetMessageHandler(TSharedRef<IPlatformMessageHandler>(StaticCastSharedPtr<IPlatformMessageHandler>(shared_from_this())));
 
 	FRHIDeviceDesc DeviceDesc;
 	DeviceDesc.Backend = Backend;
@@ -198,19 +187,15 @@ bool FSandboxApp::Initialize(const FString& CommandLine)
 		return false;
 	}
 
-	FontCache = MakeUnique<FFontCache>();
-	const FString Fonts = FPaths::FindContentDir() + "Fonts/";
-	const TSharedPtr<FFontFace> Regular = FontCache->LoadFace(Fonts + "NotoSans-Regular.ttf");
-	const TSharedPtr<FFontFace> Bold = FontCache->LoadFace(Fonts + "NotoSans-Bold.ttf");
-	const TSharedPtr<FFontFace> Devanagari = FontCache->LoadFace(Fonts + "NotoSansDevanagari-Regular.ttf");
-	if (!Regular || !Bold || !Devanagari)
+	FontCache = std::make_shared<FFontCache>();
+	const FGenesisFonts Fonts = FGenesisFonts::Load(*FontCache);
+	if (!Fonts.IsValid())
 	{
-		GE_LOG(LogSandbox, Error, "Fonts not found in \"{}\"", Fonts);
 		return false;
 	}
-	FSandboxFonts SandboxFonts;
-	SandboxFonts.Regular = std::make_shared<FCompositeFont>(FName("Regular"), TArray<TSharedPtr<FFontFace>>{ Regular, Devanagari });
-	SandboxFonts.Bold = std::make_shared<FCompositeFont>(FName("Bold"), TArray<TSharedPtr<FFontFace>>{ Bold, Devanagari });
+	const TSharedRef<FStyleSet> Style = FGenesisStyle::Create(Fonts);
+	FStyleSet::Register(Style);
+	FAppStyle::SetAppStyleSet(Style);
 
 	Renderer = MakeUnique<FUIRenderer>(*Device, *FontCache);
 	if (!Renderer->Initialize())
@@ -218,6 +203,28 @@ bool FSandboxApp::Initialize(const FString& CommandLine)
 		GE_LOG(LogSandbox, Error, "UI renderer initialization failed");
 		return false;
 	}
+	WindowRenderer = MakeUnique<FUIWindowRenderer>(*Device, *Renderer);
+	WindowRenderer->OnBeginFrame.AddLambda([this](FRHICommandList& CommandList) { RenderViewportTarget(CommandList); });
+
+	App = FUIApplication::Create(ToSharedRef(Platform), ToSharedRef(FontCache)).ToSharedPtr();
+	App->SetRenderer(WindowRenderer.get());
+	App->SetApplicationScale(AppScale);
+	App->RegisterInputPreProcessor(TSharedRef<IInputProcessor>(StaticCastSharedPtr<IInputProcessor>(shared_from_this())));
+	App->OnPreRender.AddLambda([this](float)
+	{
+		const double Now = FPlatformTime::Seconds();
+		++FramesSinceFps;
+		if (Now - LastFpsTime >= 0.5)
+		{
+			FramesPerSecond = static_cast<float>(FramesSinceFps / (Now - LastFpsTime));
+			FramesSinceFps = 0;
+			LastFpsTime = Now;
+		}
+	});
+
+	FSandboxFonts SandboxFonts;
+	SandboxFonts.Regular = Fonts.Regular;
+	SandboxFonts.Bold = Fonts.Bold;
 	Content = MakeUnique<FSandboxContent>(*FontCache, SandboxFonts);
 	CreateWindows();
 	return true;
@@ -225,135 +232,170 @@ bool FSandboxApp::Initialize(const FString& CommandLine)
 
 void FSandboxApp::CreateWindows()
 {
-	auto Main = MakeUnique<FSandboxWindow>();
-	FWindowDesc MainDesc;
-	MainDesc.Title = FString::Format("Genesis UI Sandbox ({})", ToString(Backend));
-	MainDesc.Size = { 1180.0f, 740.0f };
-	MainDesc.bShowImmediately = false;
-	Main->Window = Platform->MakeWindow(MainDesc).ToSharedPtr();
+	FGalleryHost Host;
+	Host.Content = Content.get();
+	Host.ViewportTarget = &ViewportTarget;
+	Host.GetFrameInfo = [this] { return MakeFrameInfo(); };
+	Host.SetAppScale = [this](float Scale) { SetAppScale(Scale); };
+	Host.ToggleInspector = [this] { ToggleInspector(); };
+	Host.Quit = [this] { App->RequestQuit(); };
 
-	// Place the inspector to the right of the main window when there is room.
-	const FIntPoint MainPos = Main->Window->GetClientPosition();
-	const FIntPoint MainSize = Main->Window->GetClientSize();
-	auto Inspector = MakeUnique<FSandboxWindow>();
-	Inspector->bInspector = true;
-	FWindowDesc InspectorDesc;
-	InspectorDesc.Title = "Genesis UI Sandbox - Inspector";
-	InspectorDesc.Size = { 360.0f, 460.0f };
-	InspectorDesc.bUseOSBorder = false;
-	InspectorDesc.bHasMaximizeButton = false;
-	InspectorDesc.bShowImmediately = false;
-	InspectorDesc.bAppearsInTaskbar = false;
-	InspectorDesc.Position = FIntPoint(MainPos.X + MainSize.X + FMath::RoundToInt(16 * Main->Window->GetDpiScale()), MainPos.Y);
+	MainWindow = SNew(SWindow)
+		.Title(FString::Format("Genesis UI Sandbox ({})", ToString(Backend)))
+		.ClientSize(FVector2(1180.0f, 760.0f))
+		.OnWindowClosed([this](const TSharedRef<SWindow>&) { App->RequestQuit(); })
+		[
+			SAssignNew(Gallery, SWidgetGallery, Host)
+		];
+	App->AddWindow(ToSharedRef(MainWindow));
+	CreateInspector();
+}
+
+TSharedRef<SWidget> FSandboxApp::MakeInspectorContent()
+{
+	const auto Line = [](TAttribute<FString> Text, bool bHeading = false) -> TSharedRef<SWidget>
+	{
+		return SNew(STextBlock).Text(Text).AutoWrapText(true).TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>(bHeading ? "BoldText" : "NormalText"));
+	};
+	const TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox);
+	const auto Add = [&Lines](const TSharedRef<SWidget>& Widget, float Top = 2.0f) { Lines->AddSlot().AutoHeight().Padding(FMargin(0.0f, Top, 0.0f, 0.0f))[Widget]; };
+	Add(Line("This window", true), 0.0f);
+	Add(Line([this]
+	{
+		const FIntPoint Size = Inspector ? Inspector->GetNativeWindow()->GetClientSize() : FIntPoint();
+		const FIntPoint Pos = Inspector ? Inspector->GetNativeWindow()->GetClientPosition() : FIntPoint();
+		return FString::Format("DPI scale {:.2f} (app scale {:.2f}), {}x{} px at {}, {}",
+			Inspector ? Inspector->GetNativeWindow()->GetDpiScale() : 1.0f, AppScale, Size.X, Size.Y, Pos.X, Pos.Y);
+	}));
+	Add(Line("Drag the title bar to move it; resize from any edge."));
+	Add(Line("Monitors", true), 10.0f);
+	Add(Line([this]
+	{
+		FDisplayMetrics Metrics;
+		Platform->GetDisplayMetrics(Metrics);
+		FString Text;
+		for (const FMonitorInfo& Monitor : Metrics.Monitors)
+		{
+			Text += FString::Format("{}{}{}: {}x{} at {}, {}, {:.0f}%", Text.IsEmpty() ? "" : "\n", Monitor.Name.Mid(4), Monitor.bIsPrimary ? " (primary)" : "",
+				Monitor.DisplayRect.Width(), Monitor.DisplayRect.Height(), Monitor.DisplayRect.Left, Monitor.DisplayRect.Top, Monitor.DpiScale * 100.0f);
+		}
+		return Text;
+	}));
+	Add(Line("Input", true), 10.0f);
+	Add(Line([this]
+	{
+		const TSharedPtr<SWidget> Focused = App->GetKeyboardFocusedWidget();
+		const TArray<TSharedRef<SWidget>> Hovered = App->GetHoveredPath();
+		return FString::Format("Focus: {}\nUnder the pointer: {}\nCaptured by: {}\nMenus open: {}",
+			Focused ? Focused->GetTypeName() : FString("none"), Hovered.empty() ? FString("none") : Hovered.back()->GetTypeName(),
+			App->GetMouseCaptor() ? App->GetMouseCaptor()->GetTypeName() : FString("none"), App->GetMenuCount());
+	}));
+	Add(Line("Renderer", true), 10.0f);
+	Add(Line([this]
+	{
+		const FUIRenderStats& Stats = WindowRenderer->GetStats(*MainWindow->GetNativeWindow());
+		return FString::Format("{}: {}\nMain window: {} elements, {} batches\nGlyph atlas pages: {}\nFrames: {}", ToString(Backend), Device->GetAdapterName(),
+			Stats.Elements, Stats.Batches, FontCache->GetPageCount(), App->GetFrameNumber());
+	}));
+
+	const FWindowStyle& WindowStyle = FAppStyle::Get().GetWidgetStyle<FWindowStyle>("Window");
+	return SNew(SVerticalBox)
+		// The UI-drawn title bar: the empty part drags the window (the
+		// window's TitleBarHeight), the close button claims its own area.
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SBorder).BorderImage(&WindowStyle.TitleBar).Padding(FMargin(12.0f, 0.0f, 0.0f, 0.0f))
+			[
+				SNew(SBox).HeightOverride(TOptional<float>(34.0f))
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text("Inspector — borderless window").TextStyle(&WindowStyle.TitleText)]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SButton).ButtonStyle(&WindowStyle.CloseButton).IsFocusable(false).ContentPadding(FMargin(16.0f, 0.0f)).Text("×")
+						.OnClicked([this] { ToggleInspector(); return FReply::Handled(); })
+					]
+				]
+			]
+		]
+		+ SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(14.0f, 12.0f))[Lines];
+}
+
+void FSandboxApp::CreateInspector()
+{
+	// To the right of the main window when there is room.
+	const FIntPoint MainPos = MainWindow->GetNativeWindow()->GetClientPosition();
+	const FIntPoint MainSize = MainWindow->GetNativeWindow()->GetClientSize();
+	const float Dpi = MainWindow->GetNativeWindow()->GetDpiScale();
+	FIntPoint Position(MainPos.X + MainSize.X + FMath::RoundToInt(16 * Dpi), MainPos.Y);
 	FDisplayMetrics Metrics;
 	Platform->GetDisplayMetrics(Metrics);
 	if (const FMonitorInfo* Primary = Metrics.GetPrimary())
 	{
-		const int32 InspectorWidth = FMath::RoundToInt(InspectorDesc.Size.X * Primary->DpiScale);
-		if (InspectorDesc.Position->X + InspectorWidth > Primary->WorkArea.Right)
+		const int32 Width = FMath::RoundToInt(380.0f * Primary->DpiScale);
+		if (Position.X + Width > Primary->WorkArea.Right)
 		{
-			InspectorDesc.Position = FIntPoint(Primary->WorkArea.Right - InspectorWidth - 16, MainPos.Y + 40);
+			Position = FIntPoint(Primary->WorkArea.Right - Width - 16, MainPos.Y + 40);
 		}
 	}
-	InspectorDesc.Parent = Main->Window;
-	Inspector->Window = Platform->MakeWindow(InspectorDesc).ToSharedPtr();
-
-	for (TUniquePtr<FSandboxWindow>* W : { &Main, &Inspector })
-	{
-		(*W)->SwapChain = Device->CreateSwapChain(*(*W)->Window);
-		Windows.push_back(std::move(*W));
-	}
-	// Show after the swapchains exist so the first paint has somewhere to go.
-	Windows[0]->Window->Show();
-	Windows[1]->Window->Show();
+	Inspector = SNew(SWindow)
+		.Title("Genesis UI Sandbox - Inspector")
+		.ClientSize(FVector2(380.0f, 480.0f))
+		.ScreenPosition(TOptional<FIntPoint>(Position))
+		.UseOSBorder(false)
+		.SupportsMaximize(false)
+		.AppearsInTaskbar(false)
+		.TitleBarHeight(34.0f)
+		.OnWindowClosed([this](const TSharedRef<SWindow>&) { Inspector.reset(); })
+		[
+			MakeInspectorContent()
+		];
+	App->AddWindow(ToSharedRef(Inspector));
 }
 
-FSandboxWindow* FSandboxApp::Find(const IPlatformWindow& Window)
+void FSandboxApp::ToggleInspector()
 {
-	for (TUniquePtr<FSandboxWindow>& W : Windows)
+	if (Inspector)
 	{
-		if (W->Window.get() == &Window)
-		{
-			return W.get();
-		}
+		Inspector->RequestClose();
 	}
-	return nullptr;
+	else
+	{
+		CreateInspector();
+	}
 }
 
-FSandboxFrameInfo FSandboxApp::MakeFrameInfo(const FSandboxWindow& Window) const
+void FSandboxApp::SetAppScale(float Scale)
+{
+	AppScale = Scale;
+	App->SetApplicationScale(Scale);
+	GE_LOG(LogSandbox, Display, "App scale {:.2f}", AppScale);
+}
+
+FSandboxFrameInfo FSandboxApp::MakeFrameInfo() const
 {
 	FSandboxFrameInfo Frame;
 	Frame.Time = FPlatformTime::Seconds() - StartTime;
-	Frame.DpiScale = Window.Window->GetDpiScale();
+	Frame.DpiScale = MainWindow ? MainWindow->GetNativeWindow()->GetDpiScale() : 1.0f;
 	Frame.AppScale = AppScale;
 	Frame.Scale = Frame.DpiScale * AppScale;
-	Frame.PixelSize = Window.SwapChain ? Window.SwapChain->GetSize() : Window.Window->GetClientSize();
+	Frame.PixelSize = MainWindow ? MainWindow->GetPixelSize() : FIntPoint();
 	Frame.LogicalSize = Frame.PixelSize.ToVector2() / Frame.Scale;
-	Frame.MouseLogical = Window.MousePixels.X < 0.0f ? FVector2(-1.0f, -1.0f) : Window.MousePixels / Frame.Scale;
 	Frame.BackendName = ToString(Backend);
 	Frame.AdapterName = Device->GetAdapterName();
 	Frame.FramesPerSecond = FramesPerSecond;
-	Frame.Stats = Window.Stats;
-	Frame.ListScroll = ListScroll;
+	if (MainWindow && WindowRenderer)
+	{
+		Frame.Stats = WindowRenderer->GetStats(*MainWindow->GetNativeWindow());
+	}
 	return Frame;
 }
 
-TArray<FString> FSandboxApp::InspectorLines(const FSandboxWindow& Window) const
+void FSandboxApp::RenderViewportTarget(FRHICommandList& CommandList)
 {
-	TArray<FString> Lines;
-	Lines.push_back("#This window");
-	const FIntPoint Pos = Window.Window->GetClientPosition();
-	const FIntPoint Size = Window.Window->GetClientSize();
-	Lines.push_back(FString::Format("DPI scale {:.2f} (app scale {:.2f})", Window.Window->GetDpiScale(), AppScale));
-	Lines.push_back(FString::Format("Client {}x{} px at {}, {}", Size.X, Size.Y, Pos.X, Pos.Y));
-	Lines.push_back("Drag the title bar to another monitor;");
-	Lines.push_back("resize from any edge.");
-	Lines.push_back("#Monitors");
-	FDisplayMetrics Metrics;
-	Platform->GetDisplayMetrics(Metrics);
-	for (const FMonitorInfo& Monitor : Metrics.Monitors)
-	{
-		Lines.push_back(FString::Format("{}{}: {}x{} at {}, {}, {:.0f}%", Monitor.Name.Mid(4), Monitor.bIsPrimary ? " (primary)" : "",
-			Monitor.DisplayRect.Width(), Monitor.DisplayRect.Height(), Monitor.DisplayRect.Left, Monitor.DisplayRect.Top, Monitor.DpiScale * 100.0f));
-	}
-	Lines.push_back("#Renderer");
-	Lines.push_back(FString::Format("{}: {}", ToString(Backend), Device->GetAdapterName()));
-	Lines.push_back(FString::Format("Glyph atlas pages: {}", FontCache->GetPageCount()));
-	int32 Pads = 0;
-	for (int32 User = 0; User < 4; ++User)
-	{
-		Pads += Platform->IsGamepadAttached(User) ? 1 : 0;
-	}
-	Lines.push_back("#Input");
-	Lines.push_back(FString::Format("Gamepads: {}", Pads));
-	Lines.push_back(FString::Format("Last event: {}", LastEvent));
-	return Lines;
-}
-
-void FSandboxApp::RenderFrame()
-{
-	if (bInFrame || !Device)
-	{
-		return;
-	}
-	bInFrame = true;
-
-	const double Now = FPlatformTime::Seconds();
-	++FramesSinceFps;
-	if (Now - LastFpsTime >= 0.5)
-	{
-		FramesPerSecond = static_cast<float>(FramesSinceFps / (Now - LastFpsTime));
-		FramesSinceFps = 0;
-		LastFpsTime = Now;
-	}
-
-	FRHICommandList& CommandList = Device->BeginFrame();
-	Renderer->BeginFrame();
-
-	// The render-target viewport, sized for the main window's scale.
-	FSandboxWindow& Main = *Windows[0];
-	const FSandboxFrameInfo MainFrame = MakeFrameInfo(Main);
-	const FIntPoint TargetSize(FMath::RoundToInt(240.0f * MainFrame.Scale), FMath::RoundToInt(150.0f * MainFrame.Scale));
+	// The render-target viewport of the draw-elements page, sized for the main window's scale.
+	FSandboxFrameInfo Frame = MakeFrameInfo();
+	const FIntPoint TargetSize(FMath::RoundToInt(240.0f * Frame.Scale), FMath::RoundToInt(150.0f * Frame.Scale));
 	if (!ViewportTarget || ViewportTarget->GetSize() != TargetSize)
 	{
 		if (ViewportTarget)
@@ -363,32 +405,9 @@ void FSandboxApp::RenderFrame()
 		ViewportTarget = Renderer->CreateRenderTarget(TargetSize.X, TargetSize.Y, "Sandbox viewport").ToSharedPtr();
 	}
 	ViewportElements.Reset();
-	Content->PaintViewportScene(ViewportElements, MainFrame, TargetSize);
+	Frame.Origin = FVector2::Zero();
+	Content->PaintViewportScene(ViewportElements, Frame, TargetSize);
 	Renderer->Render(CommandList, ViewportTarget->GetTexture(), ViewportElements, FLinearColor(0.0f, 0.0f, 0.0f, 1.0f));
-
-	for (TUniquePtr<FSandboxWindow>& W : Windows)
-	{
-		if (!W->SwapChain || !W->SwapChain->IsDrawable() || W->Window->IsMinimized())
-		{
-			continue;
-		}
-		const FSandboxFrameInfo Frame = MakeFrameInfo(*W);
-		W->Elements.Reset();
-		W->Elements.SetViewportSize(Frame.PixelSize);
-		if (W->bInspector)
-		{
-			Content->PaintInspector(W->Elements, Frame, InspectorLines(*W));
-		}
-		else
-		{
-			Content->PaintMain(W->Elements, Frame, ViewportTarget);
-		}
-		Renderer->Render(CommandList, *W->SwapChain, W->Elements, FLinearColor(0.0f, 0.0f, 0.0f, 1.0f));
-		W->Stats = Renderer->GetLastStats(); // shown next frame
-	}
-	Device->EndFrame();
-	++FrameNumber;
-	bInFrame = false;
 }
 
 int32 FSandboxApp::Run(const FString& CommandLine)
@@ -398,40 +417,32 @@ int32 FSandboxApp::Run(const FString& CommandLine)
 		return 1;
 	}
 	StartTime = LastFpsTime = FPlatformTime::Seconds();
-	double LastTime = StartTime;
-	while (!bQuit)
+	if (!SelfTestDir.IsEmpty())
 	{
-		const double Now = FPlatformTime::Seconds();
-		const float DeltaTime = static_cast<float>(Now - LastTime);
-		LastTime = Now;
-
-		Platform->PumpMessages(DeltaTime);
-		Platform->ProcessDeferredEvents(DeltaTime);
-		Platform->PollGameDeviceState(DeltaTime);
+		// Keep frames coming so the script advances while nothing changes.
+		Gallery->RegisterActiveTimer(0.0f, [](double, float) { return EActiveTimerReturn::Continue; });
+	}
+	while (!App->IsQuitRequested() && MainWindow && !MainWindow->IsClosed())
+	{
+		App->Tick();
 		if (!SelfTestDir.IsEmpty())
 		{
 			TickSelfTest();
 		}
-
-		bool bAnyVisible = false;
-		for (const TUniquePtr<FSandboxWindow>& W : Windows)
+		else if (!App->IsActive())
 		{
-			bAnyVisible |= W->SwapChain && W->SwapChain->IsDrawable() && !W->Window->IsMinimized();
-		}
-		if (bAnyVisible)
-		{
-			RenderFrame(); // vsync paces the loop
-		}
-		else
-		{
-			// Minimized: nothing to animate, sleep until the OS has news.
 			Platform->WaitForMessages(0.25f);
-			++FrameNumber; // keeps the self-test script moving while minimized
 		}
 	}
 
 	Device->WaitIdle();
-	Windows.clear();
+	App->SetRenderer(nullptr);
+	FUIApplication::Shutdown();
+	App.reset();
+	MainWindow.reset();
+	Inspector.reset();
+	Gallery.reset();
+	WindowRenderer.reset();
 	ViewportTarget.reset();
 	Renderer.reset();
 	if (FileLog)
@@ -442,101 +453,12 @@ int32 FSandboxApp::Run(const FString& CommandLine)
 }
 
 // ---------------------------------------------------------------------------
-// Self-test: a scripted run that exercises DPI changes, minimize/restore,
-// moving between monitors and resizing, and saves screenshots.
+// Global keys
 
-void FSandboxApp::Capture(const char* Name)
+bool FSandboxApp::HandleKeyDownEvent(FUIApplication&, const FKeyEvent& Event)
 {
-	for (const TUniquePtr<FSandboxWindow>& W : Windows)
+	switch (Event.GetKey())
 	{
-		// Bring the window on top and let DWM compose a couple of frames.
-		const HWND Hwnd = static_cast<HWND>(W->Window->GetNativeHandle());
-		SetWindowPos(Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-		RenderFrame();
-		RenderFrame();
-		const FString Path = SelfTestDir + FString::Format("{}_{}_{}.png", ToString(Backend), W->bInspector ? "inspector" : "main", Name);
-		const bool bOk = CaptureWindowClientToPng(Hwnd, Path);
-		SetWindowPos(Hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-		GE_LOG(LogSandbox, Display, "Screenshot {} -> {} ({}x{} px, DPI scale {:.2f}, app scale {:.2f})", bOk ? "saved" : "FAILED", Path,
-			W->Window->GetClientSize().X, W->Window->GetClientSize().Y, W->Window->GetDpiScale(), AppScale);
-	}
-}
-
-void FSandboxApp::SimulateDpiChange(float NewScale)
-{
-	// What Windows sends when a window moves to a monitor with another DPI:
-	// the new DPI plus a suggested window rectangle keeping the logical size.
-	FSandboxWindow& Main = *Windows[0];
-	const HWND Hwnd = static_cast<HWND>(Main.Window->GetNativeHandle());
-	RECT Rect;
-	GetWindowRect(Hwnd, &Rect);
-	const float Ratio = NewScale / Main.Window->GetDpiScale();
-	RECT Suggested{ Rect.left, Rect.top, Rect.left + FMath::RoundToInt((Rect.right - Rect.left) * Ratio), Rect.top + FMath::RoundToInt((Rect.bottom - Rect.top) * Ratio) };
-	const WORD Dpi = static_cast<WORD>(FMath::RoundToInt(NewScale * 96.0f));
-	GE_LOG(LogSandbox, Display, "Simulating WM_DPICHANGED to {} dpi", Dpi);
-	SendMessageW(Hwnd, WM_DPICHANGED, MAKEWPARAM(Dpi, Dpi), reinterpret_cast<LPARAM>(&Suggested));
-}
-
-void FSandboxApp::TickSelfTest()
-{
-	FSandboxWindow& Main = *Windows[0];
-	const float NativeScale = static_cast<float>(GetDpiForWindow(static_cast<HWND>(Main.Window->GetNativeHandle()))) / 96.0f;
-	switch (FrameNumber)
-	{
-	case 60: Capture("native"); break;
-	case 70: SimulateDpiChange(1.0f); break;
-	case 100: Capture("dpi100"); break;
-	case 110: SimulateDpiChange(2.0f); break;
-	case 140: Capture("dpi200"); break;
-	case 150: SimulateDpiChange(NativeScale); break;
-	case 170: Main.Window->Minimize(); break;
-	case 200: Main.Window->Restore(); break;
-	case 230: Capture("restored"); break;
-	case 240:
-	{
-		// Move to another monitor when there is one.
-		FDisplayMetrics Metrics;
-		Platform->GetDisplayMetrics(Metrics);
-		const FIntPoint Pos = Main.Window->GetClientPosition();
-		for (const FMonitorInfo& Monitor : Metrics.Monitors)
-		{
-			const bool bContains = Pos.X >= Monitor.DisplayRect.Left && Pos.X < Monitor.DisplayRect.Right && Pos.Y >= Monitor.DisplayRect.Top && Pos.Y < Monitor.DisplayRect.Bottom;
-			if (!bContains)
-			{
-				GE_LOG(LogSandbox, Display, "Moving the main window to monitor {} ({:.0f}%)", Monitor.Name, Monitor.DpiScale * 100.0f);
-				Main.Window->MoveWindowTo(Monitor.WorkArea.Left + 80, Monitor.WorkArea.Top + 80);
-				Windows[1]->Window->MoveWindowTo(Monitor.WorkArea.Left + 80 + Main.Window->GetClientSize().X + 24, Monitor.WorkArea.Top + 80);
-				break;
-			}
-		}
-		break;
-	}
-	case 280: Capture("monitor2"); break;
-	case 290:
-	{
-		const FIntPoint Pos = Main.Window->GetClientPosition();
-		Main.Window->ReshapeWindow(Pos.X, Pos.Y, 1500, 1000);
-		break;
-	}
-	case 320: Capture("resized"); break;
-	case 330: AppScale = 1.25f; break;
-	case 360: Capture("appscale125"); break;
-	case 370: bQuit = true; break;
-	default: break;
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Input and window events
-
-bool FSandboxApp::OnKeyDown(EKey Key, uint32, bool bIsRepeat)
-{
-	LastEvent = FString::Format("key {}{}", ToString(Key), bIsRepeat ? " (repeat)" : "");
-	switch (Key)
-	{
-	case EKey::Escape:
-		bQuit = true;
-		return true;
 	case EKey::F2:
 	{
 		const float Scales[] = { 1.0f, 1.25f, 1.5f, 2.0f };
@@ -548,157 +470,192 @@ bool FSandboxApp::OnKeyDown(EKey Key, uint32, bool bIsRepeat)
 				Next = (I + 1) % 4;
 			}
 		}
-		AppScale = Scales[Next];
-		GE_LOG(LogSandbox, Display, "App scale {:.2f}", AppScale);
+		SetAppScale(Scales[Next]);
 		return true;
 	}
 	case EKey::F3:
 	{
-		const float Current = Windows[0]->Window->GetDpiScale();
+		const float Current = MainWindow->GetNativeWindow()->GetDpiScale();
 		SimulateDpiChange(Current >= 2.0f ? 1.0f : Current + 0.5f);
 		return true;
 	}
+	case EKey::F4:
+		ToggleInspector();
+		return true;
 	default:
 		return false;
 	}
 }
 
-bool FSandboxApp::OnMouseDown(const TSharedRef<IPlatformWindow>& Window, EMouseButton Button, FVector2 Position)
+// ---------------------------------------------------------------------------
+// Self-test: every gallery page plus a menu and a tooltip, then the DPI,
+// minimize, monitor, resize and app-scale script of milestone 2.
+
+void FSandboxApp::Capture(const char* Name)
 {
-	LastEvent = FString::Format("mouse down {} at {:.0f}, {:.0f}", static_cast<int32>(Button), Position.X, Position.Y);
-	FSandboxWindow* W = Find(Window.Get());
-	if (W && W->bInspector && Button == EMouseButton::Left)
+	for (const TSharedPtr<SWindow>& Window : { MainWindow, Inspector })
 	{
-		const float Scale = Window->GetDpiScale() * AppScale;
-		const FVector2 Logical = Window->GetClientSize().ToVector2() / Scale;
-		if (FSandboxContent::GetInspectorCloseButton(Logical).Contains(Position / Scale))
+		if (!Window)
 		{
-			CloseInspector();
+			continue;
 		}
+		// Bring the window on top and let DWM compose a couple of frames.
+		const HWND Hwnd = static_cast<HWND>(Window->GetNativeWindow()->GetNativeHandle());
+		SetWindowPos(Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+		for (int32 I = 0; I < 3; ++I)
+		{
+			Window->Invalidate(EInvalidateWidgetReason::Paint);
+			App->Tick();
+		}
+		const FString Path = SelfTestDir + FString::Format("{}_{}_{}.png", ToString(Backend), Window == Inspector ? "inspector" : "main", Name);
+		const bool bOk = CaptureWindowClientToPng(Hwnd, Path);
+		SetWindowPos(Hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+		GE_LOG(LogSandbox, Display, "Screenshot {} -> {} ({}x{} px, DPI scale {:.2f}, app scale {:.2f})", bOk ? "saved" : "FAILED", Path,
+			Window->GetPixelSize().X, Window->GetPixelSize().Y, Window->GetNativeWindow()->GetDpiScale(), AppScale);
 	}
-	return true;
 }
 
-bool FSandboxApp::OnMouseMove(const TSharedRef<IPlatformWindow>& Window, FVector2 Position)
+void FSandboxApp::SimulateDpiChange(float NewScale)
 {
-	if (FSandboxWindow* W = Find(Window.Get()))
+	// What Windows sends when a window moves to a monitor with another DPI:
+	// the new DPI plus a suggested window rectangle keeping the logical size.
+	const HWND Hwnd = static_cast<HWND>(MainWindow->GetNativeWindow()->GetNativeHandle());
+	RECT Rect;
+	GetWindowRect(Hwnd, &Rect);
+	const float Ratio = NewScale / MainWindow->GetNativeWindow()->GetDpiScale();
+	RECT Suggested{ Rect.left, Rect.top, Rect.left + FMath::RoundToInt((Rect.right - Rect.left) * Ratio), Rect.top + FMath::RoundToInt((Rect.bottom - Rect.top) * Ratio) };
+	const WORD Dpi = static_cast<WORD>(FMath::RoundToInt(NewScale * 96.0f));
+	GE_LOG(LogSandbox, Display, "Simulating WM_DPICHANGED to {} dpi", Dpi);
+	SendMessageW(Hwnd, WM_DPICHANGED, MAKEWPARAM(Dpi, Dpi), reinterpret_cast<LPARAM>(&Suggested));
+}
+
+void FSandboxApp::TickSelfTest()
+{
+	const int32 Frame = SelfTestFrame++;
+	const TSharedRef<IPlatformWindow> Native = ToSharedRef(MainWindow->GetNativeWindow());
+	const float NativeScale = static_cast<float>(GetDpiForWindow(static_cast<HWND>(Native->GetNativeHandle()))) / 96.0f;
+
+	// Gallery pages: 30 frames each, captured on the 25th.
+	const int32 PageFrames = 30;
+	const int32 Pages = Gallery->GetPageCount();
+	if (Frame < Pages * PageFrames + 20)
 	{
-		W->MousePixels = Position;
-	}
-	return true;
-}
-
-bool FSandboxApp::OnMouseLeave(const TSharedRef<IPlatformWindow>& Window)
-{
-	if (FSandboxWindow* W = Find(Window.Get()))
-	{
-		W->MousePixels = FVector2(-1.0f, -1.0f);
-	}
-	return true;
-}
-
-bool FSandboxApp::OnMouseWheel(const TSharedRef<IPlatformWindow>&, float Delta, bool bHorizontal, FVector2)
-{
-	if (!bHorizontal)
-	{
-		ListScroll -= Delta * 26.0f * 3.0f;
-		LastEvent = FString::Format("wheel {:+.1f}", Delta);
-	}
-	return true;
-}
-
-bool FSandboxApp::OnGamepadButtonDown(int32 UserIndex, EGamepadButton Button, bool bIsRepeat)
-{
-	LastEvent = FString::Format("pad {} {}{}", UserIndex, ToString(Button), bIsRepeat ? " (repeat)" : "");
-	return true;
-}
-
-void FSandboxApp::OnGamepadConnectionChanged(int32 UserIndex, bool bConnected)
-{
-	GE_LOG(LogSandbox, Display, "Gamepad {} {}", UserIndex, bConnected ? "connected" : "disconnected");
-}
-
-void FSandboxApp::OnSizeChanged(const TSharedRef<IPlatformWindow>& Window, int32 Width, int32 Height, bool bWasMinimized)
-{
-	FSandboxWindow* W = Find(Window.Get());
-	if (!W || !W->SwapChain)
-	{
+		if (Frame >= 20)
+		{
+			const int32 Page = (Frame - 20) / PageFrames;
+			const int32 Step = (Frame - 20) % PageFrames;
+			if (Step == 0)
+			{
+				Gallery->SetPage(Page);
+			}
+			if (Step == 25)
+			{
+				Capture(FString::Format("page{}", Page + 1).c_str());
+			}
+		}
 		return;
 	}
-	GE_LOG(LogSandbox, Log, "{} resized to {}x{}{}", W->bInspector ? "Inspector" : "Main window", Width, Height, bWasMinimized ? " (minimized)" : "");
-	W->SwapChain->Resize(static_cast<uint32>(Width), static_cast<uint32>(Height));
-	// Redraw right away so the content follows interactive resizing.
-	if (!bWasMinimized)
+
+	const int32 T = Frame - (Pages * PageFrames + 20);
+	switch (T)
 	{
-		RenderFrame();
-	}
-}
-
-void FSandboxApp::OnMovedWindow(const TSharedRef<IPlatformWindow>& Window, int32 X, int32 Y)
-{
-	(void)Window;
-	LastEvent = FString::Format("window moved to {}, {}", X, Y);
-}
-
-void FSandboxApp::OnDpiScaleChanged(const TSharedRef<IPlatformWindow>& Window, float NewScale)
-{
-	FSandboxWindow* W = Find(Window.Get());
-	GE_LOG(LogSandbox, Display, "{} DPI scale changed to {:.2f}", W && W->bInspector ? "Inspector" : "Main window", NewScale);
-	LastEvent = FString::Format("DPI scale {:.2f}", NewScale);
-}
-
-void FSandboxApp::CloseInspector()
-{
-	for (SIZE_T I = 0; I < Windows.size(); ++I)
+	case 0: Gallery->SetPage(4); break;
+	case 10:
+		Gallery->FileMenu->SetIsOpen(true);
+		break;
+	case 20:
 	{
-		if (Windows[I]->bInspector)
+		// Hover the third entry of the File menu ("Open recent") to open its submenu.
+		TArray<SMenuEntry*> Entries;
+		const TFunction<void(const SWidget&)> Find = [&](const SWidget& Widget)
 		{
-			Device->WaitIdle();
-			Windows[I]->SwapChain.reset();
-			Windows[I]->Window->Destroy();
-			Windows.erase(Windows.begin() + static_cast<std::ptrdiff_t>(I));
-			return;
+			if (SMenuEntry* Entry = dynamic_cast<SMenuEntry*>(const_cast<SWidget*>(&Widget)))
+			{
+				Entries.push_back(Entry);
+			}
+			for (const FArrangedWidget& Child : Widget.GetArrangedChildren())
+			{
+				Find(Child.Widget.Get());
+			}
+		};
+		if (const TSharedPtr<SMenuAnchor> Anchor = std::dynamic_pointer_cast<SMenuAnchor>(Gallery->FileMenu->GetButton()->GetParentWidgetShared()))
+		{
+			if (const TSharedPtr<IMenu> Menu = Anchor->GetMenu())
+			{
+				Find(Menu->GetContent().Get());
+			}
 		}
+		if (Entries.size() >= 3)
+		{
+			App->OnMouseMove(Native, Entries[2]->GetCachedGeometry().GetLayoutBoundingRect().GetCenter());
+		}
+		break;
 	}
-}
-
-void FSandboxApp::OnWindowClose(const TSharedRef<IPlatformWindow>& Window)
-{
-	FSandboxWindow* W = Find(Window.Get());
-	if (W && W->bInspector)
+	case 30: Capture("menu"); break;
+	case 35: App->DismissAllMenus(); break;
+	case 40:
+		App->OnMouseMove(Native, Gallery->ToolTipDemo->GetCachedGeometry().GetLayoutBoundingRect().GetCenter());
+		break;
+	case 90: Capture("tooltip"); break;
+	case 95:
+		App->OnMouseMove(Native, FVector2(2.0f, 2.0f));
+		Gallery->SetPage(0);
+		break;
+	case 110: Capture("native"); break;
+	case 120: SimulateDpiChange(1.0f); break;
+	case 150: Capture("dpi100"); break;
+	case 160: SimulateDpiChange(2.0f); break;
+	case 190: Capture("dpi200"); break;
+	case 200: SimulateDpiChange(NativeScale); break;
+	case 220: Native->Minimize(); break;
+	case 250: Native->Restore(); break;
+	case 280: Capture("restored"); break;
+	case 290:
 	{
-		CloseInspector();
+		// Move to another monitor when there is one.
+		FDisplayMetrics Metrics;
+		Platform->GetDisplayMetrics(Metrics);
+		const FIntPoint Pos = Native->GetClientPosition();
+		for (const FMonitorInfo& Monitor : Metrics.Monitors)
+		{
+			const bool bContains = Pos.X >= Monitor.DisplayRect.Left && Pos.X < Monitor.DisplayRect.Right && Pos.Y >= Monitor.DisplayRect.Top && Pos.Y < Monitor.DisplayRect.Bottom;
+			if (!bContains)
+			{
+				GE_LOG(LogSandbox, Display, "Moving the main window to monitor {} ({:.0f}%)", Monitor.Name, Monitor.DpiScale * 100.0f);
+				Native->MoveWindowTo(Monitor.WorkArea.Left + 80, Monitor.WorkArea.Top + 80);
+				if (Inspector)
+				{
+					Inspector->GetNativeWindow()->MoveWindowTo(Monitor.WorkArea.Left + 80 + Native->GetClientSize().X + 24, Monitor.WorkArea.Top + 80);
+				}
+				break;
+			}
+		}
+		break;
 	}
-	else
+	case 330: Capture("monitor2"); break;
+	case 340:
 	{
-		bQuit = true;
+		const FIntPoint Pos = Native->GetClientPosition();
+		Native->ReshapeWindow(Pos.X, Pos.Y, 1500, 1000);
+		break;
 	}
-}
-
-void FSandboxApp::OnOSPaint(const TSharedRef<IPlatformWindow>&)
-{
-	RenderFrame();
-}
-
-EWindowZone FSandboxApp::GetWindowZoneForPoint(const TSharedRef<IPlatformWindow>& Window, FVector2 Position)
-{
-	const float Scale = Window->GetDpiScale() * AppScale;
-	const FVector2 Logical = Position / Scale;
-	const FVector2 Size = Window->GetClientSize().ToVector2() / Scale;
-	if (FSandboxContent::GetInspectorCloseButton(Size).Contains(Logical))
-	{
-		return EWindowZone::ClientArea; // handled by OnMouseDown so it can show hover
+	case 370: Capture("resized"); break;
+	case 380: SetAppScale(1.25f); break;
+	case 410: Capture("appscale125"); break;
+	case 420: App->RequestQuit(); break;
+	default: break;
 	}
-	return Logical.Y < FSandboxContent::TitleBarHeight ? EWindowZone::TitleBar : EWindowZone::ClientArea;
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
 	CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 	const FString CommandLine = FString::FromWide(GetCommandLineW());
-	auto App = std::make_shared<FSandboxApp>();
-	const int32 Result = App->Run(CommandLine);
-	App.reset();
+	int32 Result;
+	{
+		auto App = std::make_shared<FSandboxApp>();
+		Result = App->Run(CommandLine);
+	}
 	CoUninitialize();
 	return Result;
 }

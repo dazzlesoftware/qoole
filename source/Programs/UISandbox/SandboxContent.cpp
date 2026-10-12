@@ -92,14 +92,14 @@ FSandboxContent::FSandboxContent(FFontCache& InFontCache, FSandboxFonts InFonts)
 
 FPaintGeometry FSandboxContent::Geo(const FSandboxFrameInfo& Frame, FRect R) const
 {
-	return FPaintGeometry::Make(R.GetTopLeft(), R.GetSize(), Frame.Scale);
+	return FPaintGeometry::Make(R.GetTopLeft() + Frame.Origin, R.GetSize(), Frame.Scale);
 }
 
 FVector2 FSandboxContent::Text(FDrawElementList& List, int32 Layer, const FSandboxFrameInfo& Frame, FVector2 Position, std::string_view String,
 	const TSharedPtr<FCompositeFont>& Font, float Size, FColor Color)
 {
 	const TSharedRef<const FShapedText> Shaped = FontCache.ShapeText(String, FFontInfo(Font, Size), Frame.Scale);
-	List.AddText(Layer, FPaintGeometry::Make(Position, Shaped->GetLogicalSize(), Frame.Scale), Shaped, Color);
+	List.AddText(Layer, FPaintGeometry::Make(Position + Frame.Origin, Shaped->GetLogicalSize(), Frame.Scale), Shaped, Color);
 	return Shaped->GetLogicalSize();
 }
 
@@ -379,38 +379,4 @@ void FSandboxContent::PaintViewportScene(FDrawElementList& List, const FSandboxF
 	}
 	List.AddCustomVerts(1, FPaintGeometry::Make(Size * 0.5f, {}, Scale), nullptr, std::move(Vertices), std::move(Indices));
 	Text(List, 2, Frame, { 8.0f, 6.0f }, "render target", Fonts.Bold, 13.0f, FColor::White());
-}
-
-void FSandboxContent::PaintInspector(FDrawElementList& List, const FSandboxFrameInfo& Frame, const TArray<FString>& Lines)
-{
-	const FVector2 Size = Frame.LogicalSize;
-	List.AddSolidBox(0, Geo(Frame, FRect(FVector2(), Size)), PanelFill);
-	// UI-drawn title bar (the window has no OS border).
-	List.AddSolidBox(1, Geo(Frame, FRect(0.0f, 0.0f, Size.X, TitleBarHeight)), Background);
-	List.AddBox(2, Geo(Frame, FRect(10.0f, 9.0f, 26.0f, 25.0f)), FBrush::FromImage(IconImage));
-	Text(List, 2, Frame, { 34.0f, 7.0f }, "Inspector — borderless window", Fonts.Bold, 13.0f, HeaderText);
-	const FRect Close = GetInspectorCloseButton(Size);
-	const bool bCloseHovered = Close.Contains(Frame.MouseLogical);
-	if (bCloseHovered)
-	{
-		List.AddSolidBox(2, Geo(Frame, Close), FColor(196, 43, 28));
-	}
-	const FVector2 C = Close.GetCenter();
-	List.AddLines(3, Geo(Frame, FRect(C, C)), { { -5.0f, -5.0f }, { 5.0f, 5.0f } }, HeaderText, 1.2f);
-	List.AddLines(3, Geo(Frame, FRect(C, C)), { { -5.0f, 5.0f }, { 5.0f, -5.0f } }, HeaderText, 1.2f);
-	List.AddSolidBox(2, Geo(Frame, FRect(0.0f, TitleBarHeight, Size.X, TitleBarHeight + 1.0f)), PanelOutline);
-
-	float Y = TitleBarHeight + 12.0f;
-	for (const FString& Line : Lines)
-	{
-		const bool bHeading = Line.StartsWith("#");
-		const std::string_view View = bHeading ? Line.View().substr(1) : Line.View();
-		Y += Text(List, 2, Frame, { 14.0f, Y }, View, bHeading ? Fonts.Bold : Fonts.Regular, bHeading ? 14.0f : 12.5f, bHeading ? HeaderText : BodyText).Y + (bHeading ? 4.0f : 1.0f);
-	}
-
-	// A breathing accent ring so continuous redraw is visible here too.
-	const float R = 14.0f + 6.0f * Pulse(Frame.Time, 2.0f);
-	const FVector2 P(Size.X - 40.0f, Size.Y - 40.0f);
-	List.AddRoundedBox(2, Geo(Frame, FRect(P.X - R, P.Y - R, P.X + R, P.Y + R)), FColor::Transparent(), R, Accent, 2.0f);
-	List.AddRoundedBox(1, Geo(Frame, FRect(FVector2(), Size)), FColor::Transparent(), 0.0f, PanelOutline, 1.0f);
 }

@@ -1,7 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// What the sandbox draws. Everything is built directly from draw elements;
-// widgets arrive in milestone 3.
+// The milestone 2 showcase: boxes, 9-slices, rounded boxes, lines, clipping,
+// shaped text and a render-target viewport, built directly from draw
+// elements. The widget gallery shows it as its "Draw elements" page.
 
 #pragma once
 
@@ -21,9 +22,10 @@ struct FSandboxFrameInfo
 	float Scale = 1.0f;         // pixels per logical unit (DPI x app scale)
 	float DpiScale = 1.0f;
 	float AppScale = 1.0f;
-	FVector2 LogicalSize;       // window client area, logical units
+	FVector2 Origin;            // top-left of the drawing area in the window, logical units
+	FVector2 LogicalSize;       // size of the drawing area, logical units
 	FIntPoint PixelSize;
-	FVector2 MouseLogical{ -1.0f, -1.0f };
+	FVector2 MouseLogical{ -1.0f, -1.0f }; // relative to Origin
 	FString BackendName;
 	FString AdapterName;
 	float FramesPerSecond = 0.0f;
@@ -36,16 +38,10 @@ class FSandboxContent
 public:
 	FSandboxContent(FFontCache& InFontCache, FSandboxFonts InFonts);
 
-	// The main window.
+	// The showcase, filling Frame.LogicalSize at Frame.Origin.
 	void PaintMain(FDrawElementList& List, const FSandboxFrameInfo& Frame, const TSharedPtr<FUIRenderTarget>& ViewportTarget);
 	// The scene shown through the Viewport element, drawn into its render target.
 	void PaintViewportScene(FDrawElementList& List, const FSandboxFrameInfo& Frame, FIntPoint TargetSize);
-	// The borderless inspector window, with a UI-drawn title bar.
-	void PaintInspector(FDrawElementList& List, const FSandboxFrameInfo& Frame, const TArray<FString>& Lines);
-
-	// Title bar height and close button rectangle of the inspector, logical units.
-	static constexpr float TitleBarHeight = 34.0f;
-	static FRect GetInspectorCloseButton(FVector2 LogicalSize) { return FRect(LogicalSize.X - 44.0f, 0.0f, LogicalSize.X, TitleBarHeight); }
 
 private:
 	struct FPanel
