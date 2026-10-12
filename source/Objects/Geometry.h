@@ -123,7 +123,7 @@ class FaceTex {
   void GetTAttribs(unsigned int &a1, unsigned int &a2, unsigned int &a3) const;
   void GetTDim(int &width, int &height) const;
 
-  void SetTexture(Texture *_texture) { texture = _texture; }
+  void SetTexture(Texture *_texture);
   void SetTName(const char *tName);
   void SetTInfo(int xOff, int yOff, float rotAng, float xScale, float yScale);
   void SetTAttribs(unsigned int a1, unsigned int a2, unsigned int a3);
@@ -145,6 +145,9 @@ class FaceTex {
                              float &xScale, float &yScale);
  private:
   Texture *texture;
+  // The name the face was given when the game has no such texture
+  // (texture is then NULL); kept so that saving writes it back.
+  char missingName[64];
   int xo, yo;
   float ra, xs, ys;
   unsigned int atr1, atr2, atr3;

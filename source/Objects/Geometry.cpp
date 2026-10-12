@@ -230,6 +230,7 @@ Edge3d::SetLine(int startPoint, int endPoint) {
 
 FaceTex::FaceTex(const char *tName) {
   texture = NULL;
+  missingName[0] = '\0';
   SetTName(tName);
   SetTInfo(0, 0, 0.0f, 1.0f, 1.0f);
   SetTAttribs(0, 0, 0);
@@ -239,6 +240,7 @@ FaceTex::FaceTex(const char *tName) {
 
 FaceTex::FaceTex(const FaceTex &src) {
   texture = NULL;
+  missingName[0] = '\0';
   *this = src;
 }
 
@@ -252,6 +254,7 @@ FaceTex::operator=(const FaceTex &src) {
     return *this;
 
   SetTexture(src.texture);
+  strcpy(missingName, src.missingName);
   SetTInfo(src.xo, src.yo, src.ra, src.xs, src.ys);
   SetTAttribs(src.atr1, src.atr2, src.atr3);
   lockTex = src.lockTex;
@@ -264,7 +267,7 @@ FaceTex::GetTName(void) const {
 	if(texture)
 		return texture->GetName();
 	else
-		return "";
+		return (char *)missingName;
 }
  
 void
@@ -296,6 +299,20 @@ FaceTex::GetTDim(int &w, int &h) const {
 void
 FaceTex::SetTName(const char *tName) {
   texture = Game::Get()->GetTexDB()->FindTexture((char *)tName);
+  if (texture || !tName) {
+    missingName[0] = '\0';
+  }
+  else {
+    strncpy(missingName, tName, sizeof(missingName) - 1);
+    missingName[sizeof(missingName) - 1] = '\0';
+  }
+}
+
+void
+FaceTex::SetTexture(Texture *_texture) {
+  texture = _texture;
+  if (texture)
+    missingName[0] = '\0';
 }
 
 void
