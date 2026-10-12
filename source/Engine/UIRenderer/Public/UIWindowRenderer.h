@@ -12,6 +12,7 @@
 #pragma once
 
 #include "Rendering/WindowRenderer.h"
+#include "RenderTargetViewportClient.h"
 #include "UIRenderer.h"
 
 class FUIWindowRenderer final : public IUIWindowRenderer
@@ -30,6 +31,10 @@ public:
 
 	TMulticastDelegate<void(FRHICommandList&)> OnBeginFrame;
 
+	// Viewport clients rendered at the start of every frame that needs them
+	// (held weakly).
+	void AddViewportClient(const TSharedRef<FRenderTargetViewportClient>& Client) { ViewportClients.push_back(Client.ToSharedPtr()); }
+
 private:
 	struct FViewport
 	{
@@ -40,5 +45,6 @@ private:
 	FRHIDevice& Device;
 	FUIRenderer& Renderer;
 	TMap<const IPlatformWindow*, FViewport> Viewports;
+	TArray<TWeakPtr<FRenderTargetViewportClient>> ViewportClients;
 	bool bInFrame = false;
 };

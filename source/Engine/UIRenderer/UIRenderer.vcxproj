@@ -37,11 +37,12 @@
   </ImportGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(GenesisEngineDir)Core\Public;$(GenesisEngineDir)ApplicationCore\Public;$(GenesisEngineDir)RHI\Public;$(GenesisEngineDir)UICore\Public;$(ProjectDir)Public;$(ProjectDir)Private;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisEngineDir)Core\Public;$(GenesisEngineDir)UI\Public;$(GenesisEngineDir)ApplicationCore\Public;$(GenesisEngineDir)RHI\Public;$(GenesisEngineDir)UICore\Public;$(ProjectDir)Public;$(ProjectDir)Private;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Private\ElementBatcher.cpp" />
+    <ClCompile Include="Private\RenderTargetViewportClient.cpp" />
     <ClCompile Include="Private\UIRenderer.cpp" />
     <ClCompile Include="Private\UIWindowRenderer.cpp" />
   </ItemGroup>
@@ -51,6 +52,7 @@
     <ClInclude Include="Private\Shaders\UIShaders_PSRoundedBox_SPIRV.h" />
     <ClInclude Include="Private\Shaders\UIShaders_VSMain_SPIRV.h" />
     <ClInclude Include="Public\ElementBatcher.h" />
+    <ClInclude Include="Public\RenderTargetViewportClient.h" />
     <ClInclude Include="Public\UIRenderer.h" />
     <ClInclude Include="Public\UIWindowRenderer.h" />
   </ItemGroup>

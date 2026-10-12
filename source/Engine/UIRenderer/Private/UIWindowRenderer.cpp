@@ -62,6 +62,14 @@ void FUIWindowRenderer::DrawWindows(TArrayView<const FWindowDrawRequest> Request
 	FRHICommandList& CommandList = Device.BeginFrame();
 	Renderer.BeginFrame();
 	OnBeginFrame.Broadcast(CommandList);
+	std::erase_if(ViewportClients, [](const TWeakPtr<FRenderTargetViewportClient>& C) { return C.expired(); });
+	for (const TWeakPtr<FRenderTargetViewportClient>& Weak : TArray<TWeakPtr<FRenderTargetViewportClient>>(ViewportClients))
+	{
+		if (const TSharedPtr<FRenderTargetViewportClient> Client = Weak.lock())
+		{
+			Client->RenderIfNeeded(CommandList);
+		}
+	}
 	for (const FWindowDrawRequest& Request : Requests)
 	{
 		auto It = Viewports.find(Request.Window);
