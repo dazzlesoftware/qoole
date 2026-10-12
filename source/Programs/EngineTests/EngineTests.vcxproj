@@ -37,7 +37,7 @@
   </ImportGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(GenesisEngineDir)Core\Public;$(GenesisEngineDir)ApplicationCore\Public;$(GenesisEngineDir)RHI\Public;$(GenesisEngineDir)UICore\Public;$(GenesisEngineDir)UIRenderer\Public;$(ProjectDir);$(GenesisExternalDir)doctest;$(GenesisExternalDir)FreeType\include;$(GenesisExternalDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisEngineDir)Core\Public;$(GenesisEngineDir)ApplicationCore\Public;$(GenesisEngineDir)RHI\Public;$(GenesisEngineDir)UICore\Public;$(GenesisEngineDir)UI\Public;$(GenesisEngineDir)UIRenderer\Public;$(ProjectDir);$(GenesisExternalDir)doctest;$(GenesisExternalDir)FreeType\include;$(GenesisExternalDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -49,13 +49,19 @@
     <ClCompile Include="BatcherTests.cpp" />
     <ClCompile Include="ClipStackTests.cpp" />
     <ClCompile Include="CoreTests.cpp" />
+    <ClCompile Include="EditableTextTests.cpp" />
     <ClCompile Include="GPUTests.cpp" />
+    <ClCompile Include="InputTests.cpp" />
+    <ClCompile Include="LayoutTests.cpp" />
+    <ClCompile Include="ListViewTests.cpp" />
     <ClCompile Include="PlatformTests.cpp" />
     <ClCompile Include="TestMain.cpp" />
     <ClCompile Include="TextTests.cpp" />
+    <ClCompile Include="UITestHelpers.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TestHelpers.h" />
+    <ClInclude Include="UITestHelpers.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Engine\Core\Core.vcxproj">
@@ -69,6 +75,9 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Engine\UICore\UICore.vcxproj">
       <Project>{6F3297E3-299E-599B-A2FE-946001E4FAF7}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Engine\UI\UI.vcxproj">
+      <Project>{3F5319A7-A0BC-4053-83E8-316D4FFD074A}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\Engine\UIRenderer\UIRenderer.vcxproj">
       <Project>{436BBD32-CC21-56E4-94F1-B731DD66653A}</Project>

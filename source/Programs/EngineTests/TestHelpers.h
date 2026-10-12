@@ -10,6 +10,14 @@
 #include "ElementBatcher.h"
 #include "Fonts/FontCache.h"
 
+#include <ostream>
+
+// Lets doctest print FStrings in failed checks.
+inline std::ostream& operator<<(std::ostream& Stream, const FString& String)
+{
+	return Stream << String.View();
+}
+
 // Captures log output so tests can assert on warnings and errors.
 class FTestLogCapture final : public FOutputDevice
 {
