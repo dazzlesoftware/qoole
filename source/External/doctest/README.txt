@@ -1,5 +1,5 @@
-doctest v2.4.11
-https://github.com/doctest/doctest (tag v2.4.11)
+doctest v2.5.3
+https://github.com/doctest/doctest
 
-Single-header C++ testing framework, used by the Genesis test projects.
-Only doctest/doctest.h is vendored here. Licensed under MIT; see LICENSE.txt.
+Single-header C++ testing framework used by the Genesis Engine tests
+(source/Programs/EngineTests). Licensed under the MIT license; see LICENSE.txt.
