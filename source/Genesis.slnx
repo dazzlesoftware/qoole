@@ -3,21 +3,23 @@
     <Platform Name="x64" />
   </Configurations>
   <Folder Name="/Engine/">
-    <Project Path="Engine/Core/Core.vcxproj" />
+    <Project Path="Engine/Core/Core.vcxproj" Id="e35d228a-878b-5068-9ef0-84e2774dc6f5" />
     <Project Path="Engine/MapCore/MapCore.vcxproj" Id="e6b3966d-7ccb-46db-92a6-40893ed2e9dd" />
-    <Project Path="Engine/ApplicationCore/ApplicationCore.vcxproj" />
-    <Project Path="Engine/RHI/RHI.vcxproj" />
-    <Project Path="Engine/UICore/UICore.vcxproj" />
-    <Project Path="Engine/UI/UI.vcxproj" />
-    <Project Path="Engine/UIRenderer/UIRenderer.vcxproj" />
+    <Project Path="Engine/ApplicationCore/ApplicationCore.vcxproj" Id="677ba165-fdba-5e9b-8349-25d75147593a" />
+    <Project Path="Engine/RHI/RHI.vcxproj" Id="4ea620b2-9f21-526f-8d58-73dd975601e8" />
+    <Project Path="Engine/UICore/UICore.vcxproj" Id="6f3297e3-299e-599b-a2fe-946001e4faf7" />
+    <Project Path="Engine/UI/UI.vcxproj" Id="3f5319a7-a0bc-4053-83e8-316d4ffd074a" />
+    <Project Path="Engine/UIRenderer/UIRenderer.vcxproj" Id="436bbd32-cc21-56e4-94f1-b731dd66653a" />
+    <Project Path="Engine/MapEditor/MapEditor.vcxproj" Id="248d610e-bede-4c49-afd7-43f90e5f4b54" />
   </Folder>
   <Folder Name="/External/">
-    <Project Path="External/FreeType/FreeType.vcxproj" />
-    <Project Path="External/HarfBuzz/HarfBuzz.vcxproj" />
+    <Project Path="External/FreeType/FreeType.vcxproj" Id="a394f7d3-d789-4c87-bf42-69fb4b7609a2" />
+    <Project Path="External/HarfBuzz/HarfBuzz.vcxproj" Id="ffa50721-3b6e-440f-a253-4b19f430fc5d" />
   </Folder>
   <Folder Name="/Programs/">
-    <Project Path="Programs/UISandbox/UISandbox.vcxproj" />
-    <Project Path="Programs/EngineTests/EngineTests.vcxproj" />
+    <Project Path="Programs/GenesisMapEditor/GenesisMapEditor.vcxproj" Id="08da9a96-81ca-4fc1-a617-1170789bf886" />
+    <Project Path="Programs/UISandbox/UISandbox.vcxproj" Id="62c3be81-3630-5bf2-826e-8a5a0cf1fc42" />
+    <Project Path="Programs/EngineTests/EngineTests.vcxproj" Id="c087b070-3f95-5e50-af08-72ade3bf9d0a" />
     <Project Path="Engine/Tests/GenesisTests.vcxproj" Id="bbc47c09-d18a-47f5-9486-7c1db20ceb88" />
   </Folder>
   <Folder Name="/Renderers/">
