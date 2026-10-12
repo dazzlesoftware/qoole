@@ -1,8 +1,9 @@
 # Genesis UI — Design
 
 Status: **approved direction** (decisions recorded in §16). Milestone 1
-(the map core freed from MFC, §14.4) and milestone 2 (platform layer, RHI,
-UI renderer, fonts, §17) are implemented.
+(the map core freed from MFC, §14.4), milestone 2 (platform layer, RHI,
+UI renderer, fonts, §17) and milestone 3 (widget core and input, §18) are
+implemented.
 
 Genesis UI is the user-interface framework for Genesis Editor and, later,
 Genesis Engine games. It replaces MFC in the editor, provides in-game UI, and
@@ -31,6 +32,7 @@ and how the existing MFC editor moves onto it.
 15. [Milestones](#15-milestones)
 16. [Decisions](#16-decisions)
 17. [Milestone 2 notes](#17-milestone-2-notes)
+18. [Milestone 3 notes](#18-milestone-3-notes)
 
 ---
 
@@ -657,7 +659,7 @@ Each milestone ends with something runnable and its own PR(s).
 | 0 | **x64**, drop MGL/Glide | Done: x64-only build, MGL/Glide removed. |
 | 1 | **Core free of MFC** | Done (§14.4): `Basic`/`Objects`/`Render`/`Game` build as the `MapCore` static library without MFC headers; the MFC editor works through adapters; `GenesisTests` pass. |
 | 2 | **Platform + RHI + UI renderer + fonts** | Done (§17): `UISandbox` app: a DPI-aware window drawing boxes, rounded boxes, lines and shaped text through D3D12 and Vulkan; resizes and moves across monitors cleanly. |
-| 3 | **Widget core + input** | Layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
+| 3 | **Widget core + input** | Done (§18): layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
 | 4 | **Editor framework** | Commands, menu registry, toolbars, docking with save/restore, property grid over `IPropertySource`, viewport widget. |
 | 5 | **New editor shell** | Opens/edits/saves maps in four docked viewports with menus, toolbars and selection. |
 | 6 | **Panel parity, MFC removed** | All 14.1 surfaces ported; MFC code and plugins deleted. |
@@ -754,3 +756,114 @@ More screenshots: [Vulkan 150%](images/genesis-ui-m2/uisandbox-vulkan-150.png),
   reported nothing over full self-test runs. The Vulkan SDK is not
   installed; validation ran with the Khronos layer built from source and
   loaded through `VK_ADD_LAYER_PATH`.
+
+## 18. Milestone 3 notes
+
+Built in milestone 3:
+
+| Module | Contents |
+|---|---|
+| `UICore` | `SWidget` with retained measure/arrange/paint/hit-testing (§6.4), `TAttribute` and `TWidgetAttribute` (§6.3), slots and `TPanelChildren`, `SLeafWidget` / `SCompoundWidget` / `SPanel`, the declarative syntax (`SNew`, `SAssignNew`, `GE_BEGIN_ARGS`...), `FGeometry`, input events, `FReply` / `FCursorReply` / `FNavigationReply`, `FDragDropOperation`, `FUIApplicationBase`, styles (`FStylePalette`, `FStyleColor`, `FStyleBrush`, widget style structs, `FStyleSet`, `FAppStyle`), `FTextLayout`, and `IUIWindowRenderer`. |
+| `UI` (new) | `FUIApplication` (frame loop, routing, focus, navigation, capture, hover, drag and drop, tooltips, menu stack, input pre-processors, modal windows, per-user focus), `FNavigationConfig`, the `Genesis` style set, `SWindow`, and the widgets: `SBox`, `SBorder`, `SSpacer`, `SHorizontalBox`, `SVerticalBox`, `SOverlay`, `SWidgetSwitcher`, `SGridPanel`, `SWrapBox`, `SCanvas` (anchors), `SScaleBox`, `SScrollBar`, `SScrollBox`, `SSplitter`, `STextBlock`, `SEditableText`, `SEditableTextBox`, `SImage`, `SSeparator`, `SProgressBar`, `SThrobber`, `SButton`, `SCheckBox`, `SToolTip`, `SMenuAnchor`, `SComboButton`, `SMenuEntry`, and the virtualized `SListView<T>` / `STreeView<T>` / `STableRow<T>`. |
+| `ApplicationCore` | `ITextInputMethodSystem` / `ITextInputMethodContext`: IMM32 on Windows (the IME stays off until a text field activates a context; the composition is drawn inline and the candidate window follows the caret), scripted composition on the null platform. |
+| `UIRenderer` | `FUIWindowRenderer`: `IUIWindowRenderer` on the RHI (a swapchain per window, all windows in one GPU frame, `OnBeginFrame` for render targets). |
+
+`UISandbox` is now the widget gallery: six pages (buttons and toggles,
+text, layout panels, lists and trees, menus/tooltips/drag and drop, and the
+milestone 2 draw-element showcase), File/Edit/View menus, and a borderless
+inspector window whose title bar and close button are widgets.
+`-selftest=<dir>` captures every page, an open menu with its submenu and a
+tooltip, then runs the milestone 2 DPI/minimize/monitor/resize/app-scale
+script. `EngineTests` gained 54 headless tests (suites `UILayout`,
+`UIInput`, `UIEditableText`, `UIViews`) that run on
+`FNullPlatformApplication` with a scripted clock.
+
+![Widget gallery on D3D12 at 150%](images/genesis-ui-m3/gallery-buttons-d3d12-150.png)
+
+More screenshots: [text](images/genesis-ui-m3/gallery-text-d3d12-150.png),
+[layout](images/genesis-ui-m3/gallery-layout-d3d12-150.png),
+[lists and trees](images/genesis-ui-m3/gallery-views-d3d12-150.png),
+[menu with submenu](images/genesis-ui-m3/gallery-menu-d3d12-150.png),
+[tooltip](images/genesis-ui-m3/gallery-tooltip-d3d12-150.png),
+[Vulkan at app scale 125%](images/genesis-ui-m3/gallery-vulkan-appscale125.png),
+[borderless inspector](images/genesis-ui-m3/inspector-borderless-vulkan.png).
+
+**How it fits together**
+
+- Layout: `SWindow::UpdateLayout` runs `Measure` (only on widgets whose
+  layout is dirty, or on everything when the scale changes) and
+  `ArrangeTree` (only on dirty widgets and on widgets whose allotted
+  geometry changed). Widgets that depend on their arranged size (wrapping
+  text, wrap boxes, scale boxes, list views generating rows) do that work in
+  `OnPreArrange` and may invalidate layout; the window repeats the pass (at
+  most four times), so a frame always shows the settled result. Paint and
+  hit-testing read the geometry and arranged children that arrange stored.
+- Invalidation walks parent pointers up to the window: layout reasons mark
+  the ancestors for measure and arrange, render transforms mark them only
+  for arrange, and every reason marks the window for repaint. Bound
+  attributes are evaluated once per frame, from a list of the widgets that
+  have any; an unchanged binding costs one call and a compare.
+- Idle: the loop waits for OS messages when no window needs layout or paint
+  and there is no ticking widget, volatile widget, zero-period timer or
+  pending tooltip. An idle editor draws nothing.
+- Routing follows §7.2: pointer events tunnel (preview) and then bubble
+  along the hit-tested path, or go straight to the captor; key events follow
+  the focus path; `FReply` requests are applied afterwards. A click that
+  nobody handles moves focus to the nearest focusable widget on the path,
+  or clears focus if there is none. A non-focusable widget that handles a
+  click leaves focus where it is; toolbar buttons will rely on this.
+- Navigation: widgets on the focus path answer `OnNavigation`
+  (Escape/Stop/Wrap/Explicit/Custom). Tab order is the depth-first order of
+  arranged, focusable widgets; arrow keys pick the nearest widget past the
+  edge in that direction, preferring widgets that line up with the current
+  one. Menus wrap their own navigation. On gamepads, the D-pad and left
+  stick navigate (with repeat), A accepts and B goes back.
+
+**Deviations from the design, and why**
+
+- Painting is cached per window, not per widget (§6.4, point 3): a window
+  repaints entirely when anything in it invalidated paint, and not at all
+  otherwise. That keeps an idle editor at zero redraws without per-widget
+  element ranges and the clip-index remapping they would need. Per-widget
+  caching can come later behind the same invalidation flags if profiles
+  ask for it.
+- Popups (menus, tooltips, the drag decorator) are layers inside the window
+  they belong to (`SWindow::AddPopup`) and are kept inside its client area.
+  Native popup windows (`EWindowType::Menu`/`ToolTip` already exist in the
+  platform layer) come with the menu registry in milestone 4, where menus
+  need to extend past small windows.
+- `FEditableTextLayout` is folded into `SEditableText`, and multi-line
+  editing is an `IsMultiLine` flag on it rather than a separate
+  `SMultiLineEditableText`.
+- List and tree views support rows of different heights: the scroll offset
+  is measured in items (fractional), and rows are measured as they are
+  generated. Items must be hashable (`std::hash`) and comparable.
+- Disabled widgets are skipped during routing rather than swallowing the
+  event, so their enabled ancestors still see it.
+- Not in this milestone (planned for milestone 4 or for when they are first
+  needed): `SComboBox<T>`, `SSpinBox<T>`, `SNumericEntryBox<T>`, `SSlider`,
+  `SColorPicker`, `SRichTextBlock`, `STileView<T>`, `SHeaderRow`, rich and
+  right-to-left text, styles loaded from data, and user key rebinding.
+
+**Testing notes**
+
+- The 54 UI tests run headless. They cover:
+  - layout of every panel, including retained layout (only the invalidated
+    branch is measured again; idle frames neither lay out nor paint), bound
+    attributes, DPI changes, and text wrapping and hit-testing;
+  - routing order, hover, capture, focus events, Tab, directional and
+    gamepad navigation;
+  - drag and drop (including cancel), tooltips, menus and submenus, modal
+    windows and input pre-processors;
+  - text editing: selection, word movement, undo grouping, clipboard,
+    commit and revert, password fields, multi-line text and IME
+    composition;
+  - list and tree views: virtualization, selection, expansion, and
+    dragging rows.
+- The gallery self-test ran with the D3D12 debug layer on and reported
+  nothing. Vulkan ran without validation because the layer is not installed
+  on this machine. Both monitors of the development machine are at 150%, as
+  in milestone 2.
+- IME: the IMM32 path follows the documented messages, and the widget side
+  is tested with scripted composition. It has not yet been tried with a
+  real Chinese, Japanese or Korean IME.
