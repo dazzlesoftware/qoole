@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * geometry.cpp
  */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 
 #include <stdlib.h>
 #include <math.h>
@@ -67,7 +67,7 @@ Point3d::GetDistSqr(Point3d &pt) const {
 
 Points3d::Points3d(int initSize) {
   // PreConditions.
-  ASSERT(initSize > 0);
+  check(initSize > 0);
 
   numElm = 0;
   arraySize = initSize;
@@ -82,9 +82,9 @@ Points3d::Points3d(Points3d &src) {
 
 Points3d::~Points3d(void) {
   // Sanity Check.
-  ASSERT(numElm >= 0 && numElm <= arraySize);
-  ASSERT(arraySize > 0);
-  ASSERT(array != NULL);
+  check(numElm >= 0 && numElm <= arraySize);
+  check(arraySize > 0);
+  check(array != NULL);
 
   int i;
 
@@ -117,9 +117,9 @@ Points3d::operator=(const Points3d &src) {
     array[i] = (src.array[i] == NULL ? NULL : new Point3d(*(src.array[i])));
 
   // PostConditions.
-  ASSERT(numElm >= 0 && numElm <= arraySize);
-  ASSERT(arraySize > 0);
-  ASSERT(array != NULL);
+  check(numElm >= 0 && numElm <= arraySize);
+  check(arraySize > 0);
+  check(array != NULL);
 
   return *this;
 }
@@ -127,9 +127,9 @@ Points3d::operator=(const Points3d &src) {
 int
 Points3d::AddPoint(const Point3d &point) {
   // Sanity Check.
-  ASSERT(array != NULL);
-  ASSERT(numElm >= 0);
-  ASSERT(arraySize > 0);
+  check(array != NULL);
+  check(numElm >= 0);
+  check(arraySize > 0);
 
   int i, insertPos;
 
@@ -149,7 +149,7 @@ Points3d::AddPoint(const Point3d &point) {
       }
   }
 
-  ASSERT(insertPos >= 0 && insertPos < arraySize);  // Sanity check.
+  check(insertPos >= 0 && insertPos < arraySize);  // Sanity check.
   array[insertPos] = new Point3d(point);
   numElm++;
   return insertPos;
@@ -158,10 +158,10 @@ Points3d::AddPoint(const Point3d &point) {
 void
 Points3d::DeletePoint(int index) {
   // PreConditions
-  ASSERT(index >= 0 && index < arraySize);
-  ASSERT(array[index] != NULL);
+  check(index >= 0 && index < arraySize);
+  check(array[index] != NULL);
   // Sanity Check.
-  ASSERT(numElm > 0 && numElm <= arraySize);
+  check(numElm > 0 && numElm <= arraySize);
 
   delete array[index];
   array[index] = NULL;
@@ -171,7 +171,7 @@ Points3d::DeletePoint(int index) {
 Point3d &
 Points3d::GetPoint(int index) const {
   // PreCondition.
-  ASSERT(index >= 0 && index < arraySize && array[index] != NULL);
+  check(index >= 0 && index < arraySize && array[index] != NULL);
   return *(array[index]);
 }
 
@@ -179,12 +179,12 @@ int
 Points3d::FindPoint(float xPos, float yPos, float zPos,
                     float delta, int startIndex) const {
   // PreConditions.
-  ASSERT(delta >= 0.0);
-  ASSERT(startIndex >= 0 && startIndex < arraySize);
+  check(delta >= 0.0);
+  check(startIndex >= 0 && startIndex < arraySize);
   // Sanity check.
-  ASSERT(numElm >= 0 && numElm <= arraySize);
-  ASSERT(arraySize > 0);
-  ASSERT(array != NULL);
+  check(numElm >= 0 && numElm <= arraySize);
+  check(arraySize > 0);
+  check(array != NULL);
 
   int i;
 
@@ -218,8 +218,8 @@ Points3d::FindPoint(Point3d &pt, float delta, int startIndex) const {
 Edge3d &
 Edge3d::SetLine(int startPoint, int endPoint) {
   // PreConditions.
-  ASSERT(startPoint >= 0);
-  ASSERT(endPoint >= 0);
+  check(startPoint >= 0);
+  check(endPoint >= 0);
 
   p1 = startPoint;
   p2 = endPoint;
@@ -286,7 +286,7 @@ FaceTex::GetTAttribs(unsigned int &a1, unsigned int &a2, unsigned int &a3) const
 
 void
 FaceTex::GetTDim(int &w, int &h) const {
-  ASSERT(texture != NULL);
+  check(texture != NULL);
 
   texture->Cache();
   w = texture->realWidth;
@@ -359,7 +359,7 @@ FaceTex::ST2XYZ(const Plane &plane, float s, float t, Vector3d &pt) const {
   Line l(pt0, mVec);
 
   bool ok = plane.Intersect(l, pt);
-  ASSERT(ok);
+  check(ok);
 
   return pt;
 }
@@ -552,8 +552,8 @@ FaceTex::Transform(const Matrix44 &trans, const Plane &texPlane,
 
 GPolygon::GPolygon(int pt1, int pt2, int pt3) {
   // PreConditions.
-  ASSERT(pt1 >= 0 && pt2 >= 0 && pt3 >= 0);
-  ASSERT(pt1 != pt2 && pt2 != pt3 && pt1 != pt3);
+  check(pt1 >= 0 && pt2 >= 0 && pt3 >= 0);
+  check(pt1 != pt2 && pt2 != pt3 && pt1 != pt3);
 
   edges.AppendNode(*(new Edge3d(pt1, pt2)));
   edges.AppendNode(*(new Edge3d(pt2, pt3)));
@@ -569,12 +569,12 @@ GPolygon::GPolygon(const GPolygon &src) {
 
 GPolygon::~GPolygon(void) {
   // Sanity Check.
-  ASSERT(GetNumSides() >= 3);
+  check(GetNumSides() >= 3);
 
   while (edges.NumOfElm() > 0)
     delete &(edges.RemoveNode(0));
 
-  ASSERT(t != NULL);
+  check(t != NULL);
   delete t;
 }
 
@@ -624,8 +624,8 @@ GPolygon::GetEdgeIndex(int vIndx) const {
 Edge3d &
 GPolygon::AddVertex(int newPt, Edge3d &line) {
   // PreConditions.
-  ASSERT(newPt >= 0);
-  ASSERT(edges.FindNodeIndex(&line) != -1);
+  check(newPt >= 0);
+  check(edges.FindNodeIndex(&line) != -1);
 
   int index = edges.FindNodeIndex(&line) + 1;
   Edge3d *newLine = new Edge3d(newPt, line.GetEndPoint());
@@ -639,10 +639,10 @@ GPolygon::AddVertex(int newPt, Edge3d &line) {
 void
 GPolygon::RemoveVertex(Edge3d &line1, Edge3d &line2) {
   // PreConditions.
-  ASSERT(edges.FindNodeIndex(&line1) != -1);
-  ASSERT(edges.FindNodeIndex(&line2) != -1);
-  ASSERT(line1.GetEndPoint() == line2.GetStartPoint());
-  ASSERT(edges.NumOfElm() > 3);
+  check(edges.FindNodeIndex(&line1) != -1);
+  check(edges.FindNodeIndex(&line2) != -1);
+  check(line1.GetEndPoint() == line2.GetStartPoint());
+  check(edges.NumOfElm() > 3);
 
   line1.SetLine(line1.GetStartPoint(), line2.GetEndPoint());
   DeleteSide(line2);
@@ -651,8 +651,8 @@ GPolygon::RemoveVertex(Edge3d &line1, Edge3d &line2) {
 void
 GPolygon::RemoveVertex(int eIndx, int &vBefore, int &vAfter) {
   // PreCondition.
-  ASSERT(GetNumSides() > 3);
-  ASSERT(eIndx >= 0 && eIndx < GetNumSides());
+  check(GetNumSides() > 3);
+  check(eIndx >= 0 && eIndx < GetNumSides());
 
   Edge3d *l1, *l2;
 
@@ -663,7 +663,7 @@ GPolygon::RemoveVertex(int eIndx, int &vBefore, int &vAfter) {
   l2 = &(edges[eIndx]);
 
   // Sanity.
-  ASSERT(l1->GetEndPoint() == l2->GetStartPoint());
+  check(l1->GetEndPoint() == l2->GetStartPoint());
 
   vBefore = l1->GetStartPoint();
   vAfter = l2->GetEndPoint();
@@ -674,8 +674,8 @@ GPolygon::RemoveVertex(int eIndx, int &vBefore, int &vAfter) {
 void
 GPolygon::DeleteSide(Edge3d &line) {
   // PreCondition.
-  ASSERT(edges.FindNodeIndex(&line) != -1);
-  ASSERT(edges.NumOfElm() > 3);
+  check(edges.FindNodeIndex(&line) != -1);
+  check(edges.NumOfElm() > 3);
 
   delete &(edges.RemoveNode(line));
 }
@@ -697,14 +697,14 @@ GPolygon::InvertOrientation(void) {
 
 void
 GPolygon::SetTexturePtr(FaceTex *tPtr) {
-  ASSERT(t != NULL);
+  check(t != NULL);
   delete t;
   t = tPtr;
 }
 
 void
 GPolygon::CopyTexture(const FaceTex *tPtr) {
-  ASSERT(t != NULL);
+  check(t != NULL);
   delete t;
 
   if (tPtr)
@@ -759,7 +759,7 @@ PlaneNode::operator=(const PlaneNode &src) {
 void
 PlaneNode::SetNewPlane(const Vector3d &nVec, const Vector3d &pVec) {
   // Sanity.
-  ASSERT(plane != NULL);
+  check(plane != NULL);
 
   plane->NewPlane(nVec, pVec);
 }
@@ -811,7 +811,7 @@ Geometry::operator=(const Geometry &src) {
   int i;
   PlaneNode *pNode;
   
-  ASSERT(faces.NumOfElm() == src.planeList.NumOfElm());
+  check(faces.NumOfElm() == src.planeList.NumOfElm());
   for(i = 0; i < faces.NumOfElm(); i++) {
     pNode = new PlaneNode(faces[i], src.planeList[i].GetPlane());
     planeList.AppendNode(*pNode);
@@ -860,8 +860,8 @@ Geometry::NewGeomTexture(const char *texture) {
 void
 Geometry::BreakPlanes(int vertex) {
   // PreCondition.
-  ASSERT(vertex >= 0 && vertex < vertices.arraySize);
-  ASSERT(vertices.array[vertex] != NULL);
+  check(vertex >= 0 && vertex < vertices.arraySize);
+  check(vertices.array[vertex] != NULL);
 
   IterLinkList<GPolygon> iterf(faces);
   LinkList<GPolygon> fBuf;
@@ -892,13 +892,13 @@ Geometry::BreakPlanes(int vertex) {
 void
 Geometry::BreakPlanes(const Edge3d &edge) {
   // PreCondition.
-  ASSERT(edgeList.FindNodeIndex(&edge) != -1);
-  ASSERT(edge.GetStartPoint() >= 0 &&
+  check(edgeList.FindNodeIndex(&edge) != -1);
+  check(edge.GetStartPoint() >= 0 &&
          edge.GetStartPoint() < vertices.arraySize);
-  ASSERT(vertices.array[edge.GetStartPoint()] != NULL);
-  ASSERT(edge.GetEndPoint() >= 0 &&
+  check(vertices.array[edge.GetStartPoint()] != NULL);
+  check(edge.GetEndPoint() >= 0 &&
          edge.GetEndPoint() < vertices.arraySize);
-  ASSERT(vertices.array[edge.GetEndPoint()] != NULL);
+  check(vertices.array[edge.GetEndPoint()] != NULL);
 
   IterLinkList<GPolygon> iterf(faces);
   LinkList<GPolygon> fBuf;
@@ -939,7 +939,7 @@ Geometry::BreakPlanes(const Edge3d &edge) {
 void
 Geometry::BreakPlanes(const GPolygon &face) {
   // Sanity.
-  ASSERT(faces.FindNodeIndex(&face) != -1);
+  check(faces.FindNodeIndex(&face) != -1);
 
   IterLinkList<Edge3d> itere(face.GetEdgeList());
   IterLinkList<GPolygon> iterf(faces);
@@ -982,8 +982,8 @@ Geometry::BreakPlanes(const GPolygon &face) {
 void
 Geometry::MoveVertex(int vIndex, const Vector3d &deltaPos) {
   // PreCondition.
-  ASSERT(vIndex >= 0 && vIndex < vertices.arraySize);
-  ASSERT(vertices.array[vIndex] != NULL);
+  check(vIndex >= 0 && vIndex < vertices.arraySize);
+  check(vertices.array[vIndex] != NULL);
 
   (vertices.array[vIndex])->AddVector(deltaPos);
   boundRadius = CalBoundRadius();
@@ -992,7 +992,7 @@ Geometry::MoveVertex(int vIndex, const Vector3d &deltaPos) {
 void
 Geometry::MoveEdge(const Edge3d &edge, const Vector3d &deltaPos) {
   // PreCondition.
-  ASSERT(edgeList.FindNodeIndex(&edge) != -1);
+  check(edgeList.FindNodeIndex(&edge) != -1);
 
   (vertices.array[edge.GetStartPoint()])->AddVector(deltaPos);
   (vertices.array[edge.GetEndPoint()])->AddVector(deltaPos);
@@ -1002,7 +1002,7 @@ Geometry::MoveEdge(const Edge3d &edge, const Vector3d &deltaPos) {
 void
 Geometry::MoveFace(const GPolygon &face, const Vector3d &deltaPos) {
   // PreCondition.
-  ASSERT(faces.FindNodeIndex(&face) != -1);
+  check(faces.FindNodeIndex(&face) != -1);
 
   IterLinkList<Edge3d> iter(face.GetEdgeList());
 
@@ -1023,7 +1023,7 @@ Geometry::IntegrityCheck(void) {
   bool rtnVal;
 
   // Sanity.
-  // ASSERT(faces.NumOfElm() == planeList.NumOfElm());
+  // check(faces.NumOfElm() == planeList.NumOfElm());
 
   // Rebuild plane list.
   // ConstructPlaneList();
@@ -1215,7 +1215,7 @@ Geometry::Transform(const Matrix44 &transMatrix, Points3d &vBuffer) const {
   }
 
   // Sanity.
-  ASSERT(vBuffer.numElm == vBuffer.arraySize);
+  check(vBuffer.numElm == vBuffer.arraySize);
 
   // Check if vBuffer is big enough.
   if (vBuffer.arraySize < vertices.arraySize) {
@@ -1234,7 +1234,7 @@ Geometry::Transform(const Matrix44 &transMatrix, Points3d &vBuffer) const {
       continue;
 
     // Sanity
-    ASSERT(vBuffer.array[i] != NULL);
+    check(vBuffer.array[i] != NULL);
     
     // *(vBuffer.array[i]) = *(vertices.array[i]);
     // transMatrix.Transform(*(vBuffer.array[i]));
@@ -1248,16 +1248,16 @@ Points3d &
 Geometry::TransformVertexPts(const Matrix44 &transMatrix,
                              Points3d &vBuffer, int vertex) const {
   // PreCondition.
-  ASSERT(vertex >= -1 && vertex < GetNumVertices());
+  check(vertex >= -1 && vertex < GetNumVertices());
 
   if (vertex == -1)
     return Transform(transMatrix, vBuffer);
 
   // Hack....  Requires vBuffer been used before.
   // Sanity.
-  ASSERT(vBuffer.numElm > 0 && vBuffer.arraySize > 0);
-  ASSERT(vBuffer.array[0] != NULL);
-  ASSERT(vertices.array[vertex] != NULL);
+  check(vBuffer.numElm > 0 && vBuffer.arraySize > 0);
+  check(vBuffer.array[0] != NULL);
+  check(vertices.array[vertex] != NULL);
 
   transMatrix.Transform(*(vBuffer.array[0]), *(vertices.array[vertex]));
   return vBuffer;
@@ -1279,7 +1279,7 @@ Geometry::TransformEdgePts(const Matrix44 &transMatrix,
   }
 
   // Sanity.
-  ASSERT(vBuffer.numElm == vBuffer.arraySize);
+  check(vBuffer.numElm == vBuffer.arraySize);
 
   // Check if vBuffer is big enough.
   if (vBuffer.arraySize < GetNumEdges()) {
@@ -1302,13 +1302,13 @@ Geometry::TransformEdgePts(const Matrix44 &transMatrix,
     aveVec.AddVector(vertices[edgePtr->GetStartPoint()],
                      vertices[edgePtr->GetEndPoint()]);
     aveVec.MultVector(0.5f);
-    ASSERT(vBuffer.array[i] != NULL);
+    check(vBuffer.array[i] != NULL);
     transMatrix.Transform(*(vBuffer.array[i++]), aveVec);
     if (edge != NULL)
       break;
   }
   // Sanity.
-  ASSERT(i > 0);
+  check(i > 0);
   return vBuffer;
 }
 
@@ -1328,7 +1328,7 @@ Geometry::TransformFacePts(const Matrix44 &transMatrix,
   }
 
   // Sanity.
-  ASSERT(vBuffer.numElm == vBuffer.arraySize);
+  check(vBuffer.numElm == vBuffer.arraySize);
 
   // Check if vBuffer is big enough.
   if (vBuffer.arraySize < GetNumFaces()) {
@@ -1351,13 +1351,13 @@ Geometry::TransformFacePts(const Matrix44 &transMatrix,
     for(j = 0; j < facePtr->GetNumSides(); j++)
       aveVec.AddVector(vertices[(facePtr->GetSide(j)).GetStartPoint()]);
     aveVec.MultVector(1.0f / facePtr->GetNumSides());
-    ASSERT(vBuffer.array[i] != NULL);
+    check(vBuffer.array[i] != NULL);
     transMatrix.Transform(*(vBuffer.array[i++]), aveVec);
     if (face != NULL)
       break;
   }
   // Sanity.
-  ASSERT(i > 0);
+  check(i > 0);
   return vBuffer;
 }
 
@@ -1415,7 +1415,7 @@ void
 Geometry::FindTransBoundBox(const Matrix44 trans,
                             Vector3d &minVec, Vector3d &maxVec) const {
   // Sanity.
-  ASSERT(vertices.GetNumPoints() > 3);
+  check(vertices.GetNumPoints() > 3);
 
   int i, init;
   Vector3d vec;
@@ -1444,7 +1444,7 @@ Geometry::FindTransBoundBox(const Matrix44 trans,
 Geometry *
 Geometry::CreateExpandedGeom(float delta) const {
   // Sanity.
-  ASSERT(planeList.NumOfElm() < MAX_FACES);
+  check(planeList.NumOfElm() < MAX_FACES);
 
   Geometry *rtnVal = NULL;
   const FaceTex *tBuf[MAX_FACES];
@@ -1494,7 +1494,7 @@ Geometry::CreateExpandedGeom(float delta) const {
 LinkList<Geometry> *
 Geometry::HollowInward(float delta) const {
   // Sanity.
-  ASSERT(planeList.NumOfElm() + 1 < MAX_FACES);
+  check(planeList.NumOfElm() + 1 < MAX_FACES);
 
   static LinkList<Geometry> rtnVal;
   Geometry *pNewGeom;
@@ -1544,7 +1544,7 @@ Geometry::HollowInward(float delta) const {
     // delete the inner plane.
     delete pBuf[pNum];
 
-    ASSERT(pNewGeom != NULL);
+    check(pNewGeom != NULL);
     if (pNewGeom == NULL) {
       // Something's wrong.
       break;
@@ -1585,10 +1585,10 @@ Geometry::CSGSubtract(const Geometry &cuttee, const Geometry &cutter) {
   rtnVal.DeleteAllNodes();
 
   // Sanity Check.
-  ASSERT(cuttee.faces.NumOfElm() == cuttee.planeList.NumOfElm());
-  ASSERT(cutter.faces.NumOfElm() == cutter.planeList.NumOfElm());
-  ASSERT(cuttee.faces.NumOfElm() <= MAX_FACES);
-  ASSERT(cutter.faces.NumOfElm() <= MAX_FACES);
+  check(cuttee.faces.NumOfElm() == cuttee.planeList.NumOfElm());
+  check(cutter.faces.NumOfElm() == cutter.planeList.NumOfElm());
+  check(cuttee.faces.NumOfElm() <= MAX_FACES);
+  check(cutter.faces.NumOfElm() <= MAX_FACES);
 
   // First check to see if the 2 geoms intersect at all.
   pNum = 0;
@@ -1606,7 +1606,7 @@ Geometry::CSGSubtract(const Geometry &cuttee, const Geometry &cutter) {
   if (invGeom == NULL) {
     // The 2 geometries don't intersect.  return;
     // Post Condition.
-    ASSERT(rtnVal.NumOfElm() == 0);
+    check(rtnVal.NumOfElm() == 0);
     return NULL;
   }
 
@@ -1615,7 +1615,7 @@ Geometry::CSGSubtract(const Geometry &cuttee, const Geometry &cutter) {
   // Should be made in NewBoundGeometry().
   // invGeom->ConstructPlaneList();
   // Sanity.
-  ASSERT(invGeom->faces.NumOfElm() == invGeom->planeList.NumOfElm());
+  check(invGeom->faces.NumOfElm() == invGeom->planeList.NumOfElm());
 
   int tCount, maxCount;
   FaceTex *iTexture, *pTexture, *nTexture = NULL;
@@ -1653,10 +1653,10 @@ Geometry::CSGSubtract(const Geometry &cuttee, const Geometry &cutter) {
   done = false;
   for(p = 0; p < invGeom->planeList.NumOfElm() && !done; p++) {
     // Sanity Check.
-    ASSERT(geom->planeList.NumOfElm() <= MAX_FACES);
+    check(geom->planeList.NumOfElm() <= MAX_FACES);
 
     // Make the new sub piece.
-    ASSERT(invPlane == NULL);  // Sanity.
+    check(invPlane == NULL);  // Sanity.
     invPlane = new Plane(invGeom->planeList[p].GetPlane()); 
     (n = invPlane->GetNorm()).MultVector(-1.0f);  // Invert the cutting plane.
     invPlane->NewPlane(n, invPlane->GetPoint());
@@ -1719,9 +1719,9 @@ Geometry::CSGSubtract(const Geometry &cuttee, const Geometry &cutter) {
 Geometry *
 Geometry::CSGIntersect(const Geometry &geom1, const Geometry &geom2) {
   // Sanity.
-  ASSERT(geom1.planeList.NumOfElm() == geom1.faces.NumOfElm());
-  ASSERT(geom2.planeList.NumOfElm() == geom2.faces.NumOfElm());
-  ASSERT(geom1.faces.NumOfElm() + geom2.faces.NumOfElm() <= 64);
+  check(geom1.planeList.NumOfElm() == geom1.faces.NumOfElm());
+  check(geom2.planeList.NumOfElm() == geom2.faces.NumOfElm());
+  check(geom1.faces.NumOfElm() + geom2.faces.NumOfElm() <= 64);
 
   int pNum, i;
   const Plane *pBuf[MAX_FACES * 2];
@@ -1753,7 +1753,7 @@ Geometry::CSGIntersect(const Geometry &geom1, const Geometry &geom2) {
 //===== Plane Clip =====
 Geometry *
 Geometry::PlaneClip(const Plane &cPlane) {
-  ASSERT(faces.NumOfElm() + 1 <= MAX_FACES);
+  check(faces.NumOfElm() + 1 <= MAX_FACES);
 
   // Find the most used texture in cuttee.
   FaceTex *iTexture, *pTexture, *nTexture = NULL;
@@ -1782,7 +1782,7 @@ Geometry::PlaneClip(const Plane &cPlane) {
   }
 
   // Copy plane ptrs over to buffer.
-  ASSERT(faces.NumOfElm() == planeList.NumOfElm());
+  check(faces.NumOfElm() == planeList.NumOfElm());
 
   const Plane *pBuf[MAX_FACES];
   const FaceTex *tBuf[MAX_FACES];
@@ -1795,7 +1795,7 @@ Geometry::PlaneClip(const Plane &cPlane) {
     pBuf[pNum] = &(iterPlanes.GetNext()->GetPlane());
 	tBuf[pNum] = iterFaces.GetNext()->GetTexturePtr();
   }
-  ASSERT(pNum == faces.NumOfElm());
+  check(pNum == faces.NumOfElm());
 
   pBuf[pNum] = &cPlane;
   tBuf[pNum++] = nTexture;
@@ -1878,7 +1878,7 @@ Geometry::MakeSegment(const Vector3d &pt1, const Vector3d &pt2, float width) {
 
   rtnVal = NewBoundGeometry(6, (const Plane **) pBuf, (const FaceTex **)tBuf);
 
-  ASSERT(rtnVal != NULL);
+  check(rtnVal != NULL);
   if (rtnVal != NULL) {
     rtnVal->boundRadius = rtnVal->CalBoundRadius();
     rtnVal->ConstructEdgeList();
@@ -1894,7 +1894,7 @@ Geometry::MakeSegment(const Vector3d &pt1, const Vector3d &pt2, float width) {
 Geometry *
 Geometry::ReadBoundGeometry(LFile *inFile, int geomNum) {
   // PreCondition.
-  ASSERT(geomNum >= -1);
+  check(geomNum >= -1);
 
   Geometry *rtnVal = NULL;
   Vector3d p1, p2, p3;
@@ -2077,7 +2077,7 @@ void
 Geometry::WriteBoundGeometry(FILE *outFile, const Geometry &geom,
                              int geomNum, const Matrix44 &t, bool round) {
   // PreCondition.
-  ASSERT(geomNum >= -1);
+  check(geomNum >= -1);
 
   int i, i1, i2;
   unsigned int a1, a2, a3;
@@ -2095,7 +2095,7 @@ Geometry::WriteBoundGeometry(FILE *outFile, const Geometry &geom,
     fprintf(outFile, "{ // Brush %d\n", geomNum);
 
   // Sanity.
-  ASSERT(geom.faces.NumOfElm() == geom.planeList.NumOfElm());
+  check(geom.faces.NumOfElm() == geom.planeList.NumOfElm());
 
   for(i = 0; i < geom.faces.NumOfElm(); i++) {
     pPlane = &((geom.planeList[i]).GetPlane());
@@ -2191,7 +2191,7 @@ Geometry::WriteBoundGeometry(FILE *outFile, const Geometry &geom,
 Plane *
 Geometry::MakePlane(const GPolygon &poly) const {
   // PreCondition.
-  ASSERT(faces.FindNodeIndex(&poly) != -1);
+  check(faces.FindNodeIndex(&poly) != -1);
 
   Plane *rtnVal;
   Vector3d dVec, nVec, v0, v1;
@@ -2289,7 +2289,7 @@ Geometry *
 Geometry::NewBoundGeometry(int pNum, const Plane *pBuf[],
                            const FaceTex *tBuf[]) {
   // PreConditions.
-  ASSERT(pNum <= MAX_FACES * 2 && pNum >= 4);
+  check(pNum <= MAX_FACES * 2 && pNum >= 4);
 
   Geometry *rtnVal = new Geometry();
   int p, e, i, j, k, ind;
@@ -2353,7 +2353,7 @@ Geometry::NewBoundGeometry(int pNum, const Plane *pBuf[],
         for(j = 0; j < k && sideEnds[j] != ind; j++);
         if (j < k)
           continue;
-        ASSERT(k < 64);  // Sanity.
+        check(k < 64);  // Sanity.
         sideEnds[k++] = ind;
       }
 
@@ -2375,7 +2375,7 @@ Geometry::NewBoundGeometry(int pNum, const Plane *pBuf[],
       // hmm.. Dont know what to do.
       if (!ok)
         continue;
-      ASSERT(ok);  // Sanity.
+      check(ok);  // Sanity.
 
       // Find min and max of parametrized pts.
       minInd = maxInd = sideEnds[0];
@@ -2437,7 +2437,7 @@ Geometry::NewBoundGeometry(int pNum, const Plane *pBuf[],
     }
 
     // Sanity.
-    ASSERT(k == (newPoly->GetSide(2)).GetEndPoint());
+    check(k == (newPoly->GetSide(2)).GetEndPoint());
 
     // Remove the dummy points.
     newPoly->RemoveVertex(newPoly->GetSide(newPoly->GetNumSides() - 1),
@@ -2453,7 +2453,7 @@ Geometry::NewBoundGeometry(int pNum, const Plane *pBuf[],
     // pNode = new PlaneNode(*newPoly, rtnVal->vertices);
     (rtnVal->planeList).AppendNode(*pNode);
     // Sanity.
-    ASSERT((rtnVal->faces).NumOfElm() == (rtnVal->planeList).NumOfElm());
+    check((rtnVal->faces).NumOfElm() == (rtnVal->planeList).NumOfElm());
   }
 
   if ((rtnVal->faces).NumOfElm() >= 4)
@@ -2538,7 +2538,7 @@ WireFrameGeom::~WireFrameGeom(void) {
   delete wfVertices;
 
   // Sanity.
-  ASSERT(approxBox != NULL);
+  check(approxBox != NULL);
   delete approxBox;
 }
 
@@ -2562,7 +2562,7 @@ WireFrameGeom::GetWireFrameEdgeList(void) const {
 const LinkList<Edge3d> &
 WireFrameGeom::GetApproxBoxEdgeList(void) const {
   // Sanity
-  ASSERT(approxBox != NULL);
+  check(approxBox != NULL);
 
   return approxBox->GetEdgeList();
 }
@@ -2570,7 +2570,7 @@ WireFrameGeom::GetApproxBoxEdgeList(void) const {
 const LinkList<PlaneNode> &
 WireFrameGeom::GetPlaneList(void) const {
   // Sanity
-  ASSERT(approxBox != NULL);
+  check(approxBox != NULL);
 
   return approxBox->GetPlaneList();
 }
@@ -2586,7 +2586,7 @@ bool
 WireFrameGeom::HitGeometry(const Line &ray, float rangeBegin,
                            float rangeEnd, float &depth) const {
   // Sanity.
-  ASSERT(approxBox != NULL);
+  check(approxBox != NULL);
 
   return approxBox->HitGeometry(ray, rangeBegin, rangeEnd, depth);
 }
@@ -2595,7 +2595,7 @@ void
 WireFrameGeom::FindTransBoundBox(const Matrix44 trans,
                                  Vector3d &minVec, Vector3d &maxVec) const {
   // Sanity.
-  ASSERT(numWFVertices > 3);
+  check(numWFVertices > 3);
 
   int i;
   Vector3d vec;
@@ -2620,7 +2620,7 @@ WireFrameGeom::FindTransBoundBox(const Matrix44 trans,
 void
 WireFrameGeom::FindSelfDimen(Vector3d &minVec, Vector3d &maxVec) const {
   // Sanity.
-  ASSERT(numWFVertices > 3);
+  check(numWFVertices > 3);
 
   int i;
   const GeomWFVertex *vertex;
@@ -2656,7 +2656,7 @@ WireFrameGeom::TransformWireFrame(const Matrix44 &transMatrix,
   }
 
   // Sanity.
-  ASSERT(vBuffer.numElm == vBuffer.arraySize);
+  check(vBuffer.numElm == vBuffer.arraySize);
 
   // Check if vBuffer is big enough.
   if (vBuffer.arraySize < numWFVertices) {
@@ -2672,7 +2672,7 @@ WireFrameGeom::TransformWireFrame(const Matrix44 &transMatrix,
   // Transform.
   for(i = 0; i < numWFVertices; i++) {
     // Sanity.
-    ASSERT(vBuffer.array[i] != NULL);
+    check(vBuffer.array[i] != NULL);
 
     vertex = &(wfVertices[i]);
     transMatrix.Transform(*(vBuffer.array[i]),
@@ -2686,7 +2686,7 @@ Points3d &
 WireFrameGeom::TransformApproxBox(const Matrix44 &transMatrix,
                                   Points3d &vBuffer) const {
   // Sanity.
-  ASSERT(approxBox != NULL);
+  check(approxBox != NULL);
   return approxBox->Transform(transMatrix, vBuffer);
 }
 
@@ -2705,7 +2705,7 @@ WireFrameGeom::ConsApprxBox(void) {
   approxBox = new Geometry();
 
   // Sanity.
-  ASSERT(numWFVertices > 0);
+  check(numWFVertices > 0);
 
   // Find bounding vectors.
   vertex = &(wfVertices[0]);
@@ -2772,7 +2772,7 @@ WireFrameGeom::GetMinMax(Vector3d &minVec, Vector3d &maxVec) const {
   Point3d pt;
 
   // Sanity.
-  ASSERT(numWFVertices > 0);
+  check(numWFVertices > 0);
 
   // Find bounding vectors.
   vertex = &(wfVertices[0]);

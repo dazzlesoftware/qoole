@@ -22,12 +22,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * mapio.cpp
  */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 
 #include <string.h>
 #include "mapio.h"
 #include "LCommon.h"
-#include "Draw.h"
+#include "DrawBase.h"
 
 //==================== MapIO ====================
 
@@ -43,7 +43,7 @@ bool (*MapIO::ProgressFunc)(int percent) = NULL;
 Object *
 MapIO::ReadMap(const char *fName, bool (*_ProgressFunc)(int percent)) {
 	// PreCondition.
-	ASSERT(fName != NULL);
+	check(fName != NULL);
 
 	LFile *inFile = new LFile;
 	Object *hObjPtr, *rtnVal = NULL;
@@ -85,7 +85,7 @@ MapIO::ReadMap(const char *fName, bool (*_ProgressFunc)(int percent)) {
 	{
 		hObjPtr = iterObj.GetNext();
 		if (hObjPtr->HasEntity() &&
-			strcmp((hObjPtr->GetEntityPtr())->GetClassName(), "worldspawn") == 0)
+			strcmp((hObjPtr->GetEntityPtr())->GetClassname(), "worldspawn") == 0)
 		{
 			rtnVal = &(objList.RemoveNode(*hObjPtr));
 			break;
@@ -143,7 +143,7 @@ MapIO::ReadEntities(LFile *inFile, LinkList<Object> &objList) {
 	while (1)
 	{
 		// Sanity.
-		ASSERT(brushes.NumOfElm() == 0);
+		check(brushes.NumOfElm() == 0);
 
 		newEnt = Entity::ReadEntity(inFile, -1, ReadBrush, &pDone, &pTotal, ProgressFunc);
 		if (newEnt == NULL)
@@ -215,7 +215,7 @@ MapIO::ReadEntities(LFile *inFile, LinkList<Object> &objList) {
 		}
 		
 		oldEnt = newObj->SetEntity(newEnt);
-		ASSERT(oldEnt == NULL);  // Sanity.
+		check(oldEnt == NULL);  // Sanity.
 
 		// Adjust obj prop.
 		CnvrtEnt2Obj(*newEnt, *newObj);
@@ -233,7 +233,7 @@ ERROR_READENTITIES:
   
 RTN_READENTITIES:
 	// Sanity.
-	ASSERT(brushes.NumOfElm() == 0);
+	check(brushes.NumOfElm() == 0);
 
 	return true;
 }
@@ -275,9 +275,9 @@ MapIO::ReadBrush(LFile *inFile)
 bool
 MapIO::WriteMap(const char *fName, Object &rootObj, bool (*_ProgressFunc)(int percent)) {
 	// PreConditions.
-	ASSERT(rootObj.IsRoot());
-	ASSERT(!rootObj.IsLeaf());
-	ASSERT(rootObj.HasEntity() && strcmp((rootObj.GetEntityPtr())->GetClassName(), "worldspawn") == 0);
+	check(rootObj.IsRoot());
+	check(!rootObj.IsLeaf());
+	check(rootObj.HasEntity() && strcmp((rootObj.GetEntityPtr())->GetClassname(), "worldspawn") == 0);
 
 	ProgressFunc = _ProgressFunc;
 	pDone = 0;
@@ -288,7 +288,7 @@ MapIO::WriteMap(const char *fName, Object &rootObj, bool (*_ProgressFunc)(int pe
 	if ((outFile = fopen(fName, "wt")) == NULL)
 		return false;
 
-	fprintf(outFile, "// %s generated MAP\n", AfxGetAppName());
+	fprintf(outFile, "// %s generated MAP\n", FApp::GetName().ToAnsi().c_str());
 	fprintf(outFile, "// Genesis Editor\n");
 	fprintf(outFile, "\n");
   
@@ -351,7 +351,7 @@ MapIO::WriteEntities2Map(FILE *outFile, Object &objNode) {
 void
 MapIO::WriteBrushes2Map(FILE *outFile, Object &objNode, const Entity *ePtr) {
 	// PreCondition.
-	ASSERT(outFile != NULL);
+	check(outFile != NULL);
 
 	// Check for the same entity.
 	if (objNode.HasEntity() && objNode.GetEntityPtr(true) != ePtr)
@@ -360,7 +360,7 @@ MapIO::WriteBrushes2Map(FILE *outFile, Object &objNode, const Entity *ePtr) {
 	if (objNode.HasBrush())
 	{
 		// Sanity Check.
-		ASSERT(objNode.IsLeaf());
+		check(objNode.IsLeaf());
 
 		Geometry::WriteBoundGeometry(outFile, objNode.GetBrush(), -1, objNode.GetTransformation(), true);
 		
@@ -392,9 +392,9 @@ MapIO::CnvrtEnt2Obj(const Entity &ent, Object &objNode) {
 	if (ent.IsNotUserAttrib(EA_ANGLE)) {
 #else
 	if (ent.IsAttribSet(EA_ANGLE) &&
-		(strncmp(ent.GetClassName(), "info_player_", 12) == 0 ||
-		strncmp(ent.GetClassName(), "info_teleport", 13) == 0 ||
-		strncmp(ent.GetClassName(), "monster_", 8) == 0)) {
+		(strncmp(ent.GetClassname(), "info_player_", 12) == 0 ||
+		strncmp(ent.GetClassname(), "info_teleport", 13) == 0 ||
+		strncmp(ent.GetClassname(), "monster_", 8) == 0)) {
 #endif
 		trans.SetRotateZ(DEG2RAD(ent.GetAngle()));
 		trans.Transform(fv.NewVector(1.0f, 0.0f, 0.0f));
@@ -418,7 +418,7 @@ MapIO::CnvrtEnt2Obj(const Entity &ent, Object &objNode) {
 #if 0
 	if (ent.IsAttribSet(EA_MANGLE) &&
 #endif
-	if (strcmp(ent.GetClassName(), "info_intermission") == 0) {
+	if (strcmp(ent.GetClassname(), "info_intermission") == 0) {
 		SphrVector orientVec;
 		Vector3d tVec(ent.GetMAngle());
 
@@ -432,7 +432,7 @@ MapIO::CnvrtEnt2Obj(const Entity &ent, Object &objNode) {
 void
 MapIO::CnvrtObj2Ent(const Object &objNode, Entity &ent) {
 	const Vector3d xAxis(1.0f, 0.0f, 0.0f), yAxis(0.0f, 1.0f, 0.0f);
-	const char *cName = (objNode.GetEntityPtr())->GetClassName();
+	const char *cName = (objNode.GetEntityPtr())->GetClassname();
 	Vector3d ov(0.0f, 0.0f, 0.0f);
 	Vector3d fv;
 	int ang;
@@ -444,7 +444,7 @@ MapIO::CnvrtObj2Ent(const Object &objNode, Entity &ent) {
 	}
 	else { // if (objNode.IsItemNode())
 #if 1
-		ASSERT(objNode.IsItemNode());  // Sanity.
+		check(objNode.IsItemNode());  // Sanity.
 		
 		Vector3d ov, minBVec, maxBVec;
 
@@ -460,7 +460,7 @@ MapIO::CnvrtObj2Ent(const Object &objNode, Entity &ent) {
 		ent.SetOrigin(ov);
 
 #else
-		ASSERT(objNode.IsItemNode());  // Sanity.
+		check(objNode.IsItemNode());  // Sanity.
 
 		(objNode.GetTransformation()).Transform(ov);
 		ent.SetOrigin(ov);
@@ -482,7 +482,7 @@ MapIO::CnvrtObj2Ent(const Object &objNode, Entity &ent) {
 		
 		if (ang < 0)
 			ang += 360;
-		ASSERT(ang >= 0 && ang <= 360);	// Sanity
+		check(ang >= 0 && ang <= 360);	// Sanity
 		ent.SetAngle(ang);
 	}
 	else if (strcmp(cName, "info_intermission") == 0) {
@@ -499,7 +499,7 @@ MapIO::CnvrtObj2Ent(const Object &objNode, Entity &ent) {
 		ang = (int) ROUND(RAD2DEG(ATan(fv.DotVector(yAxis), fv.DotVector(xAxis))));
 		if (ang < 0)
 			ang += 360;
-		ASSERT(ang >= 0 && ang <= 360);	// Sanity
+		check(ang >= 0 && ang <= 360);	// Sanity
 		ent.SetAngle(ang);
 	}
 #endif
@@ -524,7 +524,7 @@ MapIO::CnvrtObj2Ent(const Object &objNode, Entity &ent) {
 		
 		if (ang < 0)
 			ang += 360;
-		ASSERT(ang >= 0 && ang <= 360);	// Sanity
+		check(ang >= 0 && ang <= 360);	// Sanity
 		ent.SetAngle(ang);
 	}
 #if 0
@@ -540,7 +540,7 @@ MapIO::CnvrtObj2Ent(const Object &objNode, Entity &ent) {
 		
 		if (ang < 0)
 			ang += 360;
-		ASSERT(ang >= 0 && ang <= 360);	// Sanity
+		check(ang >= 0 && ang <= 360);	// Sanity
 		ent.SetAngle(ang);
 	}
 	else if (strcmp(cName, "info_intermission") == 0) {

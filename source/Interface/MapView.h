@@ -222,7 +222,7 @@ protected:
 	UINT qvType;
 	UINT qvRender;
 	View *pView;
-	FDraw *pDraw;
+	FWndDraw *pDraw;
 
 	float zoomVal;
 	int width, height;

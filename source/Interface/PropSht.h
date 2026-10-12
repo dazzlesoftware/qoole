@@ -33,9 +33,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "PropSrf.h"
 #include "PropCnt.h"
 
-#define PROPPAGE_ADDSURFACE		0x0001
-#define PROPPAGE_ADDCONTENT		0x0002
-
 //======================================================================
 // FPropSheet
 //======================================================================

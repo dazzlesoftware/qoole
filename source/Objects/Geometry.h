@@ -172,7 +172,7 @@ class GPolygon : public ElmNode {
 
   void InvertOrientation(void);
 
-  FaceTex *GetTexturePtr(void) const { ASSERT(t != NULL); return t; };
+  FaceTex *GetTexturePtr(void) const { check(t != NULL); return t; };
   void SetTexturePtr(FaceTex *tPtr);
   void CopyTexture(const FaceTex *tPtr);
 

@@ -226,12 +226,12 @@ class Matrix44 {
   // Matrix44 &operator=(const Matrix44 &src);
 
   inline float GetMatrix(int row, int col) const {
-    ASSERT(row >= 0 && row < 4 && col >= 0 && col < 4);
+    check(row >= 0 && row < 4 && col >= 0 && col < 4);
     return matrix[row * 4 + col];
   };
 
   inline float SetMatrix(int row, int col, float m) {
-    ASSERT(row >= 0 && row < 4 && col >= 0 && col < 4);
+    check(row >= 0 && row < 4 && col >= 0 && col < 4);
     return (matrix[row * 4 + col] = m);
   };
 

@@ -32,7 +32,7 @@ NewDraw(CWnd *wnd) {
 
 // ========== FDrawMFC ==========
 
-FDrawMFC::FDrawMFC(CWnd *wnd) : FDraw(wnd) {
+FDrawMFC::FDrawMFC(CWnd *wnd) : FWndDraw(wnd) {
 	CDC *pDC = wnd->GetDC();
 	for(int i = 0; i < numBufs; i++)
 		dc[i].CreateCompatibleDC(pDC);

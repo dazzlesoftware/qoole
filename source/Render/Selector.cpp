@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * selector.cpp
  */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 
 #include "selector.h"
 
@@ -45,8 +45,8 @@ bool
 Selector::IsSelectionHit(Object *sObjPtr, const Line &slctRay,
                          float rBgn, float rEnd, float &depth) const {
   // PreCondition.
-  ASSERT(sObjPtr != NULL);
-  ASSERT(sObjPtr->GetParentPtr() == scopePtr);
+  check(sObjPtr != NULL);
+  check(sObjPtr->GetParentPtr() == scopePtr);
 
   Vector3d p0, v0;
   Matrix44 trans;
@@ -68,7 +68,7 @@ Object *
 Selector::GetSelection(Object *sObjPtr, const Line &slctRay,
                        float rBgn, float rEnd, int direction) const {
   // Sanity Check.
-  ASSERT(sObjPtr == NULL || sObjPtr->GetParentPtr() == scopePtr);
+  check(sObjPtr == NULL || sObjPtr->GetParentPtr() == scopePtr);
 
   int i;
   float z;
@@ -101,7 +101,7 @@ Selector::GetSelection(Object *sObjPtr, const Line &slctRay,
   }
   else {
     i = hlObjs.FindNodeIndex(holdPtr);
-    ASSERT(i != -1);
+    check(i != -1);
     i = (direction == 0 ?
          ((i == 0 ? hlObjs.NumOfElm() : i) - 1) :
          ((i + 1) % hlObjs.NumOfElm()));
@@ -124,8 +124,8 @@ Selector::GetSelection(Object *sObjPtr, const Line &slctRay,
 Object *
 Selector::SSelectObject(Object *sObjPtr) {
   // Sanity.
-  // ASSERT(sObjPtr != NULL);
-  ASSERT(sObjPtr == NULL || sObjPtr->GetParentPtr() == scopePtr);
+  // check(sObjPtr != NULL);
+  check(sObjPtr == NULL || sObjPtr->GetParentPtr() == scopePtr);
 
   sSelectedObjPtr = sObjPtr;
   return sSelectedObjPtr;
@@ -151,8 +151,8 @@ Selector::IsObjectMSelected(Object *sObjPtr) const {
 bool
 Selector::MSelectObject(Object *sObjPtr) {
   // Sanity.
-  ASSERT(sObjPtr != NULL);
-  ASSERT(sObjPtr->GetParentPtr() == scopePtr);
+  check(sObjPtr != NULL);
+  check(sObjPtr->GetParentPtr() == scopePtr);
 
   // Reset face selection.
   faceSlctIndx = -1;
@@ -213,7 +213,7 @@ Selector::MUnselect(Object *sObjPtr) {
     sObjPtr->SetSelected(false);
 
     int i = mSelectedObjs.FindNodeIndex(sObjPtr);
-    ASSERT(i != -1);
+    check(i != -1);
     delete &(mSelectedObjs.RemoveNode(i));
   }
 }
@@ -260,7 +260,7 @@ Object *
 Selector::FindMultiSlctBaseObj(const Line &slctRay, float rBgn,
                                float rEnd, int direction) const {
   // Precondition.
-  ASSERT(direction == 0 || direction == 1);
+  check(direction == 0 || direction == 1);
 
   int i;
   float z;
@@ -358,10 +358,10 @@ Selector::ResetSelectFace(const Vector3d &viewVec) {
 void
 Selector::SelectFaceIndex(int fIndex) {
   if (fIndex != -1) {
-    ASSERT(mSelectedObjs.NumOfElm() == 1);
+    check(mSelectedObjs.NumOfElm() == 1);
     Object *sObjPtr = mSelectedObjs[0].GetPtr();
-    ASSERT(sObjPtr->HasBrush());
-    ASSERT(fIndex >= 0 && fIndex < sObjPtr->GetBrush().GetNumFaces());
+    check(sObjPtr->HasBrush());
+    check(fIndex >= 0 && fIndex < sObjPtr->GetBrush().GetNumFaces());
   }
 
   faceSlctIndx = fIndex;
@@ -372,13 +372,13 @@ Selector::GetSelectFace(void) const {
   if (faceSlctIndx == -1)
     return NULL;
 
-  ASSERT(mSelectedObjs.NumOfElm() == 1);
+  check(mSelectedObjs.NumOfElm() == 1);
   Object *sObjPtr = mSelectedObjs[0].GetPtr();
 
-  ASSERT(sObjPtr->HasBrush());
+  check(sObjPtr->HasBrush());
   Geometry *brush = &(sObjPtr->GetBrush());
 
-  ASSERT(faceSlctIndx >= 0 && faceSlctIndx < brush->GetNumFaces());
+  check(faceSlctIndx >= 0 && faceSlctIndx < brush->GetNumFaces());
   return &(brush->GetFace(faceSlctIndx));
 }
 
@@ -387,13 +387,13 @@ Selector::CycleSelectFace(const Vector3d &viewVec, int direction) {
   if (faceSlctIndx == -1)
     return NULL;
 
-  ASSERT(mSelectedObjs.NumOfElm() == 1);
+  check(mSelectedObjs.NumOfElm() == 1);
   Object *sObjPtr = mSelectedObjs[0].GetPtr();
 
-  ASSERT(sObjPtr->HasBrush());
+  check(sObjPtr->HasBrush());
   Geometry *brush = &(sObjPtr->GetBrush());
   int numFaces = brush->GetNumFaces();
-  ASSERT(faceSlctIndx >= 0 && faceSlctIndx < numFaces);
+  check(faceSlctIndx >= 0 && faceSlctIndx < numFaces);
   const LinkList<PlaneNode> *pPlaneList = &(brush->GetPlaneList());
 
   // Transform viewVec into brush's space.
@@ -428,7 +428,7 @@ Selector::CycleSelectFace(const Vector3d &viewVec, int direction) {
     if (faceArry[i] == faceSlctIndx)
       break;
   }
-  ASSERT(i < numFaces);
+  check(i < numFaces);
 
   if (direction == 1)
     i = (i + 1) % numFaces;

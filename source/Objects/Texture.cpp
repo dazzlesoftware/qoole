@@ -18,10 +18,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "Texture.h"
 #include "Game.h"
-#include "Draw.h"
+#include "DrawBase.h"
 
 // ===========================================================================
 // Texture
@@ -45,7 +45,7 @@ Texture::~Texture(void) {
 
 char *
 Texture::GetFilename(void) {
-	static char filename[MAX_PATH];
+	static char filename[_MAX_PATH];
 
 	TexDir *texDir = game->GetTexDB()->GetTexDir(texEntry->texDir);
 	strcpy(filename, texDir->dirName);
@@ -66,12 +66,12 @@ Texture::Cache(void) {
 		return true;
 
 	if(texEntry->wadEntry.offset == -1) {
-//		ASSERT(false);
+//		check(false);
 		return false;
 	}
 
 	if(!game->LoadTexture(this, GetFilename(), texEntry->wadEntry.offset)) {
-//		ASSERT(false);
+//		check(false);
 		return false;
 	}
 
@@ -257,55 +257,46 @@ TexList::~TexList() {
 
 Texture *TexList::Add(char *texName) {
 	Texture *texture = texDB->AddTexture(texName);
-	textures.Add(texture);
+	textures.push_back(texture);
 	return texture;
 }
 
 void TexList::Remove(char *texName) {
-	for(int i = 0; i < textures.GetSize(); i++) {
-		Texture *texture = textures.GetAt(i);
+	for(int i = 0; i < (int)textures.size(); i++) {
+		Texture *texture = textures[i];
 		if(!strcmp(texName, texture->GetName())) {
-			textures.RemoveAt(i);
+			textures.erase(textures.begin() + i);
 			return;
 		}
 	}
 }
 
 void TexList::Save(void) {
-	if(!textures.GetSize())
+	if(textures.empty())
 		return;
 
 	LFile file;
 	char buf[256];
 
 	FDraw::OutputText("Loading TexList: %s... ", filename);
-	TRY {
-		if(LFile::Exist(filename))
-		{
-			CFileStatus status;
-			CFile::GetStatus(filename, status);
-			status.m_attribute &= ~0x01;
-			CFile::SetStatus(filename, status);
-			CFile::Remove(filename);
-		}
-		else
-			FDraw::OutputText("Error. Couldn't open TexList.\n");
-	}
-	CATCH(CFileException, e)
+	if(LFile::Exist(filename))
 	{
-		char buf[256];
-		FDraw::OutputText("Error. Couldn't save TexList.\n");
-		sprintf(buf, "Error saving TexList '%s'", filename);
-		MessageBox(NULL, buf, NULL, MB_ICONERROR | MB_TOPMOST);
-		return;
+		// The list may be read-only (e.g. installed from a CD).
+		if(!FFile::Delete(FString::FromAnsi(filename), true))
+		{
+			FDraw::OutputText("Error. Couldn't save TexList.\n");
+			LError("Error saving TexList '%s'", filename);
+			return;
+		}
 	}
-	END_CATCH
+	else
+		FDraw::OutputText("Error. Couldn't open TexList.\n");
 
 	file.Open(filename, LFILE_WRITE);
-	for(int i = 0; i < textures.GetSize(); i++) {
-		Texture *texture = textures.GetAt(i);
+	for(int i = 0; i < (int)textures.size(); i++) {
+		Texture *texture = textures[i];
 		sprintf(buf, "%s\r\n", texture->GetTexListName(texDB));
-		file.Write(buf, (UINT)strlen(buf));
+		file.Write(buf, (int)strlen(buf));
 	}
 	FDraw::OutputText("OK.\n");
 }
@@ -468,7 +459,7 @@ TexDB::AddTexture(char *name) {
 	*/
 
 	if(result == -1) {
-		TRACE("TexDB::AddTexture: couldn't find texture '%s'\n", fullName);
+		GLog->Logf(ELogVerbosity::Verbose, "TexDB::AddTexture: couldn't find texture '%s'\n", fullName);
 		static TexEntry notFoundEntry;
 		static Texture notFoundTex(&notFoundEntry, game);
 		strcpy(notFoundEntry.wadEntry.name, "NotFound");
@@ -584,7 +575,7 @@ TexDB::DelTexDir(TexDir *texDir) {
 int
 TexDB::GetWadEntry(char *dirName, char *texName, WadEntry *rtnWadEntry) {
 	if(LFile::ExistDir(dirName)) {
-		char filename[MAX_PATH];
+		char filename[_MAX_PATH];
 		sprintf(filename, "%s\\%s", dirName, texName);
 		if(LFile::Exist(filename)) {
 			rtnWadEntry->offset = 0;
@@ -641,13 +632,14 @@ TexDB::BuildWadFromUsed(char *filename) {
 		if(texEntry[i].used)
 			wadHeader.entries++;
 
-	CProgressWnd progressWnd(AfxGetMainWnd(), "Progress");
-	progressWnd.NoCancelButton();
-
 	char building[256];
 	const char *c1 = strrchr(filename, '\\');
 	sprintf(building, "Building %s", (c1 != NULL ? c1 + 1 : filename));
-	progressWnd.SetText(building);
+
+	FProgressOptions progressOptions;
+	progressOptions.Text = FString::FromAnsi(building);
+	progressOptions.bCancellable = false;
+	TUniquePtr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
 
 	WadEntry *wadEntry = new WadEntry[wadHeader.entries];
 
@@ -688,7 +680,7 @@ TexDB::BuildWadFromUsed(char *filename) {
 		wadEntry[c].offset = wadHeader.offset;
 		wadHeader.offset += size;
 
-		progressWnd.SetPos(c * 100 / wadHeader.entries);
+		progress->SetPercent(c * 100 / wadHeader.entries);
 		c++;
 	}
 

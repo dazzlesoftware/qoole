@@ -18,12 +18,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "Sin.h"
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "Draw.h"
+#include "DrawBase.h"
 #include <direct.h>
 
 Sin::Sin(void) : Game(GetNumUtils()) {
@@ -86,13 +86,8 @@ Sin::Init(void) {
 		return true;
 
 	if (!strlen(gameDir) || !LFile::ExistDir(gameDir)) {
-		CDirDialog dirDialog;
-		dirDialog.m_strTitle = "Locate Sin Folder";
-
-		if (!dirDialog.DoBrowse())
+		if (!LBrowseForFolder("Locate Sin Folder", gameDir, sizeof(gameDir)))
 			return false;
-
-		strcpy(gameDir, dirDialog.m_strPath);
 	}
 
 	sprintf(baseDir, "%s\\base", gameDir);
@@ -300,7 +295,7 @@ Sin::LoadTexture(Texture *texture, char *filename, int offset) {
 
 void
 Sin::ExtractTextures(void) {
-	char texdir[MAX_PATH];
+	char texdir[_MAX_PATH];
 	sprintf(texdir, "%s\\textures", baseDir);
 
 	static bool beenHere = false;
@@ -310,11 +305,11 @@ Sin::ExtractTextures(void) {
 
 	char text[256];
 	sprintf(text, "Some Sin textures not found.  Genesis Editor can extract them\nto '%s' for you.  Do that now?", texdir);
-	if(MessageBox(AfxGetMainWnd()->m_hWnd, text, AfxGetAppName(), MB_YESNO) != IDYES)
+	if(!LAskYesNo("%s", text))
 		return;
 
-	char outname[MAX_PATH];
-	char dirname[MAX_PATH];
+	char outname[_MAX_PATH];
+	char dirname[_MAX_PATH];
 	char *name, *c;
 	int i, count = 0, total = 0;
 
@@ -325,11 +320,11 @@ Sin::ExtractTextures(void) {
 		if(strstr(pak1->entry[i].filename, ".swl"))
 			total++;
 
-	CProgressWnd progressWnd(AfxGetMainWnd(), "Progress");
-	progressWnd.SetText("Extracting Textures");
-	progressWnd.NoCancelButton();
-
-	SetCursor(LoadCursor(NULL, IDC_WAIT));
+	FProgressOptions progressOptions;
+	progressOptions.Text = "Extracting Textures";
+	progressOptions.bCancellable = false;
+	progressOptions.bBusyCursor = true;
+	TUniquePtr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
 
 	for(int j = 0; j < 2; j++) {
 	LPak *pak = j ? pak1 : pak0;
@@ -346,19 +341,16 @@ Sin::ExtractTextures(void) {
 			LFile::MakeDir(dirname);
 			LFile::Extract(name, outname);
 
-			progressWnd.SetPos(count++ * 100 / total);
-			progressWnd.PeekAndPump();
+			progress->SetPercent(count++ * 100 / total);
 		}
 	}
 	}
 
-	progressWnd.Clear();
-	SetCursor(LoadCursor(NULL, IDC_ARROW));
 }
 
 // Game Map Compile Stuff.
 const char *Sin::GetUtilName(int index) const {
 	static const char *utilNames[] = {"SinQBSP3", "SinQVis3", "SinQRad3", "Sin"};
-	ASSERT(index >= 0 && index < 4);
+	check(index >= 0 && index < 4);
 	return utilNames[index];
 }

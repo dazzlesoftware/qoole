@@ -70,6 +70,7 @@
     <ClCompile Include="Private\Misc\AssertionMacros.cpp" />
     <ClCompile Include="Private\Services\ConfigStore.cpp" />
     <ClCompile Include="Private\Services\Services.cpp" />
+    <ClCompile Include="Private\Windows\WindowsApp.cpp" />
     <ClCompile Include="Private\Windows\WindowsDebug.cpp" />
     <ClCompile Include="Private\Windows\WindowsString.cpp" />
   </ItemGroup>

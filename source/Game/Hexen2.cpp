@@ -18,12 +18,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "Hexen2.h"
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "Draw.h"
+#include "DrawBase.h"
 #include <direct.h>
 
 Hexen2::Hexen2(void) : Game(GetNumUtils()) {
@@ -89,13 +89,8 @@ Hexen2::Init(void) {
 		return true;
 
 	if (!strlen(gameDir) || !LFile::ExistDir(gameDir)) {
-		CDirDialog dirDialog;
-		dirDialog.m_strTitle = "Locate Hexen 2 Folder";
-
-		if (!dirDialog.DoBrowse())
+		if (!LBrowseForFolder("Locate Hexen 2 Folder", gameDir, sizeof(gameDir)))
 			return false;
-
-		strcpy(gameDir, dirDialog.m_strPath);
 	}
 
 	sprintf(baseDir, "%s\\data1", gameDir);
@@ -236,7 +231,7 @@ Hexen2::LoadModel(char *filename) {
 	}
 
 	verts = v;
-	ASSERT(verts > 0);
+	check(verts > 0);
 
 	LinkList<Edge3d> edgeList;
 	Edge3d *newEdge;
@@ -318,7 +313,7 @@ Hexen2::LoadTexture(Texture *texture, char *filename, int offset) {
 	return true;
 }
 
-bool paks2wad(char *quake_root, char *wad_output, bool (*ProgFunc)(int p));
+bool paks2wad(char *quake_root, char *wad_output, IProgressTask *progress);
 
 void
 Hexen2::ExtractTextures(void) {
@@ -330,8 +325,7 @@ Hexen2::ExtractTextures(void) {
 	if(LFile::Exist(wadFile))
 		return;
 
-	if(MessageBox(NULL, "Extract Hexen 2 Textures?", 
-		AfxGetAppName(), MB_YESNO) == IDNO)
+	if(!LAskYesNo("Extract Hexen 2 Textures?"))
 		return;
 	
 	if(!LFile::ExistDir(wadDir))
@@ -339,21 +333,23 @@ Hexen2::ExtractTextures(void) {
 
 	sprintf(baseDir, "%s\\data1", gameDir);
 
-	CProgressFunc progFunc("Extracting");
-	paks2wad(baseDir, wadFile, CProgressFunc::SetPos);
+	FProgressOptions progressOptions;
+	progressOptions.Text = "Extracting";
+	TUniquePtr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
+	paks2wad(baseDir, wadFile, progress.get());
 }
 
 //===== Map Compile Stuff =====
 const char *Hexen2::GetUtilName(int index) const {
 	static const char *utilNames[] = {"H2QBSP", "H2Light", "H2Vis", "Hexen 2"};
-	ASSERT(index >= 0 && index < 4);
+	check(index >= 0 && index < 4);
 	return utilNames[index];
 }
 
 const char *Hexen2::GetLeakFile(const char *docName) const {
 	static char leakPath[256];
 
-	ASSERT(docName != NULL);
+	check(docName != NULL);
 
 	if (!LFile::ExistDir(mapDir))
 		return NULL;

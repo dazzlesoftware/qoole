@@ -48,9 +48,12 @@ public:
 	virtual ~IProgressTask() = default;
 
 	virtual void SetText(const FString& Text) = 0;
-	virtual void SetPercent(int32 Percent) = 0;		// 0 to 100
 
-	// Processes pending UI events, then reports whether the user cancelled.
+	// Moves the bar (0 to 100) and processes pending UI events, so the
+	// progress window repaints and can see a cancel request.
+	virtual void SetPercent(int32 Percent) = 0;
+
+	// Whether the user asked to cancel.
 	virtual bool IsCancelled() = 0;
 };
 

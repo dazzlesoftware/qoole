@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * View.cpp
  */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 
 #include "view.h"
 
@@ -97,7 +97,7 @@ View::SetNewView(Object &viewObject, const Selector &selector,
                  bool reset, Vector3d *posVec, SphrVector *orientVec,
                  bool perspectiveView, int windowWidth, float viewDepth) {
   // Precondition.
-  ASSERT(&viewObject == &(selector.GetScope()));
+  check(&viewObject == &(selector.GetScope()));
 
   viewObj = &viewObject;
   selectorPtr = &selector;
@@ -133,7 +133,7 @@ View::SetPerspective(bool perspectiveView) {
 float
 View::GetClipDepth(void) const {
   // Sanity
-  ASSERT(perspective ||
+  check(perspective ||
          (clipView.GetMaxClipEdges()).GetY() ==
           -(clipView.GetMinClipEdges()).GetY());
 
@@ -143,7 +143,7 @@ View::GetClipDepth(void) const {
 void
 View::SetClipDepth(float depth) {
   // Sanity.
-  ASSERT(depth >= 1.0 && depth <= 10000.0f);
+  check(depth >= 1.0 && depth <= 10000.0f);
 
   Vector3d cMin = clipView.GetMinClipEdges();
   Vector3d cMax = clipView.GetMaxClipEdges();
@@ -169,7 +169,7 @@ View::SetWindowWidth(int width) {
 void
 View::MapViewSpaceOrigin(float &scrnX, float &scrnY) {
   // Sanity.
-  ASSERT(perspective == false);
+  check(perspective == false);
 
   Matrix44 trans;
   Vector3d ov(0.0f, 0.0f, 0.0f);
@@ -219,7 +219,7 @@ View::IsMultiSelectionHit(float scrnX, float scrnY) const {
 
   SetRay(scrnX, scrnY, slctRay, false);
   ok = clipView.ClipRay(slctRay, rangeBegin, rangeEnd);
-  ASSERT(ok);
+  check(ok);
   SetRay(scrnX, scrnY, slctRay, true);
 
   IterLinkList<ObjectPtr> iter(selectorPtr->GetMSelectedObjects());
@@ -241,7 +241,7 @@ View::SelectObject(float scrnX, float scrnY, int funcIndex) const {
 
   SetRay(scrnX, scrnY, slctRay, false);
   ok = clipView.ClipRay(slctRay, rangeBegin, rangeEnd);
-  ASSERT(ok);
+  check(ok);
   SetRay(scrnX, scrnY, slctRay, true);
 
   if (funcIndex == 0)
@@ -305,16 +305,16 @@ int
 View::SelectVertex(float scrnX, float scrnY,
                    float epsilon, Vector3d *pManipDotPos) {
   // Sanity.
-  ASSERT(displayPts == 1);
+  check(displayPts == 1);
 
   int i, rtnVal;
   Matrix44 trans;
   float div, ptX, ptY, diff, depth;
 
-  ASSERT(selectorPtr->GetNumMSelectedObjects() == 1);
+  check(selectorPtr->GetNumMSelectedObjects() == 1);
   Object *objNode = (selectorPtr->GetMSelectedObjects())[0].GetPtr();
 
-  ASSERT(objNode->HasBrush());
+  check(objNode->HasBrush());
   Geometry *brush = &(objNode->GetBrush());
 
   if (clipView.BoundObject(*objNode) == -1)
@@ -355,16 +355,16 @@ const Edge3d *
 View::SelectEdge(float scrnX, float scrnY,
                  float epsilon, Vector3d *pManipDotPos) {
   // Sanity.
-  ASSERT(displayPts == 2);
+  check(displayPts == 2);
   
   int i, index;
   Matrix44 trans;
   float div, ptX, ptY, diff, depth;
 
-  ASSERT(selectorPtr->GetNumMSelectedObjects() == 1);
+  check(selectorPtr->GetNumMSelectedObjects() == 1);
   Object *objNode = (selectorPtr->GetMSelectedObjects())[0].GetPtr();
 
-  ASSERT(objNode->HasBrush());
+  check(objNode->HasBrush());
   Geometry *brush = &(objNode->GetBrush());
 
   if (clipView.BoundObject(*objNode) == -1)
@@ -397,7 +397,7 @@ View::SelectEdge(float scrnX, float scrnY,
     }
   }
   // Sanity.
-  ASSERT(index >= -1 || index < brush->GetNumEdges());
+  check(index >= -1 || index < brush->GetNumEdges());
 
   return (index == -1 ? NULL : &(brush->GetEdgeList())[index]);
 }
@@ -406,16 +406,16 @@ const GPolygon *
 View::SelectFace(float scrnX, float scrnY,
                  float epsilon, Vector3d *pManipDotPos) {
   // Sanity.
-  ASSERT(displayPts == 3);
+  check(displayPts == 3);
 
   int i, index;
   Matrix44 trans;
   float div, ptX, ptY, diff, depth;
 
-  ASSERT(selectorPtr->GetNumMSelectedObjects() == 1);
+  check(selectorPtr->GetNumMSelectedObjects() == 1);
   Object *objNode = (selectorPtr->GetMSelectedObjects())[0].GetPtr();
 
-  ASSERT(objNode->HasBrush());
+  check(objNode->HasBrush());
   Geometry *brush = &(objNode->GetBrush());
 
   if (clipView.BoundObject(*objNode) == -1)
@@ -448,7 +448,7 @@ View::SelectFace(float scrnX, float scrnY,
     }
   }
   // Sanity.
-  ASSERT(index >= -1 || index < brush->GetNumFaces());
+  check(index >= -1 || index < brush->GetNumFaces());
 
   return (index == -1 ? NULL : &(brush->GetFace(index)));
 }
@@ -464,8 +464,8 @@ View::DisplayNoPts(void) {
 void
 View::DisplayVertexPts(int vertex) {
   // PreCondition
-  // ASSERT(selectorPtr->GetNumMSelectedObjects() == 1);
-  // ASSERT((selectorPtr->GetMSelectedObjects())[0].GetPtr()->HasBrush());
+  // check(selectorPtr->GetNumMSelectedObjects() == 1);
+  // check((selectorPtr->GetMSelectedObjects())[0].GetPtr()->HasBrush());
 
   displayPts = 1;
   manipVertex = vertex;
@@ -474,8 +474,8 @@ View::DisplayVertexPts(int vertex) {
 void
 View::DisplayEdgePts(const Edge3d *edge) {
   // PreCondition
-  // ASSERT(selectorPtr->GetNumMSelectedObjects() == 1);
-  // ASSERT((selectorPtr->GetMSelectedObjects())[0].GetPtr()->HasBrush());
+  // check(selectorPtr->GetNumMSelectedObjects() == 1);
+  // check((selectorPtr->GetMSelectedObjects())[0].GetPtr()->HasBrush());
 
   displayPts = 2;
   manipEdge = edge;
@@ -484,8 +484,8 @@ View::DisplayEdgePts(const Edge3d *edge) {
 void
 View::DisplayFacePts(const GPolygon *face) {
   // PreCondition
-  // ASSERT(selectorPtr->GetNumMSelectedObjects() == 1);
-  // ASSERT((selectorPtr->GetMSelectedObjects())[0].GetPtr()->HasBrush());
+  // check(selectorPtr->GetNumMSelectedObjects() == 1);
+  // check((selectorPtr->GetMSelectedObjects())[0].GetPtr()->HasBrush());
 
   displayPts = 3;
   manipFace = face;
@@ -495,14 +495,14 @@ View::DisplayFacePts(const GPolygon *face) {
 
 bool
 View::IsCrossHairShown(void) {
-  ASSERT((!pCrossHair && !pCrossHairNorth) || (pCrossHair && pCrossHairNorth));
+  check((!pCrossHair && !pCrossHairNorth) || (pCrossHair && pCrossHairNorth));
   return (pCrossHair != NULL);
 }
 
 void
 View::ShowCrossHair(bool show) {
   // Sanity.
-  ASSERT((!pCrossHair && !pCrossHairNorth) || (pCrossHair && pCrossHairNorth));
+  check((!pCrossHair && !pCrossHairNorth) || (pCrossHair && pCrossHairNorth));
 
   Entity *entPtr = NULL;
 
@@ -525,7 +525,7 @@ View::ShowCrossHair(bool show) {
 void
 View::SetCrossHairPos(const Vector3d &posVec) {
   // Sanity.
-  ASSERT((!pCrossHair && !pCrossHairNorth) || (pCrossHair && pCrossHairNorth));
+  check((!pCrossHair && !pCrossHairNorth) || (pCrossHair && pCrossHairNorth));
 
   if (pCrossHair == NULL)
     return;
@@ -537,7 +537,7 @@ View::SetCrossHairPos(const Vector3d &posVec) {
 Vector3d
 View::GetCrossHairPos(void) {
   // PreCondition.
-  ASSERT(pCrossHair && pCrossHairNorth->GetParentPtr());
+  check(pCrossHair && pCrossHairNorth->GetParentPtr());
 
   return pCrossHair->GetPosition();
 }
@@ -567,7 +567,7 @@ View::ApproxItems(bool approximate) {
 int
 View::GetColor(int colorIndex) {
   // Sanity.
-  ASSERT(colorIndex >= 0 && colorIndex < VRC_NUMRENDERCOLORS);
+  check(colorIndex >= 0 && colorIndex < VRC_NUMRENDERCOLORS);
 
   return renderColors[colorIndex];
 }
@@ -575,7 +575,7 @@ View::GetColor(int colorIndex) {
 int
 View::SetColor(int colorIndex, int color) {
   // Sanity.
-  ASSERT(colorIndex >= 0 && colorIndex < VRC_NUMRENDERCOLORS);
+  check(colorIndex >= 0 && colorIndex < VRC_NUMRENDERCOLORS);
 
   int rtnVal = renderColors[colorIndex];
   renderColors[colorIndex] = color;
@@ -589,8 +589,8 @@ void
 View::RenderWireFrame(bool renderWorld, bool renderSelected,
                       bool renderCrossHair) const {
   // Sanity Check.
-  ASSERT(viewObj != NULL);
-  ASSERT(renderView == NULL);
+  check(viewObj != NULL);
+  check(renderView == NULL);
 
   renderView = this;
 
@@ -606,14 +606,14 @@ View::RenderWireFrame(bool renderWorld, bool renderSelected,
   if (renderCrossHair && (pCrossHair || pCrossHairNorth)) {
     oldEntColor = SetColor(VRC_ENTITY, GetColor(VRC_CROSSHAIR));
 
-    ASSERT(pCrossHair->GetParentPtr() == NULL);
+    check(pCrossHair->GetParentPtr() == NULL);
     pCrossHair->SetParentPtr(viewObj);
     RenderObjWireFrame(*pCrossHair);
     pCrossHair->SetParentPtr(NULL);
 
     SetColor(VRC_ENTITY, GetColor(VRC_CROSSHAIRNORTH));
 
-    ASSERT(pCrossHairNorth->GetParentPtr() == NULL);
+    check(pCrossHairNorth->GetParentPtr() == NULL);
     pCrossHairNorth->SetParentPtr(viewObj);
     RenderObjWireFrame(*pCrossHairNorth);
     pCrossHairNorth->SetParentPtr(NULL);
@@ -625,7 +625,7 @@ View::RenderWireFrame(bool renderWorld, bool renderSelected,
   if (renderWorld && pLeakObj) {
     int oldBrushColor = SetColor(VRC_NORMAL, GetColor(VRC_MANIPDOT));
 
-    ASSERT(pLeakObj->GetParentPtr() == NULL);
+    check(pLeakObj->GetParentPtr() == NULL);
     pLeakObj->SetParentPtr(viewObj);
 	pLeakObj->PreOrderCondApply(RenderObjWireFrame);
     pLeakObj->SetParentPtr(NULL);
@@ -694,7 +694,7 @@ View::RenderObjWireFrame(Object &objNode) {
   bool lineClip;
   int bound;
 
-  ASSERT(!objNode.HasBrush() || !objNode.IsItemNode());
+  check(!objNode.HasBrush() || !objNode.IsItemNode());
 
   // Check to see if objNode is one of the selected objects.
   if (skipSlctObjs) {
@@ -723,14 +723,14 @@ View::RenderObjWireFrame(Object &objNode) {
     objNode.SetTransformation(trans);
   }
   else if (!objNode.IsItemNode()) {
-    ASSERT(!objNode.IsRoot());
+    check(!objNode.IsRoot());
 
     trans = (objNode.GetParent()).GetTransformation();
     objNode.CalTransSpaceMatrix(trans);
     objNode.SetTransformation(trans);
   }
   else {  // Account for item scaling problem inside other objects.
-    ASSERT(!objNode.IsRoot());
+    check(!objNode.IsRoot());
 
     if(!renderView->showEntities)
       return false;
@@ -823,10 +823,10 @@ View::RenderObjWireFrame(Object &objNode) {
 void
 View::RenderSlctFaceOutline(Object &objNode) const {
   // Sanity.
-  ASSERT(dispFaceSlct);
-  ASSERT(!objNode.IsItemNode());
-  ASSERT(objNode.HasBrush());
-  ASSERT(GetSelectFace() != NULL);
+  check(dispFaceSlct);
+  check(!objNode.IsItemNode());
+  check(objNode.HasBrush());
+  check(GetSelectFace() != NULL);
 
   bool lineClip;
   int bound;
@@ -874,16 +874,16 @@ View::RenderSlctFaceOutline(Object &objNode) const {
 void
 View::DisplayManipPts(void) const {
   // Sanity.
-  ASSERT(displayPts > 0 && displayPts <= 3);
+  check(displayPts > 0 && displayPts <= 3);
 
   float div;
   int i, numPts;
   Matrix44 trans;
 
-  ASSERT(selectorPtr->GetNumMSelectedObjects() == 1);
+  check(selectorPtr->GetNumMSelectedObjects() == 1);
   Object *objNode = (selectorPtr->GetMSelectedObjects())[0].GetPtr();
 
-  ASSERT(objNode->HasBrush());
+  check(objNode->HasBrush());
   Geometry *brush = &(objNode->GetBrush());
 
   trans = objNode->GetTransformation();
@@ -936,7 +936,7 @@ CalSVTrans(Object &objNode) {
 void
 View::RenderSolid(bool tmap) const {
   // Sanity Check.
-  ASSERT(viewObj != NULL);
+  check(viewObj != NULL);
 
   renderView = this;
   renderDraw = qdraw;
@@ -997,7 +997,7 @@ View::RenderObjSolid(Object &objNode) {
   }
   else {  // Account for item scaling problem inside other objects.
     // Sanity Check.
-    ASSERT(!objNode.IsRoot());
+    check(!objNode.IsRoot());
 
     if (!renderView->showEntities)
       return false;
@@ -1086,7 +1086,7 @@ View::RenderObjSolid(Object &objNode) {
 
     // Copy the vertices to local buffer.
     numPts = (pNodePtr->GetPolygon()).GetNumSides();
-    ASSERT(numPts <= 32);  // Sanity.
+    check(numPts <= 32);  // Sanity.
     edgeIter = new IterLinkList<Edge3d>(pNodePtr->GetPolygon().GetEdgeList());
     edgeIter->Reset();
     for(fvPtr = ptsBuf1; !edgeIter->IsDone(); fvPtr++)
@@ -1099,7 +1099,7 @@ View::RenderObjSolid(Object &objNode) {
         renderView->clipView.ClipPolygon(numPts, ptsBuf1, ptsBuf2, &fvPtr) < 3)
       continue;
 
-    ASSERT(numPts <= 48); // Sanity.
+    check(numPts <= 48); // Sanity.
 
     // Break into triangles and render.
     vPtr = fvPtr;

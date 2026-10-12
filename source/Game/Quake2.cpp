@@ -18,12 +18,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "Quake2.h"
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "Draw.h"
+#include "DrawBase.h"
 #include <direct.h>
 
 Quake2::Quake2(void) : Game(GetNumUtils()) {
@@ -89,13 +89,8 @@ Quake2::Init(void) {
 		return true;
 
 	if (!strlen(gameDir) || !LFile::ExistDir(gameDir)) {
-		CDirDialog dirDialog;
-		dirDialog.m_strTitle = "Locate Quake 2 Folder";
-
-		if (!dirDialog.DoBrowse())
+		if (!LBrowseForFolder("Locate Quake 2 Folder", gameDir, sizeof(gameDir)))
 			return false;
-
-		strcpy(gameDir, dirDialog.m_strPath);
 	}
 
 	sprintf(baseDir, "%s\\baseq2", gameDir);
@@ -260,7 +255,7 @@ Quake2::LoadModel(char *filename) {
 	}
 
 	verts = v;
-    ASSERT(verts > 0);
+    check(verts > 0);
 
 	LinkList<Edge3d> edgeList;
 	Edge3d *newEdge;
@@ -339,7 +334,7 @@ Quake2::LoadModel(char *filename) {
 
 void
 Quake2::ExtractTextures(void) {
-	char texdir[MAX_PATH];
+	char texdir[_MAX_PATH];
 	sprintf(texdir, "%s\\textures", baseDir);
 
 	static bool beenHere = false;
@@ -349,7 +344,7 @@ Quake2::ExtractTextures(void) {
 
 	char text[256];
 	sprintf(text, "Some Quake 2 textures not found.  Genesis Editor can extract them\nto '%s' for you.  Do that now?", texdir);
-	if(MessageBox(AfxGetMainWnd()->m_hWnd, text, AfxGetAppName(), MB_YESNO) != IDYES)
+	if(!LAskYesNo("%s", text))
 		return;
 
 	ExtractTexsFromPak(pak, baseDir);
@@ -360,9 +355,7 @@ void
 Quake2::InitTexture(void) {
 	// do we have a valid quake2.tex?
 	int tex_ver = TexList::LoadAll(this);
-	if(!tex_ver &&
-		MessageBox(NULL, "Extract Quake 2 Textures?", 
-		AfxGetAppName(), MB_YESNO) == IDYES)
+	if(!tex_ver && LAskYesNo("Extract Quake 2 Textures?"))
 			ExtractTextures();
 
 	// do we need to rebuild texture list?
@@ -427,7 +420,7 @@ Quake2::LoadTexture(Texture *texture, char *filename, int offset) {
 
 			char buf[256];
 			sprintf(buf, "Texture '%s' not found.\nExtract Quake 2 Textures?", filename);
-			if(MessageBox(NULL, buf, AfxGetAppName(), MB_YESNO) == IDNO)
+			if(!LAskYesNo("%s", buf))
 				return false;
 			ExtractTextures();
 			if(!file.Open(filename))
@@ -481,24 +474,21 @@ Quake2::LoadTexture(Texture *texture, char *filename, int offset) {
 }
 
 //===== Additional properties pages. =====
-#include "resource.h"
-#include "PropSht.h"
-
-DWORD Quake2::GetExtraPropPages(void) const {
+unsigned int Quake2::GetExtraPropPages(void) const {
 	return (PROPPAGE_ADDSURFACE | PROPPAGE_ADDCONTENT);
 }
 
 //===== Game Map Compile Stuff =====
 const char *Quake2::GetUtilName(int index) const {
 	static const char *utilNames[] = {"QBSP3", "QVis3", "QRad3", "Quake 2"};
-	ASSERT(index >= 0 && index < 4);
+	check(index >= 0 && index < 4);
 	return utilNames[index];
 }
 
 const char *Quake2::GetLeakFile(const char *docName) const {
 	static char leakPath[256];
 
-	ASSERT(docName != NULL);
+	check(docName != NULL);
 
 	if (!LFile::ExistDir(mapDir))
 		return NULL;

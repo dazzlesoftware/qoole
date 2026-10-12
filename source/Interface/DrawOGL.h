@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // ========== FDrawOpenGL ==========
 
-class FDrawOpenGL : public FDraw {
+class FDrawOpenGL : public FWndDraw {
 public:
 	FDrawOpenGL(CWnd *wnd);
 	~FDrawOpenGL();

@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * clip.cpp
  */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 
 #include "math.h"
 #include "clip.h"
@@ -50,9 +50,9 @@ void
 Clip::SetClipVolume(const Vector3d &minEdges, const Vector3d &maxEdges,
                     bool perspective) {
   // PreCondition.
-  ASSERT(minEdges.GetX() <= maxEdges.GetX());
-  ASSERT(minEdges.GetY() <= maxEdges.GetY());
-  ASSERT(minEdges.GetZ() <= maxEdges.GetZ());
+  check(minEdges.GetX() <= maxEdges.GetX());
+  check(minEdges.GetY() <= maxEdges.GetY());
+  check(minEdges.GetZ() <= maxEdges.GetZ());
 
   clipMin = minEdges;
   clipMax = maxEdges;
@@ -146,14 +146,14 @@ Clip::ClipLine(Point3d &pt1, Point3d &pt2) const {
     return false;
 
   // Both points are inside clip volume.
-  // ASSERT(rc1 == 0x00 && rc2 == 0x00);
+  // check(rc1 == 0x00 && rc2 == 0x00);
   return true;
 }
 
 bool
 Clip::ClipRay(const Line &ray, float &rangeBegin, float &rangeEnd) const {
   // Precondition.
-  ASSERT((ray.GetSlope()).GetMagSqr() > 0.0f);
+  check((ray.GetSlope()).GetMagSqr() > 0.0f);
 
   bool rtnVal;
   float range;
@@ -178,10 +178,10 @@ int
 Clip::ClipPolygon(int &numPts, Point3d *buf1,
                   Point3d *buf2, Point3d **fPtr) const {
   // PreCondition.
-  ASSERT(numPts <= 32);
-  ASSERT(*fPtr == buf1);
+  check(numPts <= 32);
+  check(*fPtr == buf1);
   // Sanity.
-  ASSERT(prspctv);
+  check(prspctv);
 
   unsigned char rcBuf1[48], rcBuf2[48];
   unsigned char rcbo, rcba, *frmRc, *toRc, *rcBgn;
@@ -244,7 +244,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x04) {  // all points outside.
-    ASSERT((rcba & 0x04) != 0);  // Sanityl
+    check((rcba & 0x04) != 0);  // Sanityl
     return 0;
   }
 
@@ -287,7 +287,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x08) {  // all points outside.
-    ASSERT((rcba & 0x08) != 0);  // Sanityl
+    check((rcba & 0x08) != 0);  // Sanityl
     return 0;
   }
 
@@ -329,7 +329,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x01) {  // all points outside.
-    ASSERT((rcba & 0x01) != 0);  // Sanityl
+    check((rcba & 0x01) != 0);  // Sanityl
     return 0;
   }
 
@@ -371,7 +371,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x02) {  // all points outside.
-    ASSERT((rcba & 0x02) != 0);  // Sanityl
+    check((rcba & 0x02) != 0);  // Sanityl
     return 0;
   }
 
@@ -413,7 +413,7 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x10) {  // all points outside.
-    ASSERT((rcba & 0x10) != 0);  // Sanity
+    check((rcba & 0x10) != 0);  // Sanity
     return 0;
   }
 
@@ -455,12 +455,12 @@ Clip::ClipPolygon(int &numPts, Point3d *buf1,
     bufSwitch = !bufSwitch;
   }
   else if (rcbo & 0x20) {  // all points outside.
-    ASSERT((rcba & 0x20) != 0);  // Sanityl
+    check((rcba & 0x20) != 0);  // Sanityl
     return 0;
   }
 
   // Post Condition.
-  // ASSERT(rcbo == 0x00);
+  // check(rcbo == 0x00);
 
   *fPtr = (bufSwitch ? buf2 : buf1);
 
@@ -500,7 +500,7 @@ Clip::BoundObject(const Object &obj) const {
 
   if (prspctv) {
     // Sanity Check.
-    ASSERT(clipMin.GetY() > 0.0f);
+    check(clipMin.GetY() > 0.0f);
 
     float bound1 = pos.GetY() + maxRad * root2;
     float bound2 = pos.GetY() - maxRad * root2;
@@ -563,7 +563,7 @@ Clip::BoundObject(const Object &obj) const {
 bool
 Clip::IsObjectInVolume(Object &obj) const {
   // Sanity.
-  ASSERT(!obj.IsRoot());
+  check(!obj.IsRoot());
 
   // Set the the obj.
   Matrix44 trans;
@@ -607,7 +607,7 @@ Clip::IsObjectInVolume(Object &obj) const {
     return false;
   }
   else {
-    ASSERT(obj.GetNumChildren() > 0);
+    check(obj.GetNumChildren() > 0);
     Object *pChild;
     IterLinkList<Object> *pIter = &(obj.GetIterChildren());
 	pIter->Reset();
@@ -698,7 +698,7 @@ Clip::FindZIntersect(const Point3d &pt1,
 Point3d &
 Clip::FindXYIntersect(Point3d &pt1, Point3d &pt2, int side) const {
   // PreCondition and Sanity check.
-  ASSERT(side == 1 || side == -1);
+  check(side == 1 || side == -1);
 
   static Point3d rtnVal;
   float a = (pt2.GetX() - pt1.GetX());
@@ -723,7 +723,7 @@ Clip::FindXYIntersect(Point3d &pt1, Point3d &pt2, int side) const {
 Point3d &
 Clip::FindZYIntersect(Point3d &pt1, Point3d &pt2, int side) const {
   // PreCondition.
-  ASSERT(side == 1 || side == -1);
+  check(side == 1 || side == -1);
 
   static Point3d rtnVal;
   float b = (pt2.GetY() - pt1.GetY());

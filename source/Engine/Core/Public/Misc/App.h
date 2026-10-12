@@ -34,6 +34,9 @@ public:
 	static const FString& GetName();
 	static void SetName(const FString& Name);
 
+	// Folder holding the running executable, without a trailing separator.
+	static FString GetExecutableDir();
+
 	// Asks the application to quit, e.g. after a fatal error. The handler is
 	// set by the application; without one only IsExitRequested() changes.
 	static void RequestExit();

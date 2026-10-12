@@ -51,7 +51,7 @@ LFatal(const char *fmt, ...) {
 
 // ========== FDrawOpenGL ==========
 
-FDrawOpenGL::FDrawOpenGL(CWnd *wnd) : FDraw(wnd) {
+FDrawOpenGL::FDrawOpenGL(CWnd *wnd) : FWndDraw(wnd) {
 
 	numBufs = 1;
 

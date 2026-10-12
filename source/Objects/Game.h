@@ -34,6 +34,10 @@ typedef void (*OutTextProc)(const char *strText);
 // MAXUTILS can't > 32
 #define MAXUTILS		5
 
+// Extra property pages a game asks the UI for (Game::GetExtraPropPages).
+#define PROPPAGE_ADDSURFACE		0x0001
+#define PROPPAGE_ADDCONTENT		0x0002
+
 class Game : public ElmNode {
 public:
 	Game(int numUtils);
@@ -44,7 +48,7 @@ public:
 	char *GetBaseDir(void) { return baseDir; }
 	char *GetTexDir(void) { return texDir; }
 	char *GetTexExt(void) { return texExt; }
-	TexDB *GetTexDB(void) { ASSERT(texDB != NULL); return texDB; }
+	TexDB *GetTexDB(void) { check(texDB != NULL); return texDB; }
 
 	char *GetPalDef(void) { return palDef; }
 
@@ -71,16 +75,17 @@ public:
 	char *GetPalName(void) { return palName; }
 	LPalette &GetPal(void) { return pal; }
 
-	// Additional properties pages.
-	virtual DWORD GetExtraPropPages(void) const;
+	// Additional properties pages (PROPPAGE_* flags).
+	virtual unsigned int GetExtraPropPages(void) const;
 
 	// Game Map Compile Stuff.
 	virtual int GetNumUtils(void) const = 0;
 	virtual const char *GetUtilName(int index) const = 0;
 
-	virtual void InitCompileParams(BOOL runUtils[], CString params[],
+	// params point at the game's own strings, valid until the next save.
+	virtual void InitCompileParams(bool runUtils[], const char *params[],
 								   int &paramIndex) const;
-	virtual void SaveCompileParams(BOOL runUtils[], CString params[],
+	virtual void SaveCompileParams(const bool runUtils[], const char *const params[],
 								   int &paramIndex);
 
 	virtual const char *GetMapExportPath(const char *docName,
@@ -114,7 +119,7 @@ protected:
 	bool specifyWads;
 
 	int  setPIndex;
-	UINT runUtilsFlag;
+	unsigned int runUtilsFlag;
 	char *utilsParams[MAXUTILS];
 
 	char defTexture[32];

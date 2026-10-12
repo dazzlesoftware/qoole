@@ -137,7 +137,7 @@ void FPrefabView::CreateDraw(void) {
 	static float zoomVal = 1.0f;
 
 	driver = FMapView::draw3dWire;
-	pDraw = FDraw::New(driver, bits, this, 1);
+	pDraw = FWndDraw::New(driver, bits, this, 1);
 	ASSERT(pDraw != NULL);
 	
 	pDraw->SetZoomPtr(&zoomVal);

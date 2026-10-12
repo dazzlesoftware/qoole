@@ -2,6 +2,10 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
+  <Folder Name="/Engine/">
+    <Project Path="Engine/Core/Core.vcxproj" Id="caba659b-dae6-4839-bb5a-6698150933e9" />
+    <Project Path="Engine/MapCore/MapCore.vcxproj" Id="e6b3966d-7ccb-46db-92a6-40893ed2e9dd" />
+  </Folder>
   <Folder Name="/Renderers/">
     <Project Path="Interface/DrawMFC/DrawMFC.vcxproj" Id="5f452404-f8d2-5ecf-9d02-892e70900df9" />
     <Project Path="Interface/DrawOGL/DrawOGL.vcxproj" Id="2c23f0f3-fd82-57e1-b3bc-298cf61b053f" />
