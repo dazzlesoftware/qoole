@@ -50,6 +50,31 @@ The original MGL and Glide renderers have been removed; their libraries were
 reset to the defaults, and if a renderer plugin fails to load the editor falls
 back to MFC.
 
+## Genesis Engine modules
+
+New code lives in static-library modules under `source/Engine` (`Core`,
+`ApplicationCore`, `RHI`, `UICore`, `UIRenderer`), with third-party
+libraries (FreeType, HarfBuzz, doctest, Vulkan headers) vendored in
+`source/External`. They build as part of `source/Genesis.slnx` and need no
+MFC. See section 17 of [docs/GenesisUI.md](docs/GenesisUI.md) for what is
+there.
+
+- `UISandbox.exe` (`source/Exec`) shows the UI renderer in two DPI-aware
+  windows. `-vulkan` switches from D3D12 to Vulkan, `-appscale=1.25` adds an
+  application scale, and `-selftest=<dir>` runs a scripted check (DPI
+  changes, minimize/restore, moving between monitors, resizing) that saves
+  screenshots and a log. Keys: Esc quits, F2 cycles the app scale, F3
+  simulates a DPI change.
+- `EngineTests.exe` runs the headless doctest suite, including an offscreen
+  GPU test on D3D12 (WARP) and Vulkan (skipped without a Vulkan driver).
+- Debug builds enable the D3D12 debug layer (the Windows "Graphics Tools"
+  optional feature) and the Vulkan validation layer when installed;
+  `-nodebug` / `-debug` override that in UISandbox.
+- The UI shaders are in `source/Engine/UIRenderer/Private/Shaders`. DXIL is
+  compiled at build time with the Windows SDK; after editing the HLSL, rerun
+  `BuildUIShaders.cmd` with a SPIR-V capable `dxc.exe` (Vulkan SDK or a
+  DirectXShaderCompiler release) to regenerate the Vulkan headers.
+
 ## Origins
 
 The text below is the readme of the original Qoole 99 source release.

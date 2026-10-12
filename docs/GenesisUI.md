@@ -1,7 +1,8 @@
 # Genesis UI — Design
 
-Status: **approved direction** (decisions recorded in §16). Milestones 0
-and 1 are done (§15); the Genesis UI framework itself is not implemented yet.
+Status: **approved direction** (decisions recorded in §16). Milestone 2
+(platform layer, RHI, UI renderer, fonts) is implemented; see §17 for what
+was built and where it deviates from this design.
 
 Genesis UI is the user-interface framework for Genesis Editor and, later,
 Genesis Engine games. It replaces MFC in the editor, provides in-game UI, and
@@ -29,6 +30,7 @@ and how the existing MFC editor moves onto it.
 14. [Moving the editor off MFC](#14-moving-the-editor-off-mfc)
 15. [Milestones](#15-milestones)
 16. [Decisions](#16-decisions)
+17. [Milestone 2 notes](#17-milestone-2-notes)
 
 ---
 
@@ -90,11 +92,7 @@ static library project with a `Public/` and `Private/` folder:
 
 ```
 source/Engine/
-  Core/            strings, names, math, delegates, logging, asserts,
-                   file I/O, service interfaces (config, dialogs, progress)
-  MapCore/         Basic, Objects, Render and Game built as one MFC-free
-                   library (milestone 1; the sources stay in their folders)
-  Tests/           GenesisTests: doctest tests of Core and MapCore
+  Core/            strings, names, math, delegates, logging, asserts
   ApplicationCore/ platform interfaces + Win32 implementation
   RHI/             thin GPU abstraction (D3D12 first, Vulkan second)
   UICore/          widget base, layout, paint, draw elements, styles, fonts
@@ -106,8 +104,7 @@ source/Engine/
 ```
 
 The existing editor code (`Basic`, `Objects`, `Render`, `Game`, `Editor`,
-`Interface*`) stays where it is until it is ported or retired. `MapCore`
-compiles `Basic`, `Objects`, `Render` and `Game` in place.
+`Interface*`) stays where it is until it is ported or retired.
 
 ## 3. Layers
 
@@ -576,7 +573,7 @@ it.
 | Other dialogs | Compile, entity select, hollow prompt, colors, about | Modal `SWindow`s |
 | Output/process log | `FProcessWnd` (rich edit) | Log panel (`SListView` of lines) |
 
-### 14.2 What must be untangled first (done in milestone 1)
+### 14.2 What must be untangled first
 
 The non-UI code is lightly coupled to MFC and can be freed early, behind
 small services in `Core`/`ApplicationCore`:
@@ -608,38 +605,6 @@ docking systems fighting each other. Instead:
    reaches parity, then delete MFC, `Interface`, `Interface2` and the MFC
    renderer plugin.
 
-### 14.4 Milestone 1 result
-
-`source/Engine/MapCore` builds `Basic`, `Objects`, `Render` and `Game` as
-one static library. It is called MapCore because it is the map model,
-geometry/CSG, view math and game definitions: the core of map editing that
-both the MFC editor and the new shell build on, kept distinct from the
-generic `Core` module. Its precompiled header (`MapCorePCH.h`) includes only
-the C runtime and `Core`; nothing on its include path leads to MFC, Windows
-or the editor UI.
-
-- `ASSERT`/`TRACE` became `check`/`GLog`; `CString`/`CArray`/`CFile` became
-  `FString`/`TArray`/`FFile` where the map core used them.
-- User interaction goes through `FServices` (`Core/Public/Services`):
-  `IConfigStore` (used by `LConfig`), `IMessageDialog` (`LError`, `LFatal`,
-  `LAskYesNo`), `IProgress` and `IFileDialogs` (`LBrowseForFolder`). Each has
-  a default that needs no UI.
-- `Editor/MfcServices.cpp` registers the MFC implementations at startup:
-  the `CWinApp` registry profile (existing settings load unchanged),
-  `MessageBox`, `CProgressWnd`, `CDirDialog`, and a log sink feeding the
-  output pane.
-- The renderer interface is split: `FDraw` (`Render/DrawBase.h`) is
-  window-free and is what `View` draws through; `FWndDraw`
-  (`Interface/Draw.h`) adds the MFC window and `Paint()` for the
-  `GenesisDraw*` plugins.
-
-Still coupled to MFC: `Editor` (`FEditorApp`, `FEditorDoc` as a
-`CDocument`, the undo operations) and `Interface`/`Interface2` (all
-windows, dialogs, the renderer plugins and the MRC docking library), as
-planned for milestones 5 and 6. The map core's strings are still in the
-ANSI code page (the projects build with the multibyte character set);
-conversion to UTF-8 happens at the service boundary.
-
 ## 15. Milestones
 
 Each milestone ends with something runnable and its own PR(s).
@@ -647,8 +612,8 @@ Each milestone ends with something runnable and its own PR(s).
 | # | Milestone | Exit criteria |
 |---|---|---|
 | 0 | **x64**, drop MGL/Glide | Done: x64-only build, MGL/Glide removed. |
-| 1 | **Core free of MFC** | Done: `Basic`/`Objects`/`Render`/`Game` build as the `MapCore` static library (§14.4) without MFC headers; the MFC editor works through adapters; `GenesisTests` pass. |
-| 2 | **Platform + RHI + UI renderer + fonts** | `UISandbox` app: a DPI-aware window drawing boxes, rounded boxes, lines and shaped text through D3D12 and Vulkan; resizes and moves across monitors cleanly. |
+| 1 | **Core free of MFC** | `Basic`/`Objects`/`Render`/`Game` build as a static library without MFC headers; MFC editor still works through adapters. |
+| 2 | **Platform + RHI + UI renderer + fonts** | Done (§17): `UISandbox` app: a DPI-aware window drawing boxes, rounded boxes, lines and shaped text through D3D12 and Vulkan; resizes and moves across monitors cleanly. |
 | 3 | **Widget core + input** | Layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
 | 4 | **Editor framework** | Commands, menu registry, toolbars, docking with save/restore, property grid over `IPropertySource`, viewport widget. |
 | 5 | **New editor shell** | Opens/edits/saves maps in four docked viewports with menus, toolbars and selection. |
@@ -677,3 +642,72 @@ Agreed on 2026-10-11:
 5. **doctest** for headless layout and input tests.
 6. **x64 only**; the x86 configurations are removed.
 7. **New editor shell**, not an MFC hybrid (§14.3).
+
+## 17. Milestone 2 notes
+
+Built in milestone 2 (all static libraries under `source/Engine`, built
+with C++20 at warning level 4):
+
+| Module | Contents |
+|---|---|
+| `Core` | `FString` (UTF-8, `std::u8string`), `FName`, container and smart-pointer aliases, `check`/`ensure`, `GE_LOG` logging, `TDelegate`/`TMulticastDelegate`, 2D math (`FVector2`, `FColor`/`FLinearColor`, `FMargin`, `FRect`, `FTransform2D`), time/file/path helpers. |
+| `ApplicationCore` | `IPlatformApplication`, `IPlatformWindow` + `FWindowDesc`, `IPlatformMessageHandler`, `ICursor`, clipboard, display metrics. Win32: per-monitor DPI v2, `WM_DPICHANGED`, deferred input, raw mouse, XInput, OS-decorated and borderless windows (UI hit-testing for title bar and resize edges, DWM shadow kept). `FNullPlatformApplication` for headless tests. |
+| `RHI` | Device + queue, swapchain per window, upload/default buffers, 2D textures and render targets, pipelines from precompiled shaders, command list. D3D12 and Vulkan backends, chosen at startup. |
+| `UICore` | Draw elements (`FDrawElementList`: Box with image/9-slice/tiling/tint, RoundedBox, Text, Lines, CustomVerts, Viewport), layers, scissor clip stack, `FAtlasPacker`, and the font system (`FFontCache`: FreeType + HarfBuzz, font fallback, shaping, measurement, glyph atlas). |
+| `UIRenderer` | `FElementBatcher` (GPU-free: tessellate, batch key, stable layer sort, merge) and `FUIRenderer` (atlases for small images, glyph-page upload, per-frame buffers, pipelines). One HLSL file, `UIShaders.hlsl`. |
+
+Programs: `source/Programs/UISandbox` (two windows, either backend, scripted
+self-test with screenshots) and `source/Programs/EngineTests` (doctest:
+batching, atlas packing, text, clip stack, platform, and an offscreen GPU
+scene read back on D3D12 WARP and Vulkan). Vendored: FreeType 2.14.3,
+HarfBuzz 14.6.0, doctest 2.5.3, and the Noto Sans / Noto Sans Devanagari
+fonts (OFL) in `source/Content/Fonts`.
+
+![UISandbox on D3D12 at 150%](images/genesis-ui-m2/uisandbox-d3d12-150.png)
+
+More screenshots: [Vulkan 150%](images/genesis-ui-m2/uisandbox-vulkan-150.png),
+[D3D12 100%](images/genesis-ui-m2/uisandbox-d3d12-100.png),
+[Vulkan 200%](images/genesis-ui-m2/uisandbox-vulkan-200.png),
+[borderless inspector](images/genesis-ui-m2/uisandbox-inspector-borderless.png).
+
+**Deviations from the design, and why**
+
+- `FWindowDesc::Position` is in screen pixels; only the size is in logical
+  units. Logical coordinates are not well-defined across monitors with
+  different DPIs.
+- The batcher merges adjacent compatible batches even across layers. It
+  only merges batches that are next to each other after the layer sort, so
+  the draw order is unchanged and fewer draws are issued.
+- The RHI has a fixed binding model: up to 64 bytes of push constants, one
+  texture and one sampler chosen at pipeline creation. That is all the UI
+  needs; it grows with the engine renderer. R8 textures sample as
+  `(1, 1, 1, R)` on both backends so glyph masks use the image shader.
+- DXIL is compiled at build time with the Windows SDK's `dxc` (shader model
+  6.0) rather than `fxc`, so one HLSL source serves both backends. SPIR-V
+  headers are pre-generated by `UIRenderer/Private/Shaders/BuildUIShaders.cmd`
+  (needs a SPIR-V-capable `dxc`). Vulkan flips Y with a negative viewport
+  height (core in 1.1), so no `-fvk-invert-y`.
+- Colors are sRGB-encoded and blended in sRGB space, like most desktop UI
+  toolkits; `FLinearColor` converts when needed.
+- Font sizes are in logical pixels (1/96 inch), not points.
+- `FName` is case-sensitive.
+- Not in this milestone: the `Spline` element (wanted by visual scripting),
+  IME / `ITextInputMethodSystem` (with the text box in milestone 3), text
+  layout (wrapping, multiple lines, hit-testing: `FTextLayout` in milestone
+  3), right-to-left text, and eviction of atlas pages and cached images.
+- Rounded boxes, lines and text use separate shaders, so interleaving them
+  in one layer costs batches (the sandbox's main window draws in about 50).
+  Widgets will reduce this by grouping per layer; an uber-shader is the
+  fallback if it shows up in profiles.
+
+**Testing notes**
+
+- The development machine's two monitors are both at 150%, so a real move
+  between monitors with different DPIs was not possible. The sandbox's
+  self-test (`UISandbox -selftest=<dir>`) sends `WM_DPICHANGED` with 96 and
+  192 DPI to exercise the same code path, moves the window to the other
+  monitor, minimizes/restores and resizes, and saves screenshots.
+- The D3D12 debug layer and Vulkan validation (core and synchronization)
+  reported nothing over full self-test runs. The Vulkan SDK is not
+  installed; validation ran with the Khronos layer built from source and
+  loaded through `VK_ADD_LAYER_PATH`.
