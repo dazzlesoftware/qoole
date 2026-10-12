@@ -38,6 +38,17 @@ public:
 	FReply& BeginDragDrop(const TSharedRef<FDragDropOperation>& Operation) { DragDropOperation = Operation.ToSharedPtr(); return *this; }
 	FReply& EndDragDrop() { bEndDragDrop = true; return *this; }
 
+	// Captures the mouse, hides and locks the cursor and reports raw device
+	// motion (OnRawMouseMove) until capture is released: fly-through and
+	// orbit controls in viewports. The cursor comes back where it was.
+	FReply& UseHighPrecisionMouseMovement(const TSharedRef<SWidget>& Widget)
+	{
+		CaptureMouse(Widget);
+		bHighPrecision = true;
+		return *this;
+	}
+	bool ShouldUseHighPrecisionMouse() const { return bHighPrecision; }
+
 	// Keeps the cursor inside the widget while captured.
 	FReply& LockMouseToWidget(const TSharedRef<SWidget>& Widget) { MouseLockWidget = Widget.ToSharedPtr(); bReleaseMouseLock = false; return *this; }
 	FReply& ReleaseMouseLock() { MouseLockWidget.reset(); bReleaseMouseLock = true; return *this; }
@@ -69,6 +80,7 @@ private:
 	bool bClearFocus = false;
 	bool bEndDragDrop = false;
 	bool bReleaseMouseLock = false;
+	bool bHighPrecision = false;
 };
 
 // Answer to SWidget::OnCursorQuery.

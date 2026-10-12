@@ -44,6 +44,23 @@ void FUIApplication::ProcessReply(const FReply& Reply, const TSharedPtr<SWidget>
 	if (const TSharedPtr<SWidget>& Captor = Reply.GetMouseCaptor())
 	{
 		SetMouseCapture(Captor);
+		if (Reply.ShouldUseHighPrecisionMouse() && !bHighPrecisionMouse && HasMouseCapture(Captor.get()))
+		{
+			bHighPrecisionMouse = true;
+			ICursor* Cursor = Platform->GetCursor();
+			HighPrecisionRestoreScreen = Cursor->GetPosition();
+			Cursor->Show(false);
+			Platform->SetRawMouseInputEnabled(true);
+			// Keep the hidden cursor inside the widget so it never leaves the window.
+			if (const TSharedPtr<SWindow> Window = FindWindowForWidget(*Captor); Window && Window->GetNativeWindow())
+			{
+				const FRect Rect = Captor->GetCachedGeometry().GetLayoutBoundingRect();
+				const FIntPoint Origin = Window->GetNativeWindow()->GetClientPosition();
+				const FIntRect Screen(Origin.X + FMath::FloorToInt(Rect.Left), Origin.Y + FMath::FloorToInt(Rect.Top),
+					Origin.X + FMath::CeilToInt(Rect.Right), Origin.Y + FMath::CeilToInt(Rect.Bottom));
+				Cursor->Lock(&Screen);
+			}
+		}
 	}
 	else if (Reply.ShouldReleaseMouseCapture())
 	{
@@ -138,10 +155,31 @@ void FUIApplication::ReleaseMouseCapture()
 		MouseLockWidget.reset();
 		Platform->GetCursor()->Lock(nullptr);
 	}
+	if (bHighPrecisionMouse)
+	{
+		bHighPrecisionMouse = false;
+		ICursor* Cursor = Platform->GetCursor();
+		Platform->SetRawMouseInputEnabled(false);
+		Cursor->Lock(nullptr);
+		Cursor->SetPosition(FMath::RoundToInt(HighPrecisionRestoreScreen.X), FMath::RoundToInt(HighPrecisionRestoreScreen.Y));
+		Cursor->Show(true);
+	}
 	if (Old)
 	{
 		Old->OnMouseCaptureLost();
 	}
+}
+
+bool FUIApplication::OnRawMouseMove(int32 DeltaX, int32 DeltaY)
+{
+	const TSharedPtr<SWidget> Captor = MouseCaptor.lock();
+	if (!bHighPrecisionMouse || !Captor)
+	{
+		return false;
+	}
+	const FReply Reply = Captor->OnRawMouseMove(FVector2(static_cast<float>(DeltaX), static_cast<float>(DeltaY)));
+	ProcessReply(Reply, Captor, nullptr, 0);
+	return Reply.IsEventHandled();
 }
 
 // ---------------------------------------------------------------------------
@@ -420,8 +458,10 @@ bool FUIApplication::OnMouseUp(const TSharedRef<IPlatformWindow>& Native, EMouse
 	}
 	if (DragDropOperation)
 	{
-		const TArray<TSharedRef<SWidget>> Path = Window->HitTestAt(Position);
-		DropOrCancel(&Path, Event, false);
+		FVector2 Local;
+		const TSharedPtr<SWindow> Target = MapDragToWindow(*Window, Position, Local);
+		const TArray<TSharedRef<SWidget>> DropPath = Target ? Target->HitTestAt(Local) : TArray<TSharedRef<SWidget>>();
+		DropOrCancel(&DropPath, MakePointerEvent(Target ? Local : Position, Button, 0.0f), false);
 		SynthesizeMouseMove();
 		return true;
 	}
@@ -497,16 +537,22 @@ bool FUIApplication::OnMouseMove(const TSharedRef<IPlatformWindow>& Native, FVec
 		}
 	}
 
-	TArray<TSharedRef<SWidget>> Path = Window->HitTestAt(Position);
 	if (DragDropOperation)
 	{
-		UpdateHover(Window, Path, Event);
-		UpdateDragDropTargets(Path, Event);
+		// The drag holds the OS capture; find the window under the pointer.
+		FVector2 Local;
+		const TSharedPtr<SWindow> Target = MapDragToWindow(*Window, Position, Local);
+		const FPointerEvent TargetEvent = MakePointerEvent(Target ? Local : Position, EMouseButton::Invalid, 0.0f);
+		const TArray<TSharedRef<SWidget>> DragPath = Target ? Target->HitTestAt(Local) : TArray<TSharedRef<SWidget>>();
+		UpdateHover(Target, DragPath, TargetEvent);
+		UpdateDragDropTargets(DragPath, TargetEvent);
 		UpdateDragDecorator();
-		DragDropOperation->OnDragged(Event);
+		DragDropOperation->OnDragged(TargetEvent);
 		ApplyCursor();
 		return true;
 	}
+
+	TArray<TSharedRef<SWidget>> Path = Window->HitTestAt(Position);
 
 	const TSharedPtr<SWindow> Modal = GetActiveModalWindow();
 	FReply Reply = FReply::Unhandled();
@@ -544,16 +590,13 @@ bool FUIApplication::OnMouseMove(const TSharedRef<IPlatformWindow>& Native, FVec
 bool FUIApplication::OnMouseLeave(const TSharedRef<IPlatformWindow>& Native)
 {
 	const TSharedPtr<SWindow> Window = FindWindowForNative(Native.Get());
-	if (!Window || Window != WindowUnderCursor.lock() || MouseCaptor.lock())
+	// A drag follows the pointer across windows itself.
+	if (!Window || Window != WindowUnderCursor.lock() || MouseCaptor.lock() || DragDropOperation)
 	{
 		return false;
 	}
 	const FPointerEvent Event = MakePointerEvent(CursorPosition, EMouseButton::Invalid, 0.0f);
 	UpdateHover(Window, {}, Event);
-	if (DragDropOperation)
-	{
-		UpdateDragDropTargets({}, Event);
-	}
 	WindowUnderCursor.reset();
 	CloseToolTip();
 	ToolTipOwner.reset();
@@ -607,6 +650,48 @@ bool FUIApplication::OnMouseWheel(const TSharedRef<IPlatformWindow>& Native, flo
 // ---------------------------------------------------------------------------
 // Drag and drop
 
+TSharedPtr<SWindow> FUIApplication::MapDragToWindow(const SWindow& EventWindow, FVector2 Position, FVector2& OutLocal)
+{
+	const TSharedPtr<IPlatformWindow>& Native = EventWindow.GetNativeWindow();
+	const FVector2 Screen = (Native ? Native->GetClientPosition().ToVector2() : FVector2::Zero()) + Position;
+	if (DragDropOperation)
+	{
+		DragDropOperation->ScreenPosition = Screen;
+	}
+	// The window the pointer was in last wins ties; then the newest window
+	// (floating windows are created on top).
+	TArray<TSharedRef<SWindow>> Candidates;
+	if (const TSharedPtr<SWindow> Last = WindowUnderCursor.lock())
+	{
+		Candidates.push_back(ToSharedRef(Last));
+	}
+	for (auto It = Windows.rbegin(); It != Windows.rend(); ++It)
+	{
+		Candidates.push_back(*It);
+	}
+	for (const TSharedRef<SWindow>& Candidate : Candidates)
+	{
+		const TSharedPtr<IPlatformWindow>& CandidateNative = Candidate->GetNativeWindow();
+		if (!CandidateNative || !CandidateNative->IsVisible() || CandidateNative->IsMinimized())
+		{
+			continue;
+		}
+		const FVector2 Origin = CandidateNative->GetClientPosition().ToVector2();
+		const FVector2 Size = CandidateNative->GetClientSize().ToVector2();
+		const FVector2 L = Screen - Origin;
+		if (L.X >= 0.0f && L.Y >= 0.0f && L.X < Size.X && L.Y < Size.Y)
+		{
+			OutLocal = L;
+			WindowUnderCursor = Candidate.ToSharedPtr();
+			CursorPosition = L;
+			return Candidate.ToSharedPtr();
+		}
+	}
+	WindowUnderCursor.reset();
+	OutLocal = Position;
+	return nullptr;
+}
+
 void FUIApplication::BeginDragDrop(const TSharedRef<FDragDropOperation>& Operation, const FPointerEvent& Event)
 {
 	if (DragDropOperation)
@@ -616,6 +701,14 @@ void FUIApplication::BeginDragDrop(const TSharedRef<FDragDropOperation>& Operati
 	DragDropOperation = Operation.ToSharedPtr();
 	DragDetect.reset();
 	ReleaseMouseCapture();
+	// Keep the OS capture so the drag sees the pointer outside the window
+	// (other windows, or nowhere: tabs tear off into new windows).
+	if (const TSharedPtr<SWindow> Window = WindowUnderCursor.lock(); Window && Window->GetNativeWindow())
+	{
+		Operation->ScreenPosition = Window->GetNativeWindow()->GetClientPosition().ToVector2() + CursorPosition;
+		Platform->SetCapture(Window->GetNativeWindow());
+		bDragHoldsCapture = true;
+	}
 	CloseToolTip();
 	DragDecorator = Operation->GetDefaultDecorator();
 	if (DragDecorator)
@@ -730,6 +823,12 @@ void FUIApplication::DropOrCancel(const TArray<TSharedRef<SWidget>>* Path, const
 		}
 	}
 	DragDropTargets.clear();
+	if (bDragHoldsCapture)
+	{
+		bDragHoldsCapture = false;
+		Platform->SetCapture(nullptr);
+	}
+	Operation->bCancelled = bCancel;
 	if (DragDecorator)
 	{
 		if (const TSharedPtr<SWindow> Window = DragDecoratorWindow.lock())
@@ -769,7 +868,10 @@ bool FUIApplication::RouteKeyDown(const FKeyEvent& Event)
 		}
 		if (Window)
 		{
+			// Nothing focused: the window and its content (where an editor
+			// puts its shortcut scope) see the key.
 			Path.push_back(ToSharedRef(StaticCastSharedPtr<SWidget>(Window)));
+			Path.push_back(Window->GetContent());
 		}
 	}
 

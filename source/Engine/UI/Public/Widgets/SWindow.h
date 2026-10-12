@@ -104,6 +104,7 @@ public:
 
 	// Asks OnRequestClose and destroys the window through the application.
 	void RequestClose();
+	void SetOnRequestClose(FRequestWindowClose Delegate) { OnRequestClose = std::move(Delegate); }
 	// Called by the application when the window is destroyed.
 	void NotifyWindowClosed();
 	bool IsClosed() const { return bClosed; }

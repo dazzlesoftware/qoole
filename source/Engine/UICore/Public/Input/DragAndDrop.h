@@ -48,6 +48,13 @@ public:
 	// drag was cancelled (Escape, capture loss).
 	virtual void OnDrop(bool bDropWasHandled, const FPointerEvent& MouseEvent) { (void)bDropWasHandled; (void)MouseEvent; }
 	virtual void OnDragged(const FPointerEvent& MouseEvent) { (void)MouseEvent; }
+
+	// Kept up to date by the application: the pointer in screen pixels (drags
+	// cross windows, and may end outside all of them).
+	FVector2 ScreenPosition;
+	// True when the drag was cancelled (Escape, focus loss) rather than
+	// dropped; OnDrop then gets bDropWasHandled == false too.
+	bool bCancelled = false;
 };
 
 class FDragDropEvent : public FPointerEvent

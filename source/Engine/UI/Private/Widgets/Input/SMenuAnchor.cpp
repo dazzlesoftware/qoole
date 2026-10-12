@@ -186,6 +186,35 @@ namespace
 		}
 	};
 
+	// The check mark of checkable menu entries (empty when unchecked).
+	class SCheckMark final : public SLeafWidget
+	{
+	public:
+		GE_BEGIN_ARGS(SCheckMark)
+			GE_ATTRIBUTE(ECheckBoxState, State, ECheckBoxState::Unchecked)
+		GE_END_ARGS()
+		void Construct(const FArguments& Args) { State.Assign(Args._State); }
+
+	protected:
+		FVector2 ComputeDesiredSize(float) const override { return FVector2(14.0f, 14.0f); }
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		{
+			const float S = Geometry.Size.Y;
+			if (State.Get() == ECheckBoxState::Checked)
+			{
+				Out.AddLines(LayerId, Geometry.ToPaintGeometry(), { FVector2(S * 0.18f, S * 0.52f), FVector2(S * 0.42f, S * 0.76f), FVector2(S * 0.84f, S * 0.28f) }, Style.GetForegroundColor(), 1.6f);
+			}
+			else if (State.Get() == ECheckBoxState::Undetermined)
+			{
+				Out.AddLines(LayerId, Geometry.ToPaintGeometry(), { FVector2(S * 0.25f, S * 0.5f), FVector2(S * 0.75f, S * 0.5f) }, Style.GetForegroundColor(), 1.6f);
+			}
+			return LayerId;
+		}
+
+	private:
+		TWidgetAttribute<ECheckBoxState, EInvalidateWidgetReason::Paint> State{ *this, ECheckBoxState::Unchecked };
+	};
+
 	// A small right-pointing chevron (submenu entries).
 	class SRightArrow final : public SLeafWidget
 	{
@@ -249,18 +278,28 @@ void SMenuEntry::Construct(const FArguments& Args)
 {
 	OnSelected = Args._OnSelected;
 
-	const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(Args._Text)];
+	const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+	if (Args._ShowCheck)
+	{
+		const TAttribute<ECheckBoxState> CheckState = Args._CheckState;
+		Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 6.0f, 0.0f))[SNew(SCheckMark).State(CheckState)];
+	}
+	Row->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(Args._Text)];
 	if (Args._InputGesture.IsSet())
 	{
 		Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(24.0f, 0.0f, 0.0f, 0.0f))
 			[SNew(STextBlock).Text(Args._InputGesture).ColorAndOpacity(FStyleColor(EStyleColor::ForegroundSecondary))];
 	}
 	TSharedRef<SWidget> Content = Row;
-	if (Args._SubMenu.Widget)
+	if (Args._SubMenu.Widget || Args._OnGetSubMenu.IsBound())
 	{
 		Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(16.0f, 0.0f, 0.0f, 0.0f))[SNew(SRightArrow)];
-		Content = SAssignNew(SubMenuAnchor, SMenuAnchor).Placement(EMenuPlacement::RightOfAnchor).MenuContent(ToSharedRef(Args._SubMenu.Widget))[Row];
+		SAssignNew(SubMenuAnchor, SMenuAnchor).Placement(EMenuPlacement::RightOfAnchor).OnGetMenuContent(Args._OnGetSubMenu)[Row];
+		if (Args._SubMenu.Widget)
+		{
+			SubMenuAnchor->SetMenuContent(ToSharedRef(Args._SubMenu.Widget));
+		}
+		Content = ToSharedRef(StaticCastSharedPtr<SWidget>(SubMenuAnchor));
 	}
 
 	SButton::FArguments ButtonArgs;

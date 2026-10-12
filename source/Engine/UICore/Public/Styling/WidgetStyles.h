@@ -137,6 +137,70 @@ struct FWindowStyle
 	FStyleBrush Outline; // borderless windows
 };
 
+struct FSliderStyle
+{
+	float BarThickness = 4.0f;
+	float ThumbSize = 14.0f;
+	FStyleBrush Bar;
+	FStyleBrush BarFill;      // from the start to the thumb
+	FStyleBrush Thumb;
+	FStyleBrush ThumbHovered;
+	FStyleBrush Focused;
+};
+
+struct FSpinBoxStyle
+{
+	FStyleBrush Normal;
+	FStyleBrush Hovered;
+	FStyleBrush Active;       // dragging or typing
+	FStyleBrush Fill;         // the part of the range below the value
+	FMargin Padding = FMargin(6.0f, 3.0f);
+	FEditableTextStyle Text;
+	FStyleColor UndeterminedColor = EStyleColor::ForegroundSecondary;
+};
+
+// Tabs and the tab well of docking stacks.
+struct FDockTabStyle
+{
+	FStyleBrush WellBackground;
+	FStyleBrush Normal;
+	FStyleBrush Hovered;
+	FStyleBrush Active;        // foreground tab of the focused stack
+	FStyleBrush Foreground;    // foreground tab of other stacks
+	FStyleBrush ActiveIndicator;
+	FStyleBrush ContentBackground;
+	FStyleBrush DropTarget;    // where a dragged tab will land
+	FStyleBrush DropZoneIcon;  // the docking target buttons
+	FMargin TabPadding = FMargin(10.0f, 5.0f);
+	float WellHeight = 28.0f;
+	FTextBlockStyle Text;
+	FButtonStyle CloseButton;
+};
+
+struct FToolBarStyle
+{
+	FStyleBrush Background;
+	FButtonStyle Button;
+	FButtonStyle ToggleButtonChecked;
+	FMargin Padding = FMargin(4.0f, 3.0f);
+	float SeparatorWidth = 1.0f;
+	FStyleColor SeparatorColor = EStyleColor::Border;
+	FTextBlockStyle LabelText;
+};
+
+struct FPropertyGridStyle
+{
+	FStyleBrush CategoryHeader;
+	FStyleBrush RowEven;
+	FStyleBrush RowOdd;
+	FStyleBrush RowHovered;
+	FTextBlockStyle CategoryText;
+	FTextBlockStyle NameText;
+	FStyleColor Divider = EStyleColor::Border;
+	float RowHeight = 26.0f;
+	float IndentSize = 12.0f;
+};
+
 struct FSeparatorStyle
 {
 	FStyleColor Color = EStyleColor::Border;

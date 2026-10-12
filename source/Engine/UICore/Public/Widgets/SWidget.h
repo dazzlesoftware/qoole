@@ -274,6 +274,9 @@ public:
 	virtual void OnMouseEnter(const FGeometry& Geometry, const FPointerEvent& Event) { (void)Geometry; (void)Event; }
 	virtual void OnMouseLeave(const FPointerEvent& Event) { (void)Event; }
 	virtual void OnMouseCaptureLost() {}
+	// Unaccelerated mouse motion (device units) while this widget holds the
+	// capture with high-precision movement (FReply::UseHighPrecisionMouseMovement).
+	virtual FReply OnRawMouseMove(FVector2 Delta) { (void)Delta; return FReply::Unhandled(); }
 	virtual FCursorReply OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const;
 
 	// Key events route along the focus path: preview root -> leaf, then leaf -> root.

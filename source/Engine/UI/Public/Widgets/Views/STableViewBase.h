@@ -32,6 +32,7 @@ public:
 	int32 GetFirstVisibleIndex() const { return static_cast<int32>(ScrollOffset); }
 	int32 GetNumGeneratedRows() const;
 	float GetAverageRowHeight() const { return AverageRowHeight; }
+	float GetEstimatedContentHeight() const { return AverageRowHeight * static_cast<float>(GetNumItems()); }
 
 	bool SupportsKeyboardFocus() const override { return true; }
 	FReply OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event) override;

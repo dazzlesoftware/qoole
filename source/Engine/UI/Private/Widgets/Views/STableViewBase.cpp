@@ -47,12 +47,14 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float) const override
 	{
+		// Wide enough for the rows we have; as tall as all items would be
+		// (matters only where the list sizes to its content, e.g. a drop-down).
 		float Width = 0.0f;
 		for (int32 I = 0; I < Children.Num(); ++I)
 		{
 			Width = FMath::Max(Width, Children[I].GetWidget()->GetDesiredSize().X);
 		}
-		return FVector2(Width, 0.0f);
+		return FVector2(Width, Owner->GetEstimatedContentHeight());
 	}
 
 	void OnPreArrange(const FGeometry& AllottedGeometry) override { Owner->GeneratePanelRows(AllottedGeometry); }

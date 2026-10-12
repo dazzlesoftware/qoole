@@ -81,8 +81,11 @@ public:
 	GE_BEGIN_ARGS(SMenuEntry)
 		GE_ATTRIBUTE(FString, Text, "")
 		GE_OPTIONAL_ATTRIBUTE(FString, InputGesture) // shortcut text on the right
+		GE_ARGUMENT(bool, ShowCheck, false)          // reserve a check-mark column
+		GE_ATTRIBUTE(ECheckBoxState, CheckState, ECheckBoxState::Unchecked)
 		GE_EVENT(FSimpleDelegate, OnSelected)
 		GE_NAMED_SLOT(SubMenu)                      // makes it open a submenu instead
+		GE_EVENT(FOnGetContent, OnGetSubMenu)       // or builds the submenu when it opens
 	GE_END_ARGS()
 
 	void Construct(const FArguments& Args);

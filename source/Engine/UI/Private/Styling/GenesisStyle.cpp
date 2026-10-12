@@ -146,6 +146,60 @@ TSharedRef<FStyleSet> FGenesisStyle::Create(const FGenesisFonts& Fonts)
 	FSeparatorStyle Separator;
 	Set->Set("Separator", Separator);
 
+	// Value editors.
+	FSliderStyle Slider;
+	Slider.Bar = FStyleBrush::Rounded(C::Input, 2.0f, C::Border, 1.0f);
+	Slider.BarFill = FStyleBrush::Rounded(C::Primary, 2.0f);
+	Slider.Thumb = FStyleBrush::Rounded(C::Foreground, 7.0f, C::Background, 1.0f);
+	Slider.ThumbHovered = FStyleBrush::Rounded(C::ForegroundHover, 7.0f, C::Primary, 1.5f);
+	Slider.Focused = FStyleBrush::Rounded(FColor::Transparent(), 9.0f, C::Primary, 1.5f);
+	Set->Set("Slider", Slider);
+
+	FSpinBoxStyle SpinBox;
+	SpinBox.Normal = FStyleBrush::Rounded(C::Input, Radius, C::Border, 1.0f);
+	SpinBox.Hovered = FStyleBrush::Rounded(C::Input, Radius, C::ForegroundSecondary, 1.0f);
+	SpinBox.Active = FStyleBrush::Rounded(C::Input, Radius, C::Primary, 1.0f);
+	SpinBox.Fill = FStyleBrush::Rounded(FStyleColor(C::Primary, 70), Radius);
+	SpinBox.Text = EditableText;
+	Set->Set("SpinBox", SpinBox);
+
+	// Docking.
+	FDockTabStyle DockTab;
+	DockTab.WellBackground = FStyleBrush::Solid(C::Recessed);
+	DockTab.Normal = FStyleBrush::None();
+	DockTab.Hovered = FStyleBrush::Solid(C::Hover);
+	DockTab.Active = FStyleBrush::Solid(C::Panel);
+	DockTab.Foreground = FStyleBrush::Solid(C::Header);
+	DockTab.ActiveIndicator = FStyleBrush::Solid(C::Primary);
+	DockTab.ContentBackground = FStyleBrush::Solid(C::Panel);
+	DockTab.DropTarget = FStyleBrush::Rounded(FStyleColor(C::Primary, 60), 2.0f, C::Primary, 2.0f);
+	DockTab.DropZoneIcon = FStyleBrush::Rounded(FStyleColor(C::Dropdown, 235), 4.0f, C::Primary, 1.5f);
+	DockTab.Text = Normal;
+	DockTab.CloseButton = Flat;
+	DockTab.CloseButton.NormalPadding = FMargin(4.0f, 0.0f);
+	DockTab.CloseButton.PressedPadding = FMargin(4.0f, 0.0f);
+	Set->Set("DockTab", DockTab);
+
+	FToolBarStyle ToolBar;
+	ToolBar.Background = FStyleBrush::Solid(C::Header);
+	ToolBar.Button = Flat;
+	ToolBar.Button.NormalPadding = FMargin(8.0f, 4.0f);
+	ToolBar.Button.PressedPadding = FMargin(8.0f, 5.0f, 8.0f, 3.0f);
+	ToolBar.ToggleButtonChecked = ToolBar.Button;
+	ToolBar.ToggleButtonChecked.Normal = FStyleBrush::Rounded(FStyleColor(C::Primary, 90), Radius, C::Primary, 1.0f);
+	ToolBar.ToggleButtonChecked.Hovered = FStyleBrush::Rounded(FStyleColor(C::Primary, 130), Radius, C::Primary, 1.0f);
+	ToolBar.LabelText = FTextBlockStyle(Normal).SetFontSize(12.0f);
+	Set->Set("ToolBar", ToolBar);
+
+	FPropertyGridStyle PropertyGrid;
+	PropertyGrid.CategoryHeader = FStyleBrush::Solid(C::Header);
+	PropertyGrid.RowEven = FStyleBrush::None();
+	PropertyGrid.RowOdd = FStyleBrush::Solid(FStyleColor(C::Recessed, 160));
+	PropertyGrid.RowHovered = FStyleBrush::Solid(C::SelectHover);
+	PropertyGrid.CategoryText = FTextBlockStyle(Normal).SetFont(FFontInfo(Fonts.Bold, 12.0f));
+	PropertyGrid.NameText = FTextBlockStyle(Normal).SetFontSize(12.0f);
+	Set->Set("PropertyGrid", PropertyGrid);
+
 	// Popups.
 	FToolTipStyle ToolTip;
 	ToolTip.Background = FStyleBrush::Rounded(C::Dropdown, Radius, C::Border, 1.0f);

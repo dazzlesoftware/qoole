@@ -223,6 +223,7 @@ public:
 	bool OnMouseWheel(const TSharedRef<IPlatformWindow>& Window, float Delta, bool bHorizontal, FVector2 Position) override;
 	bool OnMouseMove(const TSharedRef<IPlatformWindow>& Window, FVector2 Position) override;
 	bool OnMouseLeave(const TSharedRef<IPlatformWindow>& Window) override;
+	bool OnRawMouseMove(int32 DeltaX, int32 DeltaY) override;
 	bool OnCursorSet() override;
 	bool OnGamepadButtonDown(int32 UserIndex, EGamepadButton Button, bool bIsRepeat) override;
 	bool OnGamepadButtonUp(int32 UserIndex, EGamepadButton Button) override;
@@ -272,6 +273,9 @@ private:
 	void UpdateDragDropTargets(const TArray<TSharedRef<SWidget>>& Path, const FPointerEvent& Event);
 	void DropOrCancel(const TArray<TSharedRef<SWidget>>* Path, const FPointerEvent& Event, bool bCancel);
 	void BeginDragDrop(const TSharedRef<FDragDropOperation>& Operation, const FPointerEvent& Event);
+	// The window under a drag (any window, using screen positions) and the
+	// position in it.
+	TSharedPtr<SWindow> MapDragToWindow(const SWindow& EventWindow, FVector2 Position, FVector2& OutLocal);
 	void UpdateDragDecorator();
 	void ApplyCursor();
 	bool RouteKeyDown(const FKeyEvent& Event);
@@ -305,6 +309,10 @@ private:
 	TSharedPtr<SWidget> DragDecorator;
 	TWeakPtr<SWindow> DragDecoratorWindow;
 	TArray<TWeakPtr<SWidget>> DragDropTargets; // widgets that got OnDragEnter
+	bool bDragHoldsCapture = false;
+	// High-precision mouse: raw input on, cursor hidden at this spot.
+	bool bHighPrecisionMouse = false;
+	FVector2 HighPrecisionRestoreScreen;
 	TWeakPtr<SWidget> MouseLockWidget;
 
 	TArray<TSharedRef<FMenu>> MenuStack;
