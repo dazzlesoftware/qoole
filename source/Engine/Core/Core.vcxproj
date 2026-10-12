@@ -49,11 +49,14 @@
     <ClCompile Include="Private\Math\Color.cpp" />
     <ClCompile Include="Private\Misc\App.cpp" />
     <ClCompile Include="Private\Misc\AssertionMacros.cpp" />
+    <ClCompile Include="Private\Serialization\Json.cpp" />
     <ClCompile Include="Private\Services\ConfigStore.cpp" />
     <ClCompile Include="Private\Services\Services.cpp" />
     <ClCompile Include="Private\Windows\WindowsString.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Private\Misc\StringFormat.h" />
+    <ClInclude Include="Private\Windows\WindowsPlatform.h" />
     <ClInclude Include="Public\Containers\ContainerAliases.h" />
     <ClInclude Include="Public\Containers\GenesisString.h" />
     <ClInclude Include="Public\Containers\Name.h" />
@@ -71,14 +74,13 @@
     <ClInclude Include="Public\Math\Vector2.h" />
     <ClInclude Include="Public\Misc\App.h" />
     <ClInclude Include="Public\Misc\AssertionMacros.h" />
+    <ClInclude Include="Public\Serialization\Json.h" />
     <ClInclude Include="Public\Services\ConfigStore.h" />
     <ClInclude Include="Public\Services\FileDialogs.h" />
     <ClInclude Include="Public\Services\MessageDialog.h" />
     <ClInclude Include="Public\Services\Progress.h" />
     <ClInclude Include="Public\Services\Services.h" />
     <ClInclude Include="Public\Templates\SharedPointer.h" />
-    <ClInclude Include="Private\Misc\StringFormat.h" />
-    <ClInclude Include="Private\Windows\WindowsPlatform.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
