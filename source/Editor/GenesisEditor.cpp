@@ -88,7 +88,7 @@ char *pArrCredit = { "|Genesis Editor\t||"
 void OnSignal(int sigNum) {
 	static bool beenhere = false;
 	if(!beenhere && GMainFrame->GetDeskTopDocument()) {
-		char buf[128] = "Got signal ";
+		char buf[512] = "Got signal ";
 
 		if(sigNum == SIGABRT) strcat(buf, "SIGABRT");
 		if(sigNum == SIGFPE) strcat(buf, "SIGFPE");
