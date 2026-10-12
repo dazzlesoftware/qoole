@@ -56,19 +56,23 @@ New code lives in static-library modules under `source/Engine` (`Core`,
 `ApplicationCore`, `RHI`, `UICore`, `UI`, `UIRenderer`), with third-party
 libraries (FreeType, HarfBuzz, doctest, Vulkan headers) vendored in
 `source/External`. They build as part of `source/Genesis.slnx` and need no
-MFC. See sections 17 and 18 of [docs/GenesisUI.md](docs/GenesisUI.md) for
+MFC. See sections 17 to 19 of [docs/GenesisUI.md](docs/GenesisUI.md) for
 what is there.
 
-- `UISandbox.exe` (`source/Exec`) is the Genesis UI widget gallery: every
-  built-in widget on its own page, menus, tooltips, drag and drop, and a
-  borderless inspector window. `-vulkan` switches from D3D12 to Vulkan,
-  `-appscale=1.25` adds an application scale, and `-selftest=<dir>` runs a
-  scripted check (every page, a menu and a tooltip, DPI changes,
-  minimize/restore, moving between monitors, resizing) that saves
-  screenshots and a log. Keys: F2 cycles the app scale, F3 simulates a DPI
-  change, F4 shows or hides the inspector.
+- `UISandbox.exe` (`source/Exec`) is the Genesis UI sandbox: an
+  editor-shaped window built from the editor framework (menus, a toolbar and
+  shortcuts from commands, dockable tabs, a property grid with undo, an RHI
+  viewport, rebindable keys) with the widget gallery as one of its tabs, and
+  a borderless inspector window. `-vulkan` switches from D3D12 to Vulkan,
+  `-appscale=1.25` adds an application scale, `-resetlayout` starts from the
+  default layout and key bindings (both are saved to
+  `%LOCALAPPDATA%\Genesis\UISandbox`), and `-selftest=<dir>` runs a scripted
+  check (every gallery page, menus, a tooltip, the color picker, a tab torn
+  off and docked back, DPI changes, minimize/restore, moving between
+  monitors, resizing) that saves screenshots and a log. Keys: F2 cycles the
+  app scale, F3 simulates a DPI change, F4 shows or hides the inspector.
 - `EngineTests.exe` runs the headless doctest suite: layout, input, text
-  editing and list/tree tests on the null platform, plus an offscreen GPU
+  editing, list/tree and editor framework tests on the null platform, plus an offscreen GPU
   test on D3D12 (WARP) and Vulkan (skipped without a Vulkan driver).
 - Debug builds enable the D3D12 debug layer (the Windows "Graphics Tools"
   optional feature) and the Vulkan validation layer when installed;

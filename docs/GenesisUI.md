@@ -2,8 +2,8 @@
 
 Status: **approved direction** (decisions recorded in §16). Milestone 1
 (the map core freed from MFC, §14.4), milestone 2 (platform layer, RHI,
-UI renderer, fonts, §17) and milestone 3 (widget core and input, §18) are
-implemented.
+UI renderer, fonts, §17), milestone 3 (widget core and input, §18) and
+milestone 4 (editor framework, §19) are implemented.
 
 Genesis UI is the user-interface framework for Genesis Editor and, later,
 Genesis Engine games. It replaces MFC in the editor, provides in-game UI, and
@@ -33,6 +33,7 @@ and how the existing MFC editor moves onto it.
 16. [Decisions](#16-decisions)
 17. [Milestone 2 notes](#17-milestone-2-notes)
 18. [Milestone 3 notes](#18-milestone-3-notes)
+19. [Milestone 4 notes](#19-milestone-4-notes)
 
 ---
 
@@ -660,7 +661,7 @@ Each milestone ends with something runnable and its own PR(s).
 | 1 | **Core free of MFC** | Done (§14.4): `Basic`/`Objects`/`Render`/`Game` build as the `MapCore` static library without MFC headers; the MFC editor works through adapters; `GenesisTests` pass. |
 | 2 | **Platform + RHI + UI renderer + fonts** | Done (§17): `UISandbox` app: a DPI-aware window drawing boxes, rounded boxes, lines and shaped text through D3D12 and Vulkan; resizes and moves across monitors cleanly. |
 | 3 | **Widget core + input** | Done (§18): layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
-| 4 | **Editor framework** | Commands, menu registry, toolbars, docking with save/restore, property grid over `IPropertySource`, viewport widget. |
+| 4 | **Editor framework** | Done (§19): commands, menu registry, toolbars, docking with save/restore, property grid over `IPropertySource`, viewport widget. Editor-shaped demo in `UISandbox`; headless framework tests pass. |
 | 5 | **New editor shell** | Opens/edits/saves maps in four docked viewports with menus, toolbars and selection. |
 | 6 | **Panel parity, MFC removed** | All 14.1 surfaces ported; MFC code and plugins deleted. |
 | 7 | **Object model** | Reflection, serialization, change notification; property grid driven by reflection. |
@@ -867,3 +868,105 @@ More screenshots: [text](images/genesis-ui-m3/gallery-text-d3d12-150.png),
 - IME: the IMM32 path follows the documented messages, and the widget side
   is tested with scripted composition. It has not yet been tried with a
   real Chinese, Japanese or Korean IME.
+
+## 19. Milestone 4 notes
+
+Built in milestone 4:
+
+| Module | Contents |
+|---|---|
+| `Core` | `FJsonValue` (`Serialization/Json.h`): a small JSON value with ordered objects, pretty printing, and parsing that reports line and column. Layouts and key bindings use it. |
+| `UICore` | `FReply::UseHighPrecisionMouseMovement` and `SWidget::OnRawMouseMove` (raw mouse deltas while the cursor is hidden and locked), the drop position and a cancel flag on `FDragDropOperation`, and the styles of the new widgets. |
+| `UI` | **Commands** (`Framework/Commands`): `FInputChord`, `FUICommandInfo`, `FBindingContext`, `FInputBindingManager` (lookup by chord through parent contexts, user rebinding saved as a JSON diff of the defaults), `FUIAction`, `FUICommandList`, and `SCommandBindingScope`, which turns key presses under it into commands. **Menus and toolbars** (`Framework/MultiBox`): `FMenuRegistry` with named menus, sections, entries placed before/after/first, dynamic sections, parent menus, and `GenerateMenuWidget` / `GenerateMenuBar` / `GenerateToolBar`. **Docking** (`Framework/Docking`): `FTabManager`, tab spawners, `FDockLayout` (areas, splitters, stacks, floating windows) with JSON save/restore and a version fallback, `SDockTab`, `SDockTabStack`, `SDockingSplitter`, `SDockingArea`; tabs drag between stacks, onto a stack's edges, and out into windows and back. **Property grid** (`Framework/PropertyGrid`): `IPropertySource`, `FPropertyDesc`, `SPropertyGrid` (categories, search, multiple values, transactions for undo, resizable name column). **Widgets**: `SViewport` / `IViewportClient`, `SSlider`, `SSpinBox<T>` (`SNumericEntryBox<T>`), `SComboBox<T>`, `SColorBlock` and `SColorPicker`; menu entries gained check marks and lazily built submenus. |
+| `UIRenderer` | `FRenderTargetViewportClient`: a viewport client that owns an RHI render target sized to the widget in pixels, redraws on request, and is drawn by `FUIWindowRenderer` before the windows that show it. |
+
+`UISandbox` now opens an editor-shaped window built only from the
+framework: a small 2D "map" with a viewport (select, move with snapping,
+pan, zoom, right-drag to pan with raw mouse), an outliner, a details
+panel, a log, a key-bindings tab where any command can be rebound by
+pressing keys, and the milestone 3 widget gallery as one more tab. The menu
+bar (File, Edit, View, Window) and the toolbar come from the menu registry
+and share the same commands and shortcuts; Edit names the change it would
+undo. The layout and key bindings are saved to
+`%LOCALAPPDATA%\Genesis\UISandbox` on exit and restored at the next start
+(`-resetlayout` starts from the defaults). `-selftest=<dir>` captures the
+editor and every gallery page, the Edit menu, the View menu with a submenu,
+the color picker of the property grid, the Details tab torn off into its own
+window and docked back, then runs the milestone 2 script. `EngineTests`
+gained 16 framework tests (suite `UIFramework`); all 104 tests pass.
+
+![Editor framework demo on D3D12 at 150%](images/genesis-ui-m4/editor-d3d12-150.png)
+
+More screenshots: [Edit menu with the undo description](images/genesis-ui-m4/menu-edit-d3d12-150.png),
+[View menu and submenu](images/genesis-ui-m4/menu-view-submenu-d3d12-150.png),
+[color picker over two lights (Vulkan)](images/genesis-ui-m4/details-colorpicker-vulkan-150.png),
+[Details torn off into a window](images/genesis-ui-m4/details-torn-off-d3d12-150.png),
+[Details docked back to the right of the viewport](images/genesis-ui-m4/details-docked-right-d3d12-150.png),
+[the gallery as a tab](images/genesis-ui-m4/gallery-tab-d3d12-150.png),
+[app scale 125%](images/genesis-ui-m4/editor-d3d12-appscale125.png).
+
+**How it fits together**
+
+- A command is declared once in a binding context and mapped to an action
+  in a command list. Menu entries, toolbar buttons and shortcuts all ask
+  the command list whether it can run, whether it is checked and whether it
+  is visible, so they never disagree. Entries for commands that no list
+  maps are hidden, which lets one registered menu serve several contexts.
+- Shortcuts are processed by `SCommandBindingScope` as the key event
+  bubbles, so a focused text box sees its keys (Ctrl+A, Delete) first and
+  the editor's commands get only what the text box leaves. Key repeats do
+  not run commands. A disabled command still consumes its shortcut.
+- Menus are resolved when they open: the registered sections, extensions
+  from elsewhere, the parent menu's sections, and dynamic sections that
+  build entries from the current state (the Undo label, the Window menu's
+  tab list). Hidden entries are dropped and adjacent separators collapse.
+- The tab manager owns the live layout. Saving walks the live widgets back
+  into an `FDockLayout`, so splitter ratios, the foreground tab, closed
+  tabs and floating windows are all kept. A tab closed by the user is
+  remembered by its stack and reopens there from the Window menu.
+- The property grid shows the intersection of the selected objects'
+  properties. A value that differs between them is unset and shows
+  "Multiple Values" (a dash in vector fields); writing it writes every
+  object. Dragging a spin box or a color slider is one transaction from
+  press to release, so one undo step reverts the whole drag.
+- A viewport client draws into its own render target at the widget's pixel
+  size, then the window draws that texture like any image. `SViewport` is
+  volatile only while its client is realtime; otherwise the client asks for
+  a redraw when its view changes, and an idle editor still draws nothing.
+
+**Deviations from the design, and why**
+
+- Menus and the drag decorator are still in-window popups (see §18).
+  Native popup windows are deferred to when the new editor shell needs
+  menus that extend past a small floating window; nothing in the registry
+  depends on how a menu is shown.
+- Floating windows created by tearing off a tab have their own content and
+  do not sit under the main window's `SCommandBindingScope`, so the main
+  window's shortcuts do not reach them. The shell (milestone 5) will give
+  every editor window the same command scope.
+- The menu bar has no Alt-key access (mnemonics and F10) yet.
+- Toolbars show text labels; icons wait for the editor's image set.
+- Asset pickers in the property grid wait for the asset system; enums are
+  combo boxes, colors open `SColorPicker` in a popup, vectors are spin boxes
+  per component.
+- The tab well does not scroll or overflow into a menu when it has more
+  tabs than room; the tabs shrink and clip.
+
+**Testing notes**
+
+- The `UIFramework` tests run headless on the null platform. They cover:
+  - JSON round trips and parse errors;
+  - chords, shortcut dispatch through a command scope, rebinding (including
+    the command a new chord displaces) and saving the user bindings;
+  - menu resolution (extensions, inserts, dynamic sections, parents, hidden
+    entries), the menu bar and the toolbar;
+  - docking: restore, persist, reopening closed tabs, dragging a tab within
+    a well, onto an edge, out into a window and back, and the Window menu;
+  - the property grid: multiple values, transactions, vectors, search,
+    categories, and the checkbox, enum and color editors;
+  - the spin box, slider and combo box;
+  - the viewport: pixel size at 150%, input forwarding, and raw mouse while
+    captured.
+- The sandbox self-test ran on D3D12 with the debug layer on (Debug) and in
+  Release, and on Vulkan, and reported nothing. Vulkan again ran without
+  validation because the layer is not installed on this machine.
