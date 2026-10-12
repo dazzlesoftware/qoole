@@ -2,8 +2,9 @@
 
 Status: **approved direction** (decisions recorded in §16). Milestone 1
 (the map core freed from MFC, §14.4), milestone 2 (platform layer, RHI,
-UI renderer, fonts, §17), milestone 3 (widget core and input, §18) and
-milestone 4 (editor framework, §19) are implemented.
+UI renderer, fonts, §17), milestone 3 (widget core and input, §18),
+milestone 4 (editor framework, §19) and milestone 5 (the new map editor
+shell, §20) are implemented.
 
 Genesis UI is the user-interface framework for Genesis Editor and, later,
 Genesis Engine games. It replaces MFC in the editor, provides in-game UI, and
@@ -34,6 +35,7 @@ and how the existing MFC editor moves onto it.
 17. [Milestone 2 notes](#17-milestone-2-notes)
 18. [Milestone 3 notes](#18-milestone-3-notes)
 19. [Milestone 4 notes](#19-milestone-4-notes)
+20. [Milestone 5 notes](#20-milestone-5-notes)
 
 ---
 
@@ -662,7 +664,7 @@ Each milestone ends with something runnable and its own PR(s).
 | 2 | **Platform + RHI + UI renderer + fonts** | Done (§17): `UISandbox` app: a DPI-aware window drawing boxes, rounded boxes, lines and shaped text through D3D12 and Vulkan; resizes and moves across monitors cleanly. |
 | 3 | **Widget core + input** | Done (§18): layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
 | 4 | **Editor framework** | Done (§19): commands, menu registry, toolbars, docking with save/restore, property grid over `IPropertySource`, viewport widget. Editor-shaped demo in `UISandbox`; headless framework tests pass. |
-| 5 | **New editor shell** | Opens/edits/saves maps in four docked viewports with menus, toolbars and selection. |
+| 5 | **New editor shell** | Done (§20): `GenesisMapEditor` opens/edits/saves maps in four docked viewports with menus, toolbars and selection. |
 | 6 | **Panel parity, MFC removed** | All 14.1 surfaces ported; MFC code and plugins deleted. |
 | 7 | **Object model** | Reflection, serialization, change notification; property grid driven by reflection. |
 | 8 | **Widget assets** | UMG layer, JSON assets, push bindings, animation, game viewport integration, render-to-texture. |
@@ -970,3 +972,92 @@ More screenshots: [Edit menu with the undo description](images/genesis-ui-m4/men
 - The sandbox self-test ran on D3D12 with the debug layer on (Debug) and in
   Release, and on Vulkan, and reported nothing. Vulkan again ran without
   validation because the layer is not installed on this machine.
+
+## 20. Milestone 5 notes
+
+Built in milestone 5:
+
+| Where | Contents |
+|---|---|
+| `GenesisMapEditor.exe` (`source/Programs/GenesisMapEditor`) | The new map editor shell: the four map views (top, front, side, 3D) as dockable tabs, an outliner and a log, a menu bar (File, Edit, View, Object, Window) and a toolbar built from commands, a status bar with the cursor position and counts. Opens `.qle` maps, imports and exports `.map`, saves `.qle`; asks before discarding changes. The layout, key bindings and settings are kept in `%LOCALAPPDATA%\Genesis\MapEditor`. |
+| `MapEditor` (new module, `source/Engine/MapEditor`) | `FMapDocument`: the map core's object tree, its selection and an undo stack of transactions (move, add, delete, duplicate, prefabs, entities; the selection before and after each step is restored), `.qle`/`.map` load and save. `FMapViewportClient`: one map view in an `SViewport`, owning a map core `View`; picking, box selection, moving with grid snapping, panning, zooming, a fly camera in 3D. `FMapDraw`: the map core's `FDraw` collected into GPU lists. `FMapEditorEnvironment`: starts and stops the map core and manages game sets. |
+| `MapCore` | `GenesisGame`, a built-in game for Genesis Engine maps that needs no game folder, with its entity set and wireframes in `source/Content/Editor`; faces keep the names of textures their game does not have, so such maps save without losing them. |
+| `RHI` | Depth buffers (`D32_FLOAT` textures, `BeginRenderPass` with a depth target, depth state in pipelines) and a `Float3` vertex format, on D3D12 and Vulkan. |
+| `Core`, `ApplicationCore` | Open and save file pickers in `IFileDialogs`; `FPlatformDialogs` for the native message box and pickers. |
+
+`GenesisMapEditor -selftest=<dir>` builds a small map from prefabs and
+entities, clicks the cube in the top view and drags it (snapped), opens the
+Edit menu (which names the step to undo), undoes and redoes, box-selects in
+the front view, duplicates and deletes, switches the 3D view between
+wireframe and solid, saves `.qle` and `.map` and reads both back, then
+changes the DPI. `EngineTests` gained 8 tests (suite `MapEditor`).
+
+![The map editor on D3D12 at 150%](images/genesis-ui-m5/editor-d3d12-150.png)
+
+More screenshots: [a moved, selected cube](images/genesis-ui-m5/moved-selection-d3d12-150.png),
+[the Edit menu naming the undo step](images/genesis-ui-m5/menu-edit-undo-d3d12-150.png),
+[box selection](images/genesis-ui-m5/box-select-d3d12-150.png),
+[the 3D view in wireframe](images/genesis-ui-m5/wireframe-3d-d3d12-150.png),
+[the saved map reopened, on Vulkan at 200%](images/genesis-ui-m5/reopened-vulkan-200.png).
+
+**How it fits together**
+
+- The map core does the map work it always did: `View` holds the camera,
+  projects, clips and picks; `Selector` holds the selection; `Object`,
+  `Geometry` and `MapIO` hold and read and write the map. The editor drives
+  them as the MFC views did, without MFC: `FMapViewportClient` turns
+  viewport input into the map core's screen coordinates, and `FMapDraw`
+  takes what `View` draws.
+- Drawing: `View::RenderWireFrame` produces lines, which `FMapDraw` turns
+  into one custom-vertex element per view for the UI renderer (with the
+  grid and the label). The 3D view's solid mode uses `View::RenderSolid`,
+  whose triangles come in screen space with a depth; a small pipeline draws
+  them with the depth buffer (perspective-correct), and the selection's
+  wireframe and the label are drawn over them. Faces get a color per object
+  and a shade per side, since the built-in game has no textures yet.
+- Undo: every edit goes through `FMapDocument` and is recorded in the
+  current transaction (a drag is one transaction, and its moves merge).
+  Objects taken out of the map belong to the step that took them out and
+  are freed when that step is dropped.
+- Game sets: the map core has one current game and entity list. The editor
+  starts on the built-in Genesis game; `.qle` files name their game set in
+  their header and opening one switches to it; File > New With Game starts
+  a map for another set. The legacy games are offered when
+  `GenesisEditor.pak` is next to the executable and ask for their folder the
+  first time, as before.
+
+**Deviations from the design, and why**
+
+- The shell is `GenesisMapEditor.exe`, not `GenesisEditor.exe`, and the MFC
+  editor keeps its name: renaming it would change where it keeps its
+  settings (its registry key comes from its name) while people still use it.
+  The new editor takes the name in milestone 6, when the MFC one goes.
+- Editing tools are select and move. Rotate, scale, clipping, CSG, brush
+  editing (faces, edges, vertices), groups and scope, texture application,
+  entity properties, cut/copy/paste and the compile tools come with the
+  panels of milestone 6. Moving works in the 2D views; the 3D view selects
+  and flies.
+- Selecting on its own is not an undo step (the MFC editor made every
+  selection change one).
+- Solid faces are flat-shaded, never textured: the built-in game has no
+  textures, and the legacy games' textures go with them.
+- The Vulkan SPIR-V of the map shader was made by correcting one
+  instruction of the old Vulkan plugin's SPIR-V, because no SPIR-V capable
+  `dxc` was available; `BuildMapShaders.cmd` regenerates it from
+  `MapShaders.hlsl` (see the notes there).
+- File dialogs and message boxes are the operating system's (through the
+  Core services), not Genesis UI windows.
+
+**Testing notes**
+
+- The `MapEditor` tests use the built-in game and `Content/Editor`, and need
+  no pak. They cover the game set, undo and redo of adds, moves (merged in a
+  transaction), deletes (order restored) and duplicates (copies freed), the
+  modified state, `.qle` and `.map` round trips, texture names the game does
+  not have, and, with a view in a headless window on D3D12 WARP: clicking,
+  Ctrl+clicking, box selection, a snapped drag that keeps the depth axis,
+  undo, zooming at the cursor and drawing. The 3D view's depth buffer is
+  checked on D3D12 WARP and on Vulkan.
+- `GenesisMapEditor -selftest` ran in Debug (with the D3D12 debug layer) and
+  Release on D3D12 and Vulkan and reported nothing. Vulkan ran without
+  validation, which is not installed on this machine.

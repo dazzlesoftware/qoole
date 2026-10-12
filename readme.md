@@ -53,12 +53,22 @@ back to MFC.
 ## Genesis Engine modules
 
 New code lives in static-library modules under `source/Engine` (`Core`,
-`ApplicationCore`, `RHI`, `UICore`, `UI`, `UIRenderer`), with third-party
+`ApplicationCore`, `RHI`, `UICore`, `UI`, `UIRenderer`, `MapEditor`), with third-party
 libraries (FreeType, HarfBuzz, doctest, Vulkan headers) vendored in
 `source/External`. They build as part of `source/Genesis.slnx` and need no
-MFC. See sections 17 to 19 of [docs/GenesisUI.md](docs/GenesisUI.md) for
+MFC. See sections 17 to 20 of [docs/GenesisUI.md](docs/GenesisUI.md) for
 what is there.
 
+- `GenesisMapEditor.exe` (`source/Exec`) is the new map editor on Genesis UI,
+  which will replace the MFC editor: four docked map views (top, front,
+  side, 3D with solid faces), an outliner and a log, menus, a toolbar and
+  shortcuts. It opens `.qle` maps, imports and exports `.map`, and adds
+  prefab brushes and entities; select, move (snapped to the grid), duplicate,
+  delete, undo and redo. It needs no game installed: new maps use the
+  built-in Genesis game (`source/Content/Editor`); the legacy games are
+  offered when `GenesisEditor.pak` is next to it. Pass a map to open it;
+  `-vulkan`, `-appscale=`, `-resetlayout` and `-selftest=<dir>` work as in
+  UISandbox. Settings are kept in `%LOCALAPPDATA%\Genesis\MapEditor`.
 - `UISandbox.exe` (`source/Exec`) is the Genesis UI sandbox: an
   editor-shaped window built from the editor framework (menus, a toolbar and
   shortcuts from commands, dockable tabs, a property grid with undo, an RHI
@@ -72,7 +82,7 @@ what is there.
   monitors, resizing) that saves screenshots and a log. Keys: F2 cycles the
   app scale, F3 simulates a DPI change, F4 shows or hides the inspector.
 - `EngineTests.exe` runs the headless doctest suite: layout, input, text
-  editing, list/tree and editor framework tests on the null platform, plus an offscreen GPU
+  editing, list/tree, editor framework and map editor tests on the null platform, plus an offscreen GPU
   test on D3D12 (WARP) and Vulkan (skipped without a Vulkan driver).
 - Debug builds enable the D3D12 debug layer (the Windows "Graphics Tools"
   optional feature) and the Vulkan validation layer when installed;
