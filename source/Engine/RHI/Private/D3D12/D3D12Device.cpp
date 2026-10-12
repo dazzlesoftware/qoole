@@ -20,6 +20,7 @@ namespace
 		case EPixelFormat::R8_UNORM: return DXGI_FORMAT_R8_UNORM;
 		case EPixelFormat::R8G8B8A8_UNORM: return DXGI_FORMAT_R8G8B8A8_UNORM;
 		case EPixelFormat::B8G8R8A8_UNORM: return DXGI_FORMAT_B8G8R8A8_UNORM;
+		case EPixelFormat::D32_FLOAT: return DXGI_FORMAT_D32_FLOAT;
 		case EPixelFormat::Unknown: break;
 		}
 		return DXGI_FORMAT_UNKNOWN;
@@ -30,6 +31,7 @@ namespace
 		switch (Format)
 		{
 		case EVertexFormat::Float2: return DXGI_FORMAT_R32G32_FLOAT;
+		case EVertexFormat::Float3: return DXGI_FORMAT_R32G32B32_FLOAT;
 		case EVertexFormat::Float4: return DXGI_FORMAT_R32G32B32A32_FLOAT;
 		case EVertexFormat::UByte4N: return DXGI_FORMAT_R8G8B8A8_UNORM;
 		}
@@ -58,6 +60,7 @@ namespace
 	constexpr D3D12_RESOURCE_STATES TextureIdleState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 	constexpr uint32 SrvHeapCapacity = 4096;
 	constexpr uint32 RtvHeapCapacity = 256;
+	constexpr uint32 DsvHeapCapacity = 64;
 	constexpr uint64 UploadChunkSize = 4 * 1024 * 1024;
 }
 
@@ -157,7 +160,14 @@ FD3D12Texture::FD3D12Texture(FD3D12Device& InDevice, const FRHITextureDesc& InDe
 
 FD3D12Texture::~FD3D12Texture()
 {
-	Device.DeferDelete(std::move(Resource), Srv, Rtv);
+	if (IsDepthFormat(Desc.Format))
+	{
+		Device.DeferDelete(std::move(Resource), FD3D12DescriptorHeap::Invalid, FD3D12DescriptorHeap::Invalid, Rtv);
+	}
+	else
+	{
+		Device.DeferDelete(std::move(Resource), Srv, Rtv);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -295,9 +305,14 @@ void FD3D12CommandList::Begin(ID3D12GraphicsCommandList* InList)
 	List->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
-void FD3D12CommandList::BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOptional<FLinearColor>& ClearColor, FIntPoint Size)
+void FD3D12CommandList::BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOptional<FLinearColor>& ClearColor, FIntPoint Size,
+	const D3D12_CPU_DESCRIPTOR_HANDLE* Dsv, const TOptional<float>& ClearDepth)
 {
-	List->OMSetRenderTargets(1, &Rtv, FALSE, nullptr);
+	List->OMSetRenderTargets(1, &Rtv, FALSE, Dsv);
+	if (Dsv && ClearDepth)
+	{
+		List->ClearDepthStencilView(*Dsv, D3D12_CLEAR_FLAG_DEPTH, *ClearDepth, 0, 0, nullptr);
+	}
 	if (ClearColor)
 	{
 		const float Color[4] = { ClearColor->R, ClearColor->G, ClearColor->B, ClearColor->A };
@@ -331,6 +346,23 @@ void FD3D12CommandList::BeginRenderPass(FRHITexture& Target, const TOptional<FLi
 	List->ResourceBarrier(1, &Barrier);
 	BeginPass(Device.GetRtvHeap().GetCpuHandle(Texture.GetRtvIndex()), ClearColor,
 		FIntPoint(static_cast<int32>(Texture.GetWidth()), static_cast<int32>(Texture.GetHeight())));
+}
+
+void FD3D12CommandList::BeginRenderPass(FRHITexture& Target, FRHITexture& DepthTarget, const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth)
+{
+	check(!PassResource);
+	auto& Texture = static_cast<FD3D12Texture&>(Target);
+	auto& Depth = static_cast<FD3D12Texture&>(DepthTarget);
+	check(Texture.GetDesc().bRenderTarget && IsDepthFormat(Depth.GetFormat()));
+	check(Depth.GetWidth() == Texture.GetWidth() && Depth.GetHeight() == Texture.GetHeight());
+	PassResource = Texture.GetResource();
+	PassRestoreState = TextureIdleState;
+	const D3D12_RESOURCE_BARRIER Barrier = Transition(PassResource, TextureIdleState, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	List->ResourceBarrier(1, &Barrier);
+	// Depth buffers stay in DEPTH_WRITE for their whole life.
+	const D3D12_CPU_DESCRIPTOR_HANDLE Dsv = Device.GetDsvHeap().GetCpuHandle(Depth.GetDsvIndex());
+	BeginPass(Device.GetRtvHeap().GetCpuHandle(Texture.GetRtvIndex()), ClearColor,
+		FIntPoint(static_cast<int32>(Texture.GetWidth()), static_cast<int32>(Texture.GetHeight())), &Dsv, ClearDepth);
 }
 
 void FD3D12CommandList::EndRenderPass()
@@ -506,7 +538,8 @@ bool FD3D12Device::Initialize()
 	FenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
 	if (!SrvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, SrvHeapCapacity, true)
-		|| !RtvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, RtvHeapCapacity, false))
+		|| !RtvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, RtvHeapCapacity, false)
+		|| !DsvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV, DsvHeapCapacity, false))
 	{
 		GE_LOG(LogRHI, Error, "Failed to create D3D12 descriptor heaps");
 		return false;
@@ -577,7 +610,7 @@ void FD3D12Device::WaitIdle()
 	CollectGarbage();
 }
 
-void FD3D12Device::DeferDelete(ComPtr<IUnknown> Object, uint32 SrvSlot, uint32 RtvSlot)
+void FD3D12Device::DeferDelete(ComPtr<IUnknown> Object, uint32 SrvSlot, uint32 RtvSlot, uint32 DsvSlot)
 {
 	FDeferredDelete Entry;
 	// Everything submitted so far must finish; work recorded in the open
@@ -586,6 +619,7 @@ void FD3D12Device::DeferDelete(ComPtr<IUnknown> Object, uint32 SrvSlot, uint32 R
 	Entry.Object = std::move(Object);
 	Entry.SrvSlot = SrvSlot;
 	Entry.RtvSlot = RtvSlot;
+	Entry.DsvSlot = DsvSlot;
 	Garbage.push_back(std::move(Entry));
 }
 
@@ -608,6 +642,7 @@ void FD3D12Device::CollectGarbage()
 		Garbage.pop_front();
 		SrvHeap.Free(Entry.SrvSlot);
 		RtvHeap.Free(Entry.RtvSlot);
+		DsvHeap.Free(Entry.DsvSlot);
 	}
 }
 
@@ -678,6 +713,10 @@ TSharedPtr<FRHIBuffer> FD3D12Device::CreateBuffer(const FRHIBufferDesc& BufferDe
 TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& TextureDesc)
 {
 	check(TextureDesc.Width > 0 && TextureDesc.Height > 0);
+	if (IsDepthFormat(TextureDesc.Format))
+	{
+		return CreateDepthTexture(TextureDesc);
+	}
 	const DXGI_FORMAT Format = ToDxgi(TextureDesc.Format);
 
 	D3D12_HEAP_PROPERTIES Heap{};
@@ -749,6 +788,41 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 		});
 	}
 	return Texture;
+}
+
+TSharedPtr<FRHITexture> FD3D12Device::CreateDepthTexture(const FRHITextureDesc& TextureDesc)
+{
+	D3D12_HEAP_PROPERTIES Heap{};
+	Heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+	D3D12_RESOURCE_DESC ResourceDesc{};
+	ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	ResourceDesc.Width = TextureDesc.Width;
+	ResourceDesc.Height = TextureDesc.Height;
+	ResourceDesc.DepthOrArraySize = 1;
+	ResourceDesc.MipLevels = 1;
+	ResourceDesc.Format = DXGI_FORMAT_D32_FLOAT;
+	ResourceDesc.SampleDesc.Count = 1;
+	ResourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL | D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
+
+	D3D12_CLEAR_VALUE Clear{};
+	Clear.Format = DXGI_FORMAT_D32_FLOAT;
+	Clear.DepthStencil.Depth = 1.0f;
+
+	ComPtr<ID3D12Resource> Resource;
+	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &Clear, IID_PPV_ARGS(&Resource))))
+	{
+		GE_LOG(LogRHI, Error, "Failed to create a {}x{} depth buffer", TextureDesc.Width, TextureDesc.Height);
+		return nullptr;
+	}
+	SetName(Resource.Get(), TextureDesc.DebugName);
+
+	const uint32 Dsv = DsvHeap.Allocate();
+	if (Dsv == FD3D12DescriptorHeap::Invalid)
+	{
+		return nullptr;
+	}
+	Device->CreateDepthStencilView(Resource.Get(), nullptr, DsvHeap.GetCpuHandle(Dsv));
+	return std::make_shared<FD3D12Texture>(*this, TextureDesc, std::move(Resource), FD3D12DescriptorHeap::Invalid, Dsv);
 }
 
 ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(uint32 PushConstantSize, ESamplerFilter Filter)
@@ -838,6 +912,13 @@ TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHI
 	PsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	PsoDesc.RasterizerState.DepthClipEnable = TRUE;
 	PsoDesc.DepthStencilState.DepthEnable = FALSE;
+	if (PipelineDesc.DepthFormat != EPixelFormat::Unknown)
+	{
+		PsoDesc.DSVFormat = ToDxgi(PipelineDesc.DepthFormat);
+		PsoDesc.DepthStencilState.DepthEnable = TRUE;
+		PsoDesc.DepthStencilState.DepthWriteMask = PipelineDesc.bDepthWrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+		PsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	}
 
 	D3D12_RENDER_TARGET_BLEND_DESC& Blend = PsoDesc.BlendState.RenderTarget[0];
 	Blend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;

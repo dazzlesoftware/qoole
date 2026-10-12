@@ -96,12 +96,13 @@ FVulkanTexture::FVulkanTexture(FVulkanDevice& InDevice, const FRHITextureDesc& I
 FVulkanTexture::~FVulkanTexture()
 {
 	Device.DeferDestroy([DeviceHandle = Device.GetHandle(), ImageHandle = Image, MemoryHandle = Memory,
-		Sampled = SampledView, Attachment = AttachmentView, FramebufferHandle = Framebuffer,
+		Sampled = SampledView, Attachment = AttachmentView, FramebufferHandle = Framebuffer, DepthFramebufferHandle = DepthFramebuffer,
 		Set0 = DescriptorSets[0], Set1 = DescriptorSets[1], Pool0 = DescriptorPools[0], Pool1 = DescriptorPools[1]]()
 	{
 		if (Set0) vkFreeDescriptorSets(DeviceHandle, Pool0, 1, &Set0);
 		if (Set1) vkFreeDescriptorSets(DeviceHandle, Pool1, 1, &Set1);
 		if (FramebufferHandle) vkDestroyFramebuffer(DeviceHandle, FramebufferHandle, nullptr);
+		if (DepthFramebufferHandle) vkDestroyFramebuffer(DeviceHandle, DepthFramebufferHandle, nullptr);
 		if (Attachment) vkDestroyImageView(DeviceHandle, Attachment, nullptr);
 		if (Sampled) vkDestroyImageView(DeviceHandle, Sampled, nullptr);
 		if (ImageHandle) vkDestroyImage(DeviceHandle, ImageHandle, nullptr);
@@ -126,8 +127,10 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 	ImageInfo.arrayLayers = 1;
 	ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	ImageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-	if (Desc.bRenderTarget)
+	const bool bDepth = IsDepthFormat(Desc.Format);
+	ImageInfo.usage = bDepth ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+		: VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	if (Desc.bRenderTarget && !bDepth)
 	{
 		ImageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 	}
@@ -154,7 +157,7 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 	ViewInfo.image = Image;
 	ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 	ViewInfo.format = Format;
-	ViewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+	ViewInfo.subresourceRange = { static_cast<VkImageAspectFlags>(bDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT), 0, 1, 0, 1 };
 	const bool bSwizzled = Desc.Format == EPixelFormat::R8_UNORM;
 	if (bSwizzled)
 	{
@@ -179,6 +182,29 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 	{
 		Device.SetDebugName(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64>(Image), Desc.DebugName);
 		Device.SetDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<uint64>(SampledView), Desc.DebugName);
+	}
+
+	if (bDepth)
+	{
+		// Depth buffers live in DEPTH_STENCIL_ATTACHMENT_OPTIMAL; their first
+		// pass clears them.
+		FVulkanUploadContext Upload;
+		if (!Device.BeginUpload(0, Upload))
+		{
+			return false;
+		}
+		VkImageMemoryBarrier Barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+		Barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		Barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		Barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		Barrier.image = Image;
+		Barrier.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
+		vkCmdPipelineBarrier(Upload.CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+			0, 0, nullptr, 0, nullptr, 1, &Barrier);
+		Device.EndUpload(Upload);
+		return true;
 	}
 
 	// Initial contents: the data, or the clear color (render targets) / zero,
@@ -270,8 +296,40 @@ VkDescriptorSet FVulkanTexture::GetDescriptorSet(ESamplerFilter Filter)
 	return DescriptorSets[Index];
 }
 
-VkFramebuffer FVulkanTexture::GetFramebuffer(VkRenderPass CompatibleRenderPass)
+VkFramebuffer FVulkanTexture::GetFramebuffer(VkRenderPass CompatibleRenderPass, FVulkanTexture* Depth)
 {
+	if (Depth)
+	{
+		const VkImageView DepthView = Depth->GetAttachmentView();
+		if (DepthFramebuffer && DepthFramebufferView != DepthView)
+		{
+			Device.DeferDestroy([DeviceHandle = Device.GetHandle(), Old = DepthFramebuffer]()
+			{
+				vkDestroyFramebuffer(DeviceHandle, Old, nullptr);
+			});
+			DepthFramebuffer = VK_NULL_HANDLE;
+		}
+		if (!DepthFramebuffer && Desc.bRenderTarget)
+		{
+			const VkImageView Views[2] = { GetAttachmentView(), DepthView };
+			VkFramebufferCreateInfo FramebufferInfo{ VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
+			FramebufferInfo.renderPass = CompatibleRenderPass;
+			FramebufferInfo.attachmentCount = 2;
+			FramebufferInfo.pAttachments = Views;
+			FramebufferInfo.width = Desc.Width;
+			FramebufferInfo.height = Desc.Height;
+			FramebufferInfo.layers = 1;
+			if (VulkanUtil::Check(vkCreateFramebuffer(Device.GetHandle(), &FramebufferInfo, nullptr, &DepthFramebuffer), "vkCreateFramebuffer"))
+			{
+				DepthFramebufferView = DepthView;
+			}
+			else
+			{
+				DepthFramebuffer = VK_NULL_HANDLE;
+			}
+		}
+		return DepthFramebuffer;
+	}
 	if (!Framebuffer && Desc.bRenderTarget)
 	{
 		const VkImageView View = AttachmentView ? AttachmentView : SampledView;
@@ -330,6 +388,7 @@ namespace
 		switch (Format)
 		{
 		case EVertexFormat::Float2: return VK_FORMAT_R32G32_SFLOAT;
+		case EVertexFormat::Float3: return VK_FORMAT_R32G32B32_SFLOAT;
 		case EVertexFormat::Float4: return VK_FORMAT_R32G32B32A32_SFLOAT;
 		case EVertexFormat::UByte4N: return VK_FORMAT_R8G8B8A8_UNORM;
 		}
@@ -432,6 +491,13 @@ bool FVulkanGraphicsPipeline::Initialize()
 	Multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
 	VkPipelineDepthStencilStateCreateInfo DepthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+	const VkFormat DepthFormat = VulkanUtil::ToVkFormat(Desc.DepthFormat);
+	if (DepthFormat != VK_FORMAT_UNDEFINED)
+	{
+		DepthStencil.depthTestEnable = VK_TRUE;
+		DepthStencil.depthWriteEnable = Desc.bDepthWrite ? VK_TRUE : VK_FALSE;
+		DepthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+	}
 
 	VkPipelineColorBlendAttachmentState BlendAttachment{};
 	BlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -462,7 +528,8 @@ bool FVulkanGraphicsPipeline::Initialize()
 
 	// Any render pass with the same attachment format is compatible.
 	const VkFormat TargetFormat = VulkanUtil::ToVkFormat(Desc.RenderTargetFormat);
-	const VkRenderPass RenderPass = Device.GetRenderPass(TargetFormat, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	const VkRenderPass RenderPass = Device.GetRenderPass(TargetFormat, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		DepthFormat);
 
 	VkGraphicsPipelineCreateInfo PipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 	PipelineInfo.stageCount = 2;

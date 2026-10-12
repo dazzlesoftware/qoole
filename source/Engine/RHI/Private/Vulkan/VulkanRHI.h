@@ -22,6 +22,7 @@
 // Synchronization model:
 //   - Textures are in SHADER_READ_ONLY_OPTIMAL outside render passes; render
 //     passes into a texture transition it to COLOR_ATTACHMENT_OPTIMAL and back.
+//     Depth buffers stay in DEPTH_STENCIL_ATTACHMENT_OPTIMAL.
 //   - Uploads (UpdateTexture, initial data) recorded inside a frame go into a
 //     per-frame upload command buffer submitted just before the frame's main
 //     command buffer; outside a frame they are submitted immediately and
@@ -69,8 +70,10 @@ public:
 	VkFormat GetVkFormat() const { return Format; }
 	// Descriptor set (set 0) for pipelines using the given sampler filter.
 	VkDescriptorSet GetDescriptorSet(ESamplerFilter Filter);
-	// Framebuffer for render passes into this texture (render targets only).
-	VkFramebuffer GetFramebuffer(VkRenderPass CompatibleRenderPass);
+	// Framebuffer for render passes into this texture (render targets only),
+	// optionally with a depth buffer; one depth buffer is kept at a time.
+	VkFramebuffer GetFramebuffer(VkRenderPass CompatibleRenderPass, FVulkanTexture* Depth = nullptr);
+	VkImageView GetAttachmentView() const { return AttachmentView ? AttachmentView : SampledView; }
 
 private:
 	FVulkanDevice& Device;
@@ -80,6 +83,8 @@ private:
 	VkImageView SampledView = VK_NULL_HANDLE;
 	VkImageView AttachmentView = VK_NULL_HANDLE; // identity swizzle; only when it differs from SampledView
 	VkFramebuffer Framebuffer = VK_NULL_HANDLE;
+	VkFramebuffer DepthFramebuffer = VK_NULL_HANDLE;
+	VkImageView DepthFramebufferView = VK_NULL_HANDLE; // the depth view DepthFramebuffer was made with
 	VkDescriptorSet DescriptorSets[2] = {};
 	VkDescriptorPool DescriptorPools[2] = {};
 };
@@ -163,6 +168,7 @@ public:
 
 	void BeginRenderPass(FRHISwapChain& Target, const TOptional<FLinearColor>& ClearColor) override;
 	void BeginRenderPass(FRHITexture& Target, const TOptional<FLinearColor>& ClearColor) override;
+	void BeginRenderPass(FRHITexture& Target, FRHITexture& DepthTarget, const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth) override;
 	void EndRenderPass() override;
 
 	void SetViewport(float X, float Y, float Width, float Height) override;
@@ -175,7 +181,8 @@ public:
 	void DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex) override;
 
 private:
-	void BeginPass(VkRenderPass RenderPass, VkFramebuffer Framebuffer, uint32 Width, uint32 Height, const TOptional<FLinearColor>& ClearColor);
+	void BeginPass(VkRenderPass RenderPass, VkFramebuffer Framebuffer, uint32 Width, uint32 Height, const TOptional<FLinearColor>& ClearColor,
+		bool bHasDepth = false, const TOptional<float>& ClearDepth = {});
 	void ResetState();
 
 	FVulkanDevice& Device;
@@ -241,8 +248,10 @@ public:
 	bool CreateBufferObject(VkDeviceSize Size, VkBufferUsageFlags Usage, bool bHostVisible, VkBuffer& OutBuffer, VkDeviceMemory& OutMemory, void** OutMapped);
 
 	// Render passes are cached by format, load op and layouts. Every pass has
-	// one color attachment; all passes of a format are compatible.
-	VkRenderPass GetRenderPass(VkFormat Format, bool bClear, VkImageLayout InitialLayout, VkImageLayout FinalLayout);
+	// one color attachment and optionally a depth attachment (DepthFormat);
+	// all passes with the same formats are compatible.
+	VkRenderPass GetRenderPass(VkFormat Format, bool bClear, VkImageLayout InitialLayout, VkImageLayout FinalLayout,
+		VkFormat DepthFormat = VK_FORMAT_UNDEFINED, bool bClearDepth = false);
 	VkPipelineLayout GetPipelineLayout(ESamplerFilter Filter) const { return PipelineLayouts[static_cast<uint32>(Filter)]; }
 	VkDescriptorSet AllocateDescriptorSet(ESamplerFilter Filter, VkDescriptorPool& OutPool);
 	FVulkanTexture& GetWhiteTexture() const { return *WhiteTexture; }

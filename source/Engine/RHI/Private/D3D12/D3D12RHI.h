@@ -56,12 +56,14 @@ private:
 class FD3D12Texture final : public FRHITexture
 {
 public:
+	// Depth buffers have no SRV, and their InRtv is a slot of the DSV heap.
 	FD3D12Texture(FD3D12Device& InDevice, const FRHITextureDesc& InDesc, ComPtr<ID3D12Resource> InResource, uint32 InSrv, uint32 InRtv);
 	~FD3D12Texture() override;
 
 	ID3D12Resource* GetResource() const { return Resource.Get(); }
 	uint32 GetSrvIndex() const { return Srv; }
 	uint32 GetRtvIndex() const { return Rtv; }
+	uint32 GetDsvIndex() const { return Rtv; }
 
 private:
 	FD3D12Device& Device;
@@ -122,6 +124,7 @@ public:
 
 	void BeginRenderPass(FRHISwapChain& Target, const TOptional<FLinearColor>& ClearColor) override;
 	void BeginRenderPass(FRHITexture& Target, const TOptional<FLinearColor>& ClearColor) override;
+	void BeginRenderPass(FRHITexture& Target, FRHITexture& DepthTarget, const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth) override;
 	void EndRenderPass() override;
 	void SetViewport(float X, float Y, float Width, float Height) override;
 	void SetScissor(const FIntRect& Rect) override;
@@ -133,7 +136,8 @@ public:
 	void DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex) override;
 
 private:
-	void BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOptional<FLinearColor>& ClearColor, FIntPoint Size);
+	void BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOptional<FLinearColor>& ClearColor, FIntPoint Size,
+		const D3D12_CPU_DESCRIPTOR_HANDLE* Dsv = nullptr, const TOptional<float>& ClearDepth = {});
 
 	FD3D12Device& Device;
 	ID3D12GraphicsCommandList* List = nullptr;
@@ -169,9 +173,11 @@ public:
 	ID3D12CommandQueue* GetQueue() const { return Queue.Get(); }
 	FD3D12DescriptorHeap& GetSrvHeap() { return SrvHeap; }
 	FD3D12DescriptorHeap& GetRtvHeap() { return RtvHeap; }
+	FD3D12DescriptorHeap& GetDsvHeap() { return DsvHeap; }
 	// Keeps a native object (and optionally descriptor slots) alive until the
 	// GPU has finished the work submitted so far.
-	void DeferDelete(ComPtr<IUnknown> Object, uint32 SrvSlot = FD3D12DescriptorHeap::Invalid, uint32 RtvSlot = FD3D12DescriptorHeap::Invalid);
+	void DeferDelete(ComPtr<IUnknown> Object, uint32 SrvSlot = FD3D12DescriptorHeap::Invalid, uint32 RtvSlot = FD3D12DescriptorHeap::Invalid,
+		uint32 DsvSlot = FD3D12DescriptorHeap::Invalid);
 	void MarkPresent(FD3D12SwapChain* SwapChain);
 	void FlushDebugMessages();
 
@@ -183,6 +189,7 @@ private:
 		TSharedPtr<void> Shared;
 		uint32 SrvSlot = FD3D12DescriptorHeap::Invalid;
 		uint32 RtvSlot = FD3D12DescriptorHeap::Invalid;
+		uint32 DsvSlot = FD3D12DescriptorHeap::Invalid;
 	};
 
 	struct FUploadAllocation
@@ -208,6 +215,7 @@ private:
 	void WaitForFence(uint64 Value);
 	void CollectGarbage();
 	ComPtr<ID3D12RootSignature> GetRootSignature(uint32 PushConstantSize, ESamplerFilter Filter);
+	TSharedPtr<FRHITexture> CreateDepthTexture(const FRHITextureDesc& Desc);
 
 	FRHIDeviceDesc Desc;
 	FString AdapterName;
@@ -221,6 +229,7 @@ private:
 
 	FD3D12DescriptorHeap SrvHeap;
 	FD3D12DescriptorHeap RtvHeap;
+	FD3D12DescriptorHeap DsvHeap;
 
 	struct FFrame
 	{

@@ -83,6 +83,7 @@ namespace VulkanUtil
 		case EPixelFormat::R8_UNORM: return VK_FORMAT_R8_UNORM;
 		case EPixelFormat::R8G8B8A8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
 		case EPixelFormat::B8G8R8A8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
+		case EPixelFormat::D32_FLOAT: return VK_FORMAT_D32_SFLOAT;
 		case EPixelFormat::Unknown: break;
 		}
 		return VK_FORMAT_UNDEFINED;
@@ -601,12 +602,16 @@ bool FVulkanDevice::CreateBufferObject(VkDeviceSize Size, VkBufferUsageFlags Usa
 	return true;
 }
 
-VkRenderPass FVulkanDevice::GetRenderPass(VkFormat Format, bool bClear, VkImageLayout InitialLayout, VkImageLayout FinalLayout)
+VkRenderPass FVulkanDevice::GetRenderPass(VkFormat Format, bool bClear, VkImageLayout InitialLayout, VkImageLayout FinalLayout,
+	VkFormat DepthFormat, bool bClearDepth)
 {
+	// Formats are small enum values (below 2^16).
 	const uint64 Key = static_cast<uint64>(Format)
 		| (static_cast<uint64>(bClear) << 32)
 		| (static_cast<uint64>(LayoutKey(InitialLayout)) << 33)
-		| (static_cast<uint64>(LayoutKey(FinalLayout)) << 36);
+		| (static_cast<uint64>(LayoutKey(FinalLayout)) << 36)
+		| (static_cast<uint64>(bClearDepth) << 39)
+		| (static_cast<uint64>(DepthFormat) << 40);
 	if (auto It = RenderPasses.find(Key); It != RenderPasses.end())
 	{
 		return It->second;
@@ -622,11 +627,28 @@ VkRenderPass FVulkanDevice::GetRenderPass(VkFormat Format, bool bClear, VkImageL
 	Attachment.initialLayout = InitialLayout;
 	Attachment.finalLayout = FinalLayout;
 
+	VkAttachmentDescription Attachments[2] = { Attachment, {} };
+	const bool bDepth = DepthFormat != VK_FORMAT_UNDEFINED;
+	if (bDepth)
+	{
+		VkAttachmentDescription& DepthAttachment = Attachments[1];
+		DepthAttachment.format = DepthFormat;
+		DepthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		DepthAttachment.loadOp = bClearDepth ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+		DepthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		DepthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		DepthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		DepthAttachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		DepthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	}
+
 	VkAttachmentReference ColorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+	VkAttachmentReference DepthRef{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 	VkSubpassDescription Subpass{};
 	Subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	Subpass.colorAttachmentCount = 1;
 	Subpass.pColorAttachments = &ColorRef;
+	Subpass.pDepthStencilAttachment = bDepth ? &DepthRef : nullptr;
 
 	// In: wait for earlier sampling/copies/attachment writes of the image (and,
 	// for swapchains, for the acquire semaphore wait at COLOR_ATTACHMENT_OUTPUT).
@@ -644,10 +666,18 @@ VkRenderPass FVulkanDevice::GetRenderPass(VkFormat Format, bool bClear, VkImageL
 	Dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 	Dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
 	Dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+	if (bDepth)
+	{
+		// The depth buffer is written by the previous pass that used it.
+		Dependencies[0].srcStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		Dependencies[0].srcAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		Dependencies[0].dstStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		Dependencies[0].dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	}
 
 	VkRenderPassCreateInfo CreateInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
-	CreateInfo.attachmentCount = 1;
-	CreateInfo.pAttachments = &Attachment;
+	CreateInfo.attachmentCount = bDepth ? 2u : 1u;
+	CreateInfo.pAttachments = Attachments;
 	CreateInfo.subpassCount = 1;
 	CreateInfo.pSubpasses = &Subpass;
 	CreateInfo.dependencyCount = 2;

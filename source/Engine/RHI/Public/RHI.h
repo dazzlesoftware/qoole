@@ -40,9 +40,11 @@ enum class EPixelFormat : uint8
 	R8_UNORM,
 	R8G8B8A8_UNORM,
 	B8G8R8A8_UNORM,
+	D32_FLOAT, // depth buffers only (see FRHITextureDesc)
 };
 
 uint32 GetBytesPerPixel(EPixelFormat Format);
+inline bool IsDepthFormat(EPixelFormat Format) { return Format == EPixelFormat::D32_FLOAT; }
 
 enum class EBufferUsage : uint8
 {
@@ -92,7 +94,8 @@ struct FRHITextureDesc
 };
 
 // A sampled 2D texture, optionally also a render target. Outside a render
-// pass, textures are always ready to sample.
+// pass, textures are always ready to sample. A D32_FLOAT texture is a depth
+// buffer instead: it cannot be sampled, only passed to BeginRenderPass.
 class FRHITexture
 {
 public:
@@ -136,6 +139,7 @@ struct FRHIShaderBytecode
 enum class EVertexFormat : uint8
 {
 	Float2,
+	Float3,
 	Float4,
 	UByte4N, // 4 x uint8, normalized to [0, 1]
 };
@@ -171,6 +175,10 @@ struct FRHIGraphicsPipelineDesc
 	ESamplerFilter SamplerFilter = ESamplerFilter::Linear;
 	EPixelFormat RenderTargetFormat = EPixelFormat::R8G8B8A8_UNORM;
 	uint32 PushConstantSize = 0; // bytes, multiple of 4, at most 64
+	// D32_FLOAT for pipelines used in passes with a depth buffer; the test is
+	// "less or equal" and passes with depth draw only with such pipelines.
+	EPixelFormat DepthFormat = EPixelFormat::Unknown;
+	bool bDepthWrite = true;
 	const char* DebugName = nullptr;
 };
 
@@ -201,6 +209,9 @@ public:
 	virtual void BeginRenderPass(FRHISwapChain& Target, const TOptional<FLinearColor>& ClearColor) = 0;
 	// Draw into a render target texture.
 	virtual void BeginRenderPass(FRHITexture& Target, const TOptional<FLinearColor>& ClearColor) = 0;
+	// Draw into a render target texture with a depth buffer of the same size
+	// (D32_FLOAT); ClearDepth unset keeps its contents.
+	virtual void BeginRenderPass(FRHITexture& Target, FRHITexture& DepthTarget, const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth) = 0;
 	virtual void EndRenderPass() = 0;
 
 	virtual void SetViewport(float X, float Y, float Width, float Height) = 0;

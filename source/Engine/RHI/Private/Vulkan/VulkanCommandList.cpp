@@ -73,22 +73,50 @@ void FVulkanCommandList::BeginRenderPass(FRHITexture& InTarget, const TOptional<
 	BeginPass(RenderPass, Framebuffer, Target.GetWidth(), Target.GetHeight(), ClearColor);
 }
 
-void FVulkanCommandList::BeginPass(VkRenderPass RenderPass, VkFramebuffer Framebuffer, uint32 Width, uint32 Height, const TOptional<FLinearColor>& ClearColor)
+void FVulkanCommandList::BeginRenderPass(FRHITexture& InTarget, FRHITexture& InDepthTarget, const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth)
 {
-	VkClearValue ClearValue{};
+	check(CommandBuffer && !bInRenderPass);
+	FVulkanTexture& Target = static_cast<FVulkanTexture&>(InTarget);
+	FVulkanTexture& Depth = static_cast<FVulkanTexture&>(InDepthTarget);
+	bInRenderPass = true;
+	if (!ensuref(Target.GetDesc().bRenderTarget && IsDepthFormat(Depth.GetFormat())
+		&& Depth.GetWidth() == Target.GetWidth() && Depth.GetHeight() == Target.GetHeight(),
+		"Vulkan: BeginRenderPass needs a render target and a depth buffer of the same size"))
+	{
+		bSkipPass = true;
+		return;
+	}
+	const VkRenderPass RenderPass = Device.GetRenderPass(Target.GetVkFormat(), ClearColor.has_value(),
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, Depth.GetVkFormat(), ClearDepth.has_value());
+	const VkFramebuffer Framebuffer = Target.GetFramebuffer(RenderPass, &Depth);
+	if (!RenderPass || !Framebuffer)
+	{
+		bSkipPass = true;
+		return;
+	}
+	BeginPass(RenderPass, Framebuffer, Target.GetWidth(), Target.GetHeight(), ClearColor, true, ClearDepth);
+}
+
+void FVulkanCommandList::BeginPass(VkRenderPass RenderPass, VkFramebuffer Framebuffer, uint32 Width, uint32 Height, const TOptional<FLinearColor>& ClearColor,
+	bool bHasDepth, const TOptional<float>& ClearDepth)
+{
+	// Clear values are indexed by attachment; unused ones are ignored.
+	VkClearValue ClearValues[2] = {};
 	if (ClearColor)
 	{
-		ClearValue.color.float32[0] = ClearColor->R;
-		ClearValue.color.float32[1] = ClearColor->G;
-		ClearValue.color.float32[2] = ClearColor->B;
-		ClearValue.color.float32[3] = ClearColor->A;
+		ClearValues[0].color.float32[0] = ClearColor->R;
+		ClearValues[0].color.float32[1] = ClearColor->G;
+		ClearValues[0].color.float32[2] = ClearColor->B;
+		ClearValues[0].color.float32[3] = ClearColor->A;
 	}
+	ClearValues[1].depthStencil.depth = ClearDepth.value_or(1.0f);
+	const uint32 ClearCount = bHasDepth && ClearDepth ? 2u : (ClearColor ? 1u : 0u);
 	VkRenderPassBeginInfo BeginInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 	BeginInfo.renderPass = RenderPass;
 	BeginInfo.framebuffer = Framebuffer;
 	BeginInfo.renderArea = { { 0, 0 }, { Width, Height } };
-	BeginInfo.clearValueCount = ClearColor ? 1u : 0u;
-	BeginInfo.pClearValues = ClearColor ? &ClearValue : nullptr;
+	BeginInfo.clearValueCount = ClearCount;
+	BeginInfo.pClearValues = ClearCount ? ClearValues : nullptr;
 	vkCmdBeginRenderPass(CommandBuffer, &BeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 	PassSize = FIntPoint(static_cast<int32>(Width), static_cast<int32>(Height));
