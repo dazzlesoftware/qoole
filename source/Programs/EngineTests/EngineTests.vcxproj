@@ -50,6 +50,7 @@
     <ClCompile Include="ClipStackTests.cpp" />
     <ClCompile Include="CoreTests.cpp" />
     <ClCompile Include="EditableTextTests.cpp" />
+    <ClCompile Include="FrameworkTests.cpp" />
     <ClCompile Include="GPUTests.cpp" />
     <ClCompile Include="InputTests.cpp" />
     <ClCompile Include="LayoutTests.cpp" />
