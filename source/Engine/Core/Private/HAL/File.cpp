@@ -145,8 +145,14 @@ bool FFile::Delete(const FString& Path, bool bEvenIfReadOnly)
 {
 	if (!Exists(Path))
 		return true;
-	if (bEvenIfReadOnly && IsReadOnly(Path))
+	// std::filesystem::remove deletes read-only files on Windows, so refuse
+	// them here unless asked.
+	if (IsReadOnly(Path))
+	{
+		if (!bEvenIfReadOnly)
+			return false;
 		SetReadOnly(Path, false);
+	}
 	std::error_code Error;
 	std::filesystem::remove(ToPath(Path), Error);
 	return !Exists(Path);
