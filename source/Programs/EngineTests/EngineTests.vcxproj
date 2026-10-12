@@ -55,6 +55,12 @@
     <ClCompile Include="InputTests.cpp" />
     <ClCompile Include="LayoutTests.cpp" />
     <ClCompile Include="ListViewTests.cpp" />
+    <ClCompile Include="MapEditorTests.cpp">
+      <!-- The map core headers are older C++ (see MapEditor.vcxproj). -->
+      <ConformanceMode>false</ConformanceMode>
+      <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(GenesisEngineDir)MapEditor\Public;$(GenesisSourceDir)Basic;$(GenesisSourceDir)Objects;$(GenesisSourceDir)Render;$(GenesisSourceDir)Game;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
     <ClCompile Include="PlatformTests.cpp" />
     <ClCompile Include="TestMain.cpp" />
     <ClCompile Include="TextTests.cpp" />
@@ -79,6 +85,12 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Engine\UI\UI.vcxproj">
       <Project>{3F5319A7-A0BC-4053-83E8-316D4FFD074A}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Engine\MapCore\MapCore.vcxproj">
+      <Project>{E6B3966D-7CCB-46DB-92A6-40893ED2E9DD}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Engine\MapEditor\MapEditor.vcxproj">
+      <Project>{248D610E-BEDE-4C49-AFD7-43F90E5F4B54}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\Engine\UIRenderer\UIRenderer.vcxproj">
       <Project>{436BBD32-CC21-56E4-94F1-B731DD66653A}</Project>
