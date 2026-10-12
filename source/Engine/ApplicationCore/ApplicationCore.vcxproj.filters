@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{79A35277-6CAD-5945-8DB3-848848F1FE3C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\GenericPlatform">
+      <UniqueIdentifier>{18414B39-5CE7-528D-AB6E-96C73280240C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\Null">
+      <UniqueIdentifier>{938CA457-0D26-5693-9F3E-AB9F440D746A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\Windows">
+      <UniqueIdentifier>{5F26388D-00C0-536A-8E24-126ACD1FA1E1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{2B2433F6-4636-531F-BF3B-FE197245745E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\GenericPlatform">
+      <UniqueIdentifier>{3A334F7C-D348-5561-B778-309D6D706F22}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\Null">
+      <UniqueIdentifier>{0AA1011D-332A-5481-930F-3C51C93C3599}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GenericPlatform\GenericPlatform.cpp">
+      <Filter>Private\GenericPlatform</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Null\NullPlatformApplication.cpp">
+      <Filter>Private\Null</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Windows\WindowsPlatformApplication.cpp">
+      <Filter>Private\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Windows\WindowsWindow.cpp">
+      <Filter>Private\Windows</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Private\Windows\WindowsPlatformApplication.h">
+      <Filter>Private\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GenericPlatform\Cursor.h">
+      <Filter>Public\GenericPlatform</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GenericPlatform\InputTypes.h">
+      <Filter>Public\GenericPlatform</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GenericPlatform\PlatformApplication.h">
+      <Filter>Public\GenericPlatform</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GenericPlatform\PlatformMessageHandler.h">
+      <Filter>Public\GenericPlatform</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GenericPlatform\PlatformWindow.h">
+      <Filter>Public\GenericPlatform</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Null\NullPlatformApplication.h">
+      <Filter>Public\Null</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
