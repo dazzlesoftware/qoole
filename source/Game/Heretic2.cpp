@@ -18,12 +18,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "Heretic2.h"
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "Draw.h"
+#include "DrawBase.h"
 #include <direct.h>
 
 Heretic2::Heretic2(void) : Game(GetNumUtils()) {
@@ -84,13 +84,8 @@ Heretic2::Init(void) {
 		return true;
 
 	if (!strlen(gameDir) || !LFile::ExistDir(gameDir)) {
-		CDirDialog dirDialog;
-		dirDialog.m_strTitle = "Locate Heretic 2 Folder";
-
-		if (!dirDialog.DoBrowse())
+		if (!LBrowseForFolder("Locate Heretic 2 Folder", gameDir, sizeof(gameDir)))
 			return false;
-
-		strcpy(gameDir, dirDialog.m_strPath);
 	}
 
 	sprintf(baseDir, "%s\\base", gameDir);
@@ -264,7 +259,7 @@ Heretic2::LoadModel(char *filename) {
 	}
 
 	verts = v;
-    ASSERT(verts > 0);
+    check(verts > 0);
 
 	LinkList<Edge3d> edgeList;
 	Edge3d *newEdge;
@@ -342,7 +337,7 @@ Heretic2::LoadModel(char *filename) {
 
 void
 Heretic2::ExtractTextures(void) {
-	char texdir[MAX_PATH];
+	char texdir[_MAX_PATH];
 	sprintf(texdir, "%s\\textures", baseDir);
 
 	static bool beenHere = false;
@@ -352,11 +347,11 @@ Heretic2::ExtractTextures(void) {
 
 	char text[256];
 	sprintf(text, "Some Heretic 2 textures not found.  Genesis Editor can extract them\nto '%s' for you.  Do that now?", texdir);
-	if(MessageBox(AfxGetMainWnd()->m_hWnd, text, AfxGetAppName(), MB_YESNO) != IDYES)
+	if(!LAskYesNo("%s", text))
 		return;
 
-	char outname[MAX_PATH];
-	char dirname[MAX_PATH];
+	char outname[_MAX_PATH];
+	char dirname[_MAX_PATH];
 	char *name, *c;
 	int i, count = 0, total = 0;
 
@@ -365,11 +360,11 @@ Heretic2::ExtractTextures(void) {
 			if(strstr(pak0->entry[i].filename, ".m8"))
 				total++;
 
-	CProgressWnd progressWnd(AfxGetMainWnd(), "Progress");
-	progressWnd.SetText("Extracting Textures");
-	progressWnd.NoCancelButton();
-
-	SetCursor(LoadCursor(NULL, IDC_WAIT));
+	FProgressOptions progressOptions;
+	progressOptions.Text = "Extracting Textures";
+	progressOptions.bCancellable = false;
+	progressOptions.bBusyCursor = true;
+	TUniquePtr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
 
 	for(i = 0; i < pak0->entries; i++) {
 		name = pak0->entry[i].filename;
@@ -389,13 +384,10 @@ Heretic2::ExtractTextures(void) {
 				break;
 			}
 
-			progressWnd.SetPos(count++ * 100 / total);
-			progressWnd.PeekAndPump();
+			progress->SetPercent(count++ * 100 / total);
 		}
 	}
 
-	progressWnd.Clear();
-	SetCursor(LoadCursor(NULL, IDC_ARROW));
 }
 
 typedef struct h2miptex_s
@@ -505,24 +497,21 @@ Heretic2::LoadTexture(Texture *texture, char *filename, int offset) {
 }
 
 //===== Additional properties pages. =====
-#include "resource.h"
-#include "PropSht.h"
-
-DWORD Heretic2::GetExtraPropPages(void) const {
+unsigned int Heretic2::GetExtraPropPages(void) const {
 	return (PROPPAGE_ADDSURFACE | PROPPAGE_ADDCONTENT);
 }
 
 //===== Game Map Compile Stuff =====
 const char *Heretic2::GetUtilName(int index) const {
 	static const char *utilNames[] = {"QBSP3", "QVis3", "QRad3", "Heretic 2"};
-	ASSERT(index >= 0 && index < 4);
+	check(index >= 0 && index < 4);
 	return utilNames[index];
 }
 
 const char *Heretic2::GetLeakFile(const char *docName) const {
 	static char leakPath[256];
 
-	ASSERT(docName != NULL);
+	check(docName != NULL);
 
 	if (!LFile::ExistDir(mapDir))
 		return NULL;

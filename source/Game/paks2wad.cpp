@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "Quake.h"
 
 struct dentry_t {
@@ -58,7 +58,7 @@ int count = 0;
 int meter = 0;
 
 int pTotal;
-bool (*ProgressFunc)(int percent);
+static IProgressTask *Progress;
 
 void readbsp(char *filename, FILE *file, long offset) {
 
@@ -131,12 +131,12 @@ void readpak(FILE *file) {
 		strlwr(pak_entry[i].filename);
 		if(strstr(pak_entry[i].filename, ".bsp") && !strstr(pak_entry[i].filename, "b_")) {
 //			Dialog_MeterUpdate(meter + i, "Scanning %s", pak_entry[i].filename);
-			ProgressFunc((meter + i) * 100 / pTotal);
+			Progress->SetPercent((meter + i) * 100 / pTotal);
 			readbsp(pak_entry[i].filename, file, pak_entry[i].offset);
 		}
 		else
 //			Dialog_MeterUpdate(meter + i, NULL);
-			ProgressFunc((meter + i) * 100 / pTotal);
+			Progress->SetPercent((meter + i) * 100 / pTotal);
 	}
 
 	meter += t;
@@ -172,10 +172,10 @@ void getpalfrompak(char *pak_filename) {
 	fclose(file);
 }
 
-bool paks2wad(char *quake_root, char *wad_output, bool (*ProgFunc)(int p)) {
+bool paks2wad(char *quake_root, char *wad_output, IProgressTask *progress) {
 	char pak0[256], pak1[256];
 
-	ProgressFunc = ProgFunc;
+	Progress = progress;
 
 	tex = (tex_t *)malloc(sizeof(tex_t) * 2500);
 
@@ -231,7 +231,7 @@ bool paks2wad(char *quake_root, char *wad_output, bool (*ProgFunc)(int p)) {
 			continue;
 
 //		Dialog_MeterUpdate(meter + i, "Adding %s", tex[i].name);
-		ProgressFunc((meter + i) * 100 / pTotal);
+		Progress->SetPercent((meter + i) * 100 / pTotal);
 
 		size = sizeof(miptex_t) + tex[i].miptex.width * tex[i].miptex.height * 85 / 64;
 
@@ -254,7 +254,7 @@ bool paks2wad(char *quake_root, char *wad_output, bool (*ProgFunc)(int p)) {
 
 		wad_header.offset += size;
 
-		TRACE("%s\n", wad_entry[i].name);
+		GLog->Logf(ELogVerbosity::Verbose, "%s\n", wad_entry[i].name);
 	}
 
 	fseek(wad_file, 0, SEEK_SET);

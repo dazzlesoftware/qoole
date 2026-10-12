@@ -21,17 +21,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __LCOMMON_H
 #define __LCOMMON_H
 
-#ifndef ASSERT
-#include <assert.h>
-#define ASSERT assert
-#endif
+#include "CoreMinimal.h"
 
 #include "list.h"
 
 // ========== LCommon ==========
 
+// Text passed to these is in the ANSI code page, like all char strings in
+// the map core. They reach the user through FServices (Core).
 void LError(const char *fmt, ...);
 void LFatal(const char *fmt = 0, ...);
+bool LAskYesNo(const char *fmt, ...);
+bool LBrowseForFolder(const char *title, char *path, int pathSize);
 
 
 // ========== LFile ==========
@@ -179,15 +180,18 @@ public:
 	~LConfig(void);
 
 	// The variable's C++ type decides how it is loaded and saved, so a bool
-	// or WORD is never accessed as a 4-byte int. type is the LVAR_* kind the
-	// caller expects. Numbers outside [minVal, maxVal] in the registry are
-	// ignored and the variable keeps its current value.
+	// or unsigned short is never accessed as a 4-byte int. type is the
+	// LVAR_* kind the caller expects. Numbers outside [minVal, maxVal] in the
+	// settings are ignored and the variable keeps its current value.
+	//
+	// Settings are read from and written to FServices::GetConfig(); the
+	// editor's store is its registry profile.
 	void RegisterVar(char *name, int *ptr, int type,
 					 int minVal = INT_MIN, int maxVal = INT_MAX);
-	void RegisterVar(char *name, UINT *ptr, int type,
+	void RegisterVar(char *name, unsigned int *ptr, int type,
 					 int minVal = 0, int maxVal = INT_MAX);
 	void RegisterVar(char *name, bool *ptr, int type);
-	void RegisterVar(char *name, WORD *ptr, int type);
+	void RegisterVar(char *name, unsigned short *ptr, int type);
 	void RegisterVar(char *name, float *ptr, int type);
 	void RegisterVar(char *name, char *ptr, int type, int size = 256);
 	template<size_t N>
@@ -235,23 +239,6 @@ public:
 };
 
 
-// ========== LLibrary ==========
-
-class LLibrary : public ElmNode {
-public:
-	LLibrary(char *libName);
-	~LLibrary();
-
-	static HINSTANCE FindLibrary(char *libName);
-
-private:
-	char name[64];
-	HINSTANCE hInst;
-
-	static LinkList<LLibrary> libs;
-};
-
-
 // ========== Time Code ==========
 
 void StartTime(void);
@@ -263,7 +250,7 @@ int GetTime(void);
 extern const char *FormatFloat(float number);
 
 // ========== Conversion stuff ==========
-extern bool Str2Int(const char *str, UINT &val);
+extern bool Str2Int(const char *str, unsigned int &val);
 
 
 // ========== Old VOS Stuff ==========

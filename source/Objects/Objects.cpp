@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * objects.cpp
  */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -46,9 +46,9 @@ Object::Object(const char *className) {
 
   if (className != NULL) {
     Entity *ePtr = new Entity(className);
-    ASSERT(ePtr != NULL);  // Sanity Check.
+    check(ePtr != NULL);  // Sanity Check.
     ePtr = SetEntity(ePtr);
-    ASSERT(ePtr == NULL);  // Snaity.
+    check(ePtr == NULL);  // Snaity.
   }
 }
 
@@ -62,7 +62,7 @@ Object::Object(const Object &src) {
 
 Object::~Object(void) {
   // Sanity Check.
-  ASSERT(IsLeaf() || (!HasBrush() && !IsItemNode()));
+  check(IsLeaf() || (!HasBrush() && !IsItemNode()));
 
   DelObj();
   delete iterChildrenPtr;
@@ -80,7 +80,7 @@ Object::operator=(const Object &src) {
   DelObj(true);
 
   // Sanity.
-  ASSERT(parent == NULL);
+  check(parent == NULL);
 
   brush = (src.brush == NULL ? NULL : new Geometry(*src.brush));
 
@@ -162,7 +162,7 @@ Object::GetParentPtr(void) const {
 Object &
 Object::GetParent(void) const {
   // Sanity Check.
-  ASSERT(parent != NULL);
+  check(parent != NULL);
   return *parent;
 }
 
@@ -186,11 +186,11 @@ Object::GetNumChildren(void) const {
 Object &
 Object::AddChild(Object &childNode, bool resetBound, int index) {
   // Sanity Check.
-  ASSERT(!HasBrush());
-  ASSERT(!HasEntity() || (IsModelNode() &&
-          (strcmp(GetEntityPtr(true)->GetClassName(), "worldspawn") == 0 ||
+  check(!HasBrush());
+  check(!HasEntity() || (IsModelNode() &&
+          (strcmp(GetEntityPtr(true)->GetClassname(), "worldspawn") == 0 ||
            childNode.CountEntities() == 0)));
-  ASSERT(index >= index -1 && index <= children.NumOfElm());
+  check(index >= index -1 && index <= children.NumOfElm());
 
   childNode.SetParent(*this);
   if (index == -1)
@@ -207,7 +207,7 @@ Object::AddChild(Object &childNode, bool resetBound, int index) {
 Object &
 Object::RemoveChild(Object &childNode, bool resetBound, int *pIndex) {
   // PreCondition.
-  ASSERT(IsMyChild(childNode));
+  check(IsMyChild(childNode));
 
   Object *rtnVal;
 
@@ -226,7 +226,7 @@ Object::RemoveChild(Object &childNode, bool resetBound, int *pIndex) {
 Object &
 Object::GetChild(int childNum) const {
   // PreCondition.
-  ASSERT(childNum >= 0 && childNum < children.NumOfElm());
+  check(childNum >= 0 && childNum < children.NumOfElm());
 
   return children[childNum];
 }
@@ -234,8 +234,8 @@ Object::GetChild(int childNum) const {
 int
 Object::FloatChildren(bool resetBound) {
   // Sanity.
-  ASSERT(!IsRoot());
-  ASSERT(GetNumChildren() > 0);
+  check(!IsRoot());
+  check(GetNumChildren() > 0);
 
   int rtnVal = GetNumChildren();
 
@@ -254,7 +254,7 @@ Object::FloatChildren(bool resetBound) {
 
   Object *childPtr;
   Object *parentPtr = GetParentPtr();
-  ASSERT(parentPtr != NULL);  // Sanity.
+  check(parentPtr != NULL);  // Sanity.
 
   IterLinkList<Object> *iter = &(GetIterChildren());
   iter->Reset();
@@ -270,7 +270,7 @@ Object::FloatChildren(bool resetBound) {
     SetBoundRadius();
 
   // Post Condition.
-  ASSERT(GetNumChildren() == 0);
+  check(GetNumChildren() == 0);
 
   return rtnVal;
 }
@@ -278,7 +278,7 @@ Object::FloatChildren(bool resetBound) {
 IterLinkList<Object> &
 Object::GetIterChildren(void) {
   // Sanity.
-  ASSERT(iterChildrenPtr != NULL);
+  check(iterChildrenPtr != NULL);
 
   iterChildrenPtr->Reset();
   return *iterChildrenPtr;
@@ -311,9 +311,9 @@ Object::FindCommonAncestor(Object &node) {
 int
 Object::CountNodes(int cType) const {
   // PreCondition
-  ASSERT(cType >= 0 && cType < 4);
+  check(cType >= 0 && cType < 4);
   // Sanity Check.
-  ASSERT(IsLeaf() || (!HasBrush() && !IsItemNode()));
+  check(IsLeaf() || (!HasBrush() && !IsItemNode()));
 
   int rtnVal = 0;
   Object *chld;
@@ -430,7 +430,7 @@ Object::HasBrush(void) const {
 Geometry &
 Object::GetBrush(void) const {
   // Sanity Check.
-  ASSERT(brush != NULL);
+  check(brush != NULL);
 
   return *brush;
 }
@@ -438,7 +438,7 @@ Object::GetBrush(void) const {
 Geometry *
 Object::SetBrush(Geometry *brushPtr) {
   // PreCondition.
-  ASSERT(IsLeaf() && (!HasEntity() || IsModelNode()));
+  check(IsLeaf() && (!HasEntity() || IsModelNode()));
 
   Geometry *rtnVal = brush;
 
@@ -451,7 +451,7 @@ Object::SetBrush(Geometry *brushPtr) {
 bool
 Object::HollowInBrush(float delta) {
   // PreCondition.
-  ASSERT(HasBrush());
+  check(HasBrush());
 
   LinkList<Geometry> *brushListPtr;
   Geometry *hollowee;
@@ -514,10 +514,10 @@ Object::HollowOutBrush(float delta) {
 
   if (!rtnVal) {
     holdBrush = SetBrush(holdBrush);
-    ASSERT(holdBrush != NULL);
+    check(holdBrush != NULL);
   }
   else {
-    ASSERT(brush == NULL);
+    check(brush == NULL);
   }
 
   delete holdBrush;
@@ -545,11 +545,11 @@ Object::GetEntityPtr(bool bubble) const {
 Entity *
 Object::SetEntity(Entity *ePtr, bool resetBound) {
   // PreCondition.
-  ASSERT(ePtr == NULL || ePtr->IsModelEntity() || (!HasBrush() && IsLeaf()));
+  check(ePtr == NULL || ePtr->IsModelEntity() || (!HasBrush() && IsLeaf()));
 
   Entity *rtnVal = entityPtr;
   if (ePtr != NULL && objName[0] == '\0') {
-	  SetObjName(ePtr->GetClassName());
+	  SetObjName(ePtr->GetClassname());
   }
 
   entityPtr = ePtr;
@@ -571,7 +571,7 @@ Object::IsModelNode(void) const {
 const WireFrameGeom &
 Object::GetItemWireFrame(void) const {
   // Sanity.
-  ASSERT(IsItemNode());
+  check(IsItemNode());
 
   return (GetEntityPtr()->GetItemWireFrame());
 }
@@ -614,9 +614,9 @@ Object::GetObjDimension(Vector3d &dimVec) {
   GetBoundBox(minVec, maxVec);
 
   // Sanity.
-  ASSERT(minVec.GetX() <= maxVec.GetX());
-  ASSERT(minVec.GetY() <= maxVec.GetY());
-  ASSERT(minVec.GetZ() <= maxVec.GetZ());
+  check(minVec.GetX() <= maxVec.GetX());
+  check(minVec.GetY() <= maxVec.GetY());
+  check(minVec.GetZ() <= maxVec.GetZ());
 
   dimVec.SubVector(maxVec, minVec);
 }
@@ -638,9 +638,9 @@ Object::GetMinBoundVec(void) {
   GetBoundBox(minVec, maxVec);
 
   // Sanity.
-  ASSERT(minVec.GetX() <= maxVec.GetX());
-  ASSERT(minVec.GetY() <= maxVec.GetY());
-  ASSERT(minVec.GetZ() <= maxVec.GetZ());
+  check(minVec.GetX() <= maxVec.GetX());
+  check(minVec.GetY() <= maxVec.GetY());
+  check(minVec.GetZ() <= maxVec.GetZ());
 
   return minVec;
 }
@@ -655,9 +655,9 @@ Object::GetMaxBoundVec(void) {
   GetBoundBox(minVec, maxVec);
 
   // Sanity.
-  ASSERT(minVec.GetX() <= maxVec.GetX());
-  ASSERT(minVec.GetY() <= maxVec.GetY());
-  ASSERT(minVec.GetZ() <= maxVec.GetZ());
+  check(minVec.GetX() <= maxVec.GetX());
+  check(minVec.GetY() <= maxVec.GetY());
+  check(minVec.GetZ() <= maxVec.GetZ());
 
   return maxVec;
 }
@@ -665,7 +665,7 @@ Object::GetMaxBoundVec(void) {
 void
 Object::GetBoundBox(Vector3d &minVec, Vector3d &maxVec) {
   // Sanity.
-  // ASSERT(!IsRoot());
+  // check(!IsRoot());
 
   if (IsItemNode()) {
     Vector3d bVec(boundRadius, boundRadius, boundRadius);
@@ -735,7 +735,7 @@ Object::Transform(const Matrix44 &transMatrix,
   TransSpace::SetScale(sVec.NewVector(1.0f, 1.0f, 1.0f));
   if (IsItemNode()) {
     // Sanity
-    ASSERT(GetNumChildren() == 0);
+    check(GetNumChildren() == 0);
 
     Vector3d fVec, tVec;
     m1.Transform(pVec, 0.0f, 0.0f, 0.0f);
@@ -746,7 +746,7 @@ Object::Transform(const Matrix44 &transMatrix,
   }
   else if (HasBrush()) {
 	// Sanity
-    ASSERT(GetNumChildren() == 0);
+    check(GetNumChildren() == 0);
 
     GetBrush().Transform(m1, mirrorEffect);
     GetBrush().CenterGeometry(pVec);
@@ -757,7 +757,7 @@ Object::Transform(const Matrix44 &transMatrix,
   }
   else {
     // Sanity.
-    ASSERT(GetNumChildren() > 0);
+    check(GetNumChildren() > 0);
 
     Vector3d aveVec(0.0f, 0.0f, 0.0f);
     Object *childPtr;
@@ -798,7 +798,7 @@ Object::GetTransMatrix(Object &startObj,
 	const Object *pStart = &startObj;
 	const Object *pEnd = &endObj;
 	const Object *pRoot = &(startObj.GetRoot());
-	ASSERT(&(endObj.GetRoot()) == pRoot);
+	check(&(endObj.GetRoot()) == pRoot);
 
 	// Traver up the tree from startObj until
 	//  we reach a common ancestor.
@@ -808,14 +808,14 @@ Object::GetTransMatrix(Object &startObj,
 		pStart->CalTransSpaceMatrix(m3.SetIdentity());
 		m1 = m2.Multiply(m3, m1);
 		pStart = pStart->GetParentPtr();
-		ASSERT(pStart != NULL);
+		check(pStart != NULL);
 	}
 
 	m2.SetIdentity();
 	while (pStart != pEnd) {
 		pEnd->CalInvTransSpaceMatrix(m2);
 		pEnd = pEnd->GetParentPtr();
-		ASSERT(pEnd != NULL);
+		check(pEnd != NULL);
 	}
 
 	transMatrix.Multiply(m2, m1);
@@ -848,7 +848,7 @@ Object::SetOrientation(const Vector3d &frontVec, const Vector3d &topVec) {
   if (CountEntities() > 0) {
     // Hack to check for the camera intermission entity.
     if (!IsItemNode() ||
-        strcmp(GetEntityPtr()->GetClassName(), "info_intermission") != 0) {
+        strcmp(GetEntityPtr()->GetClassname(), "info_intermission") != 0) {
       Vector3d xAxis(1.0f, 0.0f, 0.0f);
       Vector3d yAxis(0.0f, 1.0f, 0.0f);
 
@@ -895,7 +895,7 @@ Object::SetScale(const Vector3d &newScale) {
   else {
     rtnVal = &(TransSpace::GetScale());
     // Sanity.
-    ASSERT(rtnVal->GetX() == 1.0 &&
+    check(rtnVal->GetX() == 1.0 &&
            rtnVal->GetY() == 1.0 &&
            rtnVal->GetZ() == 1.0);
   }
@@ -915,7 +915,7 @@ Object::ChangeScale(const Vector3d &scaleDelta) {
   else {
     rtnVal = &(TransSpace::GetScale());
     // Sanity.
-    ASSERT(rtnVal->GetX() == 1.0 &&
+    check(rtnVal->GetX() == 1.0 &&
            rtnVal->GetY() == 1.0 &&
            rtnVal->GetZ() == 1.0);
   }
@@ -979,7 +979,7 @@ Object::HitObject(const Line &ray, float rangeBegin,
   bool intrsct;
 
   intrsct = perp.Intersect(ray, intrsctPt);
-  ASSERT(intrsct);  // Sanity Check.
+  check(intrsct);  // Sanity Check.
   if (intrsctPt.GetMag() > GetBoundRadius() + 0.1)
     return false;
 
@@ -1028,16 +1028,16 @@ bool
 Object::CSGSubtract(const LinkList<ObjectPtr> &cutters) {
 #ifndef NDEBUG
   // Sanity.
-  ASSERT(!IsRoot());
-  ASSERT(!IsItemNode());
-  ASSERT(!IsLeaf() || HasBrush());
-  ASSERT(cutters.NumOfElm() > 0);
+  check(!IsRoot());
+  check(!IsItemNode());
+  check(!IsLeaf() || HasBrush());
+  check(cutters.NumOfElm() > 0);
   Object *oPtr;
   for(int i = 0; i < cutters.NumOfElm(); i++) {
     oPtr = cutters[i].GetPtr();
-    ASSERT(oPtr->GetParentPtr() == GetParentPtr());
-	ASSERT(oPtr != this);
-    // ASSERT(!oPtr->IsItemNode());
+    check(oPtr->GetParentPtr() == GetParentPtr());
+	check(oPtr != this);
+    // check(!oPtr->IsItemNode());
   }
 #endif
 
@@ -1078,10 +1078,10 @@ Object::CSGSubtract(const LinkList<ObjectPtr> &cutters) {
 bool
 Object::CSGObjNodeSubtract(Object &cutter, bool resetBound) {
   // Sanity.
-  ASSERT(!IsRoot());
-  ASSERT(!IsItemNode());
-  ASSERT(this != &cutter);
-  ASSERT(!IsMyAncestor(cutter));
+  check(!IsRoot());
+  check(!IsItemNode());
+  check(this != &cutter);
+  check(!IsMyAncestor(cutter));
 
   Matrix44 t;
   bool modified;
@@ -1090,7 +1090,7 @@ Object::CSGObjNodeSubtract(Object &cutter, bool resetBound) {
   t.Multiply(GetParent().GetTransformation());
   
   if (GetNumChildren() > 0) {
-    ASSERT(!HasBrush());
+    check(!HasBrush());
 
     SetTransformation(t);
 
@@ -1117,7 +1117,7 @@ Object::CSGObjNodeSubtract(Object &cutter, bool resetBound) {
   }
 
   // Sanity.
-  ASSERT(HasBrush());
+  check(HasBrush());
 
   // Traverse the cutter tree now.
   cutter.CalTransSpaceMatrix(t);
@@ -1131,7 +1131,7 @@ Object::CSGObjNodeSubtract(Object &cutter, bool resetBound) {
 
   // Case 2: One brush left.  Same obj node.
   if (HasBrush()) {
-    ASSERT(IsLeaf());
+    check(IsLeaf());
 
     // Re-adjust position and orientation of obj.
     Vector3d posVec, sVec;
@@ -1151,8 +1151,8 @@ Object::CSGObjNodeSubtract(Object &cutter, bool resetBound) {
   //  Float all the new sub pieces to the parent node
   //   if no model entity is attached.
   //  Let parent node handle deletion of current node.
-  ASSERT(GetNumChildren() > 0);
-  ASSERT(!HasBrush());
+  check(GetNumChildren() > 0);
+  check(!HasBrush());
 
   if (!IsModelNode()) {
     if (resetBound)
@@ -1166,10 +1166,10 @@ Object::CSGObjNodeSubtract(Object &cutter, bool resetBound) {
 bool
 Object::CSGTraverseCutter(Object &cuttee) {
   // Sanity.
-  ASSERT(!IsItemNode());
-  ASSERT(this != &cuttee);
-  ASSERT(!cuttee.IsMyAncestor(*this));
-  ASSERT(cuttee.HasBrush());
+  check(!IsItemNode());
+  check(this != &cuttee);
+  check(!cuttee.IsMyAncestor(*this));
+  check(cuttee.HasBrush());
 
   if (HasBrush()) {
     return CSGBrushSubtract(cuttee, *this);
@@ -1199,9 +1199,9 @@ Object::CSGTraverseCutter(Object &cuttee) {
 bool
 Object::CSGBrushSubtract(Object &cuttee, Object &cutter) {
   // PreCondition.
-  ASSERT(cuttee.HasBrush());
-  ASSERT(cutter.HasBrush());
-  ASSERT(!cuttee.IsRoot());
+  check(cuttee.HasBrush());
+  check(cutter.HasBrush());
+  check(!cuttee.IsRoot());
 
   Geometry cutterBrush(cutter.GetBrush());
   LinkList<Geometry> *brushListPtr;
@@ -1261,7 +1261,7 @@ Object::CSGSelfIntersect(const LinkList<ObjectPtr> *pObjsPtrs) const {
 #ifndef NDEBUG
   if (pObjsPtrs) {
     for(int k = 0; k < pObjsPtrs->NumOfElm(); k++) {
-      ASSERT((*pObjsPtrs)[k].GetPtr()->GetParentPtr() == this);
+      check((*pObjsPtrs)[k].GetPtr()->GetParentPtr() == this);
     }
   }
 #endif
@@ -1282,7 +1282,7 @@ Object::CSGSelfIntersect(const LinkList<ObjectPtr> *pObjsPtrs) const {
 
   if (numListElm > 0) {
     // Sanity.
-    ASSERT(rtnVal == NULL);
+    check(rtnVal == NULL);
 
     bool failed = false;
     Geometry *pNewBrush, *pHold, *pCombined = NULL;
@@ -1327,7 +1327,7 @@ Object::CSGSelfIntersect(const LinkList<ObjectPtr> *pObjsPtrs) const {
         delete pCombined;
     }
     else {
-      ASSERT(pCombined != NULL);
+      check(pCombined != NULL);
       rtnVal = pCombined;
     }
   }
@@ -1371,7 +1371,7 @@ Object::PlaneClip(const Plane &clipPlane, bool bubble) {
     }
   }
 
-  ASSERT(GetNumChildren() > 0);
+  check(GetNumChildren() > 0);
 
   bool rtnVal = false;
 
@@ -1419,7 +1419,7 @@ Object::LoadObjFile(const char *fName,
                     int (*ErrorPromptFunc)(const char *message),
                     bool (*ProgressFunc)(int percent)) {
   // PreCondition.
-  ASSERT(fName != NULL);
+  check(fName != NULL);
 
   bool rtnVal;
   LFile *inFile = new LFile;
@@ -1577,7 +1577,7 @@ bool
 Object::SaveObjFile(const char *fName, bool append,
                     bool (*ProgressFunc)(int percent)) {
   // PreCondition.
-  ASSERT(fName != NULL);
+  check(fName != NULL);
 
   FILE *fOutPtr;
   int brushNum, entNum, objNum;
@@ -1617,9 +1617,9 @@ Object::SaveObjFile(const char *fName, bool append,
   TransSpace::SetPosition(origPosition);
 
   // Sanity Check.
-  ASSERT(brushSaved == brushNum);
-  ASSERT(entSaved == entNum);
-  ASSERT(objSaved == objNum);
+  check(brushSaved == brushNum);
+  check(entSaved == entNum);
+  check(objSaved == objNum);
 
   if (fOutPtr != NULL)
     fclose(fOutPtr);
@@ -1772,7 +1772,7 @@ RTN_LOAD_OBJECT:
 void
 Object::AssignObjIds(int &brushCnt, int &entCnt, int &objCnt) {
   // PreCondition.
-  ASSERT(brushCnt >=0 && entCnt >= 0 && objCnt >= 0);
+  check(brushCnt >=0 && entCnt >= 0 && objCnt >= 0);
 
   brushID = (HasBrush() ? brushCnt++ : -1);
   entID = (HasEntity() ? entCnt++ : -1);
@@ -1791,7 +1791,7 @@ int
 Object::SaveObject(FILE *outFile, int &pDone, int &pTotal, 
                    bool (*ProgressFunc)(int percent)) {
   // Sanity Check.
-  ASSERT(IsLeaf() || (!HasBrush() && !IsItemNode()));
+  check(IsLeaf() || (!HasBrush() && !IsItemNode()));
 
   int i, id, rtnVal;
   Vector3d vec1;
@@ -1815,9 +1815,9 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
   if (GetNumChildren() > 0) {
     iter.Reset();
     for(i = 0; !iter.IsDone(); i++) {
-      ASSERT(i < GetNumChildren());  // Sanity.
+      check(i < GetNumChildren());  // Sanity.
       id = (iter.GetNext())->objID;
-      ASSERT(id >= 0);  // Sanity.
+      check(id >= 0);  // Sanity.
       if ((i % 10) == 0) {
         if (i != 0)
           fprintf(outFile, "\n");
@@ -1830,14 +1830,14 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
   }
 
   if (HasBrush()) {
-    ASSERT(!IsItemNode());
-    ASSERT(brushID >= 0);
+    check(!IsItemNode());
+    check(brushID >= 0);
     fprintf(outFile, "  Brush: %d\n", brushID);
   }
 
   if (HasEntity()) {
     // Sanity Check.
-    ASSERT(entID >= 0);
+    check(entID >= 0);
     fprintf(outFile, "  Entity: %d\n", entID);
   }
 
@@ -1864,7 +1864,7 @@ int
 Object::SaveBrushes(FILE *outFile, int &pDone, int &pTotal,
                     bool (*ProgressFunc)(int percent)) {
   // Sanity Check
-  ASSERT(IsLeaf() || (!HasBrush() && !IsItemNode()));
+  check(IsLeaf() || (!HasBrush() && !IsItemNode()));
 
   IterLinkList<Object> iter(children);
   int rtnVal = 0;
@@ -1873,7 +1873,7 @@ Object::SaveBrushes(FILE *outFile, int &pDone, int &pTotal,
   if (HasBrush()) {
     Matrix44 t;
     t.SetIdentity();
-    ASSERT(brushID >= 0);
+    check(brushID >= 0);
     Geometry::WriteBoundGeometry(outFile, *brush, brushID, t);
     fprintf(outFile, "\n");
     rtnVal++;
@@ -1898,7 +1898,7 @@ int
 Object::SaveEntities(FILE *outFile, int &pDone, int &pTotal,
                      bool (*ProgressFunc)(int percent)) {
   // Sanity Check.
-  ASSERT(IsLeaf() || (!HasBrush() && !IsItemNode()));
+  check(IsLeaf() || (!HasBrush() && !IsItemNode()));
 
   IterLinkList<Object> iter(children);
   int rtnVal = 0;
@@ -1906,8 +1906,8 @@ Object::SaveEntities(FILE *outFile, int &pDone, int &pTotal,
   // Write out the current entity.
   if (HasEntity()) {
     // Sanity Check.
-    ASSERT(!IsItemNode() || IsLeaf());
-    ASSERT(entID >= 0);
+    check(!IsItemNode() || IsLeaf());
+    check(entID >= 0);
     Entity::WriteEntity(outFile, *(GetEntityPtr()), entID);
     fprintf(outFile, "\n");
     rtnVal++;

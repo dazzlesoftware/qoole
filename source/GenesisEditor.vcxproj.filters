@@ -19,18 +19,6 @@
     <Filter Include="Interface2">
       <UniqueIdentifier>{256D3E07-455E-5949-8E45-45F75713FF78}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Games">
-      <UniqueIdentifier>{53D096E7-4D6F-5F11-A946-06D4F9C77F45}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Render">
-      <UniqueIdentifier>{A193BEDD-8A31-5B56-9A39-9CD0EC3F5C10}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Objects">
-      <UniqueIdentifier>{A2E4A0E2-E122-5ACF-807A-7B6EB399D6C1}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Basic">
-      <UniqueIdentifier>{ADEAC528-80CF-50B2-9BEA-CED5D30B2853}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{69B21D07-7578-54BA-B140-0EF2901B1773}</UniqueIdentifier>
     </Filter>
@@ -52,6 +40,12 @@
       <Filter>Editor</Filter>
     </ClCompile>
     <ClInclude Include="Editor\EditorOp.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClCompile Include="Editor\MfcServices.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClInclude Include="Editor\MfcServices.h">
       <Filter>Editor</Filter>
     </ClInclude>
     <ClInclude Include="Editor\GenesisVersion.h">
@@ -311,120 +305,6 @@
     </ClCompile>
     <ClInclude Include="Interface2\ToolBarEx.h">
       <Filter>Interface2</Filter>
-    </ClInclude>
-    <ClCompile Include="Game\HalfLife.cpp">
-      <Filter>Games</Filter>
-    </ClCompile>
-    <ClInclude Include="Game\HalfLife.h">
-      <Filter>Games</Filter>
-    </ClInclude>
-    <ClCompile Include="Game\Heretic2.cpp">
-      <Filter>Games</Filter>
-    </ClCompile>
-    <ClInclude Include="Game\Heretic2.h">
-      <Filter>Games</Filter>
-    </ClInclude>
-    <ClCompile Include="Game\Hexen2.cpp">
-      <Filter>Games</Filter>
-    </ClCompile>
-    <ClInclude Include="Game\Hexen2.h">
-      <Filter>Games</Filter>
-    </ClInclude>
-    <ClCompile Include="Game\MapIO.cpp">
-      <Filter>Games</Filter>
-    </ClCompile>
-    <ClInclude Include="Game\Mapio.h">
-      <Filter>Games</Filter>
-    </ClInclude>
-    <ClCompile Include="Game\paks2wad.cpp">
-      <Filter>Games</Filter>
-    </ClCompile>
-    <ClCompile Include="Game\Quake.cpp">
-      <Filter>Games</Filter>
-    </ClCompile>
-    <ClInclude Include="Game\Quake.h">
-      <Filter>Games</Filter>
-    </ClInclude>
-    <ClCompile Include="Game\Quake2.cpp">
-      <Filter>Games</Filter>
-    </ClCompile>
-    <ClInclude Include="Game\Quake2.h">
-      <Filter>Games</Filter>
-    </ClInclude>
-    <ClCompile Include="Game\Sin.cpp">
-      <Filter>Games</Filter>
-    </ClCompile>
-    <ClInclude Include="Game\Sin.h">
-      <Filter>Games</Filter>
-    </ClInclude>
-    <ClCompile Include="Render\Clip.cpp">
-      <Filter>Render</Filter>
-    </ClCompile>
-    <ClInclude Include="Render\Clip.h">
-      <Filter>Render</Filter>
-    </ClInclude>
-    <ClCompile Include="Render\Selector.cpp">
-      <Filter>Render</Filter>
-    </ClCompile>
-    <ClInclude Include="Render\Selector.h">
-      <Filter>Render</Filter>
-    </ClInclude>
-    <ClCompile Include="Render\View.cpp">
-      <Filter>Render</Filter>
-    </ClCompile>
-    <ClInclude Include="Render\View.h">
-      <Filter>Render</Filter>
-    </ClInclude>
-    <ClCompile Include="Objects\Entity.cpp">
-      <Filter>Objects</Filter>
-    </ClCompile>
-    <ClInclude Include="Objects\Entity.h">
-      <Filter>Objects</Filter>
-    </ClInclude>
-    <ClCompile Include="Objects\EntList.cpp">
-      <Filter>Objects</Filter>
-    </ClCompile>
-    <ClInclude Include="Objects\EntList.h">
-      <Filter>Objects</Filter>
-    </ClInclude>
-    <ClCompile Include="Objects\Game.cpp">
-      <Filter>Objects</Filter>
-    </ClCompile>
-    <ClInclude Include="Objects\Game.h">
-      <Filter>Objects</Filter>
-    </ClInclude>
-    <ClCompile Include="Objects\Geometry.cpp">
-      <Filter>Objects</Filter>
-    </ClCompile>
-    <ClInclude Include="Objects\Geometry.h">
-      <Filter>Objects</Filter>
-    </ClInclude>
-    <ClCompile Include="Objects\Objects.cpp">
-      <Filter>Objects</Filter>
-    </ClCompile>
-    <ClInclude Include="Objects\Objects.h">
-      <Filter>Objects</Filter>
-    </ClInclude>
-    <ClCompile Include="Objects\Texture.cpp">
-      <Filter>Objects</Filter>
-    </ClCompile>
-    <ClInclude Include="Objects\Texture.h">
-      <Filter>Objects</Filter>
-    </ClInclude>
-    <ClCompile Include="Basic\LCommon.cpp">
-      <Filter>Basic</Filter>
-    </ClCompile>
-    <ClInclude Include="Basic\LCommon.h">
-      <Filter>Basic</Filter>
-    </ClInclude>
-    <ClInclude Include="Basic\List.h">
-      <Filter>Basic</Filter>
-    </ClInclude>
-    <ClCompile Include="Basic\Math3D.cpp">
-      <Filter>Basic</Filter>
-    </ClCompile>
-    <ClInclude Include="Basic\Math3D.h">
-      <Filter>Basic</Filter>
     </ClInclude>
     <Image Include="res\pviewico.bmp">
       <Filter>Resource Files</Filter>

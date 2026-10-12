@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define _LIST_H_
 
 #include <stdio.h>
+#include "Misc/AssertionMacros.h"
 //#include "LCommon.h"
 
 //==================== ElmNode ====================
@@ -130,7 +131,7 @@ template <class NodeType>
 int
 LinkList<NodeType>::NumOfElm(void) const {
   // PreConditions.
-  ASSERT(listSize >= 0);
+  check(listSize >= 0);
 
   return listSize;
 }
@@ -150,12 +151,12 @@ template <class NodeType>
 NodeType &
 LinkList<NodeType>::InsertNode(ElmNode &rec, int index) {
   // PreCondition.
-  ASSERT(listSize >= 0);
-  ASSERT(index >= 0 && index <= NumOfElm());
+  check(listSize >= 0);
+  check(index >= 0 && index <= NumOfElm());
 
   if (listSize == 0) {
     // Empty list.
-    ASSERT(index == 0);
+    check(index == 0);
 
     rec.SetPrevNode(NULL);
     rec.SetNextNode(NULL);
@@ -207,12 +208,12 @@ template <class NodeType>
 NodeType &
 LinkList<NodeType>::RemoveNode(ElmNode &rec) {
   // PreConditions.
-  ASSERT(FindNodeIndex(&rec) != -1);
-  ASSERT(listSize > 0);
+  check(FindNodeIndex(&rec) != -1);
+  check(listSize > 0);
 
   if (listSize == 1) {
     // Only 1 Node.
-    ASSERT(head == &rec);
+    check(head == &rec);
     head = tail = NULL;
   }
   else if (rec.GetPrevNode() == NULL) {
@@ -253,7 +254,7 @@ LinkList<NodeType>::FindNodeByIndex(int index) const {
   ElmNode *currPtr;
 
   // PreConditions.
-  ASSERT(index >= 0 && index < NumOfElm());
+  check(index >= 0 && index < NumOfElm());
 
   currPtr = head;
   for(i = 0; i < index; i++)
@@ -266,7 +267,7 @@ template <class NodeType>
 int
 LinkList<NodeType>::FindNodeIndex(const ElmNode *recPtr) const {
   // PreCondition.
-  ASSERT(recPtr != NULL);
+  check(recPtr != NULL);
 
   int i;
   ElmNode *currPtr;
@@ -285,8 +286,8 @@ template <class NodeType>
 LinkList<NodeType> &
 LinkList<NodeType>::operator=(const LinkList<NodeType> &src) {
   // Sanity Check.  Warn if list isn't empty.
-  ASSERT(listSize == 0);
-  ASSERT(head == NULL && tail == NULL);
+  check(listSize == 0);
+  check(head == NULL && tail == NULL);
 
   int i;
 
@@ -363,7 +364,7 @@ LinkList<NodeType>::OrderMerge(LinkList &mList,
   tail = nTail;
 
   // Post Condition.
-  ASSERT(mList.NumOfElm() == 0);
+  check(mList.NumOfElm() == 0);
   return listSize;
 }
 
@@ -419,7 +420,7 @@ template <class NodeType>
 int
 IterLinkList<NodeType>::Apply2All(bool (*ApplyFunc)(NodeType &node)) {
   // PreCondition.
-  ASSERT(ApplyFunc != NULL);
+  check(ApplyFunc != NULL);
 
   int rtnVal = 0;
 

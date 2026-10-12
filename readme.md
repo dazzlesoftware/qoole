@@ -18,6 +18,12 @@ are written to `source/Exec`. From a command line:
 
     msbuild source\Genesis.slnx -p:Configuration=Release -p:Platform=x64
 
+The solution also builds the engine modules under `source/Engine` (`Core`,
+and `MapCore`, the MFC-free map core the editor links) and `GenesisTests`,
+headless doctest tests of both. Run them after building:
+
+    source\Build\GenesisTests\x64\Release\GenesisTests.exe
+
 At startup the editor loads its data from `GenesisEditor.pak` (formerly
 `Qoole99.pak`), looked up in the working directory and then next to the
 executable.

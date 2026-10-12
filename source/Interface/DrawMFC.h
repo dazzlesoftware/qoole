@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // ========== FDrawMFC ==========
 
-class FDrawMFC : public FDraw {
+class FDrawMFC : public FWndDraw {
 public:
 	FDrawMFC(CWnd *wnd);
 	~FDrawMFC();

@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * entity.cpp
  */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 
 #include "LCommon.h"
 #include "entity.h"
@@ -46,7 +46,7 @@ Entity::Entity(const char *cName) {
 	wfGeomPtr = NULL;
 
 	EntList *entList = EntList::Get();
-	ASSERT(entList != NULL);
+	check(entList != NULL);
 
 	entInfo = entList->FindEnt(className);
 	if(entInfo) {
@@ -125,7 +125,7 @@ Entity::~Entity(void) {
 
 Entity &
 Entity::operator=(const Entity &src) {
-	ASSERT(src.className != NULL);
+	check(src.className != NULL);
 
 	int i;
 
@@ -184,7 +184,7 @@ Entity::ReadEntity(LFile *inFile, int entNum,
 				   int *pDone, int *pTotal,
 				   bool (*ProgressFunc)(int percent)) {
 	// PreCondition
-	ASSERT(entNum >= -1);
+	check(entNum >= -1);
 
 	Entity *rtnVal = NULL;
 	char *argBuf[MAX_ENTITY_KEYS];
@@ -281,8 +281,8 @@ Entity::GetVecPos(const Entity &entity) {
 void
 Entity::WriteEntity(FILE *outFile, const Entity &entity, int entNum) {
 	// PreCondition.
-	ASSERT(entNum >= -1);
-	ASSERT(entity.className != NULL);
+	check(entNum >= -1);
+	check(entity.className != NULL);
 
 	int i;
 	const Vector3d vec;
@@ -399,7 +399,7 @@ Entity::GetNumKeys(void) {
 
 const char *
 Entity::GetKeyNum(int num) const {
-	ASSERT(num >= 0 && num < keys);
+	check(num >= 0 && num < keys);
 	return key[num];
 }
 
@@ -436,9 +436,9 @@ Entity::IsModelEntity(void) const {
 }
 
 const char *
-Entity::GetClassName(void) const {
+Entity::GetClassname(void) const {
 	// Sanity Check.
-	ASSERT(className != NULL);
+	check(className != NULL);
 	return className;
 };
 
@@ -509,7 +509,7 @@ Entity::ParseKeys(const char *line, char **key, char **key2) {
 Entity *
 Entity::NewEntity(const char *keys[], int numKeys) {
 	// Sanity Check.
-	ASSERT(keys != NULL);
+	check(keys != NULL);
 
 	int c, i, val;
 	float x, y, z;

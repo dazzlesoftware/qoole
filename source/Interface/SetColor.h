@@ -72,7 +72,7 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 protected:
-	FDraw *pDraw;
+	FWndDraw *pDraw;
 
 private:
 	void OnRedraw();

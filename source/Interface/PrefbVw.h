@@ -68,7 +68,7 @@ protected:
 	Object *pRootObj;
 	Selector *pSlctr;
 	View *pView;
-	FDraw *pDraw;
+	FWndDraw *pDraw;
 
 	int width, height;
 	bool mouseLClick, mouseRClick, mouseLDrag, mouseRDrag;

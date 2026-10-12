@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef _VIEW_H_
 #define _VIEW_H_
 
-#include "Draw.h"
+#include "DrawBase.h"
 #include "math.h"
 #include "clip.h"
 #include "objects.h"

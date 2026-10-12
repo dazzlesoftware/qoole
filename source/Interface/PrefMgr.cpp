@@ -444,7 +444,7 @@ bool FPrefabMgr::AddPrefab(const char *filePath) {
 
 	// Backword compatibility for a bug.
 	if (pPrefab->HasEntity() &&
-		stricmp(pPrefab->GetEntityPtr()->GetClassName(), "worldspawn") == 0) {
+		stricmp(pPrefab->GetEntityPtr()->GetClassname(), "worldspawn") == 0) {
 		// Remove the worldspawn entity.
 		Entity *pEnt = pPrefab->SetEntity(NULL);
 		delete pEnt;

@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "GenesisVersion.h"
 
 #include "LCommon.h"
+#include "MfcServices.h"
 
 #include "Quake.h"
 #include "Quake2.h"
@@ -175,6 +176,9 @@ BOOL FEditorApp::InitInstance()
 	// such as the name of your company or organization.
 	SetRegistryKey(_T("Lithium Software"));
 
+	// Let the map core reach the user and the settings through MFC.
+	RegisterMfcServices();
+
 	LoadStdProfileSettings();  // Load standard INI file options (including MRU)
 
 	// Genesis specific registry stuff.
@@ -282,7 +286,9 @@ int FEditorApp::ExitInstance() {
 	FMapView::Exit();
 
 	LConfig::Exit();
-	
+
+	UnregisterMfcServices();
+
 	return CWinApp::ExitInstance();
 }
 

@@ -102,7 +102,13 @@ BOOL FCompile::OnInitDialog() {
 	GetDlgItem(IDC_CMPL_GAME)->ShowWindow(SW_SHOW);
 
 	// Load the dialog states.
-	pGame->InitCompileParams(m_bUtils, m_sParams, m_iSetParam);
+	bool runUtils[MAXUTILS];
+	const char *params[MAXUTILS];
+	pGame->InitCompileParams(runUtils, params, m_iSetParam);
+	for(i = 0; i < pGame->GetNumUtils(); i++) {
+		m_bUtils[i] = runUtils[i];
+		m_sParams[i] = params[i];
+	}
 
 	pCombo->SetCurSel(m_iSetParam);
 	m_sParam = m_sParams[m_iSetParam];
@@ -123,7 +129,13 @@ void FCompile::OnOK() {
 	m_sParams[m_iSetParam] = m_sParam;
 
 	// Save the dialog state.
-	pGame->SaveCompileParams(m_bUtils, m_sParams, m_iSetParam);
+	bool runUtils[MAXUTILS];
+	const char *params[MAXUTILS];
+	for(int i = 0; i < pGame->GetNumUtils(); i++) {
+		runUtils[i] = (m_bUtils[i] != FALSE);
+		params[i] = m_sParams[i];
+	}
+	pGame->SaveCompileParams(runUtils, params, m_iSetParam);
 
 	// Init the compile stage.
 	// ASSERT(cmpStage == -1);

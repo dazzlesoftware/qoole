@@ -34,7 +34,7 @@ public:
 	void ExtractTextures(void);
 
 	// Additional properties pages.
-	virtual DWORD GetExtraPropPages(void) const;
+	virtual unsigned int GetExtraPropPages(void) const;
 
 	// Game Map Compile Stuff.
 	int GetNumUtils(void) const { return 4; }

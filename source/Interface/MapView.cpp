@@ -302,7 +302,7 @@ void FMapView::CreateDraw(void) {
 		if(pDraw)
 			delete pDraw;
 
-		pDraw = FDraw::New(driver, bits, this, 2);
+		pDraw = FWndDraw::New(driver, bits, this, 2);
 
 		ASSERT(pDraw != NULL);
 		pDraw->SetZoomPtr(&zoomVal);

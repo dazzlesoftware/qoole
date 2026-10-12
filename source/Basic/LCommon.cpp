@@ -18,40 +18,67 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "LCommon.h"
 
 
 // ========== Common ==========
 
+static std::string
+FormatAnsi(const char *fmt, va_list arglist) {
+	if(!fmt)
+		return std::string();
+	char buf[1024];
+	vsnprintf(buf, sizeof(buf), fmt, arglist);
+	return buf;
+}
+
 void
 LError(const char *fmt, ...) {
 	va_list arglist;
-	char buf[256] = "";
-	
-	if(fmt) {
-		va_start(arglist, fmt);
-		vsprintf(buf, fmt, arglist);
-		va_end(arglist);
-	}
+	va_start(arglist, fmt);
+	std::string text = FormatAnsi(fmt, arglist);
+	va_end(arglist);
 
-	MessageBox(NULL, buf, "Genesis Editor Error", MB_OK | MB_TOPMOST);
+	FServices::GetMessageDialog().Show(EMessageType::Error, EMessageButtons::Ok,
+		FString::FromAnsi(text), FApp::GetName() + " Error");
 }
 
 void
 LFatal(const char *fmt, ...) {
 	va_list arglist;
-	char buf[256] = "";
-	
-	if(fmt) {
-		va_start(arglist, fmt);
-		vsprintf(buf, fmt, arglist);
-		va_end(arglist);
-	}
+	va_start(arglist, fmt);
+	std::string text = FormatAnsi(fmt, arglist);
+	va_end(arglist);
 
-	MessageBox(NULL, buf, "Genesis Editor Fatal Error", MB_OK | MB_TOPMOST);
+	FServices::GetMessageDialog().Show(EMessageType::Error, EMessageButtons::Ok,
+		FString::FromAnsi(text), FApp::GetName() + " Fatal Error");
 
-	AfxGetMainWnd()->PostMessage(WM_QUIT);
+	FApp::RequestExit();
+}
+
+bool
+LAskYesNo(const char *fmt, ...) {
+	va_list arglist;
+	va_start(arglist, fmt);
+	std::string text = FormatAnsi(fmt, arglist);
+	va_end(arglist);
+
+	return FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo,
+		FString::FromAnsi(text)) == EMessageResult::Yes;
+}
+
+bool
+LBrowseForFolder(const char *title, char *path, int pathSize) {
+	FString folder;
+	if(!FServices::GetFileDialogs().BrowseForFolder(FString::FromAnsi(title), folder))
+		return false;
+
+	std::string ansi = folder.ToAnsi();
+	if((int)ansi.size() >= pathSize)
+		return false;
+	strcpy(path, ansi.c_str());
+	return true;
 }
 
 
@@ -299,8 +326,8 @@ LFile::Extract(char *filename, char *dst) {
 
 void
 LFile::MakeDir(char *dirname) {
-	char dir[MAX_PATH];
-	char test[MAX_PATH];
+	char dir[_MAX_PATH];
+	char test[_MAX_PATH];
 	char *c = dir;
 
 	strcpy(dir, dirname);
@@ -375,10 +402,9 @@ LFile::Init(void) {
 #ifdef _DEBUG
 	_getcwd(initDir, 255);
 #else
-	GetModuleFileName(AfxGetInstanceHandle(), initDir, 255);
-	char *c = strrchr(initDir, '\\');
-	if(c)
-		*c = 0;
+	std::string exeDir = FApp::GetExecutableDir().ToAnsi();
+	strncpy(initDir, exeDir.c_str(), sizeof(initDir) - 1);
+	initDir[sizeof(initDir) - 1] = '\0';
 #endif
 }
 
@@ -507,7 +533,7 @@ int LConfig::requiredVer = 0;
 int LConfig::registryVer = 0;
 
 LConfig::LConfig(char *name) {
-	ASSERT(strlen(name) < 32);
+	check(strlen(name) < 32);
 	strcpy(sectionName, name);
 	numLVars = 0;
 }
@@ -527,44 +553,44 @@ LConfig::~LConfig(void) {
 
 void
 LConfig::RegisterVar(char *name, int *ptr, int type, int minVal, int maxVal) {
-	ASSERT(type == LVAR_INT);
+	check(type == LVAR_INT);
 	AddVar(name, ptr, LVAR_STORE_INT, sizeof(int), minVal, maxVal);
 }
 
 void
-LConfig::RegisterVar(char *name, UINT *ptr, int type, int minVal, int maxVal) {
-	ASSERT(type == LVAR_INT);
-	AddVar(name, ptr, LVAR_STORE_UINT, sizeof(UINT), minVal, maxVal);
+LConfig::RegisterVar(char *name, unsigned int *ptr, int type, int minVal, int maxVal) {
+	check(type == LVAR_INT);
+	AddVar(name, ptr, LVAR_STORE_UINT, sizeof(unsigned int), minVal, maxVal);
 }
 
 void
 LConfig::RegisterVar(char *name, bool *ptr, int type) {
-	ASSERT(type == LVAR_INT);
+	check(type == LVAR_INT);
 	AddVar(name, ptr, LVAR_STORE_BOOL, sizeof(bool), 0, 0);
 }
 
 void
-LConfig::RegisterVar(char *name, WORD *ptr, int type) {
-	ASSERT(type == LVAR_INT);
-	AddVar(name, ptr, LVAR_STORE_WORD, sizeof(WORD), 0, 0);
+LConfig::RegisterVar(char *name, unsigned short *ptr, int type) {
+	check(type == LVAR_INT);
+	AddVar(name, ptr, LVAR_STORE_WORD, sizeof(unsigned short), 0, 0);
 }
 
 void
 LConfig::RegisterVar(char *name, float *ptr, int type) {
-	ASSERT(type == LVAR_FLOAT);
+	check(type == LVAR_FLOAT);
 	AddVar(name, ptr, LVAR_STORE_FLOAT, sizeof(float), 0, 0);
 }
 
 void
 LConfig::RegisterVar(char *name, char *ptr, int type, int size) {
-	ASSERT(type == LVAR_STR);
+	check(type == LVAR_STR);
 	AddVar(name, ptr, LVAR_STORE_STR, size, 0, 0);
 }
 
 void
 LConfig::AddVar(char *name, void *ptr, int type, int size, int minVal, int maxVal) {
-	ASSERT(numLVars < 256);
-	ASSERT(strlen(name) < sizeof(lvars[0]->name));
+	check(numLVars < 256);
+	check(strlen(name) < sizeof(lvars[0]->name));
 
 	LVar *lvar = new LVar;
 	lvars[numLVars++] = lvar;
@@ -579,14 +605,18 @@ LConfig::AddVar(char *name, void *ptr, int type, int size, int minVal, int maxVa
 	if (registryVer < requiredVer)
 		return;
 
-	CWinApp *pApp = AfxGetApp();
-	CString str = pApp->GetProfileString(sectionName, lvar->name);
+	FString value;
+	if(!FServices::GetConfig().GetString(FString::FromAnsi(sectionName), FString::FromAnsi(lvar->name), value))
+		return;
 
-	if(str.IsEmpty())
+	std::string ansi = value.ToAnsi();
+	const char *str = ansi.c_str();
+	if(!*str)
 		return;
 
 	if(type == LVAR_STORE_STR) {
-		lstrcpyn((char *)ptr, str, size);
+		strncpy((char *)ptr, str, size - 1);
+		((char *)ptr)[size - 1] = '\0';
 		return;
 	}
 
@@ -604,18 +634,18 @@ LConfig::AddVar(char *name, void *ptr, int type, int size, int minVal, int maxVa
 	if(type == LVAR_STORE_BOOL)
 		*(bool *)ptr = (val & 0xff) != 0;
 	else if(type == LVAR_STORE_WORD)
-		*(WORD *)ptr = (WORD)(val & 0xffff);
+		*(unsigned short *)ptr = (unsigned short)(val & 0xffff);
 	else if(val >= minVal && val <= maxVal) {
 		if(type == LVAR_STORE_INT)
 			*(int *)ptr = val;
 		else
-			*(UINT *)ptr = (UINT)val;
+			*(unsigned int *)ptr = (unsigned int)val;
 	}
 }
 
 void
 LConfig::SaveVars(void) {
-	CWinApp *pApp = AfxGetApp();
+	IConfigStore &config = FServices::GetConfig();
 	char buf[256] = "";
 
 	for(int i = 0; i < numLVars; i++) {
@@ -623,26 +653,27 @@ LConfig::SaveVars(void) {
 
 		switch(lvar->type) {
 		case LVAR_STORE_STR:
-			lstrcpyn(buf, (char *)lvar->ptr, sizeof(buf));
+			strncpy(buf, (char *)lvar->ptr, sizeof(buf) - 1);
+			buf[sizeof(buf) - 1] = '\0';
 			break;
 		case LVAR_STORE_INT:
 			sprintf(buf, "%d", *(int *)lvar->ptr);
 			break;
 		case LVAR_STORE_UINT:
-			sprintf(buf, "%u", *(UINT *)lvar->ptr);
+			sprintf(buf, "%u", *(unsigned int *)lvar->ptr);
 			break;
 		case LVAR_STORE_BOOL:
 			sprintf(buf, "%d", *(bool *)lvar->ptr ? 1 : 0);
 			break;
 		case LVAR_STORE_WORD:
-			sprintf(buf, "%u", (unsigned int)*(WORD *)lvar->ptr);
+			sprintf(buf, "%u", (unsigned int)*(unsigned short *)lvar->ptr);
 			break;
 		case LVAR_STORE_FLOAT:
 			sprintf(buf, "%f", *(float *)lvar->ptr);
 			break;
 		}
 
-		pApp->WriteProfileString(sectionName, lvar->name, buf);
+		config.SetString(FString::FromAnsi(sectionName), FString::FromAnsi(lvar->name), FString::FromAnsi(buf));
 	}
 }
 
@@ -650,17 +681,13 @@ void LConfig::Init(int currentVersion, int requiredVersion) {
 	currentVer = currentVersion;
 	requiredVer = requiredVersion;
 
-	CWinApp *pApp = AfxGetApp();
-	ASSERT(pApp != NULL);
-
-	registryVer = pApp->GetProfileInt("_LConfig", "Version", 0);
+	registryVer = 0;
+	FServices::GetConfig().GetInt("_LConfig", "Version", registryVer);
 }
 
 void LConfig::Exit(void) {
-	CWinApp *pApp = AfxGetApp();
-	ASSERT(pApp != NULL);
-
-	pApp->WriteProfileInt("_LConfig", "Version", currentVer);
+	FServices::GetConfig().SetInt("_LConfig", "Version", currentVer);
+	FServices::GetConfig().Flush();
 }
 
 // ========== LPalette ==========
@@ -707,32 +734,6 @@ void LPalette::GammaCorrect(int &r, int &g, int &b, float gamma) {
 }
 
 
-// ========== LLibrary ==========
-
-LinkList<LLibrary> LLibrary::libs;
-
-LLibrary::LLibrary(char *libName) {
-	hInst = LoadLibrary(libName);
-}
-
-LLibrary::~LLibrary() {
-	FreeLibrary(hInst);
-}
-
-HINSTANCE LLibrary::FindLibrary(char *libName) {
-
-	IterLinkList<LLibrary> iter(libs);
-	iter.Reset();
-	while(!iter.IsDone()) {
-		LLibrary *lib = iter.GetNext();
-		if(!strcmp(lib->name, libName))
-			return lib->hInst;
-	}
-
-	return (new LLibrary(libName))->hInst;
-}
-
-
 // ========== Print Formatting ==========
 
 #include "string.h"
@@ -755,7 +756,7 @@ FormatFloat(float number) {
 
 
 //========== Conversion Stuff ==========
-bool Str2Int(const char *str, UINT &val)  {
+bool Str2Int(const char *str, unsigned int &val)  {
 	if (str == NULL || str[0] == '\0')
 		return false;
 

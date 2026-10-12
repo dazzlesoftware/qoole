@@ -63,7 +63,7 @@ public:
 	bool IsItemEntity(void) const;
 	bool IsModelEntity(void) const;
 
-	const char *GetClassName(void) const;
+	const char *GetClassname(void) const;
 
 	const Vector3d &GetOrigin(void) const;
 	const int GetAngle(void) const;

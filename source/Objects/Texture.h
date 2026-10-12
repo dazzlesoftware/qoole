@@ -21,7 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __TEXTURE_H
 #define __TEXTURE_H
 
-#include <afxtempl.h>
 #include "list.h"
 #include "LCommon.h"
 
@@ -125,7 +124,7 @@ private:
 
 	int GetWadEntry(char *dirName, char *texName, WadEntry *wadEntry);
 
-	char filename[MAX_PATH];
+	char filename[_MAX_PATH];
 	int texEntries;
 	int texAlloc;
 	TexEntry *texEntry;
@@ -145,12 +144,12 @@ public:
 	void Remove(char *texName);
 	void Save(void);
 
-	int GetNumTexs(void) { return (int)textures.GetSize(); }
-	Texture *GetTexNum(int texNum) { return textures.GetAt(texNum); }
+	int GetNumTexs(void) { return (int)textures.size(); }
+	Texture *GetTexNum(int texNum) { return textures[texNum]; }
 
 	char filename[256];
 	TexDB *texDB;
-	CArray <Texture *, Texture *> textures;
+	TArray<Texture *> textures;
 };
 
 #endif

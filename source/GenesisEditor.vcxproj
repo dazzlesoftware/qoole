@@ -54,7 +54,8 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;__MSC__;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;Basic;Objects;Render;Game;Interface;Interface2;Editor;res;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;Basic;Objects;Render;Game;Interface;Interface2;Editor;res;Engine\Core\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <ConformanceMode>false</ConformanceMode>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -78,7 +79,8 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;__MSC__;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;Basic;Objects;Render;Game;Interface;Interface2;Editor;res;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;Basic;Objects;Render;Game;Interface;Interface2;Editor;res;Engine\Core\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <ConformanceMode>false</ConformanceMode>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -99,6 +101,7 @@
     <ClCompile Include="Editor\GenesisEditor.cpp" />
     <ClCompile Include="Editor\EditorDoc.cpp" />
     <ClCompile Include="Editor\EditorOp.cpp" />
+    <ClCompile Include="Editor\MfcServices.cpp" />
     <ClCompile Include="Interface\Conf2DV.cpp" />
     <ClCompile Include="Interface\Conf3DV.cpp" />
     <ClCompile Include="Interface\ConfDrw.cpp" />
@@ -142,25 +145,6 @@
     <ClCompile Include="Interface2\sizecont.cpp" />
     <ClCompile Include="Interface2\sizedock.cpp" />
     <ClCompile Include="Interface2\ToolBarEx.cpp" />
-    <ClCompile Include="Game\HalfLife.cpp" />
-    <ClCompile Include="Game\Heretic2.cpp" />
-    <ClCompile Include="Game\Hexen2.cpp" />
-    <ClCompile Include="Game\MapIO.cpp" />
-    <ClCompile Include="Game\paks2wad.cpp" />
-    <ClCompile Include="Game\Quake.cpp" />
-    <ClCompile Include="Game\Quake2.cpp" />
-    <ClCompile Include="Game\Sin.cpp" />
-    <ClCompile Include="Render\Clip.cpp" />
-    <ClCompile Include="Render\Selector.cpp" />
-    <ClCompile Include="Render\View.cpp" />
-    <ClCompile Include="Objects\Entity.cpp" />
-    <ClCompile Include="Objects\EntList.cpp" />
-    <ClCompile Include="Objects\Game.cpp" />
-    <ClCompile Include="Objects\Geometry.cpp" />
-    <ClCompile Include="Objects\Objects.cpp" />
-    <ClCompile Include="Objects\Texture.cpp" />
-    <ClCompile Include="Basic\LCommon.cpp" />
-    <ClCompile Include="Basic\Math3D.cpp" />
     <ClCompile Include="res\StdAfx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
@@ -169,6 +153,7 @@
     <ClInclude Include="Editor\GenesisEditor.h" />
     <ClInclude Include="Editor\EditorDoc.h" />
     <ClInclude Include="Editor\EditorOp.h" />
+    <ClInclude Include="Editor\MfcServices.h" />
     <ClInclude Include="Editor\GenesisVersion.h" />
     <ClInclude Include="Interface\Conf2DV.h" />
     <ClInclude Include="Interface\Conf3DV.h" />
@@ -211,25 +196,6 @@
     <ClInclude Include="Interface2\mrcstafx.h" />
     <ClInclude Include="Interface2\ProgressWnd.h" />
     <ClInclude Include="Interface2\ToolBarEx.h" />
-    <ClInclude Include="Game\HalfLife.h" />
-    <ClInclude Include="Game\Heretic2.h" />
-    <ClInclude Include="Game\Hexen2.h" />
-    <ClInclude Include="Game\Mapio.h" />
-    <ClInclude Include="Game\Quake.h" />
-    <ClInclude Include="Game\Quake2.h" />
-    <ClInclude Include="Game\Sin.h" />
-    <ClInclude Include="Render\Clip.h" />
-    <ClInclude Include="Render\Selector.h" />
-    <ClInclude Include="Render\View.h" />
-    <ClInclude Include="Objects\Entity.h" />
-    <ClInclude Include="Objects\EntList.h" />
-    <ClInclude Include="Objects\Game.h" />
-    <ClInclude Include="Objects\Geometry.h" />
-    <ClInclude Include="Objects\Objects.h" />
-    <ClInclude Include="Objects\Texture.h" />
-    <ClInclude Include="Basic\LCommon.h" />
-    <ClInclude Include="Basic\List.h" />
-    <ClInclude Include="Basic\Math3D.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="res\StdAfx.h" />
     <ClInclude Include="res\Timer.h" />
@@ -262,6 +228,14 @@
     <Image Include="res\tup1.bmp" />
     <Image Include="res\tviewico.bmp" />
     <Image Include="res\workspce.bmp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="Engine\Core\Core.vcxproj">
+      <Project>{CABA659B-DAE6-4839-BB5A-6698150933E9}</Project>
+    </ProjectReference>
+    <ProjectReference Include="Engine\MapCore\MapCore.vcxproj">
+      <Project>{E6B3966D-7CCB-46DB-92A6-40893ED2E9DD}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

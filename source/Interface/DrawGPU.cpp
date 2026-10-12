@@ -49,7 +49,7 @@ PackRGBA(int r, int g, int b) {
 
 // ========== FDrawGPU ==========
 
-FDrawGPU::FDrawGPU(CWnd *wnd) : FDraw(wnd) {
+FDrawGPU::FDrawGPU(CWnd *wnd) : FWndDraw(wnd) {
 	numBufs = 1;
 	color = 0;
 }

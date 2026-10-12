@@ -39,7 +39,7 @@ class Selector : public ElmNode {
   Selector &operator=(const Selector &src) { return *this; LFatal(); };
 
   //===== Get Scope Info =====
-  Object &GetScope(void) const { ASSERT(scopePtr != NULL); return *scopePtr; };
+  Object &GetScope(void) const { check(scopePtr != NULL); return *scopePtr; };
   Object *GetScopePtr(void) const { return scopePtr; };
 
   //===== Object Selection Testing =====

@@ -494,9 +494,9 @@ void CToolBarEx::OnPaint()
 		CCustomDrawInfo cdrw(dc, this);
 		cdrw.NotifyPrePaint();
 
-		register const int nBtn = GetToolBarCtrl().GetButtonCount();
+		const int nBtn = GetToolBarCtrl().GetButtonCount();
 
-		for( register int i = 0; i < nBtn; ++i ) {
+		for( int i = 0; i < nBtn; ++i ) {
 			CRect rc;
 			GetItemRect(i, rc);
 
@@ -730,8 +730,8 @@ void CToolBarEx :: DrawGripper( CDC & dc ) const {
 void CToolBarEx :: OnUpdateCmdUI( CFrameWnd* pTarget, BOOL bDisableIfNoHndler ) {
 	if( m_bFlatLook ) {
 		// save current styles
-		register const int nBtn = GetToolBarCtrl().GetButtonCount();
-		register int nIdx;
+		const int nBtn = GetToolBarCtrl().GetButtonCount();
+		int nIdx;
 		for( nIdx = 0; nIdx < nBtn; ++nIdx )
 			m_Styles.SetAtGrow(nIdx, GetButtonStyle(nIdx));
 
@@ -784,11 +784,11 @@ void CToolBarEx::OnMouseMove(UINT nFlags, CPoint point)
 	}
 
 	if( m_bFlatLook && IsTopParentActive() && GetTopLevelParent()->IsWindowEnabled()) {
-		register const int nBtn = GetToolBarCtrl().GetButtonCount();
+		const int nBtn = GetToolBarCtrl().GetButtonCount();
 		const int nLastBtn = m_nLastBtn;
 		m_nLastBtn = -1;
 
-		for( register int i = 0 ; i < nBtn ; ++i ) {
+		for( int i = 0 ; i < nBtn ; ++i ) {
 			CRect rc;
 			GetItemRect(i, rc);
 
@@ -1573,7 +1573,7 @@ BOOL CToolBarEx :: BeginDrag() {
 	if( !(::GetWindowLong(GetToolBarCtrl().GetSafeHwnd(),GWL_STYLE) & CCS_ADJUSTABLE) )
 		return FALSE;	// Bar is not adjustable
 
-	register const int nBtn = GetToolBarCtrl().GetButtonCount();
+	const int nBtn = GetToolBarCtrl().GetButtonCount();
 	const int nLastBtn = m_nLastBtn;
 	m_nLastBtn = -1;
 	CPoint pt;
@@ -1584,7 +1584,7 @@ BOOL CToolBarEx :: BeginDrag() {
 
 	// have a look for whether the button is valid and
 	// - if so - draw a dragging border around it.
-	for( register int i = 0 ; i < nBtn ; ++i ) {
+	for( int i = 0 ; i < nBtn ; ++i ) {
 		if( IsSeparator(i) )
 			continue;	// real separators are not draggable
 
@@ -1682,7 +1682,7 @@ void CToolBarEx :: EndDrag(BOOL bDoMove) {
 
 	if( m_nDragButton >= 0 ) {
 		CToolBarCtrl & wndTBCtrl = GetToolBarCtrl();
-		register const int nBtn = wndTBCtrl.GetButtonCount();
+		const int nBtn = wndTBCtrl.GetButtonCount();
 
 		if( m_bDragCursor && bDoMove ) {
 			// move the button to a different location
@@ -1861,8 +1861,8 @@ void CToolBarEx :: CheckMoveControl( CToolBarEx * pToolBar, const TBBUTTON & tbB
 
 void CToolBarEx :: RemoveTrailingSeparators() {
 	CToolBarCtrl & wndTBCtrl = GetToolBarCtrl();
-	register const int nBtn = wndTBCtrl.GetButtonCount();
-	register int i = nBtn;
+	const int nBtn = wndTBCtrl.GetButtonCount();
+	int i = nBtn;
 	while( i && IsSeparator(--i) )
 		if( DoQueryDelete(i) )
 			wndTBCtrl.DeleteButton(i);
@@ -1874,8 +1874,8 @@ int CToolBarEx :: FindDropButton( const CPoint & point ) {
 
 	CRect rc;
 	// find the button which is closest to the cursor
-	register const int nBtn = GetToolBarCtrl().GetButtonCount();
-	for( register int i = 0 ; i < nBtn ; ++i ) {
+	const int nBtn = GetToolBarCtrl().GetButtonCount();
+	for( int i = 0 ; i < nBtn ; ++i ) {
 		GetItemRect(i, rc);
 		if( rc.PtInRect(pt) )
 			// insert the button to drop before this button:
@@ -1891,7 +1891,7 @@ int CToolBarEx :: FindDropButton( const CPoint & point ) {
 }
 
 void CToolBarEx :: GetMarkerRect( int nButton, CRect & rc ) {
-	register const int nBtn = GetToolBarCtrl().GetButtonCount();
+	const int nBtn = GetToolBarCtrl().GetButtonCount();
 	if( nButton < 0 || nButton > nBtn ) {
 		// set the marker behind the last button
 		GetItemRect(nBtn-1, rc);

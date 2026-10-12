@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * math3d.cpp
  */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 
 #include <math.h>
 #include "LCommon.h"
@@ -126,8 +126,8 @@ Vector3d::DotVector(const Vector3d &vec) const {
 float
 Vector3d::CosTheta(const Vector3d &vec) const {
   // PreConditions.
-  ASSERT(GetMagSqr() > 0.0f);
-  ASSERT(vec.GetMagSqr() > 0.0f);
+  check(GetMagSqr() > 0.0f);
+  check(vec.GetMagSqr() > 0.0f);
 
   float d = DotVector(vec) / (vec.GetMag() * GetMag());
 
@@ -137,7 +137,7 @@ Vector3d::CosTheta(const Vector3d &vec) const {
     d = -1.0f;
 
   // Post Condition.
-  ASSERT(d >= -1.0f && d <= 1.0f);
+  check(d >= -1.0f && d <= 1.0f);
 
   return d;
 }
@@ -260,7 +260,7 @@ Line::Line(void) {
 Line &
 Line::NewLine(const Vector3d &pt, const Vector3d &slope) {
   // PreCondition.
-  ASSERT(slope.GetMag() > 0.0f);
+  check(slope.GetMag() > 0.0f);
 
   pt0 = pt;
   v = slope;
@@ -277,7 +277,7 @@ Line::IsOnLine(const Vector3d &pt, float epsilon) const {
     return true;
 
   Vector3d p2(v);
-  ASSERT(EQUAL4(p2.GetMagSqr(), 1.0f));  // Sanity.
+  check(EQUAL4(p2.GetMagSqr(), 1.0f));  // Sanity.
   p2.MultVector(p1.DotVector(p2));
   p1.SubVector(p2);
 
@@ -287,9 +287,9 @@ Line::IsOnLine(const Vector3d &pt, float epsilon) const {
 float
 Line::Parametrize(const Vector3d &pt) const {
   // PreCondition.
-  ASSERT(IsOnLine(pt));
+  check(IsOnLine(pt));
   // Sanity Check.
-  ASSERT(EQUAL4(GetSlope().GetMagSqr(), 1.0f));
+  check(EQUAL4(GetSlope().GetMagSqr(), 1.0f));
 
   float rtnVal, cosAng;
   Vector3d diff;
@@ -299,7 +299,7 @@ Line::Parametrize(const Vector3d &pt) const {
   if (!EQUAL2(rtnVal, 0.0f)) {
     cosAng = (GetSlope()).CosTheta(diff);
     // Sanity Check.
-    // ASSERT(EQUAL3(cosAng, 1.0f) || EQUAL3(cosAng, -1.0f));
+    // check(EQUAL3(cosAng, 1.0f) || EQUAL3(cosAng, -1.0f));
     if (cosAng < 0.0f)
       rtnVal *= -1.0f;
   }
@@ -336,7 +336,7 @@ Line::Intersect(const Line &line2, Vector3d &intrsctPt) const {
     else {
       m1 = v.GetY() / v.GetX();
       m2 = line2.v.GetY() / line2.v.GetX();
-      ASSERT(m1 != m2);  // Sanity check.
+      check(m1 != m2);  // Sanity check.
       intx = (line2.pt0.GetY() - pt0.GetY() + (m1 * pt0.GetX()) -
               (m2 * line2.pt0.GetX())) / (m1 - m2);
     }
@@ -360,7 +360,7 @@ Line::Intersect(const Line &line2, Vector3d &intrsctPt) const {
     else {
       m1 = v.GetX() / v.GetY();
       m2 = line2.v.GetX() / line2.v.GetY();
-      ASSERT(m1 != m2);  // Sanity Check.
+      check(m1 != m2);  // Sanity Check.
       inty = (line2.pt0.GetX() - pt0.GetX() + (m1 * pt0.GetY()) -
               (m2 * line2.pt0.GetY())) / (m1 - m2);
     }
@@ -384,7 +384,7 @@ Line::Intersect(const Line &line2, Vector3d &intrsctPt) const {
     if (!EQUAL2(intz, intrsctPt.GetZ()))
       return false;
     // Sanity Check.
-    ASSERT(IsOnLine(intrsctPt));
+    check(IsOnLine(intrsctPt));
   }
   else if (!EQUAL4(line2.v.GetX(), 0.0f)) {
     intz = (intrsctPt.GetX() - line2.pt0.GetX()) * 
@@ -406,7 +406,7 @@ Line::Intersect(const Line &line2, Vector3d &intrsctPt) const {
                (v.GetZ() / v.GetX()) + pt0.GetZ();
     }
     else {
-      ASSERT(v.GetY() != 0.0f); // Sanity check.
+      check(v.GetY() != 0.0f); // Sanity check.
       intz = (line2.pt0.GetY() - pt0.GetY()) *
                (v.GetZ() / v.GetY()) + pt0.GetZ();
     }
@@ -422,7 +422,7 @@ float
 Line::IntersectAngle(const Line &line2) const {
   float d = v.CosTheta(line2.v);
   // Sanity Check.
-  ASSERT(d >= -1.0f && d <= 1.0f);
+  check(d >= -1.0f && d <= 1.0f);
   return (float) acos(d);
 }
 
@@ -435,7 +435,7 @@ const Plane Plane::zxPlane(Vector3d::yAxisVec, Vector3d::origVec);
 Plane &
 Plane::NewPlane(const Vector3d norm, const Vector3d &pt) {
   // PreCondition.
-  ASSERT(norm.GetMag() > 0.0f);
+  check(norm.GetMag() > 0.0f);
 
   pt0 = pt;  
   n = norm;
@@ -453,7 +453,7 @@ Plane::NewPlane(const Vector3d &pt1,
   v2.SubVector(pt1).Normalize();
 
   // Sanity Check.
-  ASSERT(!v2.IsParallel(v1));
+  check(!v2.IsParallel(v1));
   
   pt0 = pt1;
   (n.CrossVector(v2, v1)).Normalize();
@@ -507,25 +507,25 @@ Plane::Intersect(const Plane &plane2, Line &l) const {
 
   m.CrossVector(GetNorm(), plane2.GetNorm());
   // Sanity Check.
-  ASSERT(m.GetMag() > 0.0f);
+  check(m.GetMag() > 0.0f);
 
   float dx = ABS(m.GetX());
   float dy = ABS(m.GetY());
   float dz = ABS(m.GetZ());
 
   if (dx >= dy && dx >= dz) {
-    ASSERT(!EQUAL4(m.GetX(), 0.0f));
+    check(!EQUAL4(m.GetX(), 0.0f));
     demn = n.GetY() * plane2.n.GetZ() - n.GetZ() * plane2.n.GetY();
-    ASSERT(demn != 0.0f);  // Sanity Check.
+    check(demn != 0.0f);  // Sanity Check.
 
     pt0.SetX(0.0f);
     pt0.SetY((d * plane2.n.GetZ() - n.GetZ() * plane2.d) / demn);
     pt0.SetZ((n.GetY() * plane2.d - plane2.n.GetY() * d) / demn);
   }
   else if (dy >= dx && dy >= dz) {
-    ASSERT(!EQUAL4(m.GetY(), 0.0f));
+    check(!EQUAL4(m.GetY(), 0.0f));
     demn = n.GetZ() * plane2.n.GetX() - n.GetX() * plane2.n.GetZ();
-    ASSERT(demn != 0.0f);
+    check(demn != 0.0f);
 
     pt0.SetX((n.GetZ() * plane2.d - plane2.n.GetZ() * d) / demn);
     pt0.SetY(0.0f);
@@ -533,11 +533,11 @@ Plane::Intersect(const Plane &plane2, Line &l) const {
   }
   else { // m.GetZ() != 0.0f
     // Sanity.
-    ASSERT(dz >= dx && dz >= dy);
-    ASSERT(!EQUAL4(m.GetZ(), 0.0f));
+    check(dz >= dx && dz >= dy);
+    check(!EQUAL4(m.GetZ(), 0.0f));
 
     demn = n.GetY() * plane2.n.GetX() - n.GetX() * plane2.n.GetY();
-    ASSERT(demn != 0.0f);  // Sanity Check.
+    check(demn != 0.0f);  // Sanity Check.
 
     pt0.SetX((n.GetY() * plane2.d - plane2.n.GetY() * d) / demn);
     pt0.SetY((plane2.n.GetX() * d - n.GetX() * plane2.d) / demn);
@@ -593,7 +593,7 @@ float
 Plane::IntersectAngle(const Plane &plane2) const {
   float d = plane2.GetNorm().CosTheta(GetNorm());
   // Sanity Check.
-  ASSERT(d >= -1.0f && d <= 1.0f);
+  check(d >= -1.0f && d <= 1.0f);
   return (float) acos(d);
 }
 
@@ -627,39 +627,39 @@ Plane::Normalize(Vector3d &p1, Vector3d &p2, Vector3d &p3) const {
 
   if (absX >= absY && absX >= absZ) {
     ok = Intersect(l.NewLine(Vector3d::origVec, Vector3d::xAxisVec), p1);
-    ASSERT(ok);
+    check(ok);
     ok = Intersect(zxPlane, l);
-    ASSERT(ok);
+    check(ok);
     if ((p2 = l.GetSlope()).GetZ() < 0)
       p2.MultVector(-1.0f);
     ok = Intersect(xyPlane, l);
-    ASSERT(ok);
+    check(ok);
     if ((p3 = l.GetSlope()).GetY() < 0)
       p3.MultVector(-1.0f);
     ok = (xAng >= 0.0f ? true : false);
   }
   else if (absY >= absX && absY >= absZ) {
     ok = Intersect(l.NewLine(Vector3d::origVec, Vector3d::yAxisVec), p1);
-    ASSERT(ok);
+    check(ok);
     ok = Intersect(xyPlane, l);
-    ASSERT(ok);
+    check(ok);
     if ((p2 = l.GetSlope()).GetX() < 0)
       p2.MultVector(-1.0f);
     ok = Intersect(yzPlane, l);
-    ASSERT(ok);
+    check(ok);
     if ((p3 = l.GetSlope()).GetZ() < 0)
       p3.MultVector(-1.0f);
     ok = (yAng >= 0.0f ? true : false);
   }
   else { // (absZ >= absX && absZ >= absY)
     ok = Intersect(l.NewLine(Vector3d::origVec, Vector3d::zAxisVec), p1);
-    ASSERT(ok);
+    check(ok);
     ok = Intersect(yzPlane, l);
-    ASSERT(ok);
+    check(ok);
     if ((p2 = l.GetSlope()).GetY() < 0)
       p2.MultVector(-1.0f);
     ok = Intersect(zxPlane, l);
-    ASSERT(ok);
+    check(ok);
     if ((p3 = l.GetSlope()).GetX() < 0)
       p3.MultVector(-1.0f);
     ok = (zAng >= 0.0f ? true : false);
@@ -1091,7 +1091,7 @@ TransSpace::CalInvTransSpaceMatrix(Matrix44 &transMatrix) const {
   Vector3d inverse;
 
   // Sanity Check.
-  ASSERT(!EQUAL4(scale.GetX(), 0.0) &&
+  check(!EQUAL4(scale.GetX(), 0.0) &&
          !EQUAL4(scale.GetY(), 0.0) &&
          !EQUAL4(scale.GetZ(), 0.0));
 

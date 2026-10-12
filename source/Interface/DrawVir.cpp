@@ -21,30 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "stdafx.h"
 #include "Draw.h"
 
-// virtual FDraw functions that aren't pure
+// The FWndDraw constructor, compiled into the editor and each renderer plugin.
 
-FDraw::FDraw(CWnd *wnd) {
+FWndDraw::FWndDraw(CWnd *wnd) {
 	pWnd = wnd;
-	numBufs = 2;
-	useBuf = 0;
-	pZoomVal = NULL;
-	useZBuf = false;
 	renderMode = ID_VIEW_RENDER_WIREFRAME;
-	fixedPal = false;
-}
-
-FDraw::~FDraw() {
-}
-
-void
-FDraw::Size(int cx, int cy) {
-	if(cx < 1)
-		cx = 1;
-	if(cy < 1)
-		cy = 1;
-
-	width = cx;
-	height = cy;
-	orgX = cx / 2;
-	orgY = cy / 2;
 }

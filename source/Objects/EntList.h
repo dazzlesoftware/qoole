@@ -68,7 +68,7 @@ public:
 	char *GetName(void) { return name; }
 	int GetDefType(void) { return deftype; }
 	int GetNumEntries(void) { return entries; }
-	FDefEntry *GetEntryNum(int i) { ASSERT(i >= 0 && i < entries); return &qdefentry[i]; }
+	FDefEntry *GetEntryNum(int i) { check(i >= 0 && i < entries); return &qdefentry[i]; }
 
 private:
 	char name[80];
@@ -103,7 +103,7 @@ public:
 	void DoneUse(void);
 
 	int GetNumEntries(void) { return entries; }
-	FEntEntry *GetEntryNum(int i) { ASSERT(i >= 0 && i < entries); return &qentry[i]; }
+	FEntEntry *GetEntryNum(int i) { check(i >= 0 && i < entries); return &qentry[i]; }
 
 	bool AddUserEntry(char *name);
 

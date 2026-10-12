@@ -18,10 +18,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include <direct.h>
 #include "Game.h"
-#include "Draw.h"
+#include "DrawBase.h"
 
 Game *Game::game = NULL;
 LinkList<Game> Game::games;
@@ -71,7 +71,7 @@ Game::Exit(void) {
 
 bool
 Game::Set(Game *_game, char *palName, float gamma) {
-	ASSERT(_game != NULL);
+	check(_game != NULL);
 	if (!_game->Init())
 		return false;
 
@@ -107,13 +107,13 @@ Game::Find(char *name) {
 }
 
 //===== Additional properties pages. =====
-DWORD Game::GetExtraPropPages(void) const {
+unsigned int Game::GetExtraPropPages(void) const {
 	// Default to add nothing.
 	return 0;
 }
 
 //===== Compile map stuff. =====
-void Game::InitCompileParams(BOOL runUtils[], CString params[],
+void Game::InitCompileParams(bool runUtils[], const char *params[],
 							 int &paramIndex) const {
 	int i, numUtils = GetNumUtils();
 
@@ -125,14 +125,14 @@ void Game::InitCompileParams(BOOL runUtils[], CString params[],
 	paramIndex = setPIndex;
 }
 
-void Game::SaveCompileParams(BOOL runUtils[], CString params[],
+void Game::SaveCompileParams(const bool runUtils[], const char *const params[],
 							 int &paramIndex) {
 	int i, numUtils = GetNumUtils();
 	runUtilsFlag = 0x00;
 
 	for(i = 0; i < numUtils; i++) {
 		runUtilsFlag |= (runUtils[i] ? (0x01 << i) : 0);
-		strcpy(utilsParams[i], (LPCTSTR) params[i]);
+		strcpy(utilsParams[i], params[i]);
 	}
 
 	setPIndex = paramIndex;
@@ -141,7 +141,7 @@ void Game::SaveCompileParams(BOOL runUtils[], CString params[],
 const char *Game::GetMapExportPath(const char *docName,
 								   OutTextProc pTextProc) const {
 	static char mapPath[256];
-	ASSERT(docName != NULL);
+	check(docName != NULL);
 
 	// Make sure the dir exists.
 	if (!LFile::ExistDir(mapDir)) {
@@ -171,7 +171,7 @@ const char *Game::GetMapExportPath(const char *docName,
 bool Game::GetUtilCmdLine(int utilIndex, const char *docName,
 						   const char **pCmdLine, const char **pInitDir,
 						   OutTextProc pTextProc) const {
-	ASSERT(docName != NULL);
+	check(docName != NULL);
 
 	static char cmdLine[256];
 	static char initDir[256];
@@ -207,7 +207,7 @@ bool Game::GetUtilCmdLine(int utilIndex, const char *docName,
 }
 
 void Game::CleanUpCompile(const char *docName, bool skipBSP, OutTextProc pTextProc) const {
-	ASSERT(docName != NULL);
+	check(docName != NULL);
 
 	if (!LFile::ExistDir(mapDir))
 		return;
@@ -252,8 +252,8 @@ void Game::ExtractTextures(void) {
 
 
 void ExtractTexsFromPak(LPak *pak, char *baseDir) {
-	char outname[MAX_PATH];
-	char dirname[MAX_PATH];
+	char outname[_MAX_PATH];
+	char dirname[_MAX_PATH];
 	char *name, *c;
 	int i, count = 0, total = 0;
 
@@ -261,11 +261,11 @@ void ExtractTexsFromPak(LPak *pak, char *baseDir) {
 		if(strstr(pak->entry[i].filename, ".wal"))
 			total++;
 
-	CProgressWnd progressWnd(AfxGetMainWnd(), "Progress");
-	progressWnd.SetText("Extracting Textures");
+	FProgressOptions progressOptions;
+	progressOptions.Text = "Extracting Textures";
+	progressOptions.bBusyCursor = true;
+	TUniquePtr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
 	FDraw::OutputText("Extracting textures from Pak... ");
-
-	SetCursor(LoadCursor(NULL, IDC_WAIT));
 
 	for(i = 0; i < pak->entries; i++) {
 		name = pak->entry[i].filename;
@@ -281,10 +281,9 @@ void ExtractTexsFromPak(LPak *pak, char *baseDir) {
 			LFile::MakeDir(dirname);
 			LFile::Extract(name, outname);
 
-			progressWnd.SetPos(count++ * 100 / total);
-			progressWnd.PeekAndPump();
+			progress->SetPercent(count++ * 100 / total);
 
-			if(progressWnd.Cancelled())
+			if(progress->IsCancelled())
 			{
 				FDraw::OutputText("Cancelled.\n");
 				break;
@@ -293,7 +292,5 @@ void ExtractTexsFromPak(LPak *pak, char *baseDir) {
 	}
 
 	FDraw::OutputText("OK.\n");
-	progressWnd.Clear();
-	SetCursor(LoadCursor(NULL, IDC_ARROW));
 }
 

@@ -18,12 +18,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "HalfLife.h"
 #include "Entity.h"
 #include "Texture.h"
 #include "LCommon.h"
-#include "Draw.h"
+#include "DrawBase.h"
 #include <direct.h>
 
 HalfLife::HalfLife(void) : Game(GetNumUtils()) {
@@ -95,13 +95,8 @@ HalfLife::Init(void) {
 		return true;
 
 	if (!strlen(gameDir) || !LFile::ExistDir(gameDir)) {
-		CDirDialog dirDialog;
-		dirDialog.m_strTitle = "Locate Half-Life Folder";
-
-		if (!dirDialog.DoBrowse())
+		if (!LBrowseForFolder("Locate Half-Life Folder", gameDir, sizeof(gameDir)))
 			return false;
-
-		strcpy(gameDir, dirDialog.m_strPath);
 	}
 
 	sprintf(baseDir, "%s\\valve", gameDir);
@@ -246,15 +241,16 @@ void HalfLife::ExtractTextures(void) {
 	if(LFile::Exist(wadFile))
 		return;
 
-	if(MessageBox(NULL, "Extract Quake Textures?", 
-		AfxGetAppName(), MB_YESNO) == IDNO)
+	if(!LAskYesNo("Extract Quake Textures?"))
 		return;
 
 	if(!LFile::ExistDir(wadDir))
 		_mkdir(wadDir);
 
-	CProgressFunc progFunc("Extracting");
-	paks2wad(baseDir, wadFile, CProgressFunc::SetPos);
+	FProgressOptions progressOptions;
+	progressOptions.Text = "Extracting";
+	TUniquePtr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
+	paks2wad(baseDir, wadFile, progress.get());
 	*/
 }
 
@@ -264,7 +260,7 @@ const char *HalfLife::GetUtilName(int index) const {
 		"QCSG", "QBsp2", "Vis", "QRad", "Half-Life"
 	};
 
-	ASSERT(index >= 0 && index < 5);
+	check(index >= 0 && index < 5);
 	return utilNames[index];
 }
 
@@ -273,7 +269,7 @@ const char *HalfLife::GetUtilName(int index) const {
 const char *HalfLife::GetLeakFile(const char *docName) const {
 	static char leakPath[256];
 
-	ASSERT(docName != NULL);
+	check(docName != NULL);
 
 	if (!LFile::ExistDir(mapDir))
 		return NULL;

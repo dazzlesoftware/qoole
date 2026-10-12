@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 
-#include "stdafx.h"
+#include "MapCorePCH.h"
 #include "LCommon.h"
 #include "EntList.h"
 
@@ -95,7 +95,7 @@ EntList::ReadEntFile(char *filename) {
 	LFile file;
 	if(!file.Open(filename)) {
 		// try appending "ents/" to beginning
-		char entFilename[MAX_PATH];
+		char entFilename[_MAX_PATH];
 		sprintf(entFilename, "ents/%s", filename);
 		if(!file.Open(entFilename))
 			return;
@@ -369,7 +369,7 @@ EntInfo::EntInfo(char hbuf[LINE_MAX], char lbuf[][LINE_MAX], int lnum, EntList *
 }
 
 EntInfo::~EntInfo(void) {
-	ASSERT(qentry != NULL);
+	check(qentry != NULL);
 	for(int i = 0; i < entries; i++) {
 		delete qentry[i].name;
 		delete qentry[i].def;
@@ -379,7 +379,6 @@ EntInfo::~EntInfo(void) {
 }
 
 #include "Game.h"
-#include "MainFrm.h"
 
 WireFrameGeom *
 EntInfo::Use(bool &ret_isModel, bool &ret_isAdjust) {
@@ -394,7 +393,7 @@ EntInfo::Use(bool &ret_isModel, bool &ret_isAdjust) {
 		dir[c - filename] = '\0';
 
 		Game *game = Game::Get();
-		ASSERT(game != NULL);
+		check(game != NULL);
 
 		sprintf(add, "%s\\%s", game->GetBaseDir(), dir);
 		LFile::UseDir(add);
@@ -413,7 +412,7 @@ EntInfo::Use(bool &ret_isModel, bool &ret_isAdjust) {
 			wfGeomPtr = new WireFrameGeom(fName);
 		else {
 			Game *game = Game::Get();
-			ASSERT(game != NULL);
+			check(game != NULL);
 			wfGeomPtr = game->LoadModel(fName);
 		}
 	}
@@ -509,7 +508,7 @@ EntDef::EntDef(char hbuf[LINE_MAX], char lbuf[][LINE_MAX], int lnum, EntList *en
 }
 
 EntDef::~EntDef(void) {
-	ASSERT(qdefentry != NULL);
+	check(qdefentry != NULL);
 	for(int i = 0; i < entries; i++) {
 		delete qdefentry[i].name;
 		delete qdefentry[i].desc;

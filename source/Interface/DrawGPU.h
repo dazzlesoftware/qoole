@@ -47,7 +47,7 @@ struct GpuFrame {
 	unsigned int lineFirst, lineCount;
 };
 
-class FDrawGPU : public FDraw {
+class FDrawGPU : public FWndDraw {
 public:
 	FDrawGPU(CWnd *wnd);
 	~FDrawGPU();
