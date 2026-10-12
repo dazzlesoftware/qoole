@@ -43,6 +43,7 @@
   <ItemGroup>
     <ClCompile Include="Private\ElementBatcher.cpp" />
     <ClCompile Include="Private\UIRenderer.cpp" />
+    <ClCompile Include="Private\UIWindowRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Private\Shaders\UIShaders_PSDefault_SPIRV.h" />
@@ -51,6 +52,7 @@
     <ClInclude Include="Private\Shaders\UIShaders_VSMain_SPIRV.h" />
     <ClInclude Include="Public\ElementBatcher.h" />
     <ClInclude Include="Public\UIRenderer.h" />
+    <ClInclude Include="Public\UIWindowRenderer.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Private\Shaders\BuildUIShaders.cmd" />
