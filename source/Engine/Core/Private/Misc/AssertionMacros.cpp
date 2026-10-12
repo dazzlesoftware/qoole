@@ -1,53 +1,37 @@
-/*
-Copyright (C) 2026 Dazzle Software, LLC
-
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-*/
+// Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Misc/AssertionMacros.h"
+
+#include "HAL/PlatformMisc.h"
 #include "Logging/Log.h"
-#include "Misc/StringFormat.h"
 
-namespace Genesis::Private
+#include <cstdlib>
+
+void FAssertion::CheckFailed(const char* Expr, const char* File, int32 Line, const std::string& Message)
 {
-	// Platform part: shows the failure to the developer. Returns true to break.
-	bool ReportCheckFailure(const char* Expr, const char* File, int Line, const char* Message);
-	bool IsDebuggerAttached();
+	const std::string Text = Message.empty()
+		? std::format("Assertion failed: {} [{}({})]", Expr, File, Line)
+		: std::format("Assertion failed: {} [{}({})]: {}", Expr, File, Line, Message);
+	FLog::Write(LogCore, ELogVerbosity::Fatal, Text);
+	// FLog aborts on Fatal; this is for the compiler.
+	std::abort();
+}
 
-	bool OnCheckFailed(const char* Expr, const char* File, int Line)
+bool FAssertion::EnsureFailed(const char* Expr, const char* File, int32 Line, bool& bFired, const std::string& Message)
+{
+	if (bFired)
 	{
-		GLog->Logf(ELogVerbosity::Error, "Check failed: %s, %s(%d)\n", Expr, File, Line);
-		return ReportCheckFailure(Expr, File, Line, nullptr);
+		return false;
 	}
+	bFired = true;
 
-	bool OnCheckfFailed(const char* Expr, const char* File, int Line, const char* Format, ...)
+	const std::string Text = Message.empty()
+		? std::format("Ensure failed: {} [{}({})]", Expr, File, Line)
+		: std::format("Ensure failed: {} [{}({})]: {}", Expr, File, Line, Message);
+	FLog::Write(LogCore, ELogVerbosity::Error, Text);
+	if (FPlatformMisc::IsDebuggerPresent())
 	{
-		va_list Args;
-		va_start(Args, Format);
-		const std::string Message = FormatV(Format, Args);
-		va_end(Args);
-
-		GLog->Logf(ELogVerbosity::Error, "Check failed: %s, %s(%d): %s\n", Expr, File, Line, Message.c_str());
-		return ReportCheckFailure(Expr, File, Line, Message.c_str());
+		FPlatformMisc::DebugBreak();
 	}
-
-	bool OnEnsureFailed(const char* Expr, const char* File, int Line)
-	{
-		GLog->Logf(ELogVerbosity::Error, "Ensure failed: %s, %s(%d)\n", Expr, File, Line);
-		return IsDebuggerAttached();
-	}
+	return false;
 }

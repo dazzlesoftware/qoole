@@ -1,48 +1,84 @@
-/*
-Copyright (C) 2026 Dazzle Software, LLC
-
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-*/
+// Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
+//
+// Shared pointers. TSharedPtr/TWeakPtr are std::shared_ptr/std::weak_ptr;
+// TSharedRef is a shared pointer that is never null (checked on creation),
+// which lets APIs say "this always exists" in their signature.
 
 #pragma once
 
-// Smart pointer aliases (docs/GenesisUI.md section 2). TSharedRef, the
-// non-null wrapper, arrives with the code that first needs it.
+#include "Misc/AssertionMacros.h"
 
 #include <memory>
-#include <utility>
 
-template<typename T>
+template <typename T>
 using TSharedPtr = std::shared_ptr<T>;
 
-template<typename T>
+template <typename T>
 using TWeakPtr = std::weak_ptr<T>;
 
-template<typename T>
-using TUniquePtr = std::unique_ptr<T>;
+template <typename T>
+using TSharedFromThis = std::enable_shared_from_this<T>;
 
-template<typename T, typename... Args>
-TSharedPtr<T> MakeShared(Args&&... InArgs)
+template <typename T>
+class TSharedRef
 {
-	return std::make_shared<T>(std::forward<Args>(InArgs)...);
+public:
+	// Takes ownership of a new object.
+	explicit TSharedRef(T* InObject)
+		: Ptr(InObject)
+	{
+		check(Ptr);
+	}
+
+	// From a shared pointer that must not be null.
+	explicit TSharedRef(std::shared_ptr<T> InPtr)
+		: Ptr(std::move(InPtr))
+	{
+		check(Ptr);
+	}
+
+	template <typename U>
+		requires std::is_convertible_v<U*, T*>
+	TSharedRef(const TSharedRef<U>& Other)
+		: Ptr(Other.ToSharedPtr())
+	{
+	}
+
+	T& Get() const { return *Ptr; }
+	T* operator->() const { return Ptr.get(); }
+	T& operator*() const { return *Ptr; }
+
+	const std::shared_ptr<T>& ToSharedPtr() const { return Ptr; }
+	operator std::shared_ptr<T>() const { return Ptr; }
+
+	template <typename U>
+		requires std::is_convertible_v<T*, U*>
+	operator std::weak_ptr<U>() const
+	{
+		return Ptr;
+	}
+
+	friend bool operator==(const TSharedRef& A, const TSharedRef& B) { return A.Ptr == B.Ptr; }
+
+private:
+	std::shared_ptr<T> Ptr;
+};
+
+template <typename T, typename... Args>
+TSharedRef<T> MakeShared(Args&&... InArgs)
+{
+	return TSharedRef<T>(std::make_shared<T>(std::forward<Args>(InArgs)...));
 }
 
-template<typename T, typename... Args>
-TUniquePtr<T> MakeUnique(Args&&... InArgs)
+// Converts a non-null shared pointer to a reference (checked).
+template <typename T>
+TSharedRef<T> ToSharedRef(const TSharedPtr<T>& Ptr)
 {
-	return std::make_unique<T>(std::forward<Args>(InArgs)...);
+	return TSharedRef<T>(Ptr);
+}
+
+template <typename To, typename From>
+TSharedPtr<To> StaticCastSharedPtr(const TSharedPtr<From>& Ptr)
+{
+	return std::static_pointer_cast<To>(Ptr);
 }

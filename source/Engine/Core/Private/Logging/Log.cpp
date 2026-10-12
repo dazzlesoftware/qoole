@@ -1,87 +1,120 @@
-/*
-Copyright (C) 2026 Dazzle Software, LLC
-
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-*/
+// Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Logging/Log.h"
-#include "Misc/StringFormat.h"
 
-#include <algorithm>
+#include "HAL/PlatformMisc.h"
 
-namespace Genesis::Private
+#include <cstdio>
+#include <cstdlib>
+#include <mutex>
+
+DEFINE_LOG_CATEGORY(LogCore, Log);
+
+const char* ToString(ELogVerbosity Verbosity)
 {
-	// Platform debugger output (OutputDebugString on Windows).
-	void WriteToDebugger(const char* Utf8Text);
+	switch (Verbosity)
+	{
+	case ELogVerbosity::Fatal: return "Fatal";
+	case ELogVerbosity::Error: return "Error";
+	case ELogVerbosity::Warning: return "Warning";
+	case ELogVerbosity::Display: return "Display";
+	case ELogVerbosity::Log: return "Log";
+	case ELogVerbosity::Verbose: return "Verbose";
+	case ELogVerbosity::VeryVerbose: return "VeryVerbose";
+	}
+	return "?";
 }
 
 namespace
 {
-	FLog GLogInstance;
-}
-
-FLog* GLog = &GLogInstance;
-
-void FLog::AddSink(ILogSink* Sink)
-{
-	if (!Sink)
-		return;
-	std::lock_guard Lock(Mutex);
-	if (std::find(Sinks.begin(), Sinks.end(), Sink) == Sinks.end())
-		Sinks.push_back(Sink);
-}
-
-void FLog::RemoveSink(ILogSink* Sink)
-{
-	std::lock_guard Lock(Mutex);
-	Sinks.erase(std::remove(Sinks.begin(), Sinks.end(), Sink), Sinks.end());
-}
-
-void FLog::Log(ELogVerbosity Verbosity, const char* Utf8Text)
-{
-	if (!Utf8Text || !*Utf8Text)
-		return;
-
-	Genesis::Private::WriteToDebugger(Utf8Text);
-
-	std::lock_guard Lock(Mutex);
-	for (ILogSink* Sink : Sinks)
-		Sink->Serialize(Verbosity, Utf8Text);
-}
-
-void FLog::Logf(ELogVerbosity Verbosity, const char* Format, ...)
-{
-	va_list Args;
-	va_start(Args, Format);
-	const std::string Text = Genesis::FormatV(Format, Args);
-	va_end(Args);
-	Log(Verbosity, Text.c_str());
-}
-
-const char* LexToString(ELogVerbosity Verbosity)
-{
-	switch (Verbosity)
+	std::string FormatLine(const FLogCategory& Category, ELogVerbosity Verbosity, std::string_view Message)
 	{
-	case ELogVerbosity::Fatal:		return "Fatal";
-	case ELogVerbosity::Error:		return "Error";
-	case ELogVerbosity::Warning:	return "Warning";
-	case ELogVerbosity::Display:	return "Display";
-	case ELogVerbosity::Log:		return "Log";
-	case ELogVerbosity::Verbose:	return "Verbose";
+		if (Verbosity == ELogVerbosity::Log || Verbosity == ELogVerbosity::Display)
+		{
+			return std::format("{}: {}\n", Category.Name, Message);
+		}
+		return std::format("{}: {}: {}\n", Category.Name, ToString(Verbosity), Message);
 	}
-	return "Unknown";
+
+	class FDebuggerOutputDevice final : public FOutputDevice
+	{
+	public:
+		void Serialize(const FLogCategory& Category, ELogVerbosity Verbosity, std::string_view Message) override
+		{
+			FPlatformMisc::LowLevelOutputDebugString(FormatLine(Category, Verbosity, Message));
+		}
+	};
+
+	class FStdErrOutputDevice final : public FOutputDevice
+	{
+	public:
+		void Serialize(const FLogCategory& Category, ELogVerbosity Verbosity, std::string_view Message) override
+		{
+			const std::string Line = FormatLine(Category, Verbosity, Message);
+			std::fwrite(Line.data(), 1, Line.size(), stderr);
+			std::fflush(stderr);
+		}
+	};
+
+	struct FLogState
+	{
+		std::recursive_mutex Mutex;
+		FDebuggerOutputDevice Debugger;
+		FStdErrOutputDevice StdErr;
+		bool bDefaultDevices = true;
+		TArray<FOutputDevice*> Devices;
+	};
+
+	FLogState& GetState()
+	{
+		static FLogState State;
+		return State;
+	}
+}
+
+void FLog::Write(const FLogCategory& Category, ELogVerbosity Verbosity, std::string_view Message)
+{
+	FLogState& State = GetState();
+	{
+		std::scoped_lock Lock(State.Mutex);
+		if (State.bDefaultDevices || Verbosity == ELogVerbosity::Fatal)
+		{
+			State.Debugger.Serialize(Category, Verbosity, Message);
+			State.StdErr.Serialize(Category, Verbosity, Message);
+		}
+		for (FOutputDevice* Device : State.Devices)
+		{
+			Device->Serialize(Category, Verbosity, Message);
+		}
+	}
+
+	if (Verbosity == ELogVerbosity::Fatal)
+	{
+		if (FPlatformMisc::IsDebuggerPresent())
+		{
+			FPlatformMisc::DebugBreak();
+		}
+		std::abort();
+	}
+}
+
+void FLog::AddDevice(FOutputDevice* Device)
+{
+	FLogState& State = GetState();
+	std::scoped_lock Lock(State.Mutex);
+	State.Devices.push_back(Device);
+}
+
+void FLog::RemoveDevice(FOutputDevice* Device)
+{
+	FLogState& State = GetState();
+	std::scoped_lock Lock(State.Mutex);
+	ArrayUtil::Remove(State.Devices, Device);
+}
+
+void FLog::SetDefaultDevicesEnabled(bool bEnabled)
+{
+	FLogState& State = GetState();
+	std::scoped_lock Lock(State.Mutex);
+	State.bDefaultDevices = bEnabled;
 }

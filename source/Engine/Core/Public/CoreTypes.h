@@ -1,26 +1,8 @@
-/*
-Copyright (C) 2026 Dazzle Software, LLC
-
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-*/
+// Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
+//
+// Fixed-size integer types and basic platform macros used by every module.
 
 #pragma once
-
-// Fixed-size integer types used across Genesis modules.
 
 #include <cstddef>
 #include <cstdint>
@@ -33,18 +15,32 @@ using uint8 = std::uint8_t;
 using uint16 = std::uint16_t;
 using uint32 = std::uint32_t;
 using uint64 = std::uint64_t;
+using SIZE_T = std::size_t;
 
-#if defined(_MSC_VER)
-#define GENESIS_DEBUG_BREAK() __debugbreak()
+// Returned by searches that find nothing.
+inline constexpr int32 INDEX_NONE = -1;
+
+#if defined(_WIN32)
+	#define GENESIS_PLATFORM_WINDOWS 1
 #else
-#define GENESIS_DEBUG_BREAK() ((void)0)
+	#define GENESIS_PLATFORM_WINDOWS 0
 #endif
 
-// Checks are compiled in for debug builds, like MFC's ASSERT was.
-#ifndef GENESIS_DO_CHECK
-#ifdef NDEBUG
-#define GENESIS_DO_CHECK 0
-#else
-#define GENESIS_DO_CHECK 1
+#ifndef GENESIS_DEBUG
+	#define GENESIS_DEBUG 0
 #endif
-#endif
+
+#define GENESIS_LIKELY(x) (x) [[likely]]
+#define GENESIS_UNLIKELY(x) (x) [[unlikely]]
+
+// Non-copyable helper base.
+class FNoncopyable
+{
+protected:
+	FNoncopyable() = default;
+	~FNoncopyable() = default;
+
+public:
+	FNoncopyable(const FNoncopyable&) = delete;
+	FNoncopyable& operator=(const FNoncopyable&) = delete;
+};

@@ -1,68 +1,63 @@
-/*
-Copyright (C) 2026 Dazzle Software, LLC
-
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-*/
+// Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
+//
+// check / checkf / verify / ensure / ensuref.
+//
+// - check(expr), checkf(expr, fmt, args...): fatal when false. Compiled out
+//   (expression not evaluated) when GENESIS_DO_CHECK is 0, the default for
+//   Release builds.
+// - verify(expr): like check, but the expression is always evaluated.
+// - ensure(expr), ensuref(expr, fmt, args...): always evaluated; when false,
+//   logs an error (once per call site), breaks into an attached debugger and
+//   returns false so the caller can recover: if (!ensure(Ptr)) return;
+//
+// Messages use std::format syntax ("{}").
 
 #pragma once
 
-// Assertions, replacing MFC's ASSERT/VERIFY.
-//
-// check(Expr)          Debug only, like ASSERT. Expr is not evaluated in
-//                      release builds.
-// checkf(Expr, Fmt...) check with a printf-style message.
-// verify(Expr)         Expr is always evaluated; only checked in debug.
-// checkNoEntry()       Marks code that must not be reached.
-// ensure(Expr)         Always evaluated and checked, returns Expr as a bool;
-//                      a failure is logged but execution continues.
-//
-// A failed check logs an error and then, in debug builds, shows the C
-// runtime's Abort/Retry/Ignore report (the dialog MFC's ASSERT used), or
-// breaks straight into an attached debugger.
-
 #include "CoreTypes.h"
 
-namespace Genesis::Private
-{
-	// Return true when the caller should break into the debugger.
-	bool OnCheckFailed(const char* Expr, const char* File, int Line);
-	bool OnCheckfFailed(const char* Expr, const char* File, int Line, const char* Format, ...);
-	bool OnEnsureFailed(const char* Expr, const char* File, int Line);
-}
+#include <format>
+#include <string>
 
-#if GENESIS_DO_CHECK
-
-#define check(Expr) \
-	do { if (!(Expr) && ::Genesis::Private::OnCheckFailed(#Expr, __FILE__, __LINE__)) GENESIS_DEBUG_BREAK(); } while (0)
-
-#define checkf(Expr, Format, ...) \
-	do { if (!(Expr) && ::Genesis::Private::OnCheckfFailed(#Expr, __FILE__, __LINE__, Format, ##__VA_ARGS__)) GENESIS_DEBUG_BREAK(); } while (0)
-
-#define verify(Expr) check(Expr)
-
-#else
-
-#define check(Expr) ((void)0)
-#define checkf(Expr, Format, ...) ((void)0)
-#define verify(Expr) ((void)(Expr))
-
+#ifndef GENESIS_DO_CHECK
+	#define GENESIS_DO_CHECK GENESIS_DEBUG
 #endif
 
-#define checkNoEntry() check(!"Enclosing block should never be called")
+struct FAssertion
+{
+	// Reports a failed check and terminates.
+	[[noreturn]] static void CheckFailed(const char* Expr, const char* File, int32 Line, const std::string& Message);
 
-#define ensure(Expr) \
-	((Expr) ? true : (::Genesis::Private::OnEnsureFailed(#Expr, __FILE__, __LINE__) ? (GENESIS_DEBUG_BREAK(), false) : false))
+	// Reports a failed ensure. bFired is the call site's "already reported" flag.
+	// Always returns false.
+	static bool EnsureFailed(const char* Expr, const char* File, int32 Line, bool& bFired, const std::string& Message);
+
+	template <typename... Args>
+	static std::string FormatText(std::format_string<Args...> Fmt, Args&&... InArgs)
+	{
+		return std::format(Fmt, std::forward<Args>(InArgs)...);
+	}
+
+	static std::string FormatText() { return {}; }
+};
+
+#if GENESIS_DO_CHECK
+	#define check(expr) \
+		do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, {}); } } while (0)
+	#define checkf(expr, fmt, ...) \
+		do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, ::FAssertion::FormatText(fmt __VA_OPT__(,) __VA_ARGS__)); } } while (0)
+	#define checkNoEntry() ::FAssertion::CheckFailed("unreachable code", __FILE__, __LINE__, {})
+#else
+	#define check(expr) do { } while (0)
+	#define checkf(expr, fmt, ...) do { } while (0)
+	#define checkNoEntry() do { } while (0)
+#endif
+
+#define verify(expr) \
+	do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, {}); } } while (0)
+
+#define ensure(expr) \
+	((expr) ? true : [&]() { static bool bFired = false; return ::FAssertion::EnsureFailed(#expr, __FILE__, __LINE__, bFired, {}); }())
+
+#define ensuref(expr, fmt, ...) \
+	((expr) ? true : [&]() { static bool bFired = false; return ::FAssertion::EnsureFailed(#expr, __FILE__, __LINE__, bFired, ::FAssertion::FormatText(fmt __VA_OPT__(,) __VA_ARGS__)); }())
