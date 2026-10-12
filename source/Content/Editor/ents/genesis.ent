@@ -1,0 +1,37 @@
+//
+//  Genesis entity set: the few engine-neutral entities the map editor
+//  offers until Genesis Engine defines its own (format: see quake.ent in
+//  GenesisEditor.pak).
+//
+
+class "Info"
+class "Light"
+class "Player"
+
+entity "worldspawn" "Null->Worldspawn" "The map itself"
+{
+	"message"	str		"The title of the map"
+	model
+}
+
+entity "info_player_start" "Player->Start" "Where the player starts"
+{
+	"origin"	notuser
+	"angle"		int		"Direction the player faces, in degrees"
+	gem "gems/player.gem"
+}
+
+entity "info_null" "Info->Null" "A named position other entities can target"
+{
+	"origin"	notuser
+	"targetname"	str		"Name other entities use to target this one"
+}
+
+entity "light" "Light->Point Light" "A point light"
+{
+	"origin"	notuser
+	"light"		int (300)	"Brightness"
+	"_color"	str		"Color as three numbers from 0 to 1"
+	"targetname"	str		"Name other entities use to target this one"
+	gem "gems/light.gem"
+}

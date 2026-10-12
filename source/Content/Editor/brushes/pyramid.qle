@@ -1,0 +1,19 @@
+// QOOLE
+// Brushes: 1
+// Entities: 0
+// Objects: 1
+
+{ // Brush 0 : Pentahedron.  4-sided pyramid.
+  ( 0 0 76 ) ( 32 32 -19 ) ( 32 -32 -19 )
+  ( 0 0 76 ) ( -32 32 -19 ) ( 32 32 -19 )
+  ( 0 0 76 ) ( -32 -32 -19 ) ( -32 32 -19 )
+  ( 0 0 76 ) ( 32 -32 -19 ) ( -32 -32 -19 )
+  ( -32 32 -19 ) ( -32 -32 -19 ) ( 32 -32 -19 )
+}
+
+{ // Object 0 : Tri Prism (4 sided)
+  Position: (0.0, 0.0, 0.0)
+  Orientation (deg): (0.0, 0.0, 0.0)
+  Scale: (1.0, 1.0, 1.0)
+  Brush: 0
+}
