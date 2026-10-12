@@ -37,6 +37,7 @@ void LFatal(const char *fmt = 0, ...);
 // ========== LFile ==========
 
 #include <stdio.h>
+#include <limits.h>
 #include <malloc.h>
 #include <string.h>
 #include <io.h>
@@ -167,7 +168,9 @@ private:
 struct LVar {
 	char name[32];
 	void *ptr;
-	int type;
+	int type;		// storage type (LVAR_STORE_*)
+	int size;		// buffer size for strings
+	int minVal, maxVal;
 };
 
 class LConfig {
@@ -175,13 +178,30 @@ public:
 	LConfig(char *name);
 	~LConfig(void);
 
-	void RegisterVar(char *name, void *ptr, int type);
+	// The variable's C++ type decides how it is loaded and saved, so a bool
+	// or WORD is never accessed as a 4-byte int. type is the LVAR_* kind the
+	// caller expects. Numbers outside [minVal, maxVal] in the registry are
+	// ignored and the variable keeps its current value.
+	void RegisterVar(char *name, int *ptr, int type,
+					 int minVal = INT_MIN, int maxVal = INT_MAX);
+	void RegisterVar(char *name, UINT *ptr, int type,
+					 int minVal = 0, int maxVal = INT_MAX);
+	void RegisterVar(char *name, bool *ptr, int type);
+	void RegisterVar(char *name, WORD *ptr, int type);
+	void RegisterVar(char *name, float *ptr, int type);
+	void RegisterVar(char *name, char *ptr, int type, int size = 256);
+	template<size_t N>
+	void RegisterVar(char *name, char (*ptr)[N], int type) {
+		RegisterVar(name, *ptr, type, (int)N);
+	}
 	void SaveVars(void);
 
 	static void Init(int curVer, int reqVer);
 	static void Exit(void);
 
 private:
+	void AddVar(char *name, void *ptr, int type, int size, int minVal, int maxVal);
+
 	char sectionName[32];
 	int numLVars;
 	LVar *lvars[256];

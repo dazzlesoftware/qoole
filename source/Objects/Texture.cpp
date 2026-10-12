@@ -341,7 +341,7 @@ TexDB::TexDB(Game *_game) {
 	file.Read(&ver, sizeof(ver));
 	if(ver != TEXDB_VER)
 	{
-		FDraw::OutputText("Error.\nDB version is %s, should be %s.\n", ver, TEXDB_VER);
+		FDraw::OutputText("Error.\nDB version is %d, should be %d.\n", ver, TEXDB_VER);
 		return;
 	}
 

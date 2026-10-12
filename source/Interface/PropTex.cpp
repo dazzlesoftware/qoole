@@ -681,8 +681,8 @@ void FPropPageTexture::OnKillFocusPPTXScale() {
 
 	if (!UpdateData(TRUE) &&
 		(focusWnd == NULL || focusWnd->GetParent() != this)) {
-		char text[10];
-		sprintf(text, "%d", oldXScl);
+		char text[32];
+		sprintf(text, "%g", oldXScl);
 		ctrlXScale().SetWindowText(text);
 		return;
 	}
@@ -722,8 +722,8 @@ void FPropPageTexture::OnKillFocusPPTYScale() {
 
 	if (!UpdateData(TRUE) &&
 		(focusWnd == NULL || focusWnd->GetParent() != this)) {
-		char text[10];
-		sprintf(text, "%d", oldYScl);
+		char text[32];
+		sprintf(text, "%g", oldYScl);
 		ctrlYScale().SetWindowText(text);
 		return;
 	}
@@ -763,8 +763,8 @@ void FPropPageTexture::OnKillFocusPPTRotAng() {
 
 	if (!UpdateData(TRUE)&&
 		(focusWnd == NULL || focusWnd->GetParent() != this)) {
-		char text[10];
-		sprintf(text, "%d", oldRot);
+		char text[32];
+		sprintf(text, "%g", oldRot);
 		ctrlRotAng().SetWindowText(text);
 		return;
 	}

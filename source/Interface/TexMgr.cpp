@@ -202,7 +202,7 @@ void FTexMgr::OnDirSel() {
 	
 	strcpy(texDirName, texDir->dirName);
 
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT)));
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
 
 	if(!pGame->UsesWadFile()) {
 		char *dirName, *texName;
@@ -262,8 +262,8 @@ void FTexMgr::OnDirSel() {
 		delete [] wadEntry;
 	}
 
-//	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_ARROW)));
-//	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT)));
+//	SetCursor(LoadCursor(NULL, IDC_ARROW));
+//	SetCursor(LoadCursor(NULL, IDC_WAIT));
 
 	m_texList.ResetContent();
 	for(int i = 0; i < texList->GetNumTexs(); i++) {
@@ -284,7 +284,7 @@ void FTexMgr::OnDirSel() {
 			m_pickList.DeleteString(index);
 	}
 
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_ARROW)));
+	SetCursor(LoadCursor(NULL, IDC_ARROW));
 
 	m_add.EnableWindow(false);
 	m_remove.EnableWindow(false);

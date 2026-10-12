@@ -369,7 +369,7 @@ Heretic2::ExtractTextures(void) {
 	progressWnd.SetText("Extracting Textures");
 	progressWnd.NoCancelButton();
 
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT)));
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
 
 	for(i = 0; i < pak0->entries; i++) {
 		name = pak0->entry[i].filename;
@@ -395,7 +395,7 @@ Heretic2::ExtractTextures(void) {
 	}
 
 	progressWnd.Clear();
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_ARROW)));
+	SetCursor(LoadCursor(NULL, IDC_ARROW));
 }
 
 typedef struct h2miptex_s

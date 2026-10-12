@@ -89,8 +89,14 @@ FDrawMFC::CopyBuf(int bufNum) {
 
 void
 FDrawMFC::RealizePal(void) {
-	for(int i = 0; i < 256; i++)
+	// A pen still selected into a DC can't be deleted.
+	for(int i = 0; i < numBufs; i++)
+		dc[i].SelectStockObject(BLACK_PEN);
+
+	for(int i = 0; i < 256; i++) {
+		pen[i].DeleteObject();
 		pen[i].CreatePen(PS_SOLID, 1, RGB(pal[i].red, pal[i].green, pal[i].blue));
+	}
 }
 
 void FDrawMFC::ZBufInit(void) { }

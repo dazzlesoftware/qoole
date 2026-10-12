@@ -49,10 +49,7 @@ MRC_AUX_DATA::MRC_AUX_DATA()
 // constructor ensures we have all the colors to hand
 //----------------------------------------------------------------------------------
 {
-    DWORD dwVersion = ::GetVersion();
-	//nWinVer = (LOBYTE(dwVersion) << 8) + HIBYTE(dwVersion);
-	//bWin32s = (dwVersion & 0x80000000) != 0;
-	bWin4 = (BYTE)dwVersion >= 4;
+	bWin4 = TRUE;	// every supported Windows version is 4.0 or later
 	
 	cxBorder2 = bWin4 ? CX_BORDER*2 : CX_BORDER;
 	cyBorder2 = bWin4 ? CY_BORDER*2 : CY_BORDER;

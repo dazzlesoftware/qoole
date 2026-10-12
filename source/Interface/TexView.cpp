@@ -391,7 +391,7 @@ void FTexWnd::SetTexList(TexList *newList) {
 
 	numCells = 0;
 
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT)));
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
 
 	CProgressWnd progressWnd(AfxGetMainWnd());
 	progressWnd.SetText("Loading Textures");
@@ -403,14 +403,14 @@ void FTexWnd::SetTexList(TexList *newList) {
 		progressWnd.PeekAndPump();
 
 		if(progressWnd.Cancelled()) {
-			SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_ARROW)));
+			SetCursor(LoadCursor(NULL, IDC_ARROW));
 			delete texList;
 			texList = NULL;
 			return;
 		}
 	}
 
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_ARROW)));
+	SetCursor(LoadCursor(NULL, IDC_ARROW));
 
 	SetScrollPos(SB_VERT, 0);
 

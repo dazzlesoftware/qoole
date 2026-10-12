@@ -329,7 +329,7 @@ Sin::ExtractTextures(void) {
 	progressWnd.SetText("Extracting Textures");
 	progressWnd.NoCancelButton();
 
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT)));
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
 
 	for(int j = 0; j < 2; j++) {
 	LPak *pak = j ? pak1 : pak0;
@@ -353,7 +353,7 @@ Sin::ExtractTextures(void) {
 	}
 
 	progressWnd.Clear();
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_ARROW)));
+	SetCursor(LoadCursor(NULL, IDC_ARROW));
 }
 
 // Game Map Compile Stuff.

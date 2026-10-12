@@ -34,8 +34,8 @@ float FDraw::textureGamma = 0.7f;
 void
 FDraw::Init(void) {
 	cfg = new LConfig("Draw");
-	cfg->RegisterVar("GridStep1", &gridStep1, LVAR_INT);
-	cfg->RegisterVar("GridStep2", &gridStep2, LVAR_INT);
+	cfg->RegisterVar("GridStep1", &gridStep1, LVAR_INT, 1, 8192);
+	cfg->RegisterVar("GridStep2", &gridStep2, LVAR_INT, 1, 1024);
 	cfg->RegisterVar("TextureGamma", &textureGamma, LVAR_FLOAT);
 }
 

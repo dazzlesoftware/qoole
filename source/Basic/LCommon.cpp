@@ -517,9 +517,54 @@ LConfig::~LConfig(void) {
 		delete lvars[i];
 }
 
+// How an LVar is stored in memory.
+#define LVAR_STORE_STR 0
+#define LVAR_STORE_INT 1
+#define LVAR_STORE_UINT 2
+#define LVAR_STORE_BOOL 3
+#define LVAR_STORE_WORD 4
+#define LVAR_STORE_FLOAT 5
+
 void
-LConfig::RegisterVar(char *name, void *ptr, int type) {
+LConfig::RegisterVar(char *name, int *ptr, int type, int minVal, int maxVal) {
+	ASSERT(type == LVAR_INT);
+	AddVar(name, ptr, LVAR_STORE_INT, sizeof(int), minVal, maxVal);
+}
+
+void
+LConfig::RegisterVar(char *name, UINT *ptr, int type, int minVal, int maxVal) {
+	ASSERT(type == LVAR_INT);
+	AddVar(name, ptr, LVAR_STORE_UINT, sizeof(UINT), minVal, maxVal);
+}
+
+void
+LConfig::RegisterVar(char *name, bool *ptr, int type) {
+	ASSERT(type == LVAR_INT);
+	AddVar(name, ptr, LVAR_STORE_BOOL, sizeof(bool), 0, 0);
+}
+
+void
+LConfig::RegisterVar(char *name, WORD *ptr, int type) {
+	ASSERT(type == LVAR_INT);
+	AddVar(name, ptr, LVAR_STORE_WORD, sizeof(WORD), 0, 0);
+}
+
+void
+LConfig::RegisterVar(char *name, float *ptr, int type) {
+	ASSERT(type == LVAR_FLOAT);
+	AddVar(name, ptr, LVAR_STORE_FLOAT, sizeof(float), 0, 0);
+}
+
+void
+LConfig::RegisterVar(char *name, char *ptr, int type, int size) {
+	ASSERT(type == LVAR_STR);
+	AddVar(name, ptr, LVAR_STORE_STR, size, 0, 0);
+}
+
+void
+LConfig::AddVar(char *name, void *ptr, int type, int size, int minVal, int maxVal) {
 	ASSERT(numLVars < 256);
+	ASSERT(strlen(name) < sizeof(lvars[0]->name));
 
 	LVar *lvar = new LVar;
 	lvars[numLVars++] = lvar;
@@ -527,6 +572,9 @@ LConfig::RegisterVar(char *name, void *ptr, int type) {
 	strcpy(lvar->name, name);
 	lvar->ptr = ptr;
 	lvar->type = type;
+	lvar->size = size;
+	lvar->minVal = minVal;
+	lvar->maxVal = maxVal;
 
 	if (registryVer < requiredVer)
 		return;
@@ -534,17 +582,35 @@ LConfig::RegisterVar(char *name, void *ptr, int type) {
 	CWinApp *pApp = AfxGetApp();
 	CString str = pApp->GetProfileString(sectionName, lvar->name);
 
-	if(!strlen(str))
+	if(str.IsEmpty())
 		return;
 
-	char *buf = str.GetBuffer(255);
+	if(type == LVAR_STORE_STR) {
+		lstrcpyn((char *)ptr, str, size);
+		return;
+	}
 
-	if(lvar->type == LVAR_STR)
-		strcpy((char *)lvar->ptr, buf);
-	else if(lvar->type == LVAR_INT)
-		sscanf(buf, "%d", lvar->ptr);
-	else if(lvar->type == LVAR_FLOAT)
-		sscanf(buf, "%f", lvar->ptr);
+	if(type == LVAR_STORE_FLOAT) {
+		sscanf(str, "%f", (float *)ptr);
+		return;
+	}
+
+	int val;
+	if(sscanf(str, "%d", &val) != 1)
+		return;
+
+	// Older versions saved bools and WORDs as 4-byte ints, picking up the
+	// bytes of whatever followed them in memory. Only the low bytes are real.
+	if(type == LVAR_STORE_BOOL)
+		*(bool *)ptr = (val & 0xff) != 0;
+	else if(type == LVAR_STORE_WORD)
+		*(WORD *)ptr = (WORD)(val & 0xffff);
+	else if(val >= minVal && val <= maxVal) {
+		if(type == LVAR_STORE_INT)
+			*(int *)ptr = val;
+		else
+			*(UINT *)ptr = (UINT)val;
+	}
 }
 
 void
@@ -555,12 +621,26 @@ LConfig::SaveVars(void) {
 	for(int i = 0; i < numLVars; i++) {
 		LVar *lvar = lvars[i];
 
-		if(lvar->type == LVAR_STR)
-			strcpy(buf, (char *)lvar->ptr);
-		else if(lvar->type == LVAR_INT)
+		switch(lvar->type) {
+		case LVAR_STORE_STR:
+			lstrcpyn(buf, (char *)lvar->ptr, sizeof(buf));
+			break;
+		case LVAR_STORE_INT:
 			sprintf(buf, "%d", *(int *)lvar->ptr);
-		else if(lvar->type == LVAR_FLOAT)
+			break;
+		case LVAR_STORE_UINT:
+			sprintf(buf, "%u", *(UINT *)lvar->ptr);
+			break;
+		case LVAR_STORE_BOOL:
+			sprintf(buf, "%d", *(bool *)lvar->ptr ? 1 : 0);
+			break;
+		case LVAR_STORE_WORD:
+			sprintf(buf, "%u", (unsigned int)*(WORD *)lvar->ptr);
+			break;
+		case LVAR_STORE_FLOAT:
 			sprintf(buf, "%f", *(float *)lvar->ptr);
+			break;
+		}
 
 		pApp->WriteProfileString(sectionName, lvar->name, buf);
 	}

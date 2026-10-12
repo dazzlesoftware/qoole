@@ -376,9 +376,12 @@ void FPropPageEntity::OnClickCallBack(int row, FPropLstInfoStruct *info) {
 CString *FPropPageEntity::DlgProcCallBack(CString &sInitText) {
 	CColorDialog clrDlg;
 
-	unsigned char r = 0, g = 0, b = 0;
-	sscanf(sInitText, "(%d, %d, %d)", &r, &g, &g);
-	COLORREF clr = (b << 16) | (g < 8) | r;
+	// Accept "(r g b)" as written below, and "(r, g, b)".
+	CString text = sInitText;
+	text.Replace(',', ' ');
+	int r = 0, g = 0, b = 0;
+	sscanf(text, "(%d %d %d)", &r, &g, &b);
+	COLORREF clr = RGB(r & 0xff, g & 0xff, b & 0xff);
 
 	clrDlg.m_cc.Flags |= CC_RGBINIT;
 	clrDlg.m_cc.rgbResult  = clr;

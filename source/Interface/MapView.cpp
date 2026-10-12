@@ -129,14 +129,14 @@ END_MESSAGE_MAP()
 void FMapView::Init() {
 	cfg = new LConfig("MapView");
 	cfg->RegisterVar("GridSnap", &gridSnap, LVAR_INT);
-	cfg->RegisterVar("GridSnapVal", &gridSnapVal, LVAR_INT);
+	cfg->RegisterVar("GridSnapVal", &gridSnapVal, LVAR_INT, 1, 8192);
 	cfg->RegisterVar("RotSnap", &rotSnap, LVAR_INT);
-	cfg->RegisterVar("RotSnapVal", &rotSnapVal, LVAR_INT);
+	cfg->RegisterVar("RotSnapVal", &rotSnapVal, LVAR_INT, 1, 360);
 
 	cfg->RegisterVar("InvLMouse", &invLMouse, LVAR_INT);
 	cfg->RegisterVar("InvRMouse", &invRMouse, LVAR_INT);
-	cfg->RegisterVar("WalkSpeed", &walkSpeed, LVAR_INT);
-	cfg->RegisterVar("Sensitivity", &sensitivity, LVAR_INT);
+	cfg->RegisterVar("WalkSpeed", &walkSpeed, LVAR_INT, 1, 8192);
+	cfg->RegisterVar("Sensitivity", &sensitivity, LVAR_INT, 1, 1000);
 
 	cfg->RegisterVar("KeyForward", &keyForward, LVAR_INT);
 	cfg->RegisterVar("KeyBackward", &keyBackward, LVAR_INT);

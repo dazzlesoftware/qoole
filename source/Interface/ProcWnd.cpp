@@ -281,13 +281,15 @@ void FProcessWnd::OnIdleUpdateContent(void) {
 DWORD CALLBACK FProcessWnd::GetInputFromBuffer(DWORD_PTR dwCookie, LPBYTE bpBuff,
 											   LONG cb, LONG FAR *pcb) {
 	FProcessWnd *pPWnd = (FProcessWnd *) dwCookie;
-	int index = 0;
+	int count = ((int)cb < pPWnd->bufSize) ? (int)cb : pPWnd->bufSize;
 
-	for(; cb > 0 && pPWnd->bufSize > 0; cb--, pPWnd->bufSize--) {
-		bpBuff[index] = pPWnd->childStdinBuf[index++];
-	}
+	memcpy(bpBuff, pPWnd->childStdinBuf, count);
 
-	*pcb = index;
+	// Keep whatever didn't fit for the next call.
+	pPWnd->bufSize -= count;
+	memmove(pPWnd->childStdinBuf, pPWnd->childStdinBuf + count, pPWnd->bufSize);
+
+	*pcb = count;
 	return 0;
 }
 

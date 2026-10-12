@@ -265,7 +265,7 @@ void ExtractTexsFromPak(LPak *pak, char *baseDir) {
 	progressWnd.SetText("Extracting Textures");
 	FDraw::OutputText("Extracting textures from Pak... ");
 
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT)));
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
 
 	for(i = 0; i < pak->entries; i++) {
 		name = pak->entry[i].filename;
@@ -294,6 +294,6 @@ void ExtractTexsFromPak(LPak *pak, char *baseDir) {
 
 	FDraw::OutputText("OK.\n");
 	progressWnd.Clear();
-	SetCursor(LoadCursor(NULL, MAKEINTRESOURCE(IDC_ARROW)));
+	SetCursor(LoadCursor(NULL, IDC_ARROW));
 }
 

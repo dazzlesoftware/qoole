@@ -166,12 +166,12 @@ FMainFrame::FMainFrame() {
 
 	// Edit: Undo levels.
 	undoLevels = 50;
-	cfg->RegisterVar("UndoLevels", &undoLevels, LVAR_INT);
+	cfg->RegisterVar("UndoLevels", &undoLevels, LVAR_INT, 0, 10000);
 	opManager.SetUndoBufSize(undoLevels);
 
 	// Edit: Hollow.
 	cfg->RegisterVar("PromptHollow", &promptHollow, LVAR_INT);
-	cfg->RegisterVar("HollowThickness", &hollowThickness, LVAR_INT);
+	cfg->RegisterVar("HollowThickness", &hollowThickness, LVAR_INT, 1, 65536);
 
 	// Grouping.
 	cfg->RegisterVar("PromptGroupName", &promptGroupName, LVAR_INT);
@@ -588,7 +588,7 @@ void FMainFrame::UpdateFrameTitle(void) {
 		return;
 	}
 
-	sprintf(winTitle, "%s - %s %s%s", pDeskTopDoc->GetTitle(),
+	sprintf(winTitle, "%s - %s %s%s", (LPCTSTR)pDeskTopDoc->GetTitle(),
 			AfxGetAppName(), GENESIS_VERSION,
 			pDeskTopDoc->IsModified() ? " *" : "");
 

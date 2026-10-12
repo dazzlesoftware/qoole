@@ -180,7 +180,7 @@ void FPrefabMgr::OnFolderExpanding(NMHDR *pnmh, LRESULT *pResult) {
 		return;
 
 	// Set hour glass cursor.
-	HCURSOR hOldCursor = LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT));
+	HCURSOR hOldCursor = LoadCursor(NULL, IDC_WAIT);
 	hOldCursor = ::SetCursor(hOldCursor);
 
 	// Delete the dummy node, if any.
@@ -229,7 +229,7 @@ void FPrefabMgr::OnFolderCollapsed(NMHDR *pnmh, LRESULT *pResult) {
 		return;
 
 	// Set hour glass cursor.
-	HCURSOR hOldCursor = LoadCursor(NULL, MAKEINTRESOURCE(IDC_WAIT));
+	HCURSOR hOldCursor = LoadCursor(NULL, IDC_WAIT);
 	hOldCursor = ::SetCursor(hOldCursor);
 
 	// Delete all the nodes.
