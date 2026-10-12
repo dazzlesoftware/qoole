@@ -203,7 +203,11 @@ MapIO::ReadEntities(LFile *inFile, LinkList<Object> &objList) {
 			newObj = new Object();
 		}
 		
-		else if (brushes.NumOfElm() == 1)
+		// Worldspawn becomes the root and gets the other entities as
+		// children, so its brushes always go in child nodes: a node can't
+		// hold a brush and children.
+		else if (brushes.NumOfElm() == 1 &&
+				 strcmp(newEnt->GetClassname(), "worldspawn") != 0)
 		{
 			newObj = &(brushes.RemoveNode(0));
 		}

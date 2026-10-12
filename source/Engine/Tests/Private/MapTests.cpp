@@ -152,10 +152,6 @@ namespace
 
 	// A Quake map: a 128 x 128 x 16 floor and a 32-unit block on it in
 	// worldspawn, and a player start above them.
-	//
-	// Worldspawn has two brushes on purpose: with exactly one, MapIO makes
-	// the brush node itself the worldspawn and the other entities its
-	// children, which the object tree does not allow (original Qoole bug).
 	std::string BoxMap()
 	{
 		return "// Genesis test map\n"
@@ -274,6 +270,48 @@ TEST_CASE("A .map file loads into an object tree")
 	REQUIRE(Root != nullptr);
 	CheckBoxMap(*Root);
 	CheckBoxBrushBounds(*Root);
+}
+
+TEST_CASE("A worldspawn with a single brush keeps it in a child node")
+{
+	// Qoole made the one brush node itself the worldspawn, and with it the
+	// parent of every other entity, so a node held a brush and children.
+	FTestGameScope GameScope;
+	FTempDir Temp;
+	const std::string MapPath = Temp.AnsiFile("single.map");
+	REQUIRE(WriteText(MapPath,
+		"{\n"
+		"\"classname\" \"worldspawn\"\n"
+		+ Brush(-64, -64, -16, 64, 64, 0)
+		+ "}\n"
+		"{\n"
+		"\"classname\" \"info_player_start\"\n"
+		"\"origin\" \"0 0 40\"\n"
+		"}\n"));
+
+	std::unique_ptr<Object> Root(MapIO::ReadMap(MapPath.c_str()));
+	REQUIRE(Root != nullptr);
+	CHECK_FALSE(Root->HasBrush());
+	CHECK(Root->GetNumChildren() == 2);
+	CHECK(Root->CountBrushes() == 1);
+	CHECK(Root->CountEntities() == 2);
+
+	std::vector<Object*> Brushes;
+	CollectBrushes(*Root, Brushes);
+	REQUIRE(Brushes.size() == 1);
+	CHECK(Brushes[0]->IsLeaf());
+	CheckBounds(*Brushes[0], Vector3d(-64, -64, -16), Vector3d(64, 64, 0));
+
+	// Saving keeps the player start.
+	const std::string OutPath = Temp.AnsiFile("saved.map");
+	REQUIRE(MapIO::WriteMap(OutPath.c_str(), *Root, nullptr));
+	std::unique_ptr<Object> Reloaded(MapIO::ReadMap(OutPath.c_str()));
+	REQUIRE(Reloaded != nullptr);
+	CHECK(Reloaded->CountBrushes() == 1);
+	CHECK(Reloaded->CountEntities() == 2);
+	Object* Start = FindEntity(*Reloaded, "info_player_start");
+	REQUIRE(Start != nullptr);
+	CHECK(Start->GetPosition().GetZ() == doctest::Approx(40.0f));
 }
 
 TEST_CASE("A map survives saving as .map and as .qle")
