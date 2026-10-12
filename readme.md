@@ -12,10 +12,9 @@ Genesis UI framework.
 
 Open `source/Genesis.slnx` in Visual Studio 2026. It needs the "Desktop
 development with C++" workload and the "C++ MFC for latest build tools
-(x86 & x64)" component. Build the x64 platform (the default); `GenesisEditor.exe`
+(x86 & x64)" component. The solution is x64 only; `GenesisEditor.exe`
 (`GenesisEditorD.exe` for Debug) and the `GenesisDraw*.dll` renderer plugins
-are written to `source/Exec`. The x86 platform still builds and goes to
-`source/Exec/x86`. From a command line:
+are written to `source/Exec`. From a command line:
 
     msbuild source\Genesis.slnx -p:Configuration=Release -p:Platform=x64
 

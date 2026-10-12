@@ -1,7 +1,6 @@
 <Solution>
   <Configurations>
     <Platform Name="x64" />
-    <Platform Name="x86" />
   </Configurations>
   <Folder Name="/Renderers/">
     <Project Path="Interface/DrawMFC/DrawMFC.vcxproj" Id="5f452404-f8d2-5ecf-9d02-892e70900df9" />

@@ -1,17 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|Win32">
-      <Configuration>Debug</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|Win32">
-      <Configuration>Release</Configuration>
-      <Platform>Win32</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release|x64">
       <Configuration>Release</Configuration>
@@ -26,25 +18,10 @@
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
-    <CharacterSet>MultiByte</CharacterSet>
-    <UseOfMfc>Dynamic</UseOfMfc>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-    <CharacterSet>MultiByte</CharacterSet>
-    <UseOfMfc>Dynamic</UseOfMfc>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
     <UseOfMfc>Dynamic</UseOfMfc>
   </PropertyGroup>
@@ -60,49 +37,16 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <OutDir>$(SolutionDir)Exec\x86\</OutDir>
-    <IntDir>$(SolutionDir)Build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>GenesisDrawDX12D</TargetName>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)Exec\</OutDir>
     <IntDir>$(SolutionDir)Build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <TargetName>GenesisDrawDX12D</TargetName>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <OutDir>$(SolutionDir)Exec\x86\</OutDir>
-    <IntDir>$(SolutionDir)Build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>GenesisDrawDX12</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)Exec\</OutDir>
     <IntDir>$(SolutionDir)Build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <TargetName>GenesisDrawDX12</TargetName>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;IS_DRAWDLL;__MSC__;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..;..\..\Objects;..\..\Basic;..;..\..\res;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <ConformanceMode>false</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
-      <MultiProcessorCompilation>true</MultiProcessorCompilation>
-    </ClCompile>
-    <Link>
-      <SubSystem>Windows</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <IgnoreSpecificDefaultLibraries>libc.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-      <ModuleDefinitionFile>Draw.def</ModuleDefinitionFile>
-    </Link>
-    <ResourceCompile>
-      <PreprocessorDefinitions>_DEBUG;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <Culture>0x0409</Culture>
-    </ResourceCompile>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -123,33 +67,6 @@
     </Link>
     <ResourceCompile>
       <PreprocessorDefinitions>_DEBUG;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <Culture>0x0409</Culture>
-    </ResourceCompile>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClCompile>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>MaxSpeed</Optimization>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;IS_DRAWDLL;__MSC__;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..;..\..\Objects;..\..\Basic;..;..\..\res;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <ConformanceMode>false</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
-      <MultiProcessorCompilation>true</MultiProcessorCompilation>
-    </ClCompile>
-    <Link>
-      <SubSystem>Windows</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <IgnoreSpecificDefaultLibraries>libc.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-      <ModuleDefinitionFile>Draw.def</ModuleDefinitionFile>
-    </Link>
-    <ResourceCompile>
-      <PreprocessorDefinitions>NDEBUG;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Culture>0x0409</Culture>
     </ResourceCompile>
   </ItemDefinitionGroup>
@@ -191,9 +108,9 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="..\DrawShaders.hlsl">
-      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x86\fxc.exe&quot; /nologo /O3 /T vs_5_1 /E VSMain /Vn g_DX12_VSMain /Fh &quot;$(IntDir)DrawShaders_DX12_VS.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x86\fxc.exe&quot; /nologo /O3 /T ps_5_1 /E PSColor /Vn g_DX12_PSColor /Fh &quot;$(IntDir)DrawShaders_DX12_PSColor.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x86\fxc.exe&quot; /nologo /O3 /T ps_5_1 /E PSTexture /Vn g_DX12_PSTexture /Fh &quot;$(IntDir)DrawShaders_DX12_PSTexture.h&quot; &quot;%(FullPath)&quot;</Command>
+      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\fxc.exe&quot; /nologo /O3 /T vs_5_1 /E VSMain /Vn g_DX12_VSMain /Fh &quot;$(IntDir)DrawShaders_DX12_VS.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\fxc.exe&quot; /nologo /O3 /T ps_5_1 /E PSColor /Vn g_DX12_PSColor /Fh &quot;$(IntDir)DrawShaders_DX12_PSColor.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\fxc.exe&quot; /nologo /O3 /T ps_5_1 /E PSTexture /Vn g_DX12_PSTexture /Fh &quot;$(IntDir)DrawShaders_DX12_PSTexture.h&quot; &quot;%(FullPath)&quot;</Command>
       <Outputs>$(IntDir)DrawShaders_DX12_VS.h;$(IntDir)DrawShaders_DX12_PSColor.h;$(IntDir)DrawShaders_DX12_PSTexture.h</Outputs>
       <Message>Compiling %(Filename)%(Extension) for DX12</Message>
     </CustomBuild>

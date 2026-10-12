@@ -1,6 +1,7 @@
 # Genesis UI — Design
 
-Status: **draft for review**. Nothing here is implemented yet.
+Status: **approved direction** (decisions recorded in §16). Nothing here is
+implemented yet.
 
 Genesis UI is the user-interface framework for Genesis Editor and, later,
 Genesis Engine games. It replaces MFC in the editor, provides in-game UI, and
@@ -27,7 +28,7 @@ and how the existing MFC editor moves onto it.
 13. [Visual scripting outlook](#13-visual-scripting-outlook)
 14. [Moving the editor off MFC](#14-moving-the-editor-off-mfc)
 15. [Milestones](#15-milestones)
-16. [Decisions needed](#16-decisions-needed)
+16. [Decisions](#16-decisions)
 
 ---
 
@@ -65,7 +66,7 @@ names of ideas. No code, no code structure transcribed line by line, no
 shader or data files. Third-party libraries must be GPL-compatible
 (MIT/BSD/zlib/Apache-2.0/FTL are fine).
 
-**Language and libraries.** C++20 (MSVC v145). Standard library containers
+**Language and libraries.** C++20 (MSVC v145), x64 only. Standard library containers
 and smart pointers underneath, exposed through Unreal-style aliases so the
 code reads consistently:
 
@@ -608,7 +609,7 @@ Each milestone ends with something runnable and its own PR(s).
 
 | # | Milestone | Exit criteria |
 |---|---|---|
-| 0 | **x64**, drop MGL/Glide | In progress in a separate session. |
+| 0 | **x64**, drop MGL/Glide | Done: x64-only build, MGL/Glide removed. |
 | 1 | **Core free of MFC** | `Basic`/`Objects`/`Render`/`Game` build as a static library without MFC headers; MFC editor still works through adapters. |
 | 2 | **Platform + RHI + UI renderer + fonts** | `UISandbox` app: a DPI-aware window drawing boxes, rounded boxes, lines and shaped text through D3D12 and Vulkan; resizes and moves across monitors cleanly. |
 | 3 | **Widget core + input** | Layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
@@ -623,16 +624,19 @@ Each milestone ends with something runnable and its own PR(s).
 Milestones 1 and 2 are independent and can run in parallel; 7 can start
 any time after 1.
 
-## 16. Decisions needed
+## 16. Decisions
 
-1. **C++20 and standard containers behind aliases** (§2) — or custom
-   containers from the start?
-2. **FreeType + HarfBuzz** vendored under `source/External` (§5.4)?
-3. **Declarative syntax**: `SNew` + argument structs with a few macros (as
-   shown in §6.5), or plain builder objects with no macros?
-4. **Module layout** under `source/Engine/` (§2), and whether the repository
-   itself (`dazzlesoftware/qoole`) should be renamed to `Genesis`.
-5. **Test framework** for headless layout/input tests: doctest (MIT,
-   single header) is the lightweight option.
-6. **Keep x86** once x64 lands, or x64 only?
-7. **New shell vs hybrid** (§14.3) — this document recommends a new shell.
+Agreed on 2026-10-11:
+
+1. **C++20, x64 only**, standard containers and smart pointers behind
+   Unreal-style aliases (§2). Custom containers only if profiling asks
+   for them.
+2. **FreeType + HarfBuzz** are vendored under `source/External` (§5.4).
+3. **Declarative syntax**: `SNew` / `SAssignNew` with argument structs,
+   slot `+` and content `[ ]`, implemented with C++20 templates and a small
+   set of our own macros (§6.5).
+4. **New code goes into modules under `source/Engine/`** (§2). Renaming the
+   repository from `qoole` to `Genesis` is left to the repository owner.
+5. **doctest** for headless layout and input tests.
+6. **x64 only**; the x86 configurations are removed.
+7. **New editor shell**, not an MFC hybrid (§14.3).
