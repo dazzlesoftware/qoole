@@ -1,0 +1,638 @@
+# Genesis UI — Design
+
+Status: **draft for review**. Nothing here is implemented yet.
+
+Genesis UI is the user-interface framework for Genesis Editor and, later,
+Genesis Engine games. It replaces MFC in the editor, provides in-game UI, and
+is the foundation for a data-driven widget layer (in the spirit of Unreal's
+UMG) and a visual scripting system (in the spirit of Blueprints).
+
+This document covers the architecture, the order in which pieces get built,
+and how the existing MFC editor moves onto it.
+
+## Contents
+
+1. [Goals and non-goals](#1-goals-and-non-goals)
+2. [Ground rules](#2-ground-rules)
+3. [Layers](#3-layers)
+4. [Platform layer](#4-platform-layer)
+5. [Rendering](#5-rendering)
+6. [Widget core](#6-widget-core)
+7. [Input, focus and the application loop](#7-input-focus-and-the-application-loop)
+8. [Styling and text](#8-styling-and-text)
+9. [Editor framework](#9-editor-framework)
+10. [Object model and reflection](#10-object-model-and-reflection)
+11. [Widget assets (the UMG-like layer)](#11-widget-assets-the-umg-like-layer)
+12. [In-game UI](#12-in-game-ui)
+13. [Visual scripting outlook](#13-visual-scripting-outlook)
+14. [Moving the editor off MFC](#14-moving-the-editor-off-mfc)
+15. [Milestones](#15-milestones)
+16. [Decisions needed](#16-decisions-needed)
+
+---
+
+## 1. Goals and non-goals
+
+**Goals**
+
+- One retained-mode UI framework for both the editor and games.
+- GPU-rendered through the same D3D12/Vulkan code the map views use, with
+  per-monitor DPI awareness from day one.
+- Declarative C++ construction of widget trees that reads like the layout it
+  produces.
+- Editor-grade features: docking tabs, menus/toolbars driven by commands,
+  virtualized lists and trees, a property grid, text editing with IME.
+- Game-grade features: gamepad/keyboard navigation, multiple local users,
+  resolution scaling, rendering UI into textures for world-space panels.
+- A clean seam for a data-driven layer (widget assets, designer, bindings,
+  animation) and visual scripting, without the core depending on either.
+- Windows first, with every OS dependency behind an interface.
+
+**Non-goals (for now)**
+
+- Matching Unreal's APIs. We take architecture ideas, not interfaces.
+- Mobile/touch-first design, accessibility APIs, right-to-left text. The
+  design leaves room for them; they are not in the first milestones.
+- A general-purpose app framework. Genesis UI serves the editor and games.
+
+## 2. Ground rules
+
+**Licensing.** Genesis Editor is GPL (it derives from Qoole 99). The Unreal
+source at `G:\GitHub\dazzlesoftware\UnrealEngine` is under the Unreal Engine
+EULA, which does not allow copying its code into this project, and is not
+GPL-compatible. It may be **read for architecture**: concepts, data flow,
+names of ideas. No code, no code structure transcribed line by line, no
+shader or data files. Third-party libraries must be GPL-compatible
+(MIT/BSD/zlib/Apache-2.0/FTL are fine).
+
+**Language and libraries.** C++20 (MSVC v145). Standard library containers
+and smart pointers underneath, exposed through Unreal-style aliases so the
+code reads consistently:
+
+| Alias | Underlying |
+|---|---|
+| `TArray<T>` | `std::vector<T>` |
+| `TMap<K,V>` | `std::unordered_map<K,V>` |
+| `TSharedPtr<T>` / `TSharedRef<T>` / `TWeakPtr<T>` | `std::shared_ptr` / non-null wrapper / `std::weak_ptr` |
+| `FString` | `std::u8string`-backed UTF-8 string |
+| `FName` | interned string id (hash + table) |
+
+Aliases keep the door open to custom implementations later (allocators,
+`TSharedRef` debug checks) without touching call sites.
+
+**Naming.** Unreal-style prefixes by type, as agreed for the rename:
+`S` widgets, `F` plain structs/classes, `T` templates, `E` enums, `I`
+interfaces, `U` reflected objects (from milestone 7), `G` globals.
+
+**Source layout.** New code lives in modules under `source/Engine/`, each a
+static library project with a `Public/` and `Private/` folder:
+
+```
+source/Engine/
+  Core/            strings, names, math, delegates, logging, asserts
+  ApplicationCore/ platform interfaces + Win32 implementation
+  RHI/             thin GPU abstraction (D3D12 first, Vulkan second)
+  UICore/          widget base, layout, paint, draw elements, styles, fonts
+  UI/              widgets, application loop, input routing, commands,
+                   menus, docking
+  UIRenderer/      draw elements -> batches -> RHI
+  Object/          reflection and object model            (milestone 7)
+  UMG/             data-driven widget layer               (milestone 8)
+```
+
+The existing editor code (`Basic`, `Objects`, `Render`, `Game`, `Editor`,
+`Interface*`) stays where it is until it is ported or retired.
+
+## 3. Layers
+
+```
+ ┌─────────────────────────────────────────────────────────────┐
+ │ Visual scripting (graphs, compiler, VM)          milestone 10│
+ ├─────────────────────────────────────────────────────────────┤
+ │ Widget designer (editor tool)                     milestone 9│
+ ├─────────────────────────────────────────────────────────────┤
+ │ UMG: widget assets, slots-as-objects, bindings,              │
+ │      animation, game viewport integration         milestone 8│
+ ├──────────────────────────────┬──────────────────────────────┤
+ │ Object: reflection, types,   │ UI: widgets, app loop, input, │
+ │ properties, functions,       │ commands, menus, docking      │
+ │ serialization  milestone 7   ├──────────────────────────────┤
+ │                              │ UICore: SWidget, layout,      │
+ │                              │ paint, styles, fonts, text    │
+ ├──────────────────────────────┴──────────────────────────────┤
+ │ UIRenderer  ──►  RHI (D3D12, Vulkan)                         │
+ ├─────────────────────────────────────────────────────────────┤
+ │ ApplicationCore (platform interfaces; Win32)  ─  Core        │
+ └─────────────────────────────────────────────────────────────┘
+```
+
+Rules:
+
+- **UICore/UI never depend on Object.** The core framework is plain C++.
+  Reflection is layered on top (UMG wraps core widgets), the same split
+  Unreal has between Slate and UMG.
+- **Widgets never touch the GPU.** They emit draw elements; the renderer
+  turns them into GPU work.
+- **Widgets never touch the OS.** They receive events from the application,
+  which receives them from the platform layer.
+
+## 4. Platform layer
+
+Module `ApplicationCore`. Four interfaces, mirroring the split that keeps
+Slate portable:
+
+| Interface | Role |
+|---|---|
+| `IPlatformApplication` | Pump OS messages, create windows, cursor, clipboard, display metrics, gamepad polling, text input (IME) system. |
+| `IPlatformWindow` | One native window: show/hide, move/resize, title, native handle, DPI scale, opacity, set-as-modal. Created from a plain `FWindowDesc` struct. |
+| `IPlatformMessageHandler` | Callbacks the application receives: key down/up/char, mouse buttons/move/wheel, raw mouse, gamepad buttons/axes, window resized/moved/activated/closed, OS paint, files dropped. Each returns whether it was handled. |
+| `ICursor` | Cursor shape, position, clipping, visibility. |
+
+The UI application implements `IPlatformMessageHandler` and is the only
+bridge from the OS into widgets.
+
+**Win32 implementation**
+
+- Per-monitor DPI awareness v2 via the application manifest;
+  `WM_DPICHANGED` reaches widgets as a scale change on that window.
+- Input messages are queued during `PumpMessages` and replayed in a
+  `ProcessDeferredEvents` step at a well-defined point of the frame.
+  Resize/move/paint are handled immediately (Windows needs that during
+  modal size loops).
+- Gamepads via XInput first (GameInput later). Raw mouse via
+  `WM_INPUT` for viewport fly-through.
+- IME through IMM32 first (composition string, candidate window position);
+  TSF can come later behind the same `ITextInputMethodSystem` interface.
+- Windows can be OS-decorated or borderless with a UI-drawn title bar
+  (needed for a modern-looking editor and for floating dock windows).
+
+A headless `FNullPlatformApplication` (no windows, scripted input) is part
+of the first milestone. It is what layout and input tests run on.
+
+## 5. Rendering
+
+### 5.1 Draw elements
+
+Widgets paint into an `FDrawElementList` for their window. Element kinds:
+
+| Element | Use |
+|---|---|
+| `Box` | Image or 9-slice brush (borders, panels, buttons), with tiling and tint. |
+| `RoundedBox` | Rounded rectangle with outline, drawn by an SDF shader (no geometry per corner). |
+| `Text` | A shaped glyph run (output of the text system), one quad per glyph from a font atlas. |
+| `Lines` | Anti-aliased polyline (graph wires, gizmos, grids). |
+| `Spline` | Cubic Bézier, tessellated (visual scripting wires). |
+| `CustomVerts` | Caller-provided triangles with a texture. |
+| `Viewport` | A render-target texture produced elsewhere (the 3D map views, previews, video). |
+
+Every element carries a **layer id** and a **clip state**. `OnPaint`
+returns the highest layer it used; layers give draw order, submission order
+breaks ties within a layer.
+
+**Clipping** is axis-aligned scissor rectangles only. Rotated content that
+needs clipping renders to a texture first (§12). This avoids Slate's
+stencil path entirely.
+
+### 5.2 Batching
+
+`UIRenderer` turns element lists into batches:
+
+1. Tessellate elements into one vertex format
+   (`position, uv, color, secondary color/params`).
+2. Assign each to a batch key `(layer, shader, texture, clip state)`.
+3. Stable-sort by layer; merge adjacent compatible batches into one
+   vertex/index range.
+
+The output is a short list of `(pipeline, texture, scissor, index range)`
+the RHI backend draws. Backends stay thin; all UI logic is renderer-agnostic.
+
+### 5.3 RHI
+
+The D3D12 and Vulkan renderer plugins (`GenesisDrawDX12`/`GenesisDrawVulkan`)
+each built their own device. Genesis UI needs the same GPU for UI and for
+the 3D map views, so the device code moves into a small shared `RHI`
+module:
+
+- device + queue, one **swapchain per platform window**,
+- buffers (upload/default), 2D textures, render targets,
+- pipelines from precompiled shaders (HLSL → DXIL/SPIR-V, as today),
+- a command list with scissor/viewport/draw-indexed.
+
+This is deliberately much smaller than a full engine RHI. It grows when the
+engine renderer arrives. The map views become `Viewport` elements: they
+render into an RHI render target and the UI composites it.
+
+### 5.4 Textures and fonts
+
+- **Atlases**: small UI images (icons, brush pieces) are packed into atlas
+  pages at load time; large images get their own texture.
+- **Fonts**: FreeType for rasterization, HarfBuzz for shaping (both
+  vendored, GPL-compatible). Glyphs rasterize on demand at the final pixel
+  size (font size × DPI scale) into alpha atlas pages, so text stays crisp at
+  every DPI. MSDF and color-emoji pages are later additions.
+- Text is measured and shaped by `UICore`; the renderer only sees glyph
+  quads.
+
+## 6. Widget core
+
+Module `UICore` (base classes, layout, paint) and `UI` (concrete widgets).
+
+### 6.1 SWidget
+
+Every widget derives from `SWidget`. Subclasses implement:
+
+| Method | Pass |
+|---|---|
+| `FVector2 ComputeDesiredSize(float LayoutScale)` | Measure, bottom-up. |
+| `void ArrangeChildren(const FGeometry&, FArrangedChildren&)` | Arrange, top-down. |
+| `int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect& Culling, FDrawElementList&, int32 Layer, const FWidgetStyle&)` | Paint. |
+| `FChildren& GetChildren()` | Tree access. |
+
+plus optional input handlers (§7). Shared state on the base: visibility,
+enabled, clipping mode, render transform, tooltip, cursor, tag, cached
+desired size, cached geometry, dirty flags.
+
+Three kinds of widget:
+
+- **Leaf** — no children (`STextBlock`, `SImage`).
+- **Compound** — one child slot, built in `Construct` (`SButton`,
+  `SBorder`, most user-made widgets).
+- **Panel** — many typed slots (`SHorizontalBox`, `SOverlay`, `SGridPanel`).
+
+### 6.2 Slots
+
+A slot holds one child plus the layout data that belongs to the *parent–child
+relationship*, not to the child: padding, horizontal/vertical alignment, and
+panel-specific rules (auto vs fill sizing and fill weight in boxes,
+row/column/span in grids, anchors/offsets/z-order in a canvas). Slot setters
+invalidate the owning panel's layout.
+
+### 6.3 Attributes and invalidation
+
+`TAttribute<T>` holds **either a value or a binding** (a function returning
+`T`). Unlike Slate's two systems, there is one:
+
+- A widget declares its attributes with the invalidation they cause
+  (`Layout`, `Paint`, `ChildOrder`, `Visibility`, `RenderTransform`).
+- Setting a value invalidates immediately if it changed.
+- Bound attributes are evaluated once per frame before layout; a changed
+  result invalidates with the declared reason. Unchanged bindings cost one
+  call and a compare.
+
+### 6.4 Layout and paint are retained
+
+Slate re-arranges during paint and again during hit-testing. Genesis UI
+stores the result instead:
+
+1. **Measure** walks only subtrees with `Layout` dirty and caches desired
+   sizes.
+2. **Arrange** walks dirty subtrees top-down and stores each widget's
+   `FGeometry` (local size + accumulated layout transform; render transform
+   kept separately).
+3. **Paint** reuses each widget's cached element sub-list unless it is
+   `Paint`-dirty or flagged **volatile** (animated, video, viewport).
+4. **Hit-testing** walks stored geometry.
+
+One mechanism (dirty flags + cached element ranges per widget) replaces
+Slate's invalidation roots, proxy lists and global-invalidation mode. An
+idle editor redraws nothing.
+
+`FGeometry` keeps **layout in logical units**; DPI and application scale are
+transforms pushed from the window down. Text is the only thing that cares
+about final pixel size (for glyph rasterization).
+
+### 6.5 Declarative construction
+
+Large UIs are written in C++, so construction has to read like the layout.
+We keep the familiar shape — an arguments struct with chained setters, slots
+added with `+`, content in `[ ]` — implemented with C++20 templates and a
+handful of small macros (our own):
+
+```cpp
+SNew(SVerticalBox)
++ SVerticalBox::Slot().AutoHeight().Padding(4)
+[
+    SNew(STextBlock).Text("Textures")
+]
++ SVerticalBox::Slot().FillHeight(1.0f)
+[
+    SAssignNew(TextureList, SListView<FTextureItemPtr>)
+        .ItemsSource(&Textures)
+        .OnGenerateRow(this, &STextureBrowser::MakeRow)
+]
+```
+
+- `SNew(T)` creates the widget, applies the arguments, calls
+  `T::Construct(const FArguments&)`, returns `TSharedRef<T>`.
+- Argument kinds: attribute (value or binding), plain value, style
+  reference, event (delegate), default slot, named slot, slot list.
+- `SAssignNew(Var, T)` also stores the widget in `Var`.
+
+### 6.6 Built-in widgets (first set)
+
+| Group | Widgets |
+|---|---|
+| Layout | `SBox` (size overrides), `SBorder`, `SHorizontalBox`, `SVerticalBox`, `SOverlay`, `SGridPanel`, `SWrapBox`, `SCanvas` (anchors), `SScaleBox`, `SScrollBox`, `SSplitter`, `SWidgetSwitcher` |
+| Display | `STextBlock`, `SRichTextBlock` (later), `SImage`, `SSeparator`, `SProgressBar`, `SThrobber` |
+| Input | `SButton`, `SCheckBox`, `SEditableText`, `SEditableTextBox`, `SMultiLineEditableText`, `SSpinBox<T>`, `SNumericEntryBox<T>`, `SSlider`, `SComboBox<T>`, `SColorPicker`, `SMenuAnchor` |
+| Views | `SListView<T>`, `STreeView<T>`, `STileView<T>` (virtualized: item source + row generator), `SHeaderRow` for columns |
+| Windows | `SWindow` (root of a tree, owns an `IPlatformWindow` or is virtual), `SToolTip`, `SViewport` |
+
+## 7. Input, focus and the application loop
+
+Module `UI`, class `FUIApplication`.
+
+### 7.1 Frame
+
+```
+PumpMessages → ProcessDeferredEvents (input → events)
+            → Tick timers and widgets that asked for it
+            → Evaluate bound attributes
+            → Measure / Arrange dirty subtrees
+            → Paint dirty windows → UIRenderer → RHI → Present
+            → Sleep if nothing is dirty, animating or capturing
+```
+
+Modal windows run a nested loop over the same frame function.
+
+### 7.2 Routing
+
+- The widget under a pointer is found from stored geometry, giving a
+  **widget path** (root → leaf).
+- Pointer events: a *preview* pass tunnels root → leaf, then the normal
+  pass bubbles leaf → root. A widget holding pointer capture receives
+  events directly.
+- Key events route along the **focus path**, not the pointer path, with the
+  same preview/bubble order.
+- `OnMouseEnter`/`OnMouseLeave` come from diffing the previous and current
+  pointer paths.
+
+### 7.3 Replies
+
+Handlers return an `FReply`: handled or not, plus **requests** — capture or
+release the pointer, set or clear focus, detect a drag, begin a
+drag-and-drop, lock the cursor, keep the frame loop awake. Widgets never
+change application state directly; the application applies the requests
+after routing. This keeps routing deterministic and testable on the
+headless platform.
+
+### 7.4 Users, focus and navigation
+
+- `FUIUser` holds per-user state: focus path, pointer capture, cursor, hover
+  path, drag operation, tooltip. Input devices map to users, so split-screen
+  players each get their own focus. The editor uses user 0.
+- Widgets opt into focus. Focus changes deliver focus-lost/focus-received
+  with a cause (mouse, navigation, programmatic).
+- **Navigation**: an unhandled key or stick input is mapped by a replaceable
+  `FNavigationConfig` to Up/Down/Left/Right/Next/Previous/Accept/Back.
+  Widgets on the focus path may answer with stop, wrap, explicit target, or
+  custom; otherwise the application searches stored geometry for the nearest
+  focusable widget in that direction.
+
+### 7.5 Also in the application
+
+- Mouse capture, cursor queries (widget asks for a cursor shape),
+  drag detection threshold and `FDragDropOperation` payloads with
+  enter/over/leave/drop on targets.
+- Tooltips after a hover delay, in a reusable tooltip window.
+- A **menu stack**: popups open as child windows or in-window layers;
+  clicking outside dismisses down to the clicked menu.
+- **Input pre-processors** that see input before widgets (global hotkeys,
+  game input sharing the window with UI, a gamepad-driven cursor).
+
+## 8. Styling and text
+
+**Styles.** `FStyleSet` is a named dictionary of brushes, colors, fonts,
+margins and per-widget style structs (`FButtonStyle`: normal/hovered/
+pressed/disabled brushes, padding, text style…). Sets register by name in a
+global registry; widgets take a style argument and fall back to the active
+application style by name. Colors go through a semantic palette
+(`Panel`, `Foreground`, `Highlight`, `Error`…) so themes swap palettes, not
+widgets. Styles are built in code first; loading from data files comes
+with the object model.
+
+**Text.**
+
+- `FTextLayout`: text → lines → runs; word wrapping; shaping per run via
+  HarfBuzz; hit-testing (point → character, character → rect); highlight
+  ranges for selection.
+- `STextBlock` uses a cached layout with a fast path for single-line text.
+- `FEditableTextLayout` adds caret, selection, undo, clipboard, scrolling and
+  an IME context (composition range, candidate window placement) used by
+  `SEditableText` and `SMultiLineEditableText`.
+- Rich text (markup with inline images/widgets) is a later addition.
+
+## 9. Editor framework
+
+Built on the core; all of it is needed before the editor can leave MFC.
+
+**Commands.** `FUICommandInfo` defines a command once: id, label, tooltip,
+icon, kind (button, toggle, radio) and default key chords. Command sets are
+grouped by context (`LevelEditor`, `TextureBrowser`…). `FUICommandList`
+maps commands to actions (execute, can-execute, is-checked, is-visible).
+Menus, toolbars and keyboard shortcuts all read the same command, so a
+disabled command greys out everywhere. User key rebinding is stored per
+context. This replaces MFC's `ON_COMMAND`/`ON_UPDATE_COMMAND_UI` maps and the
+`IDR_MAINFRAME` accelerator table.
+
+**Menus and toolbars.** A **named menu registry**
+(`"MainMenu.File"`, `"MapView.Context"`): menus are lists of sections and
+entries, built lazily when opened, extendable by name from anywhere
+(including plug-ins and, later, scripts). Toolbars use the same registry.
+This replaces the four `.rc` menus and ten bitmap toolbars.
+
+**Docking.** `FTabManager` with tab spawners (id → function creating the tab
+content), tab roles (document vs panel), and a layout tree of areas,
+splitters (orientation + size ratios) and tab stacks. Layouts save to and
+restore from JSON per user, with a version number that falls back to the
+default layout when it changes. Tabs drag out into floating windows and dock
+back via drop targets on each area. This replaces the MRC docking library
+in `Interface2`.
+
+**Property grid.** A details view that builds rows from a property
+description of the selected object(s): categories, name/value columns,
+per-type editors (numbers, text, colors, enums, vectors, asset pickers),
+multi-selection with "multiple values", undo. Until the object model exists
+(§10), the editor supplies descriptions by hand through an
+`IPropertySource` interface; later the reflection system generates them.
+This replaces the MFC property sheets and `FPropertyList`.
+
+**Viewport widget.** `SViewport` hosts an `IViewportClient` that renders into
+an RHI render target and receives the widget's input (mouse, keys, focus,
+cursor queries, raw mouse when captured). The four map views become
+viewport clients, so they are dockable tabs like any other panel.
+
+## 10. Object model and reflection
+
+Needed by the widget-asset layer, the designer's details panel, data-driven
+styles, save/load of assets, and visual scripting. Not needed by the core.
+
+Minimum feature set:
+
+- **Type registry**: name → type info for primitives, enums, structs and
+  classes, with inheritance and a factory.
+- **Properties**: name, type, accessor (offset or getter/setter), flags
+  (editable, saved, bindable, transient) and string metadata (category,
+  display name, min/max, tooltip).
+- **Functions**: name, parameter/return descriptors, generic invoke, flags
+  (callable, pure, event, overridable).
+- **Events/delegates** bindable by object + function name.
+- **Change notification** per property (for bindings and undo).
+- **Object identity and ownership**: stable ids, outer/sub-object
+  ownership, reference counting with weak references (no tracing GC
+  initially).
+- **Serialization**: generic read/write of properties, delta against
+  defaults, versioned.
+- **Runtime-defined classes**: a class that extends a native class with
+  extra properties/functions. Visual scripting needs this; the API is
+  designed for it from the start even if it ships later.
+
+Registration is done with **C++ macros and templates at static-init time**
+(no separate header-parsing tool). A code generator can replace the
+boilerplate later if it becomes a burden.
+
+## 11. Widget assets (the UMG-like layer)
+
+Module `UMG`. Reflected `UWidget` objects wrap core widgets:
+
+- `UWidget::RebuildWidget()` creates the core `SWidget`;
+  `SynchronizeProperties()` pushes property values to it;
+  `ReleaseUIResources()` drops it while the object lives on.
+- `UPanelWidget` holds `UPanelSlot` objects; each panel type has its own slot
+  class carrying layout properties (as in §6.2, but as reflected objects).
+- `UUserWidget` owns a `UWidgetTree`; widgets flagged *is variable* become
+  named members the owning code or script can reach.
+- **Asset format** (JSON first, binary later): schema version, parent class,
+  list of widget nodes (stable id, type, property overrides, is-variable,
+  slot record), parent→children order, bindings, animations.
+- **Bindings** are push-based from the start: view-model objects announce
+  property changes (§10), compiled bindings copy values on change, with
+  optional converters and one-way/two-way/one-time modes. No per-frame
+  polling.
+- **Animation**: per-widget property-path tracks with keyed curves
+  (opacity, colors, render transform, slot padding), evaluated each tick.
+- **Design-time flag**: widgets know when they are being previewed in the
+  designer; runtime-only code and bindings are skipped there.
+
+The **designer** (milestone 9) is an editor tab containing a preview
+instance on a zoom/pan surface, a hierarchy tree with drag-to-reparent, a
+palette of widget templates with drag-to-create, the reflection-driven
+details panel for the selected widget and its slot, and undo via snapshots
+of the serialized tree.
+
+## 12. In-game UI
+
+- **Game viewport**: per-player layers inside the game viewport widget; a
+  widget is added to the whole viewport or to one player's region.
+- **Input modes**: UI only, game and UI, game only — controlling cursor
+  visibility and lock, and whether focus sits on the game or on widgets.
+- **Multiple users and gamepads**: §7.4.
+- **Resolution scaling**: UI is authored at a reference resolution; a
+  configurable curve maps the viewport's short side (or width) to a scale
+  factor applied at the window root.
+- **Render to texture**: a virtual window (no OS window) renders a widget
+  tree into an RHI render target. Used for world-space panels (a quad in the
+  scene; pointer input arrives by ray-casting into the panel), cached
+  rarely-changing panels, and rotated content that needs clipping.
+
+## 13. Visual scripting outlook
+
+Planned after the widget layer; recorded here so earlier layers don't block
+it.
+
+- **Graph data** (editor-only): graphs of nodes with typed pins and links,
+  plus a schema that defines valid connections and the context menu of
+  available nodes.
+- **Compiler**: graph → reflected class (properties, functions) with a
+  bytecode body per function, run by a small VM. The graph never ships; the
+  compiled class does.
+- **Graph editor**: a zoom/pan canvas, node widgets, pin widgets and wire
+  drawing (`Spline` elements) — built entirely from Genesis UI.
+- Widget assets get event graphs (On Clicked, On Construct…) through the
+  same mechanism.
+
+## 14. Moving the editor off MFC
+
+### 14.1 What exists today
+
+| MFC surface | Count / classes | Replacement |
+|---|---|---|
+| Main frame, MDI, child frames | `FMainFrame`, `FVFrame`, `FDocTemplate` | `SWindow` + `FTabManager` layout |
+| Map views (2D/3D) | `FMapView` (CView) + `GenesisDraw*` plugins | `SViewport` + viewport clients on the RHI |
+| Docking panels | MRC library (`Interface2`, ~10k lines), `FWorkSpaceBar`, `FOutputBar` | Docking framework (§9) |
+| Toolbars | 10 bitmap toolbars, `CToolBarEx` | Command-driven toolbars |
+| Menus | 4 menus + accelerators in `.rc` | Menu registry + commands |
+| Tree views | `FTreeView`, `FPrefabMgr` | `STreeView` |
+| Property sheets/pages | `FPropSheet` + 7 pages, `FPropertyList`, in-place editors | Property grid |
+| Texture browser | `FTexView`, `FTexWnd`, `FTexDraw`, `FTexMgr`, `FTexRep` | `STileView` + texture thumbnails |
+| Prefab browser | `FPrefabFrame`, `FPrefabView` | Panel with `SViewport` preview |
+| Config dialogs | `FConfigSheet` + 5 pages | Settings tab built on the property grid |
+| Other dialogs | Compile, entity select, hollow prompt, colors, about | Modal `SWindow`s |
+| Output/process log | `FProcessWnd` (rich edit) | Log panel (`SListView` of lines) |
+
+### 14.2 What must be untangled first
+
+The non-UI code is lightly coupled to MFC and can be freed early, behind
+small services in `Core`/`ApplicationCore`:
+
+| Used today | Where | Replacement |
+|---|---|---|
+| `ASSERT`, `TRACE` | everywhere | `check`, `GLog` |
+| `CString`, `CArray`, `CFile` | `Basic`, `Objects`, `Editor` | `FString`, `TArray`, `FFile` |
+| `AfxGetApp()->Get/WriteProfile*` | `LConfig` | Config service (INI/JSON in the user profile) |
+| `MessageBox`, `AfxGetMainWnd` | `Basic`, `Game`, `Objects` | `IMessageDialog` service |
+| `CProgressWnd` | `Objects`, `Game` | `IProgress` service |
+| `CDirDialog` | `Game` | `IFileDialogs` service |
+| `CDocument` / `CObject` | `FEditorDoc`, `FDocView` | Plain `FMapDocument` model + undo stack; MFC adapter while both UIs exist |
+
+### 14.3 Strategy
+
+**A new editor shell, not an MFC hybrid.** Embedding Genesis UI panels
+inside the MFC frame would mean two message loops, two focus systems and two
+docking systems fighting each other. Instead:
+
+1. Free the core (14.2) so the map model, geometry, games and renderer build
+   without MFC.
+2. Build a new `GenesisEditor` shell on Genesis UI: main window, docking,
+   menus/toolbars from commands, and the four map views as viewport tabs —
+   enough to open, view, select and save a map.
+3. Port panels in order of use: tree view → property grid pages → texture
+   browser → prefab browser → dialogs and settings.
+4. Keep the MFC editor building as `GenesisEditorLegacy` until the new shell
+   reaches parity, then delete MFC, `Interface`, `Interface2` and the MFC
+   renderer plugin.
+
+## 15. Milestones
+
+Each milestone ends with something runnable and its own PR(s).
+
+| # | Milestone | Exit criteria |
+|---|---|---|
+| 0 | **x64**, drop MGL/Glide | In progress in a separate session. |
+| 1 | **Core free of MFC** | `Basic`/`Objects`/`Render`/`Game` build as a static library without MFC headers; MFC editor still works through adapters. |
+| 2 | **Platform + RHI + UI renderer + fonts** | `UISandbox` app: a DPI-aware window drawing boxes, rounded boxes, lines and shaped text through D3D12 and Vulkan; resizes and moves across monitors cleanly. |
+| 3 | **Widget core + input** | Layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
+| 4 | **Editor framework** | Commands, menu registry, toolbars, docking with save/restore, property grid over `IPropertySource`, viewport widget. |
+| 5 | **New editor shell** | Opens/edits/saves maps in four docked viewports with menus, toolbars and selection. |
+| 6 | **Panel parity, MFC removed** | All 14.1 surfaces ported; MFC code and plugins deleted. |
+| 7 | **Object model** | Reflection, serialization, change notification; property grid driven by reflection. |
+| 8 | **Widget assets** | UMG layer, JSON assets, push bindings, animation, game viewport integration, render-to-texture. |
+| 9 | **Widget designer** | Designer tab as described in §11. |
+| 10 | **Visual scripting** | Graph editor, compiler, VM; event graphs on widget assets. |
+
+Milestones 1 and 2 are independent and can run in parallel; 7 can start
+any time after 1.
+
+## 16. Decisions needed
+
+1. **C++20 and standard containers behind aliases** (§2) — or custom
+   containers from the start?
+2. **FreeType + HarfBuzz** vendored under `source/External` (§5.4)?
+3. **Declarative syntax**: `SNew` + argument structs with a few macros (as
+   shown in §6.5), or plain builder objects with no macros?
+4. **Module layout** under `source/Engine/` (§2), and whether the repository
+   itself (`dazzlesoftware/qoole`) should be renamed to `Genesis`.
+5. **Test framework** for headless layout/input tests: doctest (MIT,
+   single header) is the lightweight option.
+6. **Keep x86** once x64 lands, or x64 only?
+7. **New shell vs hybrid** (§14.3) — this document recommends a new shell.

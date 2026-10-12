@@ -4,6 +4,10 @@ Genesis Editor is the level editor for the planned Genesis Engine. It is
 built on the GPL source release of Qoole 99 v0.99 (see "Origins" below) and,
 like that release, is licensed under the GNU GPL (see license.txt).
 
+Design documents live in `docs/`; start with
+[docs/GenesisUI.md](docs/GenesisUI.md), the plan for replacing MFC with the
+Genesis UI framework.
+
 ## Building
 
 Open `source/Genesis.slnx` in Visual Studio 2026. It needs the "Desktop
