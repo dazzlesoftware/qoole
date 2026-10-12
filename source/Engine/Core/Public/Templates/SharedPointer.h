@@ -49,7 +49,13 @@ public:
 	T& operator*() const { return *Ptr; }
 
 	const std::shared_ptr<T>& ToSharedPtr() const { return Ptr; }
-	operator std::shared_ptr<T>() const { return Ptr; }
+	// To a shared pointer of this type or a base.
+	template <typename U>
+		requires std::is_convertible_v<T*, U*>
+	operator std::shared_ptr<U>() const
+	{
+		return Ptr;
+	}
 
 	template <typename U>
 		requires std::is_convertible_v<T*, U*>

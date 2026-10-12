@@ -57,6 +57,29 @@ private:
 	bool bEnabled = true;
 };
 
+// Records which context is active; compositions are scripted through
+// FNullPlatformApplication::QueueComposition*.
+class FNullTextInputMethodSystem final : public ITextInputMethodSystem
+{
+public:
+	void ActivateContext(const TSharedRef<ITextInputMethodContext>& Context) override { Active = Context.ToSharedPtr(); }
+	void DeactivateContext(const TSharedRef<ITextInputMethodContext>& Context) override
+	{
+		if (Active == Context.ToSharedPtr())
+		{
+			Active.reset();
+		}
+	}
+	void UpdateContextLayout(const TSharedRef<ITextInputMethodContext>& Context) override { (void)Context; ++LayoutUpdates; }
+
+	const TSharedPtr<ITextInputMethodContext>& GetActiveContext() const { return Active; }
+	int32 GetLayoutUpdateCount() const { return LayoutUpdates; }
+
+private:
+	TSharedPtr<ITextInputMethodContext> Active;
+	int32 LayoutUpdates = 0;
+};
+
 class FNullPlatformApplication final : public IPlatformApplication
 {
 public:
@@ -78,6 +101,7 @@ public:
 	void ClipboardCopy(const FString& Text) override { Clipboard = Text; }
 	FString ClipboardPaste() override { return Clipboard; }
 	bool IsHeadless() const override { return true; }
+	ITextInputMethodSystem* GetTextInputMethodSystem() override { return &TextInputMethod; }
 
 	// Scripted input, delivered on the next ProcessDeferredEvents.
 	void QueueKeyDown(EKey Key, bool bIsRepeat = false);
@@ -89,6 +113,12 @@ public:
 	void QueueMouseWheel(const TSharedRef<IPlatformWindow>& Window, float Delta, FVector2 Position);
 	void QueueRawMouseMove(int32 DeltaX, int32 DeltaY);
 	void SetModifierKeys(const FModifierKeysState& State) { Modifiers = State; }
+	// IME composition sent to the active input context (dropped when none).
+	void QueueCompositionBegin();
+	void QueueCompositionUpdate(const FString& Text, int32 CaretIndex);
+	// Ends the composition and types Committed (may be empty: cancelled).
+	void QueueCompositionEnd(const FString& Committed);
+	FNullTextInputMethodSystem& GetNullTextInputMethod() { return TextInputMethod; }
 
 	int32 GetPendingEventCount() const { return static_cast<int32>(Events.size()); }
 	const TArray<TWeakPtr<FNullPlatformWindow>>& GetWindows() const { return Windows; }
@@ -116,6 +146,7 @@ private:
 	TArray<TWeakPtr<FNullPlatformWindow>> Windows;
 	std::deque<TFunction<void(IPlatformMessageHandler&)>> Events;
 	FNullCursor Cursor;
+	FNullTextInputMethodSystem TextInputMethod;
 	FModifierKeysState Modifiers;
 	TWeakPtr<IPlatformWindow> CaptureWindow;
 	FString Clipboard;

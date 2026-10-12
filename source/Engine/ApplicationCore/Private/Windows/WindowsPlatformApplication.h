@@ -5,6 +5,7 @@
 #include "GenericPlatform/PlatformApplication.h"
 
 #include <Windows.h>
+#include <imm.h>
 #include <Xinput.h>
 
 class FWindowsApplication;
@@ -79,6 +80,26 @@ private:
 	bool bVisible = true;
 };
 
+// IME through IMM32 (docs/GenesisUI.md §4). The IME is disabled on our
+// windows unless a text context is active, so keys go straight to games and
+// viewports; while one is active the composition is drawn inline by the
+// widget and the candidate window follows its caret.
+class FWindowsTextInputMethodSystem final : public ITextInputMethodSystem
+{
+public:
+	void ActivateContext(const TSharedRef<ITextInputMethodContext>& Context) override;
+	void DeactivateContext(const TSharedRef<ITextInputMethodContext>& Context) override;
+	void UpdateContextLayout(const TSharedRef<ITextInputMethodContext>& Context) override;
+
+	// The active context if it belongs to Hwnd.
+	ITextInputMethodContext* GetContextFor(HWND Hwnd) const;
+	void PositionCandidateWindow(HWND Hwnd) const;
+
+private:
+	TSharedPtr<ITextInputMethodContext> Active;
+	HWND ActiveHwnd = nullptr;
+};
+
 class FWindowsApplication final : public IPlatformApplication
 {
 public:
@@ -98,6 +119,7 @@ public:
 	void GetDisplayMetrics(FDisplayMetrics& OutMetrics) const override;
 	void ClipboardCopy(const FString& Text) override;
 	FString ClipboardPaste() override;
+	ITextInputMethodSystem* GetTextInputMethodSystem() override { return &TextInputMethod; }
 
 	static LRESULT CALLBACK WndProc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam);
 	static const wchar_t* GetWindowClassName() { return L"GenesisWindow"; }
@@ -111,6 +133,7 @@ private:
 		LPARAM LParam = 0;
 		int32 X = 0; // raw mouse deltas or client position
 		int32 Y = 0;
+		FString Text; // IME composition text
 	};
 
 	struct FGamepadState
@@ -125,12 +148,15 @@ private:
 	LRESULT ProcessMessage(FWindowsWindow& Window, HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam);
 	void ProcessDeferredMessage(const FDeferredMessage& Message);
 	void Defer(FWindowsWindow& Window, UINT Msg, WPARAM WParam, LPARAM LParam, int32 X = 0, int32 Y = 0);
+	bool ProcessImeMessage(FWindowsWindow& Window, HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM& LParam);
+	LRESULT ProcessImeMessage(FWindowsWindow& Window, HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam, bool& bHandled);
 	LRESULT HitTest(FWindowsWindow& Window, LPARAM LParam);
 	void RemoveWindow(FWindowsWindow& Window);
 
 	TArray<TSharedRef<FWindowsWindow>> Windows;
 	TArray<FDeferredMessage> DeferredMessages;
 	FWindowsCursor Cursor;
+	FWindowsTextInputMethodSystem TextInputMethod;
 	FGamepadState Gamepads[XUSER_MAX_COUNT];
 	wchar_t PendingHighSurrogate = 0;
 	bool bRawMouse = false;

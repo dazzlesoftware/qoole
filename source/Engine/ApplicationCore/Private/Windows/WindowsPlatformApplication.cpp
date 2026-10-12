@@ -12,6 +12,7 @@
 
 #pragma comment(lib, "xinput.lib")
 #pragma comment(lib, "shcore.lib")
+#pragma comment(lib, "imm32.lib")
 
 namespace
 {
@@ -265,6 +266,169 @@ void FWindowsApplication::ProcessDeferredEvents(float DeltaTime)
 	}
 }
 
+// ---------------------------------------------------------------------------
+// IME
+
+namespace
+{
+	FString GetCompositionString(HIMC Context, DWORD Kind)
+	{
+		const LONG Bytes = ImmGetCompositionStringW(Context, Kind, nullptr, 0);
+		if (Bytes <= 0)
+		{
+			return FString();
+		}
+		std::wstring Text(static_cast<SIZE_T>(Bytes) / sizeof(wchar_t), L'\0');
+		ImmGetCompositionStringW(Context, Kind, Text.data(), static_cast<DWORD>(Bytes));
+		return FString::FromWide(Text);
+	}
+
+	// Byte offset in UTF-8 of a UTF-16 index.
+	int32 Utf16IndexToUtf8(const FString& Text, int32 Utf16Index)
+	{
+		const char* Cursor = *Text;
+		const char* const End = Cursor + Text.Len();
+		int32 Units = 0;
+		while (Cursor < End && Units < Utf16Index)
+		{
+			const char32_t CodePoint = FUtf8::Decode(Cursor, End);
+			Units += CodePoint >= 0x10000 ? 2 : 1;
+		}
+		return static_cast<int32>(Cursor - *Text);
+	}
+}
+
+void FWindowsTextInputMethodSystem::ActivateContext(const TSharedRef<ITextInputMethodContext>& Context)
+{
+	if (Active && Active != Context.ToSharedPtr())
+	{
+		DeactivateContext(TSharedRef<ITextInputMethodContext>(Active));
+	}
+	const TSharedPtr<IPlatformWindow> Window = Context->GetWindow();
+	Active = Context.ToSharedPtr();
+	ActiveHwnd = Window ? static_cast<HWND>(Window->GetNativeHandle()) : nullptr;
+	if (ActiveHwnd)
+	{
+		ImmAssociateContextEx(ActiveHwnd, nullptr, IACE_DEFAULT);
+		PositionCandidateWindow(ActiveHwnd);
+	}
+}
+
+void FWindowsTextInputMethodSystem::DeactivateContext(const TSharedRef<ITextInputMethodContext>& Context)
+{
+	if (Active != Context.ToSharedPtr())
+	{
+		return;
+	}
+	if (ActiveHwnd && IsWindow(ActiveHwnd))
+	{
+		if (const HIMC Imc = ImmGetContext(ActiveHwnd))
+		{
+			// Drop an unfinished composition rather than committing it into
+			// a field that no longer has focus.
+			ImmNotifyIME(Imc, NI_COMPOSITIONSTR, CPS_CANCEL, 0);
+			ImmReleaseContext(ActiveHwnd, Imc);
+		}
+		ImmAssociateContextEx(ActiveHwnd, nullptr, 0);
+	}
+	Active.reset();
+	ActiveHwnd = nullptr;
+}
+
+void FWindowsTextInputMethodSystem::UpdateContextLayout(const TSharedRef<ITextInputMethodContext>& Context)
+{
+	if (Active == Context.ToSharedPtr() && ActiveHwnd)
+	{
+		PositionCandidateWindow(ActiveHwnd);
+	}
+}
+
+ITextInputMethodContext* FWindowsTextInputMethodSystem::GetContextFor(HWND Hwnd) const
+{
+	return Active && Hwnd == ActiveHwnd ? Active.get() : nullptr;
+}
+
+void FWindowsTextInputMethodSystem::PositionCandidateWindow(HWND Hwnd) const
+{
+	if (!Active || Hwnd != ActiveHwnd)
+	{
+		return;
+	}
+	const HIMC Imc = ImmGetContext(Hwnd);
+	if (!Imc)
+	{
+		return;
+	}
+	const FIntRect Caret = Active->GetCaretRect();
+	COMPOSITIONFORM Composition{};
+	Composition.dwStyle = CFS_POINT;
+	Composition.ptCurrentPos = POINT{ Caret.Left, Caret.Top };
+	ImmSetCompositionWindow(Imc, &Composition);
+	CANDIDATEFORM Candidate{};
+	Candidate.dwIndex = 0;
+	Candidate.dwStyle = CFS_EXCLUDE;
+	Candidate.ptCurrentPos = POINT{ Caret.Left, Caret.Bottom };
+	Candidate.rcArea = RECT{ Caret.Left, Caret.Top, Caret.Right, Caret.Bottom };
+	ImmSetCandidateWindow(Imc, &Candidate);
+	ImmReleaseContext(Hwnd, Imc);
+}
+
+bool FWindowsApplication::ProcessImeMessage(FWindowsWindow& Window, HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM& LParam)
+{
+	(void)WParam;
+	if (!TextInputMethod.GetContextFor(Hwnd))
+	{
+		return false; // default IME behavior (and none at all while disabled)
+	}
+	switch (Msg)
+	{
+	case WM_IME_SETCONTEXT:
+		// We draw the composition ourselves; keep the candidate list.
+		LParam &= ~static_cast<LPARAM>(ISC_SHOWUICOMPOSITIONWINDOW);
+		return false;
+	case WM_IME_STARTCOMPOSITION:
+		TextInputMethod.PositionCandidateWindow(Hwnd);
+		Defer(Window, Msg, 0, 0);
+		return true;
+	case WM_IME_COMPOSITION:
+	{
+		const HIMC Imc = ImmGetContext(Hwnd);
+		if (!Imc)
+		{
+			return false;
+		}
+		if (LParam & GCS_RESULTSTR)
+		{
+			// Committed text: end the composition, then type it.
+			const FString Result = GetCompositionString(Imc, GCS_RESULTSTR);
+			Defer(Window, WM_IME_COMPOSITION, 0, 0);
+			const char* Read = *Result;
+			const char* const End = Read + Result.Len();
+			while (Read < End)
+			{
+				Defer(Window, WM_CHAR, static_cast<WPARAM>(FUtf8::Decode(Read, End)), 0);
+			}
+		}
+		if (LParam & GCS_COMPSTR)
+		{
+			FDeferredMessage Message{ Window.weak_from_this(), WM_IME_COMPOSITION, 0, 0, 0, 0 };
+			Message.Text = GetCompositionString(Imc, GCS_COMPSTR);
+			const LONG CursorPos = (LParam & GCS_CURSORPOS) ? ImmGetCompositionStringW(Imc, GCS_CURSORPOS, nullptr, 0) : -1;
+			Message.X = CursorPos >= 0 ? Utf16IndexToUtf8(Message.Text, CursorPos) : Message.Text.Len();
+			DeferredMessages.push_back(std::move(Message));
+		}
+		ImmReleaseContext(Hwnd, Imc);
+		TextInputMethod.PositionCandidateWindow(Hwnd);
+		return true;
+	}
+	case WM_IME_ENDCOMPOSITION:
+		Defer(Window, Msg, 0, 0);
+		return true;
+	default:
+		return false;
+	}
+}
+
 void FWindowsApplication::Defer(FWindowsWindow& Window, UINT Msg, WPARAM WParam, LPARAM LParam, int32 X, int32 Y)
 {
 	DeferredMessages.push_back({ Window.weak_from_this(), Msg, WParam, LParam, X, Y });
@@ -300,6 +464,26 @@ void FWindowsApplication::ProcessDeferredMessage(const FDeferredMessage& Message
 		return;
 	case WM_INPUT:
 		Handler.OnRawMouseMove(Message.X, Message.Y);
+		return;
+	case WM_IME_STARTCOMPOSITION:
+	case WM_IME_COMPOSITION:
+	case WM_IME_ENDCOMPOSITION:
+		// Deferred so composition stays ordered with the characters around it.
+		if (ITextInputMethodContext* Context = WindowPtr ? TextInputMethod.GetContextFor(WindowPtr->GetHwnd()) : nullptr)
+		{
+			if (Message.Msg == WM_IME_STARTCOMPOSITION)
+			{
+				Context->BeginComposition();
+			}
+			else if (Message.Msg == WM_IME_COMPOSITION)
+			{
+				Context->UpdateComposition(Message.Text, Message.X);
+			}
+			else
+			{
+				Context->EndComposition();
+			}
+		}
 		return;
 	default:
 		break;
@@ -611,6 +795,15 @@ LRESULT FWindowsApplication::ProcessMessage(FWindowsWindow& Window, HWND Hwnd, U
 {
 	IPlatformMessageHandler& Handler = *MessageHandler;
 	const auto Ref = [&Window]() { return TSharedRef<IPlatformWindow>(StaticCastSharedPtr<IPlatformWindow>(Window.shared_from_this())); };
+
+	if (Msg >= WM_IME_SETCONTEXT && Msg <= WM_IME_KEYUP || Msg == WM_IME_STARTCOMPOSITION || Msg == WM_IME_COMPOSITION || Msg == WM_IME_ENDCOMPOSITION)
+	{
+		if (ProcessImeMessage(Window, Hwnd, Msg, WParam, LParam))
+		{
+			return 0;
+		}
+		return DefWindowProcW(Hwnd, Msg, WParam, LParam);
+	}
 
 	switch (Msg)
 	{

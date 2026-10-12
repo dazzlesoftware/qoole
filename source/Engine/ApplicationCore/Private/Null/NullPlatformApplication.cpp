@@ -131,6 +131,45 @@ void FNullPlatformApplication::QueueMouseWheel(const TSharedRef<IPlatformWindow>
 	Events.push_back([Window, Delta, Position](IPlatformMessageHandler& H) { H.OnMouseWheel(Window, Delta, false, Position); });
 }
 
+void FNullPlatformApplication::QueueCompositionBegin()
+{
+	Events.push_back([this](IPlatformMessageHandler&)
+	{
+		if (const TSharedPtr<ITextInputMethodContext>& Context = TextInputMethod.GetActiveContext())
+		{
+			Context->BeginComposition();
+		}
+	});
+}
+
+void FNullPlatformApplication::QueueCompositionUpdate(const FString& Text, int32 CaretIndex)
+{
+	Events.push_back([this, Text, CaretIndex](IPlatformMessageHandler&)
+	{
+		if (const TSharedPtr<ITextInputMethodContext>& Context = TextInputMethod.GetActiveContext())
+		{
+			Context->UpdateComposition(Text, CaretIndex);
+		}
+	});
+}
+
+void FNullPlatformApplication::QueueCompositionEnd(const FString& Committed)
+{
+	Events.push_back([this](IPlatformMessageHandler&)
+	{
+		if (const TSharedPtr<ITextInputMethodContext>& Context = TextInputMethod.GetActiveContext())
+		{
+			Context->EndComposition();
+		}
+	});
+	const char* Read = *Committed;
+	const char* const End = Read + Committed.Len();
+	while (Read < End)
+	{
+		QueueChar(FUtf8::Decode(Read, End));
+	}
+}
+
 void FNullPlatformApplication::QueueRawMouseMove(int32 DeltaX, int32 DeltaY)
 {
 	Events.push_back([this, DeltaX, DeltaY](IPlatformMessageHandler& H)

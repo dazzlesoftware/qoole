@@ -53,6 +53,7 @@
     <ClInclude Include="Public\GenericPlatform\PlatformApplication.h" />
     <ClInclude Include="Public\GenericPlatform\PlatformMessageHandler.h" />
     <ClInclude Include="Public\GenericPlatform\PlatformWindow.h" />
+    <ClInclude Include="Public\GenericPlatform\TextInputMethod.h" />
     <ClInclude Include="Public\Null\NullPlatformApplication.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

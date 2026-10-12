@@ -97,6 +97,9 @@ bool FWindowsWindow::Initialize()
 		return false;
 	}
 
+	// The IME stays off until a text field activates an input context.
+	ImmAssociateContextEx(Hwnd, nullptr, 0);
+
 	// The window may have landed on a monitor with another DPI.
 	DpiScale = static_cast<float>(GetDpiForWindow(Hwnd)) / 96.0f;
 

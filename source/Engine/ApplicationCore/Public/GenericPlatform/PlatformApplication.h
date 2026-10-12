@@ -5,6 +5,7 @@
 #include "GenericPlatform/Cursor.h"
 #include "GenericPlatform/PlatformMessageHandler.h"
 #include "GenericPlatform/PlatformWindow.h"
+#include "GenericPlatform/TextInputMethod.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogApplicationCore, Log);
 
@@ -54,6 +55,9 @@ public:
 	virtual bool IsGamepadAttached(int32 UserIndex) const = 0;
 
 	virtual void GetDisplayMetrics(FDisplayMetrics& OutMetrics) const = 0;
+
+	// Input method editor support; nullptr when the platform has none.
+	virtual ITextInputMethodSystem* GetTextInputMethodSystem() { return nullptr; }
 
 	virtual void ClipboardCopy(const FString& Text) = 0;
 	virtual FString ClipboardPaste() = 0;
