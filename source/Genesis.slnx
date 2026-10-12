@@ -4,6 +4,7 @@
   </Configurations>
   <Folder Name="/Engine/">
     <Project Path="Engine/Core/Core.vcxproj" />
+    <Project Path="Engine/MapCore/MapCore.vcxproj" Id="e6b3966d-7ccb-46db-92a6-40893ed2e9dd" />
     <Project Path="Engine/ApplicationCore/ApplicationCore.vcxproj" />
     <Project Path="Engine/RHI/RHI.vcxproj" />
     <Project Path="Engine/UICore/UICore.vcxproj" />
@@ -16,6 +17,7 @@
   <Folder Name="/Programs/">
     <Project Path="Programs/UISandbox/UISandbox.vcxproj" />
     <Project Path="Programs/EngineTests/EngineTests.vcxproj" />
+    <Project Path="Engine/Tests/GenesisTests.vcxproj" Id="bbc47c09-d18a-47f5-9486-7c1db20ceb88" />
   </Folder>
   <Folder Name="/Renderers/">
     <Project Path="Interface/DrawMFC/DrawMFC.vcxproj" Id="5f452404-f8d2-5ecf-9d02-892e70900df9" />

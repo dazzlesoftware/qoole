@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __LCOMMON_H
 #define __LCOMMON_H
 
-#include "CoreMinimal.h"
+#include "Misc/AssertionMacros.h"
 
 #include "list.h"
 
@@ -33,6 +33,9 @@ void LError(const char *fmt, ...);
 void LFatal(const char *fmt = 0, ...);
 bool LAskYesNo(const char *fmt, ...);
 bool LBrowseForFolder(const char *title, char *path, int pathSize);
+// Debugging detail (what TRACE was used for), logged as Verbose to
+// LogMapCore, which drops it unless its verbosity is raised.
+void LTrace(const char *fmt, ...);
 
 
 // ========== LFile ==========

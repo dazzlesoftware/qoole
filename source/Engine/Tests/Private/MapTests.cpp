@@ -96,7 +96,7 @@ namespace
 			}
 		}
 
-		std::filesystem::create_directories(std::filesystem::path(DataDir.Path.GetData()) / "gems");
+		std::filesystem::create_directories(std::filesystem::path(DataDir.Path.Utf8()) / "gems");
 		for (const char* Name : { "gems\\cross1.gem", "gems\\cross2.gem", "gems\\undef.gem" })
 		{
 			FFile File;

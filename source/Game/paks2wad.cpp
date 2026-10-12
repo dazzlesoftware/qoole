@@ -254,7 +254,7 @@ bool paks2wad(char *quake_root, char *wad_output, IProgressTask *progress) {
 
 		wad_header.offset += size;
 
-		GLog->Logf(ELogVerbosity::Verbose, "%s\n", wad_entry[i].name);
+		LTrace("%s\n", wad_entry[i].name);
 	}
 
 	fseek(wad_file, 0, SEEK_SET);

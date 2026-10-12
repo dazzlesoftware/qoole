@@ -43,10 +43,15 @@
   <ItemGroup>
     <ClCompile Include="Private\Containers\GenesisString.cpp" />
     <ClCompile Include="Private\Containers\Name.cpp" />
+    <ClCompile Include="Private\HAL\File.cpp" />
     <ClCompile Include="Private\HAL\WindowsPlatformMisc.cpp" />
     <ClCompile Include="Private\Logging\Log.cpp" />
     <ClCompile Include="Private\Math\Color.cpp" />
+    <ClCompile Include="Private\Misc\App.cpp" />
     <ClCompile Include="Private\Misc\AssertionMacros.cpp" />
+    <ClCompile Include="Private\Services\ConfigStore.cpp" />
+    <ClCompile Include="Private\Services\Services.cpp" />
+    <ClCompile Include="Private\Windows\WindowsString.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\Containers\ContainerAliases.h" />
@@ -55,6 +60,7 @@
     <ClInclude Include="Public\CoreMinimal.h" />
     <ClInclude Include="Public\CoreTypes.h" />
     <ClInclude Include="Public\Delegates\Delegate.h" />
+    <ClInclude Include="Public\HAL\File.h" />
     <ClInclude Include="Public\HAL\PlatformMisc.h" />
     <ClInclude Include="Public\Logging\Log.h" />
     <ClInclude Include="Public\Math\Color.h" />
@@ -63,8 +69,16 @@
     <ClInclude Include="Public\Math\Rect.h" />
     <ClInclude Include="Public\Math\Transform2D.h" />
     <ClInclude Include="Public\Math\Vector2.h" />
+    <ClInclude Include="Public\Misc\App.h" />
     <ClInclude Include="Public\Misc\AssertionMacros.h" />
+    <ClInclude Include="Public\Services\ConfigStore.h" />
+    <ClInclude Include="Public\Services\FileDialogs.h" />
+    <ClInclude Include="Public\Services\MessageDialog.h" />
+    <ClInclude Include="Public\Services\Progress.h" />
+    <ClInclude Include="Public\Services\Services.h" />
     <ClInclude Include="Public\Templates\SharedPointer.h" />
+    <ClInclude Include="Private\Misc\StringFormat.h" />
+    <ClInclude Include="Private\Windows\WindowsPlatform.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

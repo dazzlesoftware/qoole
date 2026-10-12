@@ -26,8 +26,14 @@ inline constexpr int32 INDEX_NONE = -1;
 	#define GENESIS_PLATFORM_WINDOWS 0
 #endif
 
+// Engine.props sets this; other projects (the MFC editor, MapCore) follow the
+// usual NDEBUG convention.
 #ifndef GENESIS_DEBUG
-	#define GENESIS_DEBUG 0
+	#ifdef NDEBUG
+		#define GENESIS_DEBUG 0
+	#else
+		#define GENESIS_DEBUG 1
+	#endif
 #endif
 
 #define GENESIS_LIKELY(x) (x) [[likely]]

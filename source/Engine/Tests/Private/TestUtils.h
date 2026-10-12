@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #pragma once
 
-#include "Containers/String.h"
+#include "Containers/GenesisString.h"
 #include "HAL/File.h"
 
 #include <filesystem>
@@ -45,7 +45,7 @@ struct FTempDir
 	~FTempDir()
 	{
 		std::error_code Error;
-		std::filesystem::remove_all(std::filesystem::path(Path.GetData()), Error);
+		std::filesystem::remove_all(std::filesystem::path(Path.Utf8()), Error);
 	}
 
 	FString File(const char* Name) const { return Path + "\\" + Name; }

@@ -1,11 +1,15 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// check / checkf / verify / ensure / ensuref.
+// check / checkf / verify / checkNoEntry / ensure / ensuref.
 //
-// - check(expr), checkf(expr, fmt, args...): fatal when false. Compiled out
-//   (expression not evaluated) when GENESIS_DO_CHECK is 0, the default for
-//   Release builds.
-// - verify(expr): like check, but the expression is always evaluated.
+// - check(expr), checkf(expr, fmt, args...): compiled out (expression not
+//   evaluated) when GENESIS_DO_CHECK is 0, the default for Release builds.
+//   A failure is logged as an error and then, like the MFC ASSERT these
+//   replace in the map core, breaks into an attached debugger or shows the C
+//   runtime's Abort/Retry/Ignore report. Ignore continues.
+// - verify(expr): like check, but the expression is always evaluated and
+//   checked.
+// - checkNoEntry(): marks code that must not be reached; fatal.
 // - ensure(expr), ensuref(expr, fmt, args...): always evaluated; when false,
 //   logs an error (once per call site), breaks into an attached debugger and
 //   returns false so the caller can recover: if (!ensure(Ptr)) return;
@@ -25,8 +29,12 @@
 
 struct FAssertion
 {
-	// Reports a failed check and terminates.
-	[[noreturn]] static void CheckFailed(const char* Expr, const char* File, int32 Line, const std::string& Message);
+	// Reports a failed check or verify. Returns if the developer chooses to
+	// continue.
+	static void CheckFailed(const char* Expr, const char* File, int32 Line, const std::string& Message);
+
+	// Reports a failure and terminates.
+	[[noreturn]] static void Fatal(const char* Expr, const char* File, int32 Line, const std::string& Message);
 
 	// Reports a failed ensure. bFired is the call site's "already reported" flag.
 	// Always returns false.
@@ -46,7 +54,7 @@ struct FAssertion
 		do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, {}); } } while (0)
 	#define checkf(expr, fmt, ...) \
 		do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, ::FAssertion::FormatText(fmt __VA_OPT__(,) __VA_ARGS__)); } } while (0)
-	#define checkNoEntry() ::FAssertion::CheckFailed("unreachable code", __FILE__, __LINE__, {})
+	#define checkNoEntry() ::FAssertion::Fatal("unreachable code", __FILE__, __LINE__, {})
 #else
 	#define check(expr) do { } while (0)
 	#define checkf(expr, fmt, ...) do { } while (0)

@@ -231,7 +231,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="Engine\Core\Core.vcxproj">
-      <Project>{CABA659B-DAE6-4839-BB5A-6698150933E9}</Project>
+      <Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project>
     </ProjectReference>
     <ProjectReference Include="Engine\MapCore\MapCore.vcxproj">
       <Project>{E6B3966D-7CCB-46DB-92A6-40893ED2E9DD}</Project>

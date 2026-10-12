@@ -35,18 +35,18 @@ namespace
 {
 	// Fails the run when any check() or ensure() fails, even inside code
 	// that carries on afterwards.
-	class FCheckFailureSink : public ILogSink
+	class FCheckFailureDevice : public FOutputDevice
 	{
 	public:
 		std::atomic<int> Failures = 0;
 
-		void Serialize(ELogVerbosity Verbosity, const char* Utf8Text) override
+		void Serialize(const FLogCategory&, ELogVerbosity Verbosity, std::string_view Message) override
 		{
 			if (Verbosity == ELogVerbosity::Error &&
-				(std::strncmp(Utf8Text, "Check failed", 12) == 0 || std::strncmp(Utf8Text, "Ensure failed", 13) == 0))
+				(Message.starts_with("Assertion failed") || Message.starts_with("Ensure failed")))
 			{
 				Failures++;
-				std::fputs(Utf8Text, stderr);
+				std::fprintf(stderr, "%.*s\n", static_cast<int>(Message.size()), Message.data());
 			}
 		}
 	};
@@ -58,13 +58,15 @@ int main(int argc, char** argv)
 	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
 	_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 
-	FCheckFailureSink CheckFailures;
-	GLog->AddSink(&CheckFailures);
+	// The map core logs its progress text; keep the test output to failures.
+	FLog::SetDefaultDevicesEnabled(false);
+	FCheckFailureDevice CheckFailures;
+	FLog::AddDevice(&CheckFailures);
 
 	doctest::Context Context(argc, argv);
 	int Result = Context.run();
 
-	GLog->RemoveSink(&CheckFailures);
+	FLog::RemoveDevice(&CheckFailures);
 	if (CheckFailures.Failures > 0)
 	{
 		std::fprintf(stderr, "%d check failure(s) were logged.\n", CheckFailures.Failures.load());

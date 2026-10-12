@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // ========== Common ==========
 
+DEFINE_LOG_CATEGORY(LogMapCore, Log);
+
 static std::string
 FormatAnsi(const char *fmt, va_list arglist) {
 	if(!fmt)
@@ -66,6 +68,19 @@ LAskYesNo(const char *fmt, ...) {
 
 	return FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo,
 		FString::FromAnsi(text)) == EMessageResult::Yes;
+}
+
+void
+LTrace(const char *fmt, ...) {
+	if(LogMapCore.IsSuppressed(ELogVerbosity::Verbose))
+		return;
+
+	va_list arglist;
+	va_start(arglist, fmt);
+	std::string text = FormatAnsi(fmt, arglist);
+	va_end(arglist);
+
+	FLog::Write(LogMapCore, ELogVerbosity::Verbose, FString::FromAnsi(text).View());
 }
 
 bool
@@ -402,7 +417,14 @@ LFile::Init(void) {
 #ifdef _DEBUG
 	_getcwd(initDir, 255);
 #else
-	std::string exeDir = FApp::GetExecutableDir().ToAnsi();
+	// FPaths gives forward slashes and a trailing one; the map core uses
+	// backslashes and no trailing separator.
+	std::string exeDir = FPaths::ExecutableDir().ToAnsi();
+	for(char &c : exeDir)
+		if(c == '/')
+			c = '\\';
+	if(!exeDir.empty() && exeDir.back() == '\\')
+		exeDir.pop_back();
 	strncpy(initDir, exeDir.c_str(), sizeof(initDir) - 1);
 	initDir[sizeof(initDir) - 1] = '\0';
 #endif

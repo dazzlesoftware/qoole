@@ -42,3 +42,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "HAL/File.h"
 #include "Misc/App.h"
 #include "Services/Services.h"
+
+// Messages from the map core (FDraw::OutputText, LTrace).
+DECLARE_LOG_CATEGORY_EXTERN(LogMapCore, Log);

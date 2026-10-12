@@ -2,7 +2,10 @@
 
 #include "Containers/GenesisString.h"
 
+#include "Misc/StringFormat.h"
+
 #include <cctype>
+#include <cstdarg>
 
 namespace FUtf8
 {
@@ -206,4 +209,51 @@ TArray<FString> FString::ParseIntoArray(std::string_view Delimiter, bool bCullEm
 		Start = Pos + Delimiter.size();
 	}
 	return Out;
+}
+
+FString FString::Printf(const char* Fmt, ...)
+{
+	va_list Args;
+	va_start(Args, Fmt);
+	FString Result(Genesis::FormatV(Fmt, Args));
+	va_end(Args);
+	return Result;
+}
+
+namespace
+{
+	bool EqualsRange(std::string_view A, std::string_view B, ESearchCase Case)
+	{
+		if (A.size() != B.size())
+		{
+			return false;
+		}
+		if (Case == ESearchCase::CaseSensitive)
+		{
+			return A == B;
+		}
+		for (SIZE_T I = 0; I < A.size(); ++I)
+		{
+			if (std::tolower(static_cast<unsigned char>(A[I])) != std::tolower(static_cast<unsigned char>(B[I])))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
+bool FString::Equals(std::string_view Other, ESearchCase Case) const
+{
+	return EqualsRange(View(), Other, Case);
+}
+
+bool FString::StartsWith(std::string_view Prefix, ESearchCase Case) const
+{
+	return Prefix.size() <= Data.size() && EqualsRange(View().substr(0, Prefix.size()), Prefix, Case);
+}
+
+bool FString::EndsWith(std::string_view Suffix, ESearchCase Case) const
+{
+	return Suffix.size() <= Data.size() && EqualsRange(View().substr(Data.size() - Suffix.size()), Suffix, Case);
 }

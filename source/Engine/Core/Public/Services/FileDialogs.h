@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // File and folder pickers, replacing CDirDialog. Open/save file pickers will
 // be added when code outside the UI needs them.
 
-#include "Containers/String.h"
+#include "Containers/GenesisString.h"
 
 class IFileDialogs
 {

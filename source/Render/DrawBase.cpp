@@ -400,5 +400,5 @@ void FDraw::OutputText(const char *text, ...)
 		va_end(arglist);
 	}
 
-	GLog->Log(ELogVerbosity::Display, *FString::FromAnsi(buf));
+	FLog::Write(LogMapCore, ELogVerbosity::Display, FString::FromAnsi(buf).View());
 }

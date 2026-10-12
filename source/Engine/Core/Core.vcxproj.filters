@@ -2,46 +2,55 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Private">
-      <UniqueIdentifier>{DF415075-1027-5A00-BB6A-947EEB3D98F4}</UniqueIdentifier>
+      <UniqueIdentifier>{31ABDAFB-120B-5CED-B539-E3A17233E2C0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Private\Containers">
-      <UniqueIdentifier>{EEB978CE-FDDF-5CF0-AF31-D4E07C11E1C9}</UniqueIdentifier>
+      <UniqueIdentifier>{E3DDA1AC-EB92-5DEB-A416-AFEF5F0C543A}</UniqueIdentifier>
     </Filter>
     <Filter Include="Private\HAL">
-      <UniqueIdentifier>{0554F741-8AA8-5C0F-822D-43F57B90DCEB}</UniqueIdentifier>
+      <UniqueIdentifier>{A0859ADE-48EB-5340-B209-CEB9968F2551}</UniqueIdentifier>
     </Filter>
     <Filter Include="Private\Logging">
-      <UniqueIdentifier>{7C00BE32-E140-54FF-8EC8-992F5C1D6720}</UniqueIdentifier>
+      <UniqueIdentifier>{C474C6A4-72B0-5AFF-B4E8-870ABABFC4D1}</UniqueIdentifier>
     </Filter>
     <Filter Include="Private\Math">
-      <UniqueIdentifier>{E322B1F6-9EF5-59CE-A1A0-A6D0E8146568}</UniqueIdentifier>
+      <UniqueIdentifier>{B983770D-FA37-5F38-BB46-8552A625AB2C}</UniqueIdentifier>
     </Filter>
     <Filter Include="Private\Misc">
-      <UniqueIdentifier>{D72C8481-4753-5BBD-AA1F-531A750E3D21}</UniqueIdentifier>
+      <UniqueIdentifier>{80FC8629-BB1B-540E-A730-CB619A202658}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\Services">
+      <UniqueIdentifier>{0CDE68FD-0159-528A-A728-AF7956BCD5D0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\Windows">
+      <UniqueIdentifier>{39EFECF2-290D-56CB-96D4-08FC45116F5C}</UniqueIdentifier>
     </Filter>
     <Filter Include="Public">
-      <UniqueIdentifier>{0FF3CD71-DB5F-513E-A10D-11C452CF1B25}</UniqueIdentifier>
+      <UniqueIdentifier>{2A4AF2A0-373A-529E-BA3F-E2EF1F98BF0F}</UniqueIdentifier>
     </Filter>
     <Filter Include="Public\Containers">
-      <UniqueIdentifier>{0ADADB31-896E-5B6E-8EBA-F62738CDA31E}</UniqueIdentifier>
+      <UniqueIdentifier>{CD0E6159-E3A9-504C-A138-247E1B2D94B9}</UniqueIdentifier>
     </Filter>
     <Filter Include="Public\Delegates">
-      <UniqueIdentifier>{A129F2AC-708A-5BF5-83D4-58F8045A14F2}</UniqueIdentifier>
+      <UniqueIdentifier>{8C823C6A-7958-55E9-B1FD-984C9FC68DC8}</UniqueIdentifier>
     </Filter>
     <Filter Include="Public\HAL">
-      <UniqueIdentifier>{CE5786DD-B184-5343-AA2D-8B2B29A8E3B8}</UniqueIdentifier>
+      <UniqueIdentifier>{01FEC527-EB2B-55C0-A801-0CA48AE09D60}</UniqueIdentifier>
     </Filter>
     <Filter Include="Public\Logging">
-      <UniqueIdentifier>{6175923D-97E4-5F14-96C2-D68E100E2F85}</UniqueIdentifier>
+      <UniqueIdentifier>{2BAED5CA-553F-5997-9DAE-C6D5A4EF4EFD}</UniqueIdentifier>
     </Filter>
     <Filter Include="Public\Math">
-      <UniqueIdentifier>{1BB400D0-3BA5-53D9-9558-4063EAC0C63A}</UniqueIdentifier>
+      <UniqueIdentifier>{9410E0D3-D0AA-5200-9159-EE098FA368C0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Public\Misc">
-      <UniqueIdentifier>{17FD5083-AB22-575E-98B0-BA9926F84717}</UniqueIdentifier>
+      <UniqueIdentifier>{1D1BF22B-A7E5-539F-A0CE-59F775DB4BEB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\Services">
+      <UniqueIdentifier>{BFE50EEF-2E6B-5446-BBE1-D8B87E54A3B7}</UniqueIdentifier>
     </Filter>
     <Filter Include="Public\Templates">
-      <UniqueIdentifier>{CCAE1333-5EC1-5B4C-8EE5-742410425252}</UniqueIdentifier>
+      <UniqueIdentifier>{369CA352-F9D4-513B-9EB5-5326DFE583F5}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -50,6 +59,9 @@
     </ClCompile>
     <ClCompile Include="Private\Containers\Name.cpp">
       <Filter>Private\Containers</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\HAL\File.cpp">
+      <Filter>Private\HAL</Filter>
     </ClCompile>
     <ClCompile Include="Private\HAL\WindowsPlatformMisc.cpp">
       <Filter>Private\HAL</Filter>
@@ -60,11 +72,21 @@
     <ClCompile Include="Private\Math\Color.cpp">
       <Filter>Private\Math</Filter>
     </ClCompile>
+    <ClCompile Include="Private\Misc\App.cpp">
+      <Filter>Private\Misc</Filter>
+    </ClCompile>
     <ClCompile Include="Private\Misc\AssertionMacros.cpp">
       <Filter>Private\Misc</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
+    <ClCompile Include="Private\Services\ConfigStore.cpp">
+      <Filter>Private\Services</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Services\Services.cpp">
+      <Filter>Private\Services</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Windows\WindowsString.cpp">
+      <Filter>Private\Windows</Filter>
+    </ClCompile>
     <ClInclude Include="Public\Containers\ContainerAliases.h">
       <Filter>Public\Containers</Filter>
     </ClInclude>
@@ -82,6 +104,9 @@
     </ClInclude>
     <ClInclude Include="Public\Delegates\Delegate.h">
       <Filter>Public\Delegates</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\HAL\File.h">
+      <Filter>Public\HAL</Filter>
     </ClInclude>
     <ClInclude Include="Public\HAL\PlatformMisc.h">
       <Filter>Public\HAL</Filter>
@@ -107,11 +132,35 @@
     <ClInclude Include="Public\Math\Vector2.h">
       <Filter>Public\Math</Filter>
     </ClInclude>
+    <ClInclude Include="Public\Misc\App.h">
+      <Filter>Public\Misc</Filter>
+    </ClInclude>
     <ClInclude Include="Public\Misc\AssertionMacros.h">
       <Filter>Public\Misc</Filter>
     </ClInclude>
+    <ClInclude Include="Public\Services\ConfigStore.h">
+      <Filter>Public\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Services\FileDialogs.h">
+      <Filter>Public\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Services\MessageDialog.h">
+      <Filter>Public\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Services\Progress.h">
+      <Filter>Public\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Services\Services.h">
+      <Filter>Public\Services</Filter>
+    </ClInclude>
     <ClInclude Include="Public\Templates\SharedPointer.h">
       <Filter>Public\Templates</Filter>
+    </ClInclude>
+    <ClInclude Include="Private\Misc\StringFormat.h">
+      <Filter>Private\Misc</Filter>
+    </ClInclude>
+    <ClInclude Include="Private\Windows\WindowsPlatform.h">
+      <Filter>Private\Windows</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

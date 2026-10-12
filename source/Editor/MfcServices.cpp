@@ -23,7 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "MainFrm.h"
 #include "ProcWnd.h"
 
-#include "CoreMinimal.h"
+#include "Containers/GenesisString.h"
+#include "Logging/Log.h"
 #include "Misc/App.h"
 #include "Services/Services.h"
 
@@ -168,9 +169,9 @@ public:
 
 // ========== Output pane ==========
 
-class FProcessWndLogSink : public ILogSink {
+class FProcessWndOutputDevice : public FOutputDevice {
 public:
-	void Serialize(ELogVerbosity verbosity, const char *utf8Text) override {
+	void Serialize(const FLogCategory &, ELogVerbosity verbosity, std::string_view utf8Text) override {
 		if(verbosity > ELogVerbosity::Display)
 			return;
 
@@ -191,7 +192,7 @@ FMfcConfigStore configStore;
 FMfcMessageDialog messageDialog;
 FMfcProgress progress;
 FMfcFileDialogs fileDialogs;
-FProcessWndLogSink logSink;
+FProcessWndOutputDevice logDevice;
 
 } // namespace
 
@@ -209,11 +210,11 @@ void RegisterMfcServices(void) {
 	FServices::SetMessageDialog(&messageDialog);
 	FServices::SetProgress(&progress);
 	FServices::SetFileDialogs(&fileDialogs);
-	GLog->AddSink(&logSink);
+	FLog::AddDevice(&logDevice);
 }
 
 void UnregisterMfcServices(void) {
-	GLog->RemoveSink(&logSink);
+	FLog::RemoveDevice(&logDevice);
 	FServices::SetFileDialogs(NULL);
 	FServices::SetProgress(NULL);
 	FServices::SetMessageDialog(NULL);

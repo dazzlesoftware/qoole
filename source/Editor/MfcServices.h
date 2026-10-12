@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //   IMessageDialog  MessageBox
 //   IProgress       CProgressWnd
 //   IFileDialogs    CDirDialog
-//   GLog            Display and more severe messages go to the output pane
+//   FLog            Display and more severe messages go to the output pane
 //
 // FApp's name comes from AfxGetAppName() and its exit request posts WM_QUIT.
 

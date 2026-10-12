@@ -29,6 +29,12 @@ namespace
 {
 	std::string FormatLine(const FLogCategory& Category, ELogVerbosity Verbosity, std::string_view Message)
 	{
+		// Messages that already end a line (e.g. the map core's progress
+		// text) don't get a second line break.
+		if (Message.ends_with('\n'))
+		{
+			Message.remove_suffix(1);
+		}
 		if (Verbosity == ELogVerbosity::Log || Verbosity == ELogVerbosity::Display)
 		{
 			return std::format("{}: {}\n", Category.Name, Message);

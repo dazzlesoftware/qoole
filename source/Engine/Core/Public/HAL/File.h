@@ -24,8 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // Paths are UTF-8. Failures are reported by return values, never exceptions.
 
 #include "CoreTypes.h"
-#include "Containers/Containers.h"
-#include "Containers/String.h"
+#include "Containers/GenesisString.h"
 
 #include <cstdio>
 

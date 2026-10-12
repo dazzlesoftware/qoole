@@ -27,6 +27,12 @@ namespace FUtf8
 	int32 CountCodePoints(std::string_view Text);
 }
 
+enum class ESearchCase : uint8
+{
+	CaseSensitive,
+	IgnoreCase,
+};
+
 class FString
 {
 public:
@@ -45,9 +51,18 @@ public:
 		return FString(std::format(Fmt, std::forward<Args>(InArgs)...));
 	}
 
+	// printf-style formatting, for code ported from printf/sprintf.
+	static FString Printf(const char* Fmt, ...);
+
 	// UTF-16 conversion for OS calls.
 	static FString FromWide(std::wstring_view Text);
 	std::wstring ToWide() const;
+
+	// Conversion to and from the ANSI code page. The map core (Basic,
+	// Objects, Render, Game) builds with the multibyte character set, so its
+	// char strings are ANSI, not UTF-8; convert at that boundary.
+	static FString FromAnsi(std::string_view Text);
+	std::string ToAnsi() const;
 
 	const char* operator*() const { return reinterpret_cast<const char*>(Data.c_str()); }
 	const char* c_str() const { return **this; }
@@ -81,6 +96,11 @@ public:
 	bool Contains(std::string_view Sub) const { return Find(Sub) != INDEX_NONE; }
 	bool StartsWith(std::string_view Prefix) const { return View().starts_with(Prefix); }
 	bool EndsWith(std::string_view Suffix) const { return View().ends_with(Suffix); }
+
+	// IgnoreCase compares ASCII letters without case.
+	bool Equals(std::string_view Other, ESearchCase Case = ESearchCase::CaseSensitive) const;
+	bool StartsWith(std::string_view Prefix, ESearchCase Case) const;
+	bool EndsWith(std::string_view Suffix, ESearchCase Case) const;
 
 	FString Mid(int32 Start, int32 Count = INT32_MAX) const;
 	FString Left(int32 Count) const { return Mid(0, Count); }

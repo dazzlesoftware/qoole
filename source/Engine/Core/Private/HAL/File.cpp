@@ -28,7 +28,7 @@ namespace
 {
 	std::filesystem::path ToPath(const FString& Path)
 	{
-		return std::filesystem::path(Path.GetData());
+		return std::filesystem::path(Path.Utf8());
 	}
 
 	std::FILE* OpenFile(const FString& Path, EFileOpenMode Mode)

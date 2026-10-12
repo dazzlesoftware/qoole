@@ -459,7 +459,7 @@ TexDB::AddTexture(char *name) {
 	*/
 
 	if(result == -1) {
-		GLog->Logf(ELogVerbosity::Verbose, "TexDB::AddTexture: couldn't find texture '%s'\n", fullName);
+		LTrace("TexDB::AddTexture: couldn't find texture '%s'\n", fullName);
 		static TexEntry notFoundEntry;
 		static Texture notFoundTex(&notFoundEntry, game);
 		strcpy(notFoundEntry.wadEntry.name, "NotFound");

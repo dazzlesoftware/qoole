@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //   // The progress UI closes when Task is destroyed.
 
 #include "CoreTypes.h"
-#include "Containers/String.h"
+#include "Containers/GenesisString.h"
 #include "Templates/SharedPointer.h"
 
 struct FProgressOptions

@@ -122,7 +122,7 @@ public:
 	bool ZBufSetup(Object *obj, FaceTex *faceTex, Vector3d norm);
 	void ZBufCalcST(float x, float y, float z, float &s, float &t);
 
-	// Writes ANSI text to the log (GLog), which the editor shows in its
+	// Writes ANSI text to the log (LogMapCore), which the editor shows in its
 	// output pane.
 	static void OutputText(const char *text, ...);
 

@@ -26,8 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // are separate calls because a store may keep them differently (the MFC
 // profile writes integers to the registry as DWORDs and strings as REG_SZ).
 
-#include "Containers/Containers.h"
-#include "Containers/String.h"
+#include "Containers/GenesisString.h"
 
 class IConfigStore
 {

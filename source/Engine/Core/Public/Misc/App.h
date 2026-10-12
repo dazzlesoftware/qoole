@@ -24,8 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // application they run in (replacing AfxGetAppName and posting WM_QUIT to
 // AfxGetMainWnd).
 
-#include "Containers/Containers.h"
-#include "Containers/String.h"
+#include "Containers/GenesisString.h"
 
 class FApp
 {
@@ -33,9 +32,6 @@ public:
 	// Used for dialog captions and file headers. Defaults to "Genesis Editor".
 	static const FString& GetName();
 	static void SetName(const FString& Name);
-
-	// Folder holding the running executable, without a trailing separator.
-	static FString GetExecutableDir();
 
 	// Asks the application to quit, e.g. after a fatal error. The handler is
 	// set by the application; without one only IsExitRequested() changes.

@@ -77,7 +77,7 @@ EMessageResult FLogMessageDialog::Show(EMessageType Type, EMessageButtons Button
 	const ELogVerbosity Verbosity =
 		Type == EMessageType::Error ? ELogVerbosity::Error :
 		Type == EMessageType::Warning ? ELogVerbosity::Warning : ELogVerbosity::Display;
-	GLog->Logf(Verbosity, "%s: %s\n", Caption.IsEmpty() ? *FApp::GetName() : *Caption, *Text);
+	FLog::Write(LogCore, Verbosity, FString::Printf("%s: %s", Caption.IsEmpty() ? *FApp::GetName() : *Caption, *Text).View());
 
 	switch (Buttons)
 	{

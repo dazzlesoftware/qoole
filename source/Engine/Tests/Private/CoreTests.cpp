@@ -68,19 +68,19 @@ TEST_CASE("ensure reports and returns the condition")
 	CHECK(ensure(1 + 1 == 2));
 }
 
-TEST_CASE("GLog passes text to sinks without changing it")
+TEST_CASE("FLog passes text to output devices without changing it")
 {
-	struct FCaptureSink : ILogSink
+	struct FCaptureDevice : FOutputDevice
 	{
 		FString Captured;
-		void Serialize(ELogVerbosity, const char* Utf8Text) override { Captured += Utf8Text; }
+		void Serialize(const FLogCategory&, ELogVerbosity, std::string_view Message) override { Captured += Message; }
 	} Sink;
 
-	GLog->AddSink(&Sink);
-	GLog->Logf(ELogVerbosity::Display, "Loading %s... ", "map");
-	GLog->Log(ELogVerbosity::Display, "OK.\n");
-	GLog->RemoveSink(&Sink);
-	GLog->Log(ELogVerbosity::Display, "not captured");
+	FLog::AddDevice(&Sink);
+	FLog::Write(LogCore, ELogVerbosity::Display, FString::Printf("Loading %s... ", "map").View());
+	FLog::Write(LogCore, ELogVerbosity::Display, "OK.\n");
+	FLog::RemoveDevice(&Sink);
+	FLog::Write(LogCore, ELogVerbosity::Display, "not captured");
 
 	CHECK(Sink.Captured == FString("Loading map... OK.\n"));
 }
@@ -141,10 +141,10 @@ TEST_CASE("Services fall back to UI-free defaults")
 	CHECK(FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo, "Extract?") == EMessageResult::No);
 }
 
-TEST_CASE("FApp knows its name, folder and exit requests")
+TEST_CASE("FApp knows its name and exit requests")
 {
 	CHECK(FApp::GetName() == FString("Genesis Editor"));
-	CHECK(FFile::DirectoryExists(FApp::GetExecutableDir()));
+	CHECK(FFile::DirectoryExists(FPaths::ExecutableDir()));
 
 	bool bHandled = false;
 	FApp::SetRequestExitHandler([&] { bHandled = true; });
