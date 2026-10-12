@@ -3,8 +3,9 @@
 Status: **approved direction** (decisions recorded in §16). Milestone 1
 (the map core freed from MFC, §14.4), milestone 2 (platform layer, RHI,
 UI renderer, fonts, §17), milestone 3 (widget core and input, §18),
-milestone 4 (editor framework, §19) and milestone 5 (the new map editor
-shell, §20) are implemented.
+milestone 4 (editor framework, §19), milestone 5 (the new map editor
+shell, §20) and milestone 6 (panel parity; MFC removed, §21) are
+implemented.
 
 Genesis UI is the user-interface framework for Genesis Editor and, later,
 Genesis Engine games. It replaces MFC in the editor, provides in-game UI, and
@@ -36,6 +37,7 @@ and how the existing MFC editor moves onto it.
 18. [Milestone 3 notes](#18-milestone-3-notes)
 19. [Milestone 4 notes](#19-milestone-4-notes)
 20. [Milestone 5 notes](#20-milestone-5-notes)
+21. [Milestone 6 notes](#21-milestone-6-notes)
 
 ---
 
@@ -566,7 +568,10 @@ it.
 
 ## 14. Moving the editor off MFC
 
-### 14.1 What exists today
+### 14.1 What existed
+
+All of it was replaced or dropped in milestone 6; §21 says what became of
+each surface.
 
 | MFC surface | Count / classes | Replacement |
 |---|---|---|
@@ -646,7 +651,8 @@ or the editor UI.
   the developer continue in debug builds (the behaviour of the MFC `ASSERT`
   it replaces in the map core); `checkNoEntry` is fatal.
 
-Still coupled to MFC: `Editor` (`FEditorApp`, `FEditorDoc` as a
+Still coupled to MFC after milestone 1 (all of it removed in milestone 6,
+§21): `Editor` (`FEditorApp`, `FEditorDoc` as a
 `CDocument`, the undo operations) and `Interface`/`Interface2` (all
 windows, dialogs, the renderer plugins and the MRC docking library), as
 planned for milestones 5 and 6. The map core's strings are still in the
@@ -665,7 +671,7 @@ Each milestone ends with something runnable and its own PR(s).
 | 3 | **Widget core + input** | Done (§18): layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
 | 4 | **Editor framework** | Done (§19): commands, menu registry, toolbars, docking with save/restore, property grid over `IPropertySource`, viewport widget. Editor-shaped demo in `UISandbox`; headless framework tests pass. |
 | 5 | **New editor shell** | Done (§20): `GenesisMapEditor` opens/edits/saves maps in four docked viewports with menus, toolbars and selection. |
-| 6 | **Panel parity, MFC removed** | All 14.1 surfaces ported; MFC code and plugins deleted. |
+| 6 | **Panel parity, MFC removed** | Done (§21): the 14.1 surfaces ported (the texture browser waits for Genesis textures); the editing tools, groups and CSG; MFC code, plugins and the old games deleted. The new editor is `GenesisEditor.exe`. |
 | 7 | **Object model** | Reflection, serialization, change notification; property grid driven by reflection. |
 | 8 | **Widget assets** | UMG layer, JSON assets, push bindings, animation, game viewport integration, render-to-texture. |
 | 9 | **Widget designer** | Designer tab as described in §11. |
@@ -1061,3 +1067,95 @@ More screenshots: [a moved, selected cube](images/genesis-ui-m5/moved-selection-
 - `GenesisMapEditor -selftest` ran in Debug (with the D3D12 debug layer) and
   Release on D3D12 and Vulkan and reported nothing. Vulkan ran without
   validation, which is not installed on this machine.
+
+## 21. Milestone 6 notes
+
+Built in milestone 6:
+
+| Where | Contents |
+|---|---|
+| `GenesisEditor.exe` (`source/Programs/GenesisEditor`) | The milestone 5 shell, renamed now that the MFC editor is gone, with the editing tools and panels of the MFC editor: select, rotate, scale, clip, and vertex, edge and face editing as tools (keys M, R, S, C, V, G, F); cut, copy and paste; groups (group, ungroup, edit inside a group, leave it); hollow (inward and outward), subtract and intersect; quarter turns and flips; save the selection as a prefab. Panels: the outliner (a tree of groups that follows the group being edited), properties, prefabs, settings with key bindings, and the log. A Tools menu and an About window. Settings and saved prefabs are kept in `%LOCALAPPDATA%\Genesis\Editor`. |
+| `MapEditor` | `FMapDocument` gained the scope (the group being edited, as in Qoole: only its members can be selected and the views show only its contents), the operations above as undoable edits, and brush editing (moving a vertex, edge or face; a change that leaves the brush concave is undone). Content edits swap a brush's or entity's contents with a saved copy, so the objects keep their identity through undo and redo. `FMapViewportClient` has the tools; `FMapObjectProperties` shows map objects in the property grid. |
+| `MapCore` | The Qoole-era games (Quake, Quake 2, Hexen 2, Half-Life, Sin, Heretic 2), their WAD and texture-list code, `paks2wad` and the renderer-plugin helpers are removed. `GenesisGame` is the only game; maps made for the old games open as Genesis maps. |
+| `UI` | `SPropertyGrid` no longer reads a value it does not show, or one of another type, when the objects change under it. |
+| Removed | The MFC editor (`Editor`, `Interface`, `Interface2` with the MRC docking library, `res`, the `.rc` files and `GenesisEditor.vcxproj`), the `GenesisDraw*` renderer plugins, and the editor's dependency on `GenesisEditor.pak`. Nothing in the solution uses MFC. |
+
+What became of each MFC surface of §14.1:
+
+| MFC surface | Now |
+|---|---|
+| Main frame, MDI, child frames | One main window with a tab layout (§20). |
+| Map views and renderer plugins | Viewport tabs drawn through the RHI (§20). |
+| Docking panels, toolbars, menus | The docking framework, toolbar and menus from commands (§19, §20). |
+| Tree view | The outliner. |
+| Property sheets | The properties panel: name and position of any object, the texture of brushes, and every key of an entity, typed from the entity set (numbers, choices, one checkbox per flag), with the keys the class does not define listed apart. |
+| Prefab browser and manager | The prefabs panel (a list; no 3D preview yet) and Object > Save as Prefab. |
+| Config dialogs | The settings panel (grid, rotation steps, solid 3D, interface scale) with the key bindings. |
+| Entity select dialog | Object > Add Entity, by category. |
+| Hollow prompt | Hollow and Hollow Outward use the grid size as the wall thickness. |
+| About | A modal Genesis UI window. |
+| Output log | The log panel. |
+| Texture browser | Not ported: the built-in game has no textures yet. Faces keep their texture names, which the properties panel edits as text. |
+| Compile dialog, colors page | Dropped with the old games' compile tools; colors come from the Genesis UI style. |
+
+`GenesisEditor -selftest=<dir>` now also builds a room by hollowing a cube,
+cuts a doorway in it, sets a light's style and brightness and shows its
+properties, opens the Object menu, rotates the pyramid and clips the
+sphere with the mouse, shows the column's vertices, groups the column and
+the pyramid and edits inside the group, and opens the prefabs and settings
+panels, before saving, reopening and changing the DPI. `EngineTests` gained
+10 tests (suite `MapEditor`, 122 in all).
+
+![The editor on D3D12 at 150%, with a light's properties](images/genesis-ui-m6/editor-d3d12-150.png)
+
+More screenshots: [the Object menu](images/genesis-ui-m6/menu-object-d3d12-150.png),
+[a rotated pyramid](images/genesis-ui-m6/rotated-d3d12-150.png),
+[a clip line](images/genesis-ui-m6/clip-line-d3d12-150.png) and
+[the clipped sphere](images/genesis-ui-m6/clipped-d3d12-150.png),
+[a brush's vertices](images/genesis-ui-m6/vertices-d3d12-150.png),
+[editing inside a group](images/genesis-ui-m6/group-scope-d3d12-150.png),
+[the prefabs and settings panels](images/genesis-ui-m6/settings-prefabs-d3d12-150.png),
+[the saved map reopened on Vulkan](images/genesis-ui-m6/reopened-vulkan-150.png).
+
+**How it fits together**
+
+- Every operation goes through `FMapDocument` and is one undo step. The map
+  core does the geometry as before (`Object::Transform`, the CSG of
+  `Geometry`, `PlaneClip`); the document records what each call changed:
+  objects added, removed, moved or reparented, and the contents of the ones
+  it rewrote. Subtracting can leave pieces in the group being edited; they
+  are recorded as added.
+- Tools are drags in the 2D views. Rotate turns about the selection's
+  center in the view's plane, snapped to the rotation steps; scale pivots
+  on the corner opposite the one dragged. Clip: draw a line, then Enter
+  keeps the marked side, Ctrl+Enter splits, Tab flips the side, Esc drops
+  the line. Vertex, edge and face editing pick the map core's handles of
+  the selected brush.
+- The scope is the group being edited. Views and the outliner show it;
+  undo and redo return to the scope of their step.
+
+**Deviations from the design, and why**
+
+- The old games were removed instead of ported: Genesis maps are the
+  editor's purpose, and those games needed their own installs and the pak.
+  Their `.qle` maps still open, as Genesis maps.
+- No texture browser yet (see above); it comes with Genesis Engine
+  textures.
+- The prefabs panel is a list without a 3D preview.
+
+**Testing notes**
+
+- The new `MapEditor` tests cover rotating, scaling and flipping about a
+  pivot; hollowing, subtracting and intersecting (and a doorway cut in a
+  hollowed room, then undone); clipping each way; groups and the scope;
+  names, entity keys and textures as undoable properties; the tools driven
+  with the mouse in a headless view; the properties of map objects and the
+  property grid editing them; and brush editing, including a concave
+  result being refused.
+- `GenesisEditor -selftest` ran in Debug (with the D3D12 debug layer) and
+  Release on D3D12 and Vulkan and reported nothing; Vulkan ran without
+  validation, which is not installed on this machine. The capture now waits
+  for the desktop compositor: Release Vulkan was fast enough to be
+  captured showing an earlier step.
+- `GenesisTests` (the map core) and `EngineTests` pass in Debug and
+  Release.

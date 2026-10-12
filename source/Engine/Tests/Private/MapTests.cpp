@@ -64,7 +64,7 @@ namespace
 	};
 
 	// The editor reads entity definitions (ents/*.ent) and the wireframes
-	// every entity list needs (gems/*.gem) from GenesisEditor.pak. The tests
+	// every entity list needs (gems/*.gem) from Content/Editor. The tests
 	// write stand-ins to a data folder the map core searches: a definition
 	// of info_player_start, and a cube for every wireframe.
 	void ProvideDataFiles()

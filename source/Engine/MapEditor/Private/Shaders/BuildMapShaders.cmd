@@ -8,7 +8,7 @@ rem from https://github.com/microsoft/DirectXShaderCompiler. The dxc.exe in the
 rem Windows SDK cannot emit SPIR-V.
 rem
 rem The headers in the repository were not made by this script: they are the
-rem SPIR-V of the old Vulkan renderer plugin (Interface\DrawShaders_VK_*.h,
+rem SPIR-V of the removed Vulkan renderer plugin (Interface\DrawShaders_VK_*.h,
 rem compiled from Interface\DrawShaders.hlsl, which flipped Y itself), with
 rem the one instruction that flipped Y (y = p * s - 1) changed back to
 rem y = 1 - p * s by swapping the operands of its OpFSub. That is exactly

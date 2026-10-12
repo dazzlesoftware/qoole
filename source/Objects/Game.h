@@ -145,6 +145,5 @@ typedef struct {
 	int v1, v2;
 } edgenum_t;
 
-void ExtractTexsFromPak(LPak *pak, char *baseDir);
 
 #endif

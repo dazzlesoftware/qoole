@@ -86,14 +86,7 @@
     <ClCompile Include="..\..\Render\Selector.cpp" />
     <ClCompile Include="..\..\Render\View.cpp" />
     <ClCompile Include="..\..\Game\GenesisGame.cpp" />
-    <ClCompile Include="..\..\Game\HalfLife.cpp" />
-    <ClCompile Include="..\..\Game\Heretic2.cpp" />
-    <ClCompile Include="..\..\Game\Hexen2.cpp" />
     <ClCompile Include="..\..\Game\MapIO.cpp" />
-    <ClCompile Include="..\..\Game\Quake.cpp" />
-    <ClCompile Include="..\..\Game\Quake2.cpp" />
-    <ClCompile Include="..\..\Game\Sin.cpp" />
-    <ClCompile Include="..\..\Game\paks2wad.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MapCorePCH.h" />
@@ -111,13 +104,7 @@
     <ClInclude Include="..\..\Render\Selector.h" />
     <ClInclude Include="..\..\Render\View.h" />
     <ClInclude Include="..\..\Game\GenesisGame.h" />
-    <ClInclude Include="..\..\Game\HalfLife.h" />
-    <ClInclude Include="..\..\Game\Heretic2.h" />
-    <ClInclude Include="..\..\Game\Hexen2.h" />
     <ClInclude Include="..\..\Game\Mapio.h" />
-    <ClInclude Include="..\..\Game\Quake.h" />
-    <ClInclude Include="..\..\Game\Quake2.h" />
-    <ClInclude Include="..\..\Game\Sin.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Core\Core.vcxproj">

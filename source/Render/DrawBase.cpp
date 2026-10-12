@@ -44,26 +44,6 @@ FDraw::Exit(void) {
 	delete cfg;
 }
 
-// Renderer plugins that ship with the editor (GenesisDraw<name>.dll).
-static const char *knownDrivers[] = { "MFC", "OpenGL", "DX12", "Vulkan" };
-
-bool
-FDraw::IsKnownDriver(const char *driver) {
-	for(int i = 0; i < (int)(sizeof(knownDrivers) / sizeof(knownDrivers[0])); i++) {
-		if(!strcmpi(driver, knownDrivers[i]))
-			return true;
-	}
-	return false;
-}
-
-// Settings saved by older versions can name a renderer that no longer
-// exists (MGL, Glide). Replace those with defDriver.
-void
-FDraw::ValidateDriver(char *driver, const char *defDriver) {
-	if(!IsKnownDriver(driver))
-		strcpy(driver, defDriver);
-}
-
 void
 FDraw::RenderPoint(float x, float y, int size) {
 	float zoom = *pZoomVal;

@@ -52,28 +52,7 @@
     <ClCompile Include="..\..\Render\View.cpp">
       <Filter>Render</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Game\HalfLife.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Game\Heretic2.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Game\Hexen2.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Game\MapIO.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Game\Quake.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Game\Quake2.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Game\Sin.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Game\paks2wad.cpp">
       <Filter>Game</Filter>
     </ClCompile>
     <ClInclude Include="MapCorePCH.h" />
@@ -116,25 +95,7 @@
     <ClInclude Include="..\..\Render\View.h">
       <Filter>Render</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Game\HalfLife.h">
-      <Filter>Game</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Game\Heretic2.h">
-      <Filter>Game</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Game\Hexen2.h">
-      <Filter>Game</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Game\Mapio.h">
-      <Filter>Game</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Game\Quake.h">
-      <Filter>Game</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Game\Quake2.h">
-      <Filter>Game</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Game\Sin.h">
       <Filter>Game</Filter>
     </ClInclude>
   </ItemGroup>

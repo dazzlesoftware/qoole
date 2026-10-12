@@ -9,15 +9,22 @@
 //   left click          select the object under the cursor (again: the next
 //                       one under it; Alt: the previous one)
 //   Ctrl + left click   add or remove the object under the cursor
-//   left drag           box select (Shift: add to the selection); in the
-//                       2D views, a drag that starts on the selection moves
-//                       it (snapped to the grid unless Alt is held)
-// 2D views: middle or right drag pans, the wheel zooms at the cursor.
+//   left drag           box select (Shift: add to the selection)
+// 2D views: middle or right drag pans, the wheel zooms at the cursor, and a
+//   left drag uses the current tool (FMapViewSettings::Tool), snapped to the
+//   grid unless Alt is held:
+//     Select   a drag that starts on the selection moves it
+//     Rotate   turns the selection about its center (in RotateSnapDegrees steps)
+//     Scale    stretches the selection from its opposite corner (Shift: evenly)
+//     Clip     draws the clipping line; Enter keeps the marked side, Ctrl+Enter
+//              splits, Tab changes sides, Esc drops the line
+//     Vertex, Edge, Face
+//              drag the dots of the one selected brush
 // 3D view: right drag looks around (the cursor hides; W/A/S/D/Q/E fly while
 //   it is held, Shift faster), middle drag pans, the wheel moves forward.
 //
-// Every view of a document shares one FMapViewSettings (grid, snapping) and
-// redraws when the document changes.
+// Every view of a document shares one FMapViewSettings (grid, snapping,
+// tool) and redraws when the document changes.
 
 #pragma once
 
@@ -40,6 +47,20 @@ enum class EMapViewType : uint8
 
 const char* ToString(EMapViewType Type);
 
+// What a left drag does in a 2D view.
+enum class EMapTool : uint8
+{
+	Select,
+	Rotate,
+	Scale,
+	Clip,
+	Vertex,
+	Edge,
+	Face,
+};
+
+const char* ToString(EMapTool Tool);
+
 enum class EMapRenderMode : uint8
 {
 	Wireframe,
@@ -52,9 +73,13 @@ struct FMapViewSettings
 	float GridSize = 16.0f; // map units; snapping and the minor grid lines
 	bool bSnapToGrid = true;
 	bool bShowGrid = true;
+	EMapTool Tool = EMapTool::Select;
+	float RotateSnapDegrees = 15.0f;
 
 	// Called with the map position under the cursor of a 2D view ("x y z").
 	TFunction<void(const FString&)> OnCursorText;
+	// Called with what a tool did or needs (for the status bar and log).
+	TFunction<void(const FString&)> OnMessage;
 	// Fired when a setting changes; views redraw.
 	TMulticastDelegate<void()> OnChanged;
 	void Changed() { OnChanged.Broadcast(); }
@@ -137,6 +162,10 @@ private:
 		Move,
 		Pan,
 		Look,
+		Rotate,
+		Scale,
+		ClipLine,
+		BrushEdit,
 	};
 
 	void CreateView();
@@ -156,6 +185,25 @@ private:
 	void DrawGrid(FMapDraw& MapDraw);
 	void DrawOverlay(FDrawElementList& Elements, FIntPoint PixelSize);
 	void OnDocumentChanged(EMapChange Change);
+	void FollowScope();
+	void Message(const FString& Text) const;
+
+	// Tools (MapViewportTools.cpp).
+	// The axes of a 2D view in scope space: across, up the screen, and depth.
+	void GetViewAxes(int32& OutRight, float& OutRightSign, int32& OutUp, float& OutUpSign, int32& OutDepth) const;
+	Object* GetSingleBrush() const;
+	// Starts a tool drag once a left press has moved; false if the tool does not apply.
+	bool BeginToolDrag(FVector2 Local, const FPointerEvent& Event);
+	void UpdateToolDrag(FVector2 Local, const FPointerEvent& Event);
+	void EndToolDrag();
+	void CancelToolDrag();
+	// Whether a left press starts dragging a brush dot (Vertex, Edge, Face tools).
+	bool PickBrushDot(FVector2 Local);
+	FReply ToolKeyDown(const FKeyEvent& Event);
+	void ApplyClip(EMapClip Mode);
+	void DrawTools(FMapDraw& MapDraw);
+	FString GetToolHint() const;
+	void UpdateDotDisplay();
 
 	FMapRenderResources& Resources;
 	FMapViewSettings& Settings;
@@ -182,6 +230,23 @@ private:
 	Vector3d MoveReference;  // selection bounds min at drag start
 	Vector3d MoveApplied;    // total applied so far
 	FVector2 MoveTotal;      // logical pixels since the drag started
+
+	// Rotate and scale.
+	Vector3d Pivot;          // scope space
+	float RotateApplied = 0.0f; // degrees
+	Vector3d ScaleApplied;   // factors per scope axis
+	Vector3d ScaleStartSize; // selection size at the start
+
+	// Clip: the line drawn (scope space), kept after the drag until applied.
+	bool bHasClipLine = false;
+	bool bClipFlipped = false;
+	Vector3d ClipA, ClipB;
+
+	// Brush editing: the dot grabbed.
+	enum class EDot : uint8 { None, Vertex, Edge, Face } GrabbedDot = EDot::None;
+	int32 GrabbedVertex = -1;
+	const Edge3d* GrabbedEdge = nullptr;
+	const GPolygon* GrabbedFace = nullptr;
 
 	bool bLooking = false;
 	TSet<EKey> FlyKeys;

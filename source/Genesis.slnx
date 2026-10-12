@@ -17,21 +17,9 @@
     <Project Path="External/HarfBuzz/HarfBuzz.vcxproj" Id="ffa50721-3b6e-440f-a253-4b19f430fc5d" />
   </Folder>
   <Folder Name="/Programs/">
-    <Project Path="Programs/GenesisMapEditor/GenesisMapEditor.vcxproj" Id="08da9a96-81ca-4fc1-a617-1170789bf886" />
+    <Project Path="Programs/GenesisEditor/GenesisEditor.vcxproj" Id="08da9a96-81ca-4fc1-a617-1170789bf886" />
     <Project Path="Programs/UISandbox/UISandbox.vcxproj" Id="62c3be81-3630-5bf2-826e-8a5a0cf1fc42" />
     <Project Path="Programs/EngineTests/EngineTests.vcxproj" Id="c087b070-3f95-5e50-af08-72ade3bf9d0a" />
     <Project Path="Engine/Tests/GenesisTests.vcxproj" Id="bbc47c09-d18a-47f5-9486-7c1db20ceb88" />
   </Folder>
-  <Folder Name="/Renderers/">
-    <Project Path="Interface/DrawMFC/DrawMFC.vcxproj" Id="5f452404-f8d2-5ecf-9d02-892e70900df9" />
-    <Project Path="Interface/DrawOGL/DrawOGL.vcxproj" Id="2c23f0f3-fd82-57e1-b3bc-298cf61b053f" />
-    <Project Path="Interface/DrawDX12/DrawDX12.vcxproj" Id="569087a6-d729-52f7-a8b8-ab3eec19362a" />
-    <Project Path="Interface/DrawVK/DrawVK.vcxproj" Id="8c944c7b-db71-5b51-9a46-86f1bab400df" />
-  </Folder>
-  <Project Path="GenesisEditor.vcxproj" Id="daf54d8a-b534-5049-89a3-5cc01938fa20">
-    <BuildDependency Project="Interface/DrawMFC/DrawMFC.vcxproj" />
-    <BuildDependency Project="Interface/DrawOGL/DrawOGL.vcxproj" />
-    <BuildDependency Project="Interface/DrawDX12/DrawDX12.vcxproj" />
-    <BuildDependency Project="Interface/DrawVK/DrawVK.vcxproj" />
-  </Project>
 </Solution>

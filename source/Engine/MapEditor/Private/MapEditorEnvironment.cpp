@@ -4,17 +4,6 @@
 
 #include "MapEditorPrivate.h"
 
-#pragma warning(push, 3)
-#include "HalfLife.h"
-#include "Heretic2.h"
-#include "Hexen2.h"
-#include "Quake.h"
-#include "Quake2.h"
-#include "Sin.h"
-#pragma warning(pop)
-#undef Min
-#undef Max
-
 #include <algorithm>
 #include <filesystem>
 
@@ -27,6 +16,8 @@ namespace
 		bool bStarted = false;
 		TArray<FMapGameSet> GameSets;
 		TArray<FMapEditorEnvironment::FPrefab> Prefabs;
+		FString EditorContentDir;
+		FString UserPrefabFolder;
 		int32 Active = INDEX_NONE;
 	};
 
@@ -36,43 +27,10 @@ namespace
 		return Instance;
 	}
 
-	// gamesets.txt: "Name, Game, EntFile[, Palette]" per line.
-	void ReadGameSets(TArray<FMapGameSet>& Out)
-	{
-		LFile File;
-		if (!File.Open("gamesets.txt"))
-		{
-			return;
-		}
-		while (const char* Line = File.GetNextLine())
-		{
-			const FString Text = FString::FromAnsi(Line).TrimStartAndEnd();
-			if (Text.IsEmpty() || Text.StartsWith("//"))
-			{
-				continue;
-			}
-			TArray<FString> Fields = Text.ParseIntoArray(",", false);
-			for (FString& Field : Fields)
-			{
-				Field = Field.TrimStartAndEnd();
-			}
-			if (Fields.size() < 3 || !Game::Find(const_cast<char*>(Fields[1].ToAnsi().c_str())))
-			{
-				continue;
-			}
-			FMapGameSet Set;
-			Set.Name = FString::Format("{} ({})", Fields[0], Fields[1]);
-			Set.Game = Fields[1];
-			Set.EntFile = Fields[2];
-			Set.Palette = Fields.size() > 3 ? Fields[3] : FString();
-			Out.push_back(std::move(Set));
-		}
-	}
-
-	void FindPrefabs(const FString& EditorContentDir, TArray<FMapEditorEnvironment::FPrefab>& Out)
+	void FindPrefabs(const std::filesystem::path& Dir, bool bUser, TArray<FMapEditorEnvironment::FPrefab>& Out)
 	{
 		std::error_code Error;
-		const std::filesystem::path Dir = std::filesystem::path(EditorContentDir.ToWide()) / L"brushes";
+		const SIZE_T First = Out.size();
 		for (const auto& Entry : std::filesystem::directory_iterator(Dir, Error))
 		{
 			if (!Entry.is_regular_file() || Entry.path().extension() != L".qle")
@@ -84,9 +42,9 @@ namespace
 			{
 				Name = Name.Left(1).ToUpper() + Name.Mid(1);
 			}
-			Out.push_back({ Name, FString::FromWide(Entry.path().wstring()) });
+			Out.push_back({ Name, FString::FromWide(Entry.path().wstring()), bUser });
 		}
-		std::sort(Out.begin(), Out.end(), [](const auto& A, const auto& B) { return A.Name.View() < B.Name.View(); });
+		std::sort(Out.begin() + static_cast<std::ptrdiff_t>(First), Out.end(), [](const auto& A, const auto& B) { return A.Name.View() < B.Name.View(); });
 	}
 }
 
@@ -102,33 +60,13 @@ bool FMapEditorEnvironment::Startup(const FStartupOptions& Options)
 	FDraw::Init();
 	LFile::Init();
 
-	// Content/Editor first, so its files win over the pak's.
+	// Entity sets and wireframes are read from Content/Editor.
 	if (!Options.EditorContentDir.IsEmpty())
 	{
 		LFile::UseDir(Options.EditorContentDir.ToAnsi().c_str());
 	}
-	bool bHavePak = false;
-	if (!Options.PakPath.IsEmpty() && FFileHelper::FileExists(Options.PakPath))
-	{
-		bHavePak = LFile::UsePak(Options.PakPath.ToAnsi().c_str()) != nullptr;
-	}
-	if (!bHavePak)
-	{
-		GE_LOG(LogMapEditor, Display, "GenesisEditor.pak not found; only the built-in Genesis game is available");
-	}
 
-	// The games register themselves in Game's list. The legacy ones read
-	// their settings now (game folders, compile tools).
-	new GenesisGame;
-	if (Options.bLegacyGames && bHavePak)
-	{
-		new Quake;
-		new Quake2;
-		new Hexen2;
-		new HalfLife;
-		new Sin;
-		new Heretic2;
-	}
+	new GenesisGame; // registers itself in Game's list
 
 	E.GameSets.clear();
 	FMapGameSet BuiltIn;
@@ -136,12 +74,8 @@ bool FMapEditorEnvironment::Startup(const FStartupOptions& Options)
 	BuiltIn.Game = "Genesis";
 	BuiltIn.EntFile = GenesisGame::GetEntFileName();
 	E.GameSets.push_back(BuiltIn);
-	if (bHavePak)
-	{
-		ReadGameSets(E.GameSets);
-	}
-	E.Prefabs.clear();
-	FindPrefabs(Options.EditorContentDir, E.Prefabs);
+	E.EditorContentDir = Options.EditorContentDir;
+	RefreshPrefabs();
 	E.Active = INDEX_NONE;
 	E.bStarted = true;
 	return true;
@@ -240,6 +174,28 @@ const FMapGameSet* FMapEditorEnvironment::GetActiveGameSet()
 const TArray<FMapEditorEnvironment::FPrefab>& FMapEditorEnvironment::GetPrefabs()
 {
 	return Env().Prefabs;
+}
+
+void FMapEditorEnvironment::SetUserPrefabFolder(const FString& Folder)
+{
+	Env().UserPrefabFolder = Folder;
+	RefreshPrefabs();
+}
+
+const FString& FMapEditorEnvironment::GetUserPrefabFolder()
+{
+	return Env().UserPrefabFolder;
+}
+
+void FMapEditorEnvironment::RefreshPrefabs()
+{
+	FEnvironment& E = Env();
+	E.Prefabs.clear();
+	FindPrefabs(std::filesystem::path(E.EditorContentDir.ToWide()) / L"brushes", false, E.Prefabs);
+	if (!E.UserPrefabFolder.IsEmpty())
+	{
+		FindPrefabs(std::filesystem::path(E.UserPrefabFolder.ToWide()), true, E.Prefabs);
+	}
 }
 
 TArray<FMapEditorEnvironment::FEntityClass> FMapEditorEnvironment::GetPlaceableEntities()

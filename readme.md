@@ -5,92 +5,86 @@ built on the GPL source release of Qoole 99 v0.99 (see "Origins" below) and,
 like that release, is licensed under the GNU GPL (see license.txt).
 
 Design documents live in `docs/`; start with
-[docs/GenesisUI.md](docs/GenesisUI.md), the plan for replacing MFC with the
-Genesis UI framework.
+[docs/GenesisUI.md](docs/GenesisUI.md), the design of the Genesis UI
+framework the editor is built on, which replaced MFC.
 
 ## Building
 
-Open `source/Genesis.slnx` in Visual Studio 2026. It needs the "Desktop
-development with C++" workload and the "C++ MFC for latest build tools
-(x86 & x64)" component. The solution is x64 only; `GenesisEditor.exe`
-(`GenesisEditorD.exe` for Debug) and the `GenesisDraw*.dll` renderer plugins
-are written to `source/Exec`. From a command line:
+Open `source/Genesis.slnx` in Visual Studio 2026 with the "Desktop
+development with C++" workload. The solution is x64 only and needs only the
+Windows SDK: the Vulkan headers and the other third-party libraries are
+vendored in `source/External`, and `vulkan-1.dll` is loaded at runtime from
+the graphics driver. From a command line:
 
     msbuild source\Genesis.slnx -p:Configuration=Release -p:Platform=x64
 
-The solution also builds the engine modules under `source/Engine` (`Core`,
-and `MapCore`, the MFC-free map core the editor links) and `GenesisTests`,
-headless doctest tests of both. Run them after building:
+`GenesisEditor.exe` (`GenesisEditorD.exe` for Debug), `UISandbox.exe` and
+`EngineTests.exe` are written to `source/Exec`. `GenesisTests`, the tests of
+the map core, is in `source\Build\GenesisTests\x64\<Configuration>`.
 
-    source\Build\GenesisTests\x64\Release\GenesisTests.exe
+## The editor
 
-At startup the editor loads its data from `GenesisEditor.pak` (formerly
-`Qoole99.pak`), looked up in the working directory and then next to the
-executable.
+`GenesisEditor.exe` is built on Genesis UI and draws through Direct3D 12 or
+Vulkan:
 
-## Renderers
+- Four docked map views (top, front, side, and 3D in wireframe or with
+  solid faces), an outliner, properties, prefabs, settings and a log, with
+  menus, a toolbar and rebindable shortcuts.
+- Tools: select and move (snapped to the grid), rotate, scale, clip, and
+  vertex, edge and face editing. Cut, copy, paste, duplicate and delete;
+  groups, and editing inside a group; hollow, subtract and intersect;
+  quarter turns and flips. Every change can be undone.
+- Prefab brushes and entities from the built-in Genesis game
+  (`source/Content/Editor`); entity keys are edited with the types the
+  entity set gives them. Selections can be saved as prefabs.
+- Maps are saved as `.qle`, and `.map` files are imported and exported.
+  Maps made for the Qoole-era games open as Genesis maps.
 
-Each view type picks a renderer in the Render Library options:
+Pass a map on the command line to open it. `-vulkan` switches from D3D12 to
+Vulkan, `-appscale=1.25` adds an application scale, `-resetlayout` starts
+from the default layout and key bindings, `-nodebug` / `-debug` turn the
+D3D12 debug layer or Vulkan validation off or on (on by default in Debug
+builds), and `-selftest=<dir>` runs a scripted check that saves screenshots
+and a log. Settings and saved prefabs are kept in
+`%LOCALAPPDATA%\Genesis\Editor`.
 
-- MFC (`GenesisDrawMFC.dll`): GDI software renderer, wireframe only. Default
-  for the 2D and 3D wireframe views.
-- OpenGL (`GenesisDrawOpenGL.dll`).
-- DX12 (`GenesisDrawDX12.dll`): Direct3D 12, falling back to the WARP
-  software rasterizer when no hardware device is available. Default for the
-  solid and textured 3D views.
-- Vulkan (`GenesisDrawVulkan.dll`).
-
-DX12 and Vulkan need only the Windows SDK to build: the Vulkan headers are
-vendored in `source/External`, `vulkan-1.dll` is loaded at runtime from the
-graphics driver, and the SPIR-V shaders are pre-generated (rerun
-`source/Interface/BuildVulkanShaders.cmd` after editing `DrawShaders.hlsl`).
-
-The original MGL and Glide renderers have been removed; their libraries were
-32-bit only. Saved settings that name a renderer that no longer exists are
-reset to the defaults, and if a renderer plugin fails to load the editor falls
-back to MFC.
+The MFC editor, its `GenesisDraw*` renderer plugins, `GenesisEditor.pak` and
+the Qoole-era games (Quake, Quake 2, Hexen 2, Half-Life, Sin, Heretic 2)
+were removed in milestone 6 of the Genesis UI plan.
 
 ## Genesis Engine modules
 
-New code lives in static-library modules under `source/Engine` (`Core`,
-`ApplicationCore`, `RHI`, `UICore`, `UI`, `UIRenderer`, `MapEditor`), with third-party
-libraries (FreeType, HarfBuzz, doctest, Vulkan headers) vendored in
-`source/External`. They build as part of `source/Genesis.slnx` and need no
-MFC. See sections 17 to 20 of [docs/GenesisUI.md](docs/GenesisUI.md) for
-what is there.
+The code lives in static-library modules under `source/Engine` (`Core`,
+`ApplicationCore`, `RHI`, `UICore`, `UI`, `UIRenderer`, `MapCore`,
+`MapEditor`); `MapCore` builds Qoole's map model, geometry and game
+definitions from `source/Basic`, `Objects`, `Render` and `Game`.
+Third-party libraries (FreeType, HarfBuzz, doctest, Vulkan headers) are
+vendored in `source/External`. See sections 14 and 17 to 21 of
+[docs/GenesisUI.md](docs/GenesisUI.md) for what is there.
 
-- `GenesisMapEditor.exe` (`source/Exec`) is the new map editor on Genesis UI,
-  which will replace the MFC editor: four docked map views (top, front,
-  side, 3D with solid faces), an outliner and a log, menus, a toolbar and
-  shortcuts. It opens `.qle` maps, imports and exports `.map`, and adds
-  prefab brushes and entities; select, move (snapped to the grid), duplicate,
-  delete, undo and redo. It needs no game installed: new maps use the
-  built-in Genesis game (`source/Content/Editor`); the legacy games are
-  offered when `GenesisEditor.pak` is next to it. Pass a map to open it;
-  `-vulkan`, `-appscale=`, `-resetlayout` and `-selftest=<dir>` work as in
-  UISandbox. Settings are kept in `%LOCALAPPDATA%\Genesis\MapEditor`.
 - `UISandbox.exe` (`source/Exec`) is the Genesis UI sandbox: an
   editor-shaped window built from the editor framework (menus, a toolbar and
   shortcuts from commands, dockable tabs, a property grid with undo, an RHI
   viewport, rebindable keys) with the widget gallery as one of its tabs, and
-  a borderless inspector window. `-vulkan` switches from D3D12 to Vulkan,
-  `-appscale=1.25` adds an application scale, `-resetlayout` starts from the
-  default layout and key bindings (both are saved to
-  `%LOCALAPPDATA%\Genesis\UISandbox`), and `-selftest=<dir>` runs a scripted
-  check (every gallery page, menus, a tooltip, the color picker, a tab torn
-  off and docked back, DPI changes, minimize/restore, moving between
-  monitors, resizing) that saves screenshots and a log. Keys: F2 cycles the
-  app scale, F3 simulates a DPI change, F4 shows or hides the inspector.
+  a borderless inspector window. It takes the same `-vulkan`, `-appscale=`,
+  `-resetlayout`, `-nodebug` / `-debug` and `-selftest=<dir>` options as
+  the editor (its settings are in `%LOCALAPPDATA%\Genesis\UISandbox`); its
+  self-test visits every gallery page, menus, a tooltip, the color picker, a
+  tab torn off and docked back, DPI changes, minimize/restore, moving
+  between monitors and resizing. Keys: F2 cycles the app scale, F3
+  simulates a DPI change, F4 shows or hides the inspector.
 - `EngineTests.exe` runs the headless doctest suite: layout, input, text
-  editing, list/tree, editor framework and map editor tests on the null platform, plus an offscreen GPU
-  test on D3D12 (WARP) and Vulkan (skipped without a Vulkan driver).
+  editing, list/tree, editor framework and map editor tests on the null
+  platform, plus offscreen GPU tests on D3D12 (WARP) and Vulkan (skipped
+  without a Vulkan driver).
 - Debug builds enable the D3D12 debug layer (the Windows "Graphics Tools"
-  optional feature) and the Vulkan validation layer when installed;
-  `-nodebug` / `-debug` override that in UISandbox.
-- The UI shaders are in `source/Engine/UIRenderer/Private/Shaders`. DXIL is
-  compiled at build time with the Windows SDK; after editing the HLSL, rerun
-  `BuildUIShaders.cmd` with a SPIR-V capable `dxc.exe` (Vulkan SDK or a
-  DirectXShaderCompiler release) to regenerate the Vulkan headers.
+  optional feature) and the Vulkan validation layer when installed.
+- The UI shaders are in `source/Engine/UIRenderer/Private/Shaders` and the
+  map views' in `source/Engine/MapEditor/Private/Shaders`. DXIL is compiled
+  at build time with the Windows SDK; after editing the HLSL, rerun
+  `BuildUIShaders.cmd` or `BuildMapShaders.cmd` with a SPIR-V capable
+  `dxc.exe` (Vulkan SDK or a DirectXShaderCompiler release) to regenerate
+  the Vulkan headers.
 
 ## Origins
 

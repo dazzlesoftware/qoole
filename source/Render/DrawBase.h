@@ -70,8 +70,6 @@ public:
 	static void Init(void);
 	static void Exit(void);
 
-	static bool IsKnownDriver(const char *driver);
-	static void ValidateDriver(char *driver, const char *defDriver);
 	void UseBuf(int bufNum) { check(bufNum < numBufs); useBuf = bufNum; }
 	int GetNumBufs(void) { return numBufs; }
 	void SetZoomPtr(float *_pZoomVal) { pZoomVal = _pZoomVal; }

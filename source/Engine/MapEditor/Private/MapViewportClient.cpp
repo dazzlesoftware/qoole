@@ -194,6 +194,8 @@ void FMapViewportClient::SetDocument(FMapDocument* InDocument)
 		Document->EndTransaction();
 	}
 	Drag = EDrag::None;
+	bHasClipLine = false;
+	GrabbedDot = EDot::None;
 	delete MapView;
 	MapView = nullptr;
 	Document = InDocument;
@@ -216,8 +218,59 @@ void FMapViewportClient::SetRenderMode(EMapRenderMode Mode)
 
 void FMapViewportClient::OnDocumentChanged(EMapChange Change)
 {
-	(void)Change;
+	if (HasAnyChange(Change, EMapChange::Scope))
+	{
+		FollowScope();
+	}
 	RequestRedraw();
+}
+
+void FMapViewportClient::FollowScope()
+{
+	if (!MapView || !Document)
+	{
+		return;
+	}
+	Object* OldScope = MapView->GetViewObjPtr();
+	Object& NewScope = Document->GetScope();
+	if (OldScope == &NewScope)
+	{
+		return;
+	}
+	// Keep the camera where it was in the map: move it into the new
+	// scope's space (as the MFC views did), unless the old scope is gone.
+	Vector3d Position = MapView->GetPosition();
+	SphrVector Orientation = MapView->GetOrientation();
+	const Object* Top = OldScope;
+	while (Top && Top->GetParentPtr())
+	{
+		Top = Top->GetParentPtr();
+	}
+	if (Top == &Document->GetRoot())
+	{
+		Matrix44 Transform;
+		Object::GetTransMatrix(*OldScope, NewScope, Transform);
+		Vector3d Front, Up;
+		MapView->GetOrientation(Front, Up);
+		Front.AddVector(Position);
+		Up.AddVector(Position);
+		Transform.Transform(Position);
+		Transform.Transform(Front).SubVector(Position);
+		Transform.Transform(Up).SubVector(Position);
+		Orientation.NewVector(Front, Up);
+	}
+	bHasClipLine = false;
+	MapView->SetNewView(NewScope, Document->GetSelector(), true, &Position, &Orientation, IsPerspective(), 1,
+		IsPerspective() ? ClipDepth3D : ClipDepth2D);
+	UpdateProjection();
+}
+
+void FMapViewportClient::Message(const FString& Text) const
+{
+	if (Settings.OnMessage)
+	{
+		Settings.OnMessage(Text);
+	}
 }
 
 void FMapViewportClient::CreateView()
@@ -483,6 +536,10 @@ FReply FMapViewportClient::OnMouseButtonDown(const FGeometry& Geometry, const FP
 	case EMouseButton::Left:
 		Drag = EDrag::Pending;
 		bDragAdd = Event.IsShiftDown();
+		if (Settings.Tool == EMapTool::Vertex || Settings.Tool == EMapTool::Edge || Settings.Tool == EMapTool::Face)
+		{
+			PickBrushDot(Local);
+		}
 		return FReply::Handled().CaptureMouse(Self);
 	case EMouseButton::Middle:
 		Drag = EDrag::Pan;
@@ -527,9 +584,16 @@ FReply FMapViewportClient::OnMouseButtonUp(const FGeometry& Geometry, const FPoi
 		bLooking = false;
 		FlyKeys.clear();
 		break;
+	case EDrag::Rotate:
+	case EDrag::Scale:
+	case EDrag::ClipLine:
+	case EDrag::BrushEdit:
+		EndToolDrag();
+		break;
 	default:
 		break;
 	}
+	GrabbedDot = EDot::None;
 	Drag = EDrag::None;
 	RequestRedraw();
 	return FReply::Handled().ReleaseMouseCapture();
@@ -555,6 +619,10 @@ FReply FMapViewportClient::OnMouseMove(const FGeometry& Geometry, const FPointer
 			return FReply::Handled();
 		}
 		UpdateProjection();
+		if (BeginToolDrag(Local, Event))
+		{
+			return FReply::Handled();
+		}
 		float X, Y;
 		ToScreen(DragStart, X, Y);
 		const bool bOnSelection = !IsPerspective() && !Event.IsShiftDown() && !Event.IsControlDown()
@@ -585,6 +653,12 @@ FReply FMapViewportClient::OnMouseMove(const FGeometry& Geometry, const FPointer
 		return FReply::Handled();
 	case EDrag::Pan:
 		PanBy(Delta);
+		return FReply::Handled();
+	case EDrag::Rotate:
+	case EDrag::Scale:
+	case EDrag::ClipLine:
+	case EDrag::BrushEdit:
+		UpdateToolDrag(Local, Event);
 		return FReply::Handled();
 	default:
 		break;
@@ -651,6 +725,11 @@ void FMapViewportClient::OnMouseCaptureLost()
 	{
 		UpdateBoxSelection(true);
 	}
+	if (Document && (Drag == EDrag::Rotate || Drag == EDrag::Scale || Drag == EDrag::BrushEdit))
+	{
+		CancelToolDrag();
+	}
+	GrabbedDot = EDot::None;
 	Drag = EDrag::None;
 	bLooking = false;
 	FlyKeys.clear();
@@ -660,6 +739,10 @@ void FMapViewportClient::OnMouseCaptureLost()
 
 FReply FMapViewportClient::OnKeyDown(const FGeometry&, const FKeyEvent& Event)
 {
+	if (ToolKeyDown(Event).IsEventHandled())
+	{
+		return FReply::Handled();
+	}
 	// Flying keys only count while looking around (right button held), so
 	// the same letters stay shortcuts otherwise.
 	if (bLooking)
@@ -912,6 +995,16 @@ void FMapViewportClient::DrawOverlay(FDrawElementList& Out, FIntPoint PixelSize)
 		const int RightAxis = DominantAxis(ViewToScope(Vector3d(1.0f, 0.0f, 0.0f)), Sign);
 		const int UpAxis = DominantAxis(ViewToScope(Vector3d(0.0f, 0.0f, 1.0f)), Sign);
 		Label = FString::Format("{}  ·  {}/{}  ·  {:.0f}%", ToString(Type), AxisName(RightAxis), AxisName(UpAxis), Zoom * 100.0f);
+		const FString Hint = GetToolHint();
+		if (!Hint.IsEmpty())
+		{
+			Label += FString::Format("  ·  {}", Hint);
+		}
+	}
+	if (Document && &Document->GetScope() != &Document->GetRoot())
+	{
+		const char* Name = Document->GetScope().GetObjName();
+		Label += FString::Format("  ·  in {}", Name && Name[0] ? FString::FromAnsi(Name) : FString("a group"));
 	}
 	FFontCache& Fonts = FUIApplication::Get().GetFontCache();
 	const TSharedRef<const FShapedText> Text = Fonts.ShapeText(Label.View(), FFontInfo(Font.Font, 11.0f), Scale);
@@ -956,8 +1049,10 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FUIRenderTarget& Ren
 		{
 			DrawGrid(*MapDraw);
 		}
+		UpdateDotDisplay();
 		MapView->RenderWireFrame(true, true, false);
 	}
+	DrawTools(*MapDraw);
 	MapDraw->FlushLines(Elements, 1);
 	DrawOverlay(Elements, PixelSize);
 

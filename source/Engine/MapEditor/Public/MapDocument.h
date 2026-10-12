@@ -2,19 +2,19 @@
 //
 // An open map: the map core's object tree (Object), its selection
 // (Selector) and an undo stack. It replaces the MFC editor's CDocument
-// (FEditorDoc) and its operation classes (EditorOp) for the new editor.
+// (FEditorDoc) and its operation classes (EditorOp).
 //
 // Edits go through the document so they can be undone. Each one is a
 // transaction; several edits can be grouped into one with
 // BeginTransaction/EndTransaction (a drag that moves objects many times is
-// one undo step). A transaction also remembers the selection before and
-// after it, and undo/redo restore it. Selecting on its own is not an undo
-// step.
+// one undo step). A transaction also remembers the selection and the scope
+// before and after it, and undo/redo restore them. Selecting, and changing
+// the scope, are not undo steps on their own.
 //
-// Objects edited are direct children of the edit scope, which is the root
-// object (the map core's Selector requires selected objects to be children
-// of the scope; groups and scope changes come later). Positions and
-// movements are in the scope's space.
+// The scope is the group being edited: the root object, or a group inside
+// it. Only its children can be selected (the map core's Selector requires
+// it), the views show only its contents (as in Qoole), and positions and
+// movements are in its space.
 //
 // The map core has one current game (Game::Get()); a document belongs to
 // the game set that was active when it was created or opened.
@@ -24,17 +24,22 @@
 #include "CoreMinimal.h"
 #include "MapEditorEnvironment.h"
 
+class Matrix44;
 class Object;
+class Plane;
 class Selector;
 class Vector3d;
+class Edge3d;
+class GPolygon;
 
 enum class EMapChange : uint8
 {
 	None = 0,
 	Selection = 1 << 0, // which objects are selected
-	Geometry = 1 << 1,  // positions or shapes of existing objects
-	Structure = 1 << 2, // objects added or removed
+	Geometry = 1 << 1,  // positions, shapes or properties of existing objects
+	Structure = 1 << 2, // objects added, removed or regrouped
 	File = 1 << 3,      // path or modified state
+	Scope = 1 << 4,     // the group being edited
 	All = 0xFF,
 };
 
@@ -42,6 +47,14 @@ constexpr EMapChange operator|(EMapChange A, EMapChange B) { return static_cast<
 constexpr EMapChange operator&(EMapChange A, EMapChange B) { return static_cast<EMapChange>(static_cast<uint8>(A) & static_cast<uint8>(B)); }
 constexpr EMapChange& operator|=(EMapChange& A, EMapChange B) { return A = A | B; }
 constexpr bool HasAnyChange(EMapChange Flags, EMapChange Test) { return (Flags & Test) != EMapChange::None; }
+
+// What a clip keeps of the objects it cuts.
+enum class EMapClip : uint8
+{
+	KeepFront, // the side the plane's normal points to
+	KeepBack,
+	Split,     // both, as separate objects
+};
 
 class FMapDocument
 {
@@ -52,9 +65,9 @@ public:
 
 	// An empty map (a worldspawn entity on the root) of the active game set.
 	static TUniquePtr<FMapDocument> CreateNew();
-	// Opens a .qle map (its header names its game set, which is activated)
-	// or imports a .map file (into the active game set; saving then writes a
-	// .qle next to it). Null with a reason on failure.
+	// Opens a .qle map or imports a .map file (saving then writes a .qle next
+	// to it). Maps of games that are not available open with the built-in
+	// game, keeping their texture names. Null with a reason on failure.
 	static TUniquePtr<FMapDocument> Open(const FString& Path, FString& OutError);
 
 	// Saves as .qle (the path becomes the document's) or exports .map (by
@@ -67,13 +80,20 @@ public:
 	const FMapGameSet& GetGameSet() const { return GameSet; }
 
 	Object& GetRoot() const { return *Root; }
-	Object& GetScope() const { return *Root; }
+	Object& GetScope() const { return *Scope; }
 	Selector& GetSelector() const { return *SelectorPtr; }
 
-	// Objects in the map (children of the scope) and counts for status text.
+	// The scope's objects, and counts of the whole map for status text.
 	TArray<Object*> GetObjects() const;
 	int32 CountBrushes() const;
 	int32 CountEntities() const;
+
+	// ----- Scope -----
+	// The root or a group in the map. Clears the selection.
+	bool SetScope(Object& NewScope);
+	bool CanScopeUp() const;
+	void ScopeUp(); // selects the group that was the scope
+	static bool IsGroup(const Object& Obj);
 
 	// ----- Selection -----
 	TArray<Object*> GetSelection() const;
@@ -83,14 +103,17 @@ public:
 	void ToggleSelection(Object* Obj);
 	void SelectAll();
 	void ClearSelection();
-	// Center and bounds of the selection in scope space; false if empty.
+	// Bounds of the selection in scope space; false if empty.
 	bool GetSelectionBounds(Vector3d& OutMin, Vector3d& OutMax) const;
 
-	// ----- Edits -----
+	// ----- Transactions -----
 	void BeginTransaction(const FString& Description);
 	void EndTransaction();
+	// Undoes what the open transaction did and drops it.
+	void CancelTransaction();
 	bool IsInTransaction() const { return Pending != nullptr; }
 
+	// ----- Edits (each is an undo step unless a transaction is open) -----
 	// Moves objects by Delta (scope space). Consecutive moves of the same
 	// objects in one transaction are merged.
 	void MoveObjects(const TArray<Object*>& Objects, const Vector3d& Delta);
@@ -106,6 +129,51 @@ public:
 	Object* AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError = nullptr);
 	// A point entity of the given class at Position.
 	Object* AddEntity(const FString& ClassName, const Vector3d& Position);
+	// Writes copies of objects as a prefab (.qle), centered on the origin.
+	bool SavePrefab(const TArray<Object*>& Objects, const FString& PrefabPath, FString& OutError) const;
+
+	// Records objects as about to change in place, so that undo restores
+	// them; then change them and call ObjectsChanged. Objects already
+	// recorded in the open transaction are skipped. Needs a transaction.
+	void CaptureObjects(const TArray<Object*>& Objects);
+	void ObjectsChanged(EMapChange Change = EMapChange::Geometry) { Changed(Change); }
+
+	// Transforms objects about a pivot (scope space). Axis: 0 = X, 1 = Y, 2 = Z.
+	void TransformObjects(const TArray<Object*>& Objects, const Matrix44& Transform, bool bMirror, const FString& Description);
+	void RotateObjects(const TArray<Object*>& Objects, int32 Axis, float Degrees, const Vector3d& Pivot);
+	void ScaleObjects(const TArray<Object*>& Objects, const Vector3d& Factors, const Vector3d& Pivot);
+	void FlipObjects(const TArray<Object*>& Objects, int32 Axis, const Vector3d& Pivot);
+
+	// Brush operations. Each returns whether anything changed.
+	bool HollowObjects(const TArray<Object*>& Objects, float Thickness, bool bInward);
+	// Subtracts the selected brushes from the other brushes of the scope.
+	bool SubtractSelection();
+	// Replaces the selected brushes by their common volume.
+	bool IntersectSelection();
+	bool ClipObjects(const TArray<Object*>& Objects, const Plane& ClipPlane, EMapClip Mode);
+
+	// Groups objects of the scope into a new group (selected); ungroups
+	// selected groups (their contents end up selected).
+	Object* GroupObjects(const TArray<Object*>& Objects);
+	bool UngroupObjects(const TArray<Object*>& Groups);
+
+	// Properties.
+	void SetObjectName(Object& Obj, const FString& Name);
+	// Sets (or with an empty value removes) a key of the objects' entities.
+	void SetEntityKey(const TArray<Object*>& Objects, const FString& Key, const FString& Value);
+	// Applies a texture to every face of the objects' brushes (and groups').
+	void SetTexture(const TArray<Object*>& Objects, const FString& TextureName);
+
+	// Brush editing: moves a vertex, an edge or a face of one brush by Delta
+	// (scope space) inside a transaction begun with BeginBrushEdit. The edit
+	// ends with EndBrushEdit, which undoes the drag if the brush is no longer
+	// convex.
+	void BeginBrushEdit(Object& Brush, const FString& Description);
+	void MoveBrushVertex(int32 VertexIndex, const Vector3d& Delta);
+	void MoveBrushEdge(const Edge3d& Edge, const Vector3d& Delta);
+	void MoveBrushFace(const GPolygon& Face, const Vector3d& Delta);
+	bool EndBrushEdit();
+	Object* GetBrushEditTarget() const { return BrushEditTarget; }
 
 	// ----- Undo -----
 	bool CanUndo() const;
@@ -120,7 +188,7 @@ public:
 	// Every change, with what changed.
 	TMulticastDelegate<void(EMapChange)> OnChanged;
 
-	// Undo records (MapDocument.cpp).
+	// Undo records (Private/MapEdits.h).
 	struct FEdit;
 	struct FTransaction;
 
@@ -128,10 +196,17 @@ private:
 	FMapDocument(Object* InRoot, const FMapGameSet& InGameSet);
 
 	void ApplySelection(const TArray<Object*>& Objects);
+	void ApplyScope(Object& NewScope);
+	bool IsInMap(const Object& Obj) const;
 	void Record(TUniquePtr<FEdit> Edit, EMapChange Change);
 	void Changed(EMapChange Change);
+	// Opens a transaction if none is (returns whether it did).
+	bool BeginOwnTransaction(const FString& Description);
+	// Removes objects an operation emptied.
+	void DeleteEmptied(const TArray<Object*>& Objects);
 
 	Object* Root = nullptr;
+	Object* Scope = nullptr;
 	Selector* SelectorPtr = nullptr;
 	FMapGameSet GameSet;
 	FString Path;
@@ -140,6 +215,9 @@ private:
 	TArray<TUniquePtr<FTransaction>> RedoStack;
 	TUniquePtr<FTransaction> Pending;
 	int32 PendingDepth = 0;
+
+	Object* BrushEditTarget = nullptr;
+	bool bBrushEditStarted = false; // planes broken for the first move
 
 	// Version counts applied transactions; SavedVersion is the version on
 	// disk (-1 when no undo state matches it any more).

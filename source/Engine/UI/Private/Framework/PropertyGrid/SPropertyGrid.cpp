@@ -261,7 +261,7 @@ void SPropertyGrid::OpenColorPicker(FName Property, const FGeometry& SwatchGeome
 	const TSharedRef<SWidget> Picker = SNew(SBox).Padding(6.0f)
 	[
 		SNew(SColorPicker)
-		.TargetColor(Value ? std::get<FColor>(*Value) : FColor::White())
+		.TargetColor(Value && std::holds_alternative<FColor>(*Value) ? std::get<FColor>(*Value) : FColor::White())
 		.OnInteractionBegin([this, Property] { BeginInteraction(Property); })
 		.OnInteractionEnd([this] { EndInteraction(); })
 		.OnColorChanged([this, Property](FColor Color) { SetPropertyValue(Property, Color); })
@@ -321,7 +321,27 @@ TOptional<FPropertyValue> SPropertyGrid::GetSharedValue(FName Property) const
 	{
 		return {};
 	}
+	// Rows of objects shown before SetObjects can still ask until the grid
+	// is rebuilt: a property the objects lack, or a value of another type,
+	// reads as unset.
+	const FPropertyDesc* Desc = nullptr;
+	for (const FPropertyDesc& Shared : SharedProperties)
+	{
+		if (Shared.Name == Property)
+		{
+			Desc = &Shared;
+		}
+	}
+	if (!Desc)
+	{
+		return {};
+	}
 	FPropertyValue First = Objects[0]->GetValue(Property);
+	static constexpr SIZE_T Alternatives[] = { 0, 1, 2, 3, 4, 1, 5, 6 }; // by EPropertyType: bool, int32, float, FString, FColor, int32, FVector2, FPropertyVector3
+	if (First.index() != Alternatives[static_cast<SIZE_T>(Desc->Type)])
+	{
+		return {};
+	}
 	for (SIZE_T I = 1; I < Objects.size(); ++I)
 	{
 		if (!(Objects[I]->GetValue(Property) == First))

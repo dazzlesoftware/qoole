@@ -478,13 +478,6 @@ EntDef::EntDef(char hbuf[LINE_MAX], char lbuf[][LINE_MAX], int lnum, EntList *en
 	else
 		deftype = VAR_STRDEF;
 
-	if(deftype == VAR_FLAGDEF) {
-		strcpy(lbuf[lnum++], "256 \"Don't appear if skill 0 (easy)\"");
-		strcpy(lbuf[lnum++], "512 \"Don't appear if skill 1 (medium)\"");
-		strcpy(lbuf[lnum++], "1024 \"Don't appear if skill 2 (hard and nightmare)\"");
-		strcpy(lbuf[lnum++], "2048 \"Don't appear if deathmatch game\"");
-	}
-		
 	entries = lnum;
 	qdefentry = new FDefEntry[lnum];
 

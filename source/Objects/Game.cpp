@@ -251,46 +251,4 @@ void Game::ExtractTextures(void) {
 }
 
 
-void ExtractTexsFromPak(LPak *pak, char *baseDir) {
-	char outname[_MAX_PATH];
-	char dirname[_MAX_PATH];
-	char *name, *c;
-	int i, count = 0, total = 0;
-
-	for(i = 0; i < pak->entries; i++)
-		if(strstr(pak->entry[i].filename, ".wal"))
-			total++;
-
-	FProgressOptions progressOptions;
-	progressOptions.Text = "Extracting Textures";
-	progressOptions.bBusyCursor = true;
-	TUniquePtr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
-	FDraw::OutputText("Extracting textures from Pak... ");
-
-	for(i = 0; i < pak->entries; i++) {
-		name = pak->entry[i].filename;
-		if(strstr(name, ".wal")) {
-			sprintf(outname, "%s\\%s", baseDir, name);
-			strcpy(dirname, outname);
-			c = strrchr(dirname, '/');
-			if(!c)
-				c = strrchr(dirname, '\\');
-			if(c)
-				*c = NULL;
-
-			LFile::MakeDir(dirname);
-			LFile::Extract(name, outname);
-
-			progress->SetPercent(count++ * 100 / total);
-
-			if(progress->IsCancelled())
-			{
-				FDraw::OutputText("Cancelled.\n");
-				break;
-			}
-		}
-	}
-
-	FDraw::OutputText("OK.\n");
-}
 

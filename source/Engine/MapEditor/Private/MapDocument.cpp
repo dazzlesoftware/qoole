@@ -1,12 +1,16 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
+//
+// The document's core: files, scope, selection, transactions and undo. The
+// editing operations are in MapDocumentOps.cpp.
 
 #include "MapDocument.h"
 
-#include "MapEditorPrivate.h"
+#include "MapEdits.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <string>
 
 using namespace MapEditorPrivate;
 
@@ -33,135 +37,58 @@ void MapEditorPrivate::GetObjectBounds(Object& Obj, Vector3d& OutMin, Vector3d& 
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Edits: one change each, applied when recorded. The objects an edit has
-// taken out of the map belong to it, and it deletes them when it is dropped
-// in that state (an undone add, or a delete still in effect).
-
-struct FMapDocument::FEdit
+void MapEditorPrivate::SwapContents(Object& A, Object& B)
 {
-	virtual ~FEdit() = default;
-	virtual void Undo(FMapDocument& Doc) = 0;
-	virtual void Redo(FMapDocument& Doc) = 0;
-	bool bApplied = true;
-};
-
-namespace
-{
-	void MoveBy(const TArray<Object*>& Objects, const Vector3d& Delta)
+	check(B.GetParentPtr() == nullptr);
+	// Take everything out first: the map core only lets a leaf without an
+	// entity change its brush, and only a leaf without a brush take a point
+	// entity.
+	const auto TakeChildren = [](Object& Obj)
 	{
-		for (Object* Obj : Objects)
+		TArray<Object*> Children;
+		while (Obj.GetNumChildren() > 0)
 		{
-			Vector3d Position;
-			Obj->GetPosition(Position).AddVector(Delta);
-			Obj->TransSpace::SetPosition(Position);
+			Object& Child = Obj.GetChild(0);
+			Obj.RemoveChild(Child, false);
+			Children.push_back(&Child);
 		}
-		if (!Objects.empty() && Objects[0]->GetParentPtr())
-		{
-			Objects[0]->GetParentPtr()->SetBoundRadius();
-		}
+		return Children;
+	};
+	const TArray<Object*> ChildrenA = TakeChildren(A);
+	const TArray<Object*> ChildrenB = TakeChildren(B);
+	const std::string NameA = A.GetObjName();
+	const std::string NameB = B.GetObjName();
+	Entity* EntityA = A.SetEntity(nullptr, false);
+	Entity* EntityB = B.SetEntity(nullptr, false);
+	Geometry* BrushA = A.SetBrush(nullptr);
+	Geometry* BrushB = B.SetBrush(nullptr);
+
+	A.SetBrush(BrushB);
+	B.SetBrush(BrushA);
+	A.SetEntity(EntityB, false);
+	B.SetEntity(EntityA, false);
+	const TransSpace SpaceA = A;
+	A.TransSpace::operator=(B);
+	B.TransSpace::operator=(SpaceA);
+	A.SetObjName(NameB.c_str());
+	B.SetObjName(NameA.c_str());
+	for (Object* Child : ChildrenB)
+	{
+		A.AddChild(*Child, false);
 	}
+	for (Object* Child : ChildrenA)
+	{
+		B.AddChild(*Child, false);
+	}
+	B.SetBoundRadius(false);
+	A.SetBoundRadius(true);
 }
-
-struct FMoveEdit final : FMapDocument::FEdit
-{
-	TArray<Object*> Objects;
-	Vector3d Delta;
-
-	void Undo(FMapDocument&) override
-	{
-		Vector3d Back(Delta);
-		MoveBy(Objects, Back.MultVector(-1.0f));
-	}
-	void Redo(FMapDocument&) override { MoveBy(Objects, Delta); }
-};
-
-struct FAddEdit final : FMapDocument::FEdit
-{
-	TArray<Object*> Objects;
-	Object* Parent = nullptr;
-
-	~FAddEdit() override
-	{
-		if (!bApplied)
-		{
-			for (Object* Obj : Objects)
-			{
-				delete Obj;
-			}
-		}
-	}
-	void Undo(FMapDocument&) override
-	{
-		for (Object* Obj : Objects)
-		{
-			Parent->RemoveChild(*Obj, false);
-		}
-		Parent->SetBoundRadius();
-	}
-	void Redo(FMapDocument&) override
-	{
-		for (Object* Obj : Objects)
-		{
-			Parent->AddChild(*Obj, false);
-		}
-		Parent->SetBoundRadius();
-	}
-};
-
-struct FDeleteEdit final : FMapDocument::FEdit
-{
-	TArray<Object*> Objects;
-	TArray<int> Indices; // where each was in Parent, in removal order
-	Object* Parent = nullptr;
-
-	~FDeleteEdit() override
-	{
-		if (bApplied)
-		{
-			for (Object* Obj : Objects)
-			{
-				delete Obj;
-			}
-		}
-	}
-	void Undo(FMapDocument&) override
-	{
-		// Reinsert in reverse removal order so every index is valid again.
-		for (SIZE_T Index = Objects.size(); Index-- > 0;)
-		{
-			Parent->AddChild(*Objects[Index], false, Indices[Index]);
-		}
-		Parent->SetBoundRadius();
-	}
-	void Redo(FMapDocument&) override
-	{
-		Indices.clear();
-		for (Object* Obj : Objects)
-		{
-			int RemovedAt = -1;
-			Parent->RemoveChild(*Obj, false, &RemovedAt);
-			Indices.push_back(RemovedAt);
-		}
-		Parent->SetBoundRadius();
-	}
-};
-
-struct FMapDocument::FTransaction
-{
-	FString Description;
-	TArray<TUniquePtr<FEdit>> Edits;
-	TArray<Object*> SelectionBefore;
-	TArray<Object*> SelectionAfter;
-	EMapChange Changes = EMapChange::None;
-	int64 VersionBefore = 0;
-	int64 VersionAfter = 0;
-};
 
 // ---------------------------------------------------------------------------
 
 FMapDocument::FMapDocument(Object* InRoot, const FMapGameSet& InGameSet)
 	: Root(InRoot)
+	, Scope(InRoot)
 	, GameSet(InGameSet)
 {
 	SelectorPtr = new Selector(*Root);
@@ -189,12 +116,11 @@ TUniquePtr<FMapDocument> FMapDocument::CreateNew()
 
 namespace
 {
-	// The header MFC Genesis Editor and Qoole 99 write before a .qle body.
+	// The header Genesis Editor and Qoole 99 write before a .qle body.
 	struct FQleHeader
 	{
 		FString Game;
 		FString EntList;
-		FString Palette;
 	};
 
 	bool ReadQleHeader(const FString& Path, FQleHeader& Out)
@@ -227,10 +153,6 @@ namespace
 			{
 				Out.EntList = FString::FromAnsi(Line + 11).TrimStartAndEnd();
 				bEnt = true;
-			}
-			else if (!strnicmp(Line, "// Palette:", 11))
-			{
-				Out.Palette = FString::FromAnsi(Line + 11).TrimStartAndEnd();
 			}
 		}
 		return bGame && bEnt;
@@ -277,7 +199,7 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 			return nullptr;
 		}
 		TUniquePtr<FMapDocument> Doc(new FMapDocument(Root, *Active));
-		// Like the MFC editor: an imported map is saved as .qle next to it.
+		// An imported map is saved as .qle next to it.
 		const std::filesystem::path QlePath = std::filesystem::path(InPath.ToWide()).replace_extension(L".qle");
 		Doc->Path = FString::FromWide(QlePath.wstring());
 		Doc->SavedVersion = -1;
@@ -286,13 +208,17 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 
 	FQleHeader Header;
 	const FMapGameSet* Set = nullptr;
+	bool bConverted = false;
 	if (ReadQleHeader(InPath, Header))
 	{
 		Set = FMapEditorEnvironment::FindGameSet(Header.Game, Header.EntList);
 		if (!Set)
 		{
-			OutError = FString::Format("{} is a map for {} ({}), which is not available.", FPaths::GetCleanFilename(InPath), Header.Game, Header.EntList);
-			return nullptr;
+			// A map of a game the editor no longer has (Qoole's Quake, Half-Life...):
+			// it opens with the built-in game and saves as a Genesis map.
+			GE_LOG(LogMapEditor, Display, "{} is a {} map; opening it as a Genesis map", FPaths::GetCleanFilename(InPath), Header.Game);
+			Set = &FMapEditorEnvironment::GetBuiltInGameSet();
+			bConverted = true;
 		}
 		if (FMapEditorEnvironment::GetActiveGameSet() != Set && !FMapEditorEnvironment::Activate(*Set, &OutError))
 		{
@@ -319,6 +245,10 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 	}
 	TUniquePtr<FMapDocument> Doc(new FMapDocument(Root, *Set));
 	Doc->Path = InPath;
+	if (bConverted)
+	{
+		Doc->SavedVersion = -1; // saving writes the new header
+	}
 	return Doc;
 }
 
@@ -354,9 +284,9 @@ FString FMapDocument::GetDisplayName() const
 TArray<Object*> FMapDocument::GetObjects() const
 {
 	TArray<Object*> Result;
-	for (int Index = 0; Index < Root->GetNumChildren(); ++Index)
+	for (int Index = 0; Index < Scope->GetNumChildren(); ++Index)
 	{
-		Result.push_back(&Root->GetChild(Index));
+		Result.push_back(&Scope->GetChild(Index));
 	}
 	return Result;
 }
@@ -370,6 +300,70 @@ int32 FMapDocument::CountEntities() const
 {
 	// The root's worldspawn is not counted.
 	return FMath::Max(0, Root->CountEntities() - (Root->HasEntity() ? 1 : 0));
+}
+
+bool FMapDocument::IsInMap(const Object& Obj) const
+{
+	const Object* Node = &Obj;
+	while (Node->GetParentPtr())
+	{
+		Node = Node->GetParentPtr();
+	}
+	return Node == Root;
+}
+
+// ----- Scope -----
+
+bool FMapDocument::IsGroup(const Object& Obj)
+{
+	return Obj.GetNumChildren() > 0 && !Obj.HasBrush();
+}
+
+void FMapDocument::ApplyScope(Object& NewScope)
+{
+	if (&NewScope == Scope)
+	{
+		return;
+	}
+	SelectorPtr->MUnselect();
+	delete SelectorPtr;
+	Scope = &NewScope;
+	SelectorPtr = new Selector(*Scope);
+}
+
+bool FMapDocument::SetScope(Object& NewScope)
+{
+	if (&NewScope == Scope)
+	{
+		return true;
+	}
+	if (!IsInMap(NewScope) || (&NewScope != Root && !IsGroup(NewScope)))
+	{
+		return false;
+	}
+	ApplyScope(NewScope);
+	if (Pending)
+	{
+		Pending->Changes |= EMapChange::Scope;
+	}
+	Changed(EMapChange::Scope | EMapChange::Selection);
+	return true;
+}
+
+bool FMapDocument::CanScopeUp() const
+{
+	return Scope != Root;
+}
+
+void FMapDocument::ScopeUp()
+{
+	if (!CanScopeUp())
+	{
+		return;
+	}
+	Object* Group = Scope;
+	SetScope(*Scope->GetParentPtr());
+	SetSelection({ Group });
 }
 
 // ----- Selection -----
@@ -390,7 +384,7 @@ void FMapDocument::ApplySelection(const TArray<Object*>& Objects)
 	TArray<Object*> Valid;
 	for (Object* Obj : Objects)
 	{
-		if (Obj && Obj->GetParentPtr() == Root && std::find(Valid.begin(), Valid.end(), Obj) == Valid.end())
+		if (Obj && Obj->GetParentPtr() == Scope && std::find(Valid.begin(), Valid.end(), Obj) == Valid.end())
 		{
 			Valid.push_back(Obj);
 		}
@@ -448,9 +442,8 @@ void FMapDocument::ClearSelection()
 
 bool FMapDocument::GetSelectionBounds(Vector3d& OutMin, Vector3d& OutMax) const
 {
-	const TArray<Object*> Selection = GetSelection();
 	bool bFirst = true;
-	for (Object* Obj : Selection)
+	for (Object* Obj : GetSelection())
 	{
 		Vector3d Min, Max;
 		GetObjectBounds(*Obj, Min, Max);
@@ -478,6 +471,17 @@ void FMapDocument::BeginTransaction(const FString& Description)
 	Pending = std::make_unique<FTransaction>();
 	Pending->Description = Description;
 	Pending->SelectionBefore = GetSelection();
+	Pending->ScopeBefore = Scope;
+}
+
+bool FMapDocument::BeginOwnTransaction(const FString& Description)
+{
+	if (Pending)
+	{
+		return false;
+	}
+	BeginTransaction(Description);
+	return true;
 }
 
 void FMapDocument::EndTransaction()
@@ -490,9 +494,10 @@ void FMapDocument::EndTransaction()
 	TUniquePtr<FTransaction> Done = std::move(Pending);
 	if (Done->Edits.empty())
 	{
-		return; // selection changes alone are not undo steps
+		return; // selection and scope changes alone are not undo steps
 	}
 	Done->SelectionAfter = GetSelection();
+	Done->ScopeAfter = Scope;
 	Done->VersionBefore = Version;
 	Done->VersionAfter = NextVersion++;
 	Version = Done->VersionAfter;
@@ -505,6 +510,26 @@ void FMapDocument::EndTransaction()
 	Changed(EMapChange::File);
 }
 
+void FMapDocument::CancelTransaction()
+{
+	if (!Pending)
+	{
+		return;
+	}
+	TUniquePtr<FTransaction> Undone = std::move(Pending);
+	PendingDepth = 0;
+	BrushEditTarget = nullptr;
+	SelectorPtr->MUnselect();
+	for (SIZE_T Index = Undone->Edits.size(); Index-- > 0;)
+	{
+		Undone->Edits[Index]->Undo(*this);
+		Undone->Edits[Index]->bApplied = false;
+	}
+	ApplyScope(IsInMap(*Undone->ScopeBefore) ? *Undone->ScopeBefore : *Root);
+	ApplySelection(Undone->SelectionBefore);
+	Changed(Undone->Changes | EMapChange::Selection);
+}
+
 void FMapDocument::Record(TUniquePtr<FEdit> Edit, EMapChange Change)
 {
 	check(Pending);
@@ -513,149 +538,9 @@ void FMapDocument::Record(TUniquePtr<FEdit> Edit, EMapChange Change)
 	Changed(Change);
 }
 
-void FMapDocument::MoveObjects(const TArray<Object*>& Objects, const Vector3d& Delta)
+void FMapDocument::Changed(EMapChange Change)
 {
-	if (Objects.empty() || Delta == Vector3d(0.0f, 0.0f, 0.0f))
-	{
-		return;
-	}
-	const bool bOwnTransaction = !Pending;
-	if (bOwnTransaction)
-	{
-		BeginTransaction("Move");
-	}
-	MoveBy(Objects, Delta);
-	FMoveEdit* Last = Pending->Edits.empty() ? nullptr : dynamic_cast<FMoveEdit*>(Pending->Edits.back().get());
-	if (Last && Last->Objects == Objects)
-	{
-		Last->Delta.AddVector(Delta);
-		Changed(EMapChange::Geometry);
-	}
-	else
-	{
-		auto Edit = std::make_unique<FMoveEdit>();
-		Edit->Objects = Objects;
-		Edit->Delta = Delta;
-		Record(std::move(Edit), EMapChange::Geometry);
-	}
-	if (bOwnTransaction)
-	{
-		EndTransaction();
-	}
-}
-
-void FMapDocument::AddObjects(const TArray<Object*>& NewObjects)
-{
-	if (NewObjects.empty())
-	{
-		return;
-	}
-	const bool bOwnTransaction = !Pending;
-	if (bOwnTransaction)
-	{
-		BeginTransaction(NewObjects.size() == 1 ? "Add Object" : "Add Objects");
-	}
-	auto Edit = std::make_unique<FAddEdit>();
-	Edit->Objects = NewObjects;
-	Edit->Parent = Root;
-	Edit->Redo(*this);
-	Record(std::move(Edit), EMapChange::Structure);
-	SetSelection(NewObjects);
-	if (bOwnTransaction)
-	{
-		EndTransaction();
-	}
-}
-
-void FMapDocument::DeleteObjects(const TArray<Object*>& Objects)
-{
-	TArray<Object*> Valid;
-	for (Object* Obj : Objects)
-	{
-		if (Obj && Obj->GetParentPtr() == Root)
-		{
-			Valid.push_back(Obj);
-		}
-	}
-	if (Valid.empty())
-	{
-		return;
-	}
-	const bool bOwnTransaction = !Pending;
-	if (bOwnTransaction)
-	{
-		BeginTransaction("Delete");
-	}
-	// Unselect first: the selector must not hold objects outside the scope.
-	TArray<Object*> Remaining = GetSelection();
-	std::erase_if(Remaining, [&](Object* Obj) { return std::find(Valid.begin(), Valid.end(), Obj) != Valid.end(); });
-	SetSelection(Remaining);
-	auto Edit = std::make_unique<FDeleteEdit>();
-	Edit->Objects = Valid;
-	Edit->Parent = Root;
-	Edit->Redo(*this);
-	Record(std::move(Edit), EMapChange::Structure);
-	if (bOwnTransaction)
-	{
-		EndTransaction();
-	}
-}
-
-TArray<Object*> FMapDocument::DuplicateObjects(const TArray<Object*>& Objects, const Vector3d& Delta)
-{
-	TArray<Object*> Copies;
-	for (Object* Obj : Objects)
-	{
-		Object* Copy = new Object(*Obj);
-		Vector3d Position;
-		Copy->GetPosition(Position).AddVector(Delta);
-		Copy->SetPosition(Position);
-		Copies.push_back(Copy);
-	}
-	const bool bOwnTransaction = !Pending;
-	if (bOwnTransaction)
-	{
-		BeginTransaction("Duplicate");
-	}
-	AddObjects(Copies);
-	if (bOwnTransaction)
-	{
-		EndTransaction();
-	}
-	return Copies;
-}
-
-Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError)
-{
-	Object* Prefab = new Object;
-	if (!Prefab->LoadObjFile(PrefabPath.ToAnsi().c_str()))
-	{
-		delete Prefab;
-		if (OutError)
-		{
-			*OutError = FString::Format("{} could not be loaded.", PrefabPath);
-		}
-		return nullptr;
-	}
-	Vector3d Offset;
-	Prefab->GetPosition(Offset).AddVector(Position);
-	Prefab->SetPosition(Offset);
-	const FString Name = FPaths::GetCleanFilename(PrefabPath);
-	BeginTransaction(FString::Format("Add {}", Name.Left(Name.Len() - 4)));
-	AddObjects({ Prefab });
-	EndTransaction();
-	return Prefab;
-}
-
-Object* FMapDocument::AddEntity(const FString& ClassName, const Vector3d& Position)
-{
-	Object* Obj = new Object;
-	Obj->SetEntity(new Entity(ClassName.ToAnsi().c_str()));
-	Obj->SetPosition(Position);
-	BeginTransaction(FString::Format("Add {}", ClassName));
-	AddObjects({ Obj });
-	EndTransaction();
-	return Obj;
+	OnChanged.Broadcast(Change);
 }
 
 // ----- Undo -----
@@ -695,9 +580,10 @@ void FMapDocument::Undo()
 		Step->Edits[Index]->Undo(*this);
 		Step->Edits[Index]->bApplied = false;
 	}
+	ApplyScope(IsInMap(*Step->ScopeBefore) ? *Step->ScopeBefore : *Root);
 	ApplySelection(Step->SelectionBefore);
 	Version = Step->VersionBefore;
-	const EMapChange Changes = Step->Changes | EMapChange::Selection | EMapChange::File;
+	const EMapChange Changes = Step->Changes | EMapChange::Selection | EMapChange::Scope | EMapChange::File;
 	RedoStack.push_back(std::move(Step));
 	Changed(Changes);
 }
@@ -716,14 +602,10 @@ void FMapDocument::Redo()
 		Edit->Redo(*this);
 		Edit->bApplied = true;
 	}
+	ApplyScope(IsInMap(*Step->ScopeAfter) ? *Step->ScopeAfter : *Root);
 	ApplySelection(Step->SelectionAfter);
 	Version = Step->VersionAfter;
-	const EMapChange Changes = Step->Changes | EMapChange::Selection | EMapChange::File;
+	const EMapChange Changes = Step->Changes | EMapChange::Selection | EMapChange::Scope | EMapChange::File;
 	UndoStack.push_back(std::move(Step));
 	Changed(Changes);
-}
-
-void FMapDocument::Changed(EMapChange Change)
-{
-	OnChanged.Broadcast(Change);
 }
