@@ -1,7 +1,7 @@
 # Genesis UI — Design
 
-Status: **approved direction** (decisions recorded in §16). Nothing here is
-implemented yet.
+Status: **approved direction** (decisions recorded in §16). Milestones 0
+and 1 are done (§15); the Genesis UI framework itself is not implemented yet.
 
 Genesis UI is the user-interface framework for Genesis Editor and, later,
 Genesis Engine games. It replaces MFC in the editor, provides in-game UI, and
@@ -90,7 +90,11 @@ static library project with a `Public/` and `Private/` folder:
 
 ```
 source/Engine/
-  Core/            strings, names, math, delegates, logging, asserts
+  Core/            strings, names, math, delegates, logging, asserts,
+                   file I/O, service interfaces (config, dialogs, progress)
+  MapCore/         Basic, Objects, Render and Game built as one MFC-free
+                   library (milestone 1; the sources stay in their folders)
+  Tests/           GenesisTests: doctest tests of Core and MapCore
   ApplicationCore/ platform interfaces + Win32 implementation
   RHI/             thin GPU abstraction (D3D12 first, Vulkan second)
   UICore/          widget base, layout, paint, draw elements, styles, fonts
@@ -102,7 +106,8 @@ source/Engine/
 ```
 
 The existing editor code (`Basic`, `Objects`, `Render`, `Game`, `Editor`,
-`Interface*`) stays where it is until it is ported or retired.
+`Interface*`) stays where it is until it is ported or retired. `MapCore`
+compiles `Basic`, `Objects`, `Render` and `Game` in place.
 
 ## 3. Layers
 
@@ -571,7 +576,7 @@ it.
 | Other dialogs | Compile, entity select, hollow prompt, colors, about | Modal `SWindow`s |
 | Output/process log | `FProcessWnd` (rich edit) | Log panel (`SListView` of lines) |
 
-### 14.2 What must be untangled first
+### 14.2 What must be untangled first (done in milestone 1)
 
 The non-UI code is lightly coupled to MFC and can be freed early, behind
 small services in `Core`/`ApplicationCore`:
@@ -603,6 +608,38 @@ docking systems fighting each other. Instead:
    reaches parity, then delete MFC, `Interface`, `Interface2` and the MFC
    renderer plugin.
 
+### 14.4 Milestone 1 result
+
+`source/Engine/MapCore` builds `Basic`, `Objects`, `Render` and `Game` as
+one static library. It is called MapCore because it is the map model,
+geometry/CSG, view math and game definitions: the core of map editing that
+both the MFC editor and the new shell build on, kept distinct from the
+generic `Core` module. Its precompiled header (`MapCorePCH.h`) includes only
+the C runtime and `Core`; nothing on its include path leads to MFC, Windows
+or the editor UI.
+
+- `ASSERT`/`TRACE` became `check`/`GLog`; `CString`/`CArray`/`CFile` became
+  `FString`/`TArray`/`FFile` where the map core used them.
+- User interaction goes through `FServices` (`Core/Public/Services`):
+  `IConfigStore` (used by `LConfig`), `IMessageDialog` (`LError`, `LFatal`,
+  `LAskYesNo`), `IProgress` and `IFileDialogs` (`LBrowseForFolder`). Each has
+  a default that needs no UI.
+- `Editor/MfcServices.cpp` registers the MFC implementations at startup:
+  the `CWinApp` registry profile (existing settings load unchanged),
+  `MessageBox`, `CProgressWnd`, `CDirDialog`, and a log sink feeding the
+  output pane.
+- The renderer interface is split: `FDraw` (`Render/DrawBase.h`) is
+  window-free and is what `View` draws through; `FWndDraw`
+  (`Interface/Draw.h`) adds the MFC window and `Paint()` for the
+  `GenesisDraw*` plugins.
+
+Still coupled to MFC: `Editor` (`FEditorApp`, `FEditorDoc` as a
+`CDocument`, the undo operations) and `Interface`/`Interface2` (all
+windows, dialogs, the renderer plugins and the MRC docking library), as
+planned for milestones 5 and 6. The map core's strings are still in the
+ANSI code page (the projects build with the multibyte character set);
+conversion to UTF-8 happens at the service boundary.
+
 ## 15. Milestones
 
 Each milestone ends with something runnable and its own PR(s).
@@ -610,7 +647,7 @@ Each milestone ends with something runnable and its own PR(s).
 | # | Milestone | Exit criteria |
 |---|---|---|
 | 0 | **x64**, drop MGL/Glide | Done: x64-only build, MGL/Glide removed. |
-| 1 | **Core free of MFC** | `Basic`/`Objects`/`Render`/`Game` build as a static library without MFC headers; MFC editor still works through adapters. |
+| 1 | **Core free of MFC** | Done: `Basic`/`Objects`/`Render`/`Game` build as the `MapCore` static library (§14.4) without MFC headers; the MFC editor works through adapters; `GenesisTests` pass. |
 | 2 | **Platform + RHI + UI renderer + fonts** | `UISandbox` app: a DPI-aware window drawing boxes, rounded boxes, lines and shaped text through D3D12 and Vulkan; resizes and moves across monitors cleanly. |
 | 3 | **Widget core + input** | Layout panels, text block, button, checkbox, text box, scroll box, splitter, list/tree view; focus, keyboard navigation, capture, drag-drop, tooltips, menu popups. Widget gallery in `UISandbox`; headless layout/input tests pass. |
 | 4 | **Editor framework** | Commands, menu registry, toolbars, docking with save/restore, property grid over `IPropertySource`, viewport widget. |
