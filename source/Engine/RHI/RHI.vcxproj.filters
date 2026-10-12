@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{47B6149D-194D-5BBE-864F-DDC756FB4916}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\D3D12">
+      <UniqueIdentifier>{0EA4E321-E795-550A-87D4-D304D2F6AD97}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\Vulkan">
+      <UniqueIdentifier>{E3543BE7-4007-5249-8AA0-7C60E007F8FA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{AA4A4519-A268-5737-B819-6F32FC826AFA}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\D3D12\D3D12Device.cpp">
+      <Filter>Private\D3D12</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\RHI.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Vulkan\VulkanCommandList.cpp">
+      <Filter>Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Vulkan\VulkanDevice.cpp">
+      <Filter>Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Vulkan\VulkanLoader.cpp">
+      <Filter>Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Vulkan\VulkanResources.cpp">
+      <Filter>Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Vulkan\VulkanSwapChain.cpp">
+      <Filter>Private\Vulkan</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Private\D3D12\D3D12RHI.h">
+      <Filter>Private\D3D12</Filter>
+    </ClInclude>
+    <ClInclude Include="Private\RHIPrivate.h">
+      <Filter>Private</Filter>
+    </ClInclude>
+    <ClInclude Include="Private\Vulkan\VulkanLoader.h">
+      <Filter>Private\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Private\Vulkan\VulkanRHI.h">
+      <Filter>Private\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\RHI.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
