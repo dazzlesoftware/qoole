@@ -247,7 +247,7 @@ void SWidgetGallery::Construct(const FArguments&, FGalleryHost InHost)
 	ChildSlot
 	[
 		SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight()[MakeHeader()]
+		+ SVerticalBox::Slot().AutoHeight()[Host.bShowHeader ? MakeHeader() : SNullWidget::NullWidget()]
 		+ SVerticalBox::Slot().FillHeight(1.0f)
 		[
 			SNew(SSplitter)

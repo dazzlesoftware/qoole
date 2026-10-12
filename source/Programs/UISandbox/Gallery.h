@@ -22,6 +22,7 @@ struct FGalleryHost
 	TFunction<void(float)> SetAppScale;
 	TFunction<void()> ToggleInspector;
 	TFunction<void()> Quit;
+	bool bShowHeader = true; // its own title and File/Edit/View menus (off when docked in the editor demo)
 };
 
 class SWidgetGallery : public SCompoundWidget

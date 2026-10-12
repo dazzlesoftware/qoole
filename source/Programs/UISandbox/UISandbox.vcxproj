@@ -48,12 +48,14 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="EditorDemo.cpp" />
     <ClCompile Include="Gallery.cpp" />
     <ClCompile Include="SandboxContent.cpp" />
     <ClCompile Include="Screenshot.cpp" />
     <ClCompile Include="UISandbox.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="EditorDemo.h" />
     <ClInclude Include="Gallery.h" />
     <ClInclude Include="SandboxContent.h" />
     <ClInclude Include="Screenshot.h" />

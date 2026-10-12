@@ -1,24 +1,32 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// UISandbox: the Genesis UI widget gallery (milestone 3 of docs/GenesisUI.md)
-// running on FUIApplication, drawn through the UI renderer on D3D12 or
-// Vulkan. The main window shows every built-in widget; the borderless
-// inspector window has a widget-built title bar and live information.
+// UISandbox: Genesis UI on FUIApplication, drawn through the UI renderer on
+// D3D12 or Vulkan. The main window is the editor framework demo (milestone 4
+// of docs/GenesisUI.md: menus, toolbar and shortcuts from commands, dockable
+// tabs, a property grid with undo, an RHI viewport) with the widget gallery
+// of milestone 3 as one of its tabs. The borderless inspector window has a
+// widget-built title bar and live information.
 //
 // Command line:
 //   -d3d12 | -vulkan       backend (default D3D12)
 //   -appscale=1.25         application scale on top of the monitor DPI
 //   -nodebug / -debug      D3D12 debug layer / Vulkan validation (default: on in Debug builds)
-//   -selftest=<dir>        scripted run: every gallery page, a menu and a
-//                          tooltip, DPI changes, minimize/restore, a move to
-//                          another monitor, resize, app scale; PNG
-//                          screenshots and a log go to <dir>; exits when done
+//   -resetlayout           start from the default dock layout and key bindings
+//   -selftest=<dir>        scripted run: every gallery page, menus, a tooltip,
+//                          the property grid's color picker, a tab torn off
+//                          into a window and docked back, DPI changes,
+//                          minimize/restore, a move to another monitor,
+//                          resize, app scale; PNG screenshots and a log go to
+//                          <dir>; exits when done
 //
+// The layout and key bindings are kept in %LOCALAPPDATA%\Genesis\UISandbox.
 // Keys: F2 cycles the app scale, F3 simulates a DPI change of the main
-// window (WM_DPICHANGED), F4 shows or hides the inspector.
+// window (WM_DPICHANGED); the editor's own shortcuts are listed in its Key
+// bindings tab.
 
 #include "Application/UIApplication.h"
 #include "CoreMinimal.h"
+#include "EditorDemo.h"
 #include "Gallery.h"
 #include "RHI.h"
 #include "SandboxContent.h"
@@ -26,10 +34,13 @@
 #include "Styling/GenesisStyle.h"
 #include "UIRenderer.h"
 #include "UIWindowRenderer.h"
+#include "Widgets/Input/SColorPicker.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+
+#include <cstdlib>
 
 #include <Windows.h>
 #include <objbase.h>
@@ -117,6 +128,10 @@ private:
 	void RenderViewportTarget(FRHICommandList& CommandList);
 	void TickSelfTest();
 	void Capture(const char* Name);
+	// Moves the pointer to a text and optionally clicks it, through the
+	// application's platform handler (real routing).
+	bool PointAtText(const SWindow& Window, std::string_view Text, bool bClick);
+	SWidgetGallery* GetGallery();
 	void SimulateDpiChange(float NewScale);
 
 	TSharedPtr<IPlatformApplication> Platform;
@@ -128,7 +143,7 @@ private:
 	TUniquePtr<FSandboxContent> Content;
 	TSharedPtr<SWindow> MainWindow;
 	TSharedPtr<SWindow> Inspector;
-	TSharedPtr<SWidgetGallery> Gallery;
+	TSharedPtr<FEditorDemo> Editor;
 	TSharedPtr<FUIRenderTarget> ViewportTarget;
 	FDrawElementList ViewportElements;
 	TUniquePtr<FFileOutputDevice> FileLog;
@@ -141,6 +156,7 @@ private:
 	float FramesPerSecond = 0.0f;
 
 	FString SelfTestDir;
+	FString SettingsDir;
 	int32 SelfTestFrame = 0;
 };
 
@@ -163,6 +179,22 @@ bool FSandboxApp::Initialize(const FString& CommandLine)
 	{
 		FileLog = MakeUnique<FFileOutputDevice>(SelfTestDir + FString::Format("log_{}.txt", ToString(Backend)));
 		FLog::AddDevice(FileLog.get());
+	}
+	// Saved layout and key bindings (not for scripted runs, which need the defaults).
+	if (SelfTestDir.IsEmpty())
+	{
+		if (const wchar_t* LocalAppData = _wgetenv(L"LOCALAPPDATA"))
+		{
+			const std::wstring Base = std::wstring(LocalAppData) + L"\\Genesis";
+			CreateDirectoryW(Base.c_str(), nullptr);
+			CreateDirectoryW((Base + L"\\UISandbox").c_str(), nullptr);
+			SettingsDir = FString::FromWide(Base + L"\\UISandbox\\");
+			if (HasFlag(CommandLine, "-resetlayout"))
+			{
+				DeleteFileW((Base + L"\\UISandbox\\Layout.json").c_str());
+				DeleteFileW((Base + L"\\UISandbox\\Bindings.json").c_str());
+			}
+		}
 	}
 	if (const TOptional<FString> Scale = GetOption(CommandLine, "-appscale="))
 	{
@@ -232,23 +264,34 @@ bool FSandboxApp::Initialize(const FString& CommandLine)
 
 void FSandboxApp::CreateWindows()
 {
-	FGalleryHost Host;
-	Host.Content = Content.get();
-	Host.ViewportTarget = &ViewportTarget;
-	Host.GetFrameInfo = [this] { return MakeFrameInfo(); };
-	Host.SetAppScale = [this](float Scale) { SetAppScale(Scale); };
+	FEditorDemo::FHost Host;
+	Host.Device = Device.get();
+	Host.Renderer = Renderer.get();
+	Host.WindowRenderer = WindowRenderer.get();
+	Host.Gallery.Content = Content.get();
+	Host.Gallery.ViewportTarget = &ViewportTarget;
+	Host.Gallery.GetFrameInfo = [this] { return MakeFrameInfo(); };
+	Host.Gallery.SetAppScale = [this](float Scale) { SetAppScale(Scale); };
+	Host.Gallery.ToggleInspector = [this] { ToggleInspector(); };
+	Host.Gallery.Quit = [this] { App->RequestQuit(); };
 	Host.ToggleInspector = [this] { ToggleInspector(); };
+	Host.SetAppScale = [this](float Scale) { SetAppScale(Scale); };
 	Host.Quit = [this] { App->RequestQuit(); };
+	Host.SettingsDir = SettingsDir;
+	Editor = std::make_shared<FEditorDemo>(std::move(Host));
 
 	MainWindow = SNew(SWindow)
 		.Title(FString::Format("Genesis UI Sandbox ({})", ToString(Backend)))
-		.ClientSize(FVector2(1180.0f, 760.0f))
-		.OnWindowClosed([this](const TSharedRef<SWindow>&) { App->RequestQuit(); })
-		[
-			SAssignNew(Gallery, SWidgetGallery, Host)
-		];
+		.ClientSize(FVector2(1280.0f, 800.0f))
+		.OnWindowClosed([this](const TSharedRef<SWindow>&) { App->RequestQuit(); });
 	App->AddWindow(ToSharedRef(MainWindow));
+	MainWindow->SetContent(Editor->MakeContent(ToSharedRef(MainWindow)));
 	CreateInspector();
+}
+
+SWidgetGallery* FSandboxApp::GetGallery()
+{
+	return Editor ? Editor->Gallery.get() : nullptr;
 }
 
 TSharedRef<SWidget> FSandboxApp::MakeInspectorContent()
@@ -420,7 +463,7 @@ int32 FSandboxApp::Run(const FString& CommandLine)
 	if (!SelfTestDir.IsEmpty())
 	{
 		// Keep frames coming so the script advances while nothing changes.
-		Gallery->RegisterActiveTimer(0.0f, [](double, float) { return EActiveTimerReturn::Continue; });
+		MainWindow->RegisterActiveTimer(0.0f, [](double, float) { return EActiveTimerReturn::Continue; });
 	}
 	while (!App->IsQuitRequested() && MainWindow && !MainWindow->IsClosed())
 	{
@@ -435,13 +478,17 @@ int32 FSandboxApp::Run(const FString& CommandLine)
 		}
 	}
 
+	if (Editor)
+	{
+		Editor->SaveSettings();
+	}
 	Device->WaitIdle();
 	App->SetRenderer(nullptr);
 	FUIApplication::Shutdown();
 	App.reset();
 	MainWindow.reset();
 	Inspector.reset();
-	Gallery.reset();
+	Editor.reset();
 	WindowRenderer.reset();
 	ViewportTarget.reset();
 	Renderer.reset();
@@ -479,9 +526,6 @@ bool FSandboxApp::HandleKeyDownEvent(FUIApplication&, const FKeyEvent& Event)
 		SimulateDpiChange(Current >= 2.0f ? 1.0f : Current + 0.5f);
 		return true;
 	}
-	case EKey::F4:
-		ToggleInspector();
-		return true;
 	default:
 		return false;
 	}
@@ -493,12 +537,11 @@ bool FSandboxApp::HandleKeyDownEvent(FUIApplication&, const FKeyEvent& Event)
 
 void FSandboxApp::Capture(const char* Name)
 {
-	for (const TSharedPtr<SWindow>& Window : { MainWindow, Inspector })
+	int32 Floating = 0;
+	for (const TSharedRef<SWindow>& Window : TArray<TSharedRef<SWindow>>(App->GetWindows()))
 	{
-		if (!Window)
-		{
-			continue;
-		}
+		const char* Kind = Window == ToSharedRef(MainWindow) ? "main" : (Inspector && Window == ToSharedRef(Inspector) ? "inspector" : nullptr);
+		const FString Label = Kind ? FString(Kind) : FString::Format("floating{}", ++Floating);
 		// Bring the window on top and let DWM compose a couple of frames.
 		const HWND Hwnd = static_cast<HWND>(Window->GetNativeWindow()->GetNativeHandle());
 		SetWindowPos(Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -507,12 +550,43 @@ void FSandboxApp::Capture(const char* Name)
 			Window->Invalidate(EInvalidateWidgetReason::Paint);
 			App->Tick();
 		}
-		const FString Path = SelfTestDir + FString::Format("{}_{}_{}.png", ToString(Backend), Window == Inspector ? "inspector" : "main", Name);
+		const FString Path = SelfTestDir + FString::Format("{}_{}_{}.png", ToString(Backend), Label, Name);
 		const bool bOk = CaptureWindowClientToPng(Hwnd, Path);
 		SetWindowPos(Hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 		GE_LOG(LogSandbox, Display, "Screenshot {} -> {} ({}x{} px, DPI scale {:.2f}, app scale {:.2f})", bOk ? "saved" : "FAILED", Path,
 			Window->GetPixelSize().X, Window->GetPixelSize().Y, Window->GetNativeWindow()->GetDpiScale(), AppScale);
 	}
+}
+
+bool FSandboxApp::PointAtText(const SWindow& Window, std::string_view Text, bool bClick)
+{
+	STextBlock* Found = nullptr;
+	const TFunction<void(const SWidget&)> Find = [&](const SWidget& Widget)
+	{
+		if (STextBlock* Block = dynamic_cast<STextBlock*>(const_cast<SWidget*>(&Widget)); Block && Block->GetText().View() == Text && !Found)
+		{
+			Found = Block;
+		}
+		for (const FArrangedWidget& Child : Widget.GetArrangedChildren())
+		{
+			Find(Child.Widget.Get());
+		}
+	};
+	Find(Window);
+	if (!Found)
+	{
+		GE_LOG(LogSandbox, Warning, "Self-test: no \"{}\" to point at", Text);
+		return false;
+	}
+	const TSharedRef<IPlatformWindow> Native = ToSharedRef(Window.GetNativeWindow());
+	const FVector2 Center = Found->GetCachedGeometry().GetLayoutBoundingRect().GetCenter();
+	App->OnMouseMove(Native, Center);
+	if (bClick)
+	{
+		App->OnMouseDown(Native, EMouseButton::Left, Center);
+		App->OnMouseUp(Native, EMouseButton::Left, Center);
+	}
+	return true;
 }
 
 void FSandboxApp::SimulateDpiChange(float NewScale)
@@ -534,85 +608,146 @@ void FSandboxApp::TickSelfTest()
 	const int32 Frame = SelfTestFrame++;
 	const TSharedRef<IPlatformWindow> Native = ToSharedRef(MainWindow->GetNativeWindow());
 	const float NativeScale = static_cast<float>(GetDpiForWindow(static_cast<HWND>(Native->GetNativeHandle()))) / 96.0f;
+	FTabManager& Tabs = *Editor->TabManager;
 
-	// Gallery pages: 30 frames each, captured on the 25th.
-	const int32 PageFrames = 30;
-	const int32 Pages = Gallery->GetPageCount();
-	if (Frame < Pages * PageFrames + 20)
+	// The editor first, then every gallery page (30 frames each, captured on the 25th).
+	switch (Frame)
 	{
-		if (Frame >= 20)
+	case 20: Capture("editor"); return;
+	case 25: Tabs.TryInvokeTab("Gallery"); return;
+	default: break;
+	}
+	const int32 PageFrames = 30;
+	SWidgetGallery* Gallery = GetGallery();
+	const int32 Pages = Gallery ? Gallery->GetPageCount() : 0;
+	if (Frame >= 30 && Frame < 30 + Pages * PageFrames)
+	{
+		const int32 Page = (Frame - 30) / PageFrames;
+		const int32 Step = (Frame - 30) % PageFrames;
+		if (Step == 0)
 		{
-			const int32 Page = (Frame - 20) / PageFrames;
-			const int32 Step = (Frame - 20) % PageFrames;
-			if (Step == 0)
-			{
-				Gallery->SetPage(Page);
-			}
-			if (Step == 25)
-			{
-				Capture(FString::Format("page{}", Page + 1).c_str());
-			}
+			Gallery->SetPage(Page);
+		}
+		if (Step == 25)
+		{
+			Capture(FString::Format("page{}", Page + 1).c_str());
 		}
 		return;
 	}
+	if (Frame < 30 + Pages * PageFrames)
+	{
+		return;
+	}
 
-	const int32 T = Frame - (Pages * PageFrames + 20);
+	const int32 T = Frame - (30 + Pages * PageFrames);
 	switch (T)
 	{
+	// The gallery's tooltip.
 	case 0: Gallery->SetPage(4); break;
-	case 10:
-		Gallery->FileMenu->SetIsOpen(true);
-		break;
-	case 20:
-	{
-		// Hover the third entry of the File menu ("Open recent") to open its submenu.
-		TArray<SMenuEntry*> Entries;
-		const TFunction<void(const SWidget&)> Find = [&](const SWidget& Widget)
+	case 5:
+		if (Gallery->ToolTipDemo)
 		{
-			if (SMenuEntry* Entry = dynamic_cast<SMenuEntry*>(const_cast<SWidget*>(&Widget)))
-			{
-				Entries.push_back(Entry);
-			}
-			for (const FArrangedWidget& Child : Widget.GetArrangedChildren())
-			{
-				Find(Child.Widget.Get());
-			}
-		};
-		if (const TSharedPtr<SMenuAnchor> Anchor = std::dynamic_pointer_cast<SMenuAnchor>(Gallery->FileMenu->GetButton()->GetParentWidgetShared()))
-		{
-			if (const TSharedPtr<IMenu> Menu = Anchor->GetMenu())
-			{
-				Find(Menu->GetContent().Get());
-			}
+			App->OnMouseMove(Native, Gallery->ToolTipDemo->GetCachedGeometry().GetLayoutBoundingRect().GetCenter());
 		}
-		if (Entries.size() >= 3)
+		break;
+	case 55: Capture("tooltip"); break;
+	case 60:
+		App->OnMouseMove(Native, FVector2(2.0f, 2.0f));
+		Tabs.TryInvokeTab("Viewport");
+		break;
+
+	// Select the lights, open the Edit menu (Undo names the last change) and View > Application scale.
+	case 65:
+	{
+		TArray<int32> Lights;
+		for (const FDemoEntity& E : Editor->Scene.Entities)
 		{
-			App->OnMouseMove(Native, Entries[2]->GetCachedGeometry().GetLayoutBoundingRect().GetCenter());
+			if (E.Kind == 1) Lights.push_back(E.Id);
+		}
+		Editor->Scene.SetSelection(Lights);
+		Editor->ViewportClient->FrameSelection();
+		break;
+	}
+	case 70:
+		// A change to undo: the lights' brightness through the property grid.
+		if (Editor->Details)
+		{
+			Editor->Details->SetPropertyValue("Brightness", 4.0f);
+		}
+		break;
+	case 75: PointAtText(*MainWindow, "Edit", true); break;
+	case 90: Capture("menu_edit"); break;
+	case 95: PointAtText(*MainWindow, "View", false); break;
+	case 100: PointAtText(*MainWindow, "Application scale", false); break;
+	case 115: Capture("menu_view"); break;
+	case 120: App->DismissAllMenus(); break;
+
+	// The color picker of the property grid.
+	case 125:
+	{
+		if (Editor->Details)
+		{
+			const TFunction<SColorBlock*(const SWidget&)> FindSwatch = [&](const SWidget& Widget) -> SColorBlock*
+			{
+				if (SColorBlock* Block = dynamic_cast<SColorBlock*>(const_cast<SWidget*>(&Widget)))
+				{
+					return Block;
+				}
+				for (const FArrangedWidget& Child : Widget.GetArrangedChildren())
+				{
+					if (SColorBlock* Found = FindSwatch(Child.Widget.Get()))
+					{
+						return Found;
+					}
+				}
+				return nullptr;
+			};
+			if (SColorBlock* Swatch = FindSwatch(*Editor->Details))
+			{
+				const FVector2 Center = Swatch->GetCachedGeometry().GetLayoutBoundingRect().GetCenter();
+				App->OnMouseMove(Native, Center);
+				App->OnMouseDown(Native, EMouseButton::Left, Center);
+				App->OnMouseUp(Native, EMouseButton::Left, Center);
+			}
 		}
 		break;
 	}
-	case 30: Capture("menu"); break;
-	case 35: App->DismissAllMenus(); break;
-	case 40:
-		App->OnMouseMove(Native, Gallery->ToolTipDemo->GetCachedGeometry().GetLayoutBoundingRect().GetCenter());
+	case 140: Capture("colorpicker"); break;
+	case 145: App->DismissAllMenus(); break;
+
+	// Tear the Details tab off into its own window, then dock it back.
+	case 150:
+		if (const TSharedPtr<SDockTab> Details = Tabs.FindExistingLiveTab("Details"))
+		{
+			const FIntPoint Pos = Native->GetClientPosition();
+			Tabs.MoveTabToNewWindow(ToSharedRef(Details), FIntPoint(Pos.X + 200, Pos.Y + 160), FVector2(380.0f, 520.0f));
+		}
 		break;
-	case 90: Capture("tooltip"); break;
-	case 95:
-		App->OnMouseMove(Native, FVector2(2.0f, 2.0f));
-		Gallery->SetPage(0);
+	case 175: Capture("torn_off"); break;
+	case 180:
+		if (const TSharedPtr<SDockTab> Details = Tabs.FindExistingLiveTab("Details"))
+		{
+			if (const TSharedPtr<SDockTab> Viewport = Tabs.FindExistingLiveTab("Viewport"))
+			{
+				Tabs.MoveTabToNewStack(ToSharedRef(Details), ToSharedRef(Viewport->GetParentStack()), EUINavigation::Right);
+			}
+		}
 		break;
-	case 110: Capture("native"); break;
-	case 120: SimulateDpiChange(1.0f); break;
-	case 150: Capture("dpi100"); break;
-	case 160: SimulateDpiChange(2.0f); break;
-	case 190: Capture("dpi200"); break;
-	case 200: SimulateDpiChange(NativeScale); break;
-	case 220: Native->Minimize(); break;
-	case 250: Native->Restore(); break;
-	case 280: Capture("restored"); break;
-	case 290:
+	case 200: Capture("docked_back"); break;
+	case 205: Editor->ResetLayout(); break;
+
+	// Milestone 2's script: DPI, minimize, monitors, resize, app scale.
+	case 220: Capture("native"); break;
+	case 230: SimulateDpiChange(1.0f); break;
+	case 260: Capture("dpi100"); break;
+	case 270: SimulateDpiChange(2.0f); break;
+	case 300: Capture("dpi200"); break;
+	case 310: SimulateDpiChange(NativeScale); break;
+	case 330: Native->Minimize(); break;
+	case 360: Native->Restore(); break;
+	case 390: Capture("restored"); break;
+	case 400:
 	{
-		// Move to another monitor when there is one.
 		FDisplayMetrics Metrics;
 		Platform->GetDisplayMetrics(Metrics);
 		const FIntPoint Pos = Native->GetClientPosition();
@@ -632,17 +767,17 @@ void FSandboxApp::TickSelfTest()
 		}
 		break;
 	}
-	case 330: Capture("monitor2"); break;
-	case 340:
+	case 440: Capture("monitor2"); break;
+	case 450:
 	{
 		const FIntPoint Pos = Native->GetClientPosition();
 		Native->ReshapeWindow(Pos.X, Pos.Y, 1500, 1000);
 		break;
 	}
-	case 370: Capture("resized"); break;
-	case 380: SetAppScale(1.25f); break;
-	case 410: Capture("appscale125"); break;
-	case 420: App->RequestQuit(); break;
+	case 480: Capture("resized"); break;
+	case 490: SetAppScale(1.25f); break;
+	case 520: Capture("appscale125"); break;
+	case 530: App->RequestQuit(); break;
 	default: break;
 	}
 }
