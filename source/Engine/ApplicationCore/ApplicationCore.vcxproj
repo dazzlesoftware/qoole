@@ -43,6 +43,7 @@
   <ItemGroup>
     <ClCompile Include="Private\GenericPlatform\GenericPlatform.cpp" />
     <ClCompile Include="Private\Null\NullPlatformApplication.cpp" />
+    <ClCompile Include="Private\Windows\WindowsDialogs.cpp" />
     <ClCompile Include="Private\Windows\WindowsPlatformApplication.cpp" />
     <ClCompile Include="Private\Windows\WindowsWindow.cpp" />
   </ItemGroup>
@@ -51,6 +52,7 @@
     <ClInclude Include="Public\GenericPlatform\Cursor.h" />
     <ClInclude Include="Public\GenericPlatform\InputTypes.h" />
     <ClInclude Include="Public\GenericPlatform\PlatformApplication.h" />
+    <ClInclude Include="Public\GenericPlatform\PlatformDialogs.h" />
     <ClInclude Include="Public\GenericPlatform\PlatformMessageHandler.h" />
     <ClInclude Include="Public\GenericPlatform\PlatformWindow.h" />
     <ClInclude Include="Public\GenericPlatform\TextInputMethod.h" />
