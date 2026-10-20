@@ -107,7 +107,7 @@ protected:
 			.Capture("scene", 20)
 			// The cursor position in map units.
 			.Do([this] { MoveMouse(MapToWindow(*Views4[0], Vector3d(64.0f, 32.0f, 0.0f))); })
-			.Check("a 2D view reports the cursor in map units", [this] { return !CursorText.IsEmpty(); })
+			.Check("a 2D view reports the cursor in map units", [this] { return !CursorText.IsEmpty(); }, 5)
 			// Zoom the top view at the cursor, pan the front view.
 			.Do([this]
 			{
