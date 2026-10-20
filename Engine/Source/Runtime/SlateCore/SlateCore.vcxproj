@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{6F3297E3-299E-599B-A2FE-946001E4FAF7}</ProjectGuid>
+    <RootNamespace>SlateCore</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\Build\Engine.props" />
+  </ImportGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisThirdPartyDir)FreeType2\include;$(GenesisThirdPartyDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>HAVE_FREETYPE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\Fonts\FontCache.cpp" />
+    <ClCompile Include="Private\Rendering\AtlasPacker.cpp" />
+    <ClCompile Include="Private\Rendering\DrawElements.cpp" />
+    <ClCompile Include="Private\Rendering\UIImage.cpp" />
+    <ClCompile Include="Private\Styling\Style.cpp" />
+    <ClCompile Include="Private\Text\TextLayout.cpp" />
+    <ClCompile Include="Private\Widgets\SWidget.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\Application\UIApplicationBase.h" />
+    <ClInclude Include="Public\Fonts\FontCache.h" />
+    <ClInclude Include="Public\Input\DragAndDrop.h" />
+    <ClInclude Include="Public\Input\Events.h" />
+    <ClInclude Include="Public\Input\Reply.h" />
+    <ClInclude Include="Public\Layout\ArrangedChildren.h" />
+    <ClInclude Include="Public\Layout\Children.h" />
+    <ClInclude Include="Public\Layout\Geometry.h" />
+    <ClInclude Include="Public\Layout\LayoutUtils.h" />
+    <ClInclude Include="Public\Rendering\AtlasPacker.h" />
+    <ClInclude Include="Public\Rendering\DrawElements.h" />
+    <ClInclude Include="Public\Rendering\UIImage.h" />
+    <ClInclude Include="Public\Rendering\WindowRenderer.h" />
+    <ClInclude Include="Public\Styling\StyleSet.h" />
+    <ClInclude Include="Public\Styling\StyleTypes.h" />
+    <ClInclude Include="Public\Styling\WidgetStyles.h" />
+    <ClInclude Include="Public\Text\TextLayout.h" />
+    <ClInclude Include="Public\Types\WidgetTypes.h" />
+    <ClInclude Include="Public\Widgets\Attribute.h" />
+    <ClInclude Include="Public\Widgets\DeclarativeSyntax.h" />
+    <ClInclude Include="Public\Widgets\IToolTip.h" />
+    <ClInclude Include="Public\Widgets\SCompoundWidget.h" />
+    <ClInclude Include="Public\Widgets\SLeafWidget.h" />
+    <ClInclude Include="Public\Widgets\SPanel.h" />
+    <ClInclude Include="Public\Widgets\SWidget.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

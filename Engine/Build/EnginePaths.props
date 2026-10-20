@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The engine's directories, laid out like Unreal Engine's:
+
+    Engine\Source\Runtime, Editor, Programs, ThirdParty   sources
+    Engine\Content                                       fonts, editor data
+    Engine\Binaries\Win64                                 programs
+    Engine\Intermediate\Build\Win64                       libraries, objects
+
+  Imported by Engine.props, and on its own by the projects that keep their
+  own compiler settings (MapCore, GenesisTests).
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <GenesisEngineDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</GenesisEngineDir>
+    <GenesisSourceDir>$(GenesisEngineDir)Source\</GenesisSourceDir>
+    <GenesisRuntimeDir>$(GenesisSourceDir)Runtime\</GenesisRuntimeDir>
+    <GenesisEditorDir>$(GenesisSourceDir)Editor\</GenesisEditorDir>
+    <GenesisProgramsDir>$(GenesisSourceDir)Programs\</GenesisProgramsDir>
+    <GenesisThirdPartyDir>$(GenesisSourceDir)ThirdParty\</GenesisThirdPartyDir>
+    <GenesisBinariesDir>$(GenesisEngineDir)Binaries\Win64\</GenesisBinariesDir>
+    <GenesisIntermediateDir>$(GenesisEngineDir)Intermediate\Build\Win64\</GenesisIntermediateDir>
+    <GenesisLibDir>$(GenesisIntermediateDir)Lib\$(Configuration)\</GenesisLibDir>
+  </PropertyGroup>
+</Project>
