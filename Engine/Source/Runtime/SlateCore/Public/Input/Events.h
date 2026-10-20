@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Input events as widgets receive them (docs/GenesisUI.md §7). Pointer
+// Input events as widgets receive them (Engine/Documentation/Source/GenesisUI.md §7). Pointer
 // positions are in window pixels ("absolute" space); use
 // FGeometry::AbsoluteToLocal for a widget's local units.
 

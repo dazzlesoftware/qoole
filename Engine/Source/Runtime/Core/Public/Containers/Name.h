@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Containers/GenesisString.h"
+#include "Containers/UnrealString.h"
 
 class FName
 {

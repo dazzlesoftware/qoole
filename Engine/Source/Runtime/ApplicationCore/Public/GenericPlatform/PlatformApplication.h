@@ -26,7 +26,7 @@ struct FDisplayMetrics
 	const FMonitorInfo* GetPrimary() const;
 };
 
-// OS application services (docs/GenesisUI.md §4). One instance per process.
+// OS application services (Engine/Documentation/Source/GenesisUI.md §4). One instance per process.
 class IPlatformApplication
 {
 public:

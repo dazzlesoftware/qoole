@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Virtualized list and tree views (docs/GenesisUI.md §6.6).
+// Virtualized list and tree views (Engine/Documentation/Source/GenesisUI.md §6.6).
 //
 //   TArray<FItemPtr> Items;
 //   SNew(SListView<FItemPtr>)

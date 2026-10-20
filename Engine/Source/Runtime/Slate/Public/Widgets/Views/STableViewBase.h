@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// The untyped half of list and tree views (docs/GenesisUI.md §6.6):
+// The untyped half of list and tree views (Engine/Documentation/Source/GenesisUI.md §6.6):
 // virtualization and scrolling. Only the rows that are visible exist as
 // widgets; they are generated (or reused) while the view is arranged, once
 // its height is known. The scroll offset is in items (fractional), so rows

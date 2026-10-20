@@ -162,4 +162,4 @@ private:
 	TSharedPtr<SButton> CustomTipButton;
 };
 
-GENESIS_TEST_APP(FMenusTestApp)
+IMPLEMENT_TEST_APP(FMenusTestApp)

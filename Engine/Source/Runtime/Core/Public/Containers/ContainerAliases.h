@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Unreal-style names for the standard containers (docs/GenesisUI.md §2).
+// Unreal-style names for the standard containers (Engine/Documentation/Source/GenesisUI.md §2).
 // They are plain aliases so the standard algorithms and range-for work as
 // usual; a custom implementation can replace one later without touching call
 // sites.

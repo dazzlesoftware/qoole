@@ -263,4 +263,4 @@ private:
 	int32 WindowsOpened = 0;
 };
 
-GENESIS_TEST_APP(FWindowsTestApp)
+IMPLEMENT_TEST_APP(FWindowsTestApp)

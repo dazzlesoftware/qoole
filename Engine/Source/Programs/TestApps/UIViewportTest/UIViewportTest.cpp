@@ -150,4 +150,4 @@ private:
 	float ZoomBefore = 0.0f;
 };
 
-GENESIS_TEST_APP(FViewportTestApp)
+IMPLEMENT_TEST_APP(FViewportTestApp)

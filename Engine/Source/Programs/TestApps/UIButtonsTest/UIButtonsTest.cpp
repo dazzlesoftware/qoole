@@ -101,4 +101,4 @@ private:
 	ECheckBoxState LayerB = ECheckBoxState::Unchecked;
 };
 
-GENESIS_TEST_APP(FButtonsTestApp)
+IMPLEMENT_TEST_APP(FButtonsTestApp)

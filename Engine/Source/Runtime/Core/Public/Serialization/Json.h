@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "Containers/GenesisString.h"
+#include "Containers/UnrealString.h"
 #include "Misc/AssertionMacros.h"
 
 enum class EJsonType : uint8

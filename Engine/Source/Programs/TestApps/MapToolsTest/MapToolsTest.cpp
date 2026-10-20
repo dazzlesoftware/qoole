@@ -290,4 +290,4 @@ private:
 	int32 Objects = 0;
 };
 
-GENESIS_TEST_APP(FMapToolsTestApp)
+IMPLEMENT_TEST_APP(FMapToolsTestApp)

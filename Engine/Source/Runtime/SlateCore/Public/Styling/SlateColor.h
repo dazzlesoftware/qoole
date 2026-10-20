@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Style colors (docs/GenesisUI.md §8).
+// Style colors (Engine/Documentation/Source/GenesisUI.md §8).
 //
 // Colors go through a semantic palette: a style says "Panel" or "Foreground"
 // and the active FStyleTheme decides the actual color, so a theme swaps the

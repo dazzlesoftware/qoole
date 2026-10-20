@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // SPropertyGrid: a details view over one or more IPropertySources
-// (docs/GenesisUI.md §9). Rows are grouped by category (collapsible), with a
+// (Engine/Documentation/Source/GenesisUI.md §9). Rows are grouped by category (collapsible), with a
 // draggable name/value divider and a search box. With several objects
 // selected it shows the properties they share; values that differ show as
 // "Multiple Values" and editing sets them all.

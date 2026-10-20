@@ -41,7 +41,7 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Private\Containers\GenesisString.cpp" />
+    <ClCompile Include="Private\Containers\UnrealString.cpp" />
     <ClCompile Include="Private\Containers\Name.cpp" />
     <ClCompile Include="Private\HAL\File.cpp" />
     <ClCompile Include="Private\HAL\WindowsPlatformMisc.cpp" />
@@ -58,7 +58,7 @@
     <ClInclude Include="Private\Misc\StringFormat.h" />
     <ClInclude Include="Private\Windows\WindowsPlatform.h" />
     <ClInclude Include="Public\Containers\ContainerAliases.h" />
-    <ClInclude Include="Public\Containers\GenesisString.h" />
+    <ClInclude Include="Public\Containers\UnrealString.h" />
     <ClInclude Include="Public\Containers\Name.h" />
     <ClInclude Include="Public\CoreMinimal.h" />
     <ClInclude Include="Public\CoreTypes.h" />

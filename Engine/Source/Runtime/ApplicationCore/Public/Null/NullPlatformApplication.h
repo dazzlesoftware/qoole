@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // A headless platform: windows exist only as data and input is scripted.
-// Layout, input and renderer tests run on it (docs/GenesisUI.md §4).
+// Layout, input and renderer tests run on it (Engine/Documentation/Source/GenesisUI.md §4).
 
 #pragma once
 

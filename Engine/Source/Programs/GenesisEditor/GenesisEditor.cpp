@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // GenesisEditor: the map editor of Genesis Engine, on Genesis UI
-// (docs/GenesisUI.md, milestones 5 and 6). It replaced the MFC editor of
+// (Engine/Documentation/Source/GenesisUI.md, milestones 5 and 6). It replaced the MFC editor of
 // the same name: four docked views, the editing tools, an outliner,
 // properties, prefabs and settings panels, menus, a toolbar and shortcuts
 // from commands.

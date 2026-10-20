@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Slots and children (docs/GenesisUI.md §6.2).
+// Slots and children (Engine/Documentation/Source/GenesisUI.md §6.2).
 //
 // A slot holds one child plus the layout data of the parent-child
 // relationship (padding, alignment, panel rules). Slots are plain values

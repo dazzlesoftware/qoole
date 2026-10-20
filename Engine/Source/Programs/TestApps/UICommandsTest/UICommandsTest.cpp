@@ -355,4 +355,4 @@ private:
 	bool bSnap = false;
 };
 
-GENESIS_TEST_APP(FCommandsTestApp)
+IMPLEMENT_TEST_APP(FCommandsTestApp)

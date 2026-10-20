@@ -74,7 +74,7 @@ protected:
 			+ SScrollBox::Slot().Padding(FMargin(16.0f, 16.0f, 16.0f, 0.0f))[TestSection("Wrap box", "Children flow onto new lines as the width shrinks.", Chips)]
 			+ SScrollBox::Slot().Padding(FMargin(16.0f, 16.0f, 16.0f, 0.0f))
 			[
-				TestSection("Grid, overlay, canvas, scale box", "Panels from docs/GenesisUI.md §6.6.",
+				TestSection("Grid, overlay, canvas, scale box", "Panels from Engine/Documentation/Source/GenesisUI.md §6.6.",
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(0.0f, 0.0f, 12.0f, 0.0f))[Grid]
 					+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(0.0f, 0.0f, 12.0f, 0.0f))
@@ -187,4 +187,4 @@ private:
 	float LeftWidth = 0.0f;
 };
 
-GENESIS_TEST_APP(FLayoutTestApp)
+IMPLEMENT_TEST_APP(FLayoutTestApp)

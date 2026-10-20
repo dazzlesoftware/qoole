@@ -1223,7 +1223,7 @@ device, the UI renderer, fonts and style, the main window, the command line
 scripts: simulated mouse and keyboard input through the application's
 platform handler, finding widgets and text, screenshots of every window,
 and checks. A test application overrides `MakeContent` and `BuildSelfTest`
-and ends with `GENESIS_TEST_APP(Class)`. `FMapTestApp`
+and ends with `IMPLEMENT_TEST_APP(Class)`. `FMapTestApp`
 (`TestApps/MapTestCommon`) adds the map core, a document and its views; the
 demo scene of the framework apps is in `TestApps/DemoScene`. The shared
 MSBuild settings are `TestApps.props`, `DemoSceneTestApps.props` and

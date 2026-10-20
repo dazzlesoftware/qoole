@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // How the UI application gets its windows onto the screen without knowing
-// about the GPU (docs/GenesisUI.md §3: widgets never touch the GPU).
+// about the GPU (Engine/Documentation/Source/GenesisUI.md §3: widgets never touch the GPU).
 // SlateRHIRenderer's FSlateRHIRenderer implements it on the RHI; headless tests
 // use none or a recording fake.
 

@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-using namespace GenesisVk;
+using namespace VulkanDynamicAPI;
 
 void FVulkanCommandList::Begin(VkCommandBuffer InCommandBuffer)
 {

@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // FSlateApplication: the frame loop, the windows, and the only bridge from the
-// OS into widgets (docs/GenesisUI.md §7).
+// OS into widgets (Engine/Documentation/Source/GenesisUI.md §7).
 //
 // Frame (Tick):
 //   PumpMessages -> ProcessDeferredEvents (input -> events)

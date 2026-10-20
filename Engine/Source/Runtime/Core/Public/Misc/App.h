@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // application they run in (replacing AfxGetAppName and posting WM_QUIT to
 // AfxGetMainWnd).
 
-#include "Containers/GenesisString.h"
+#include "Containers/UnrealString.h"
 
 class FApp
 {

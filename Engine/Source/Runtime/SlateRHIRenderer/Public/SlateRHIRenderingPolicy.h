@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Draws FDrawElementLists through the RHI (docs/GenesisUI.md §5.2).
+// Draws FDrawElementLists through the RHI (Engine/Documentation/Source/GenesisUI.md §5.2).
 //
 // Per frame, between FRHIDevice::BeginFrame and EndFrame:
 //

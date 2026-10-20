@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// What the property grid edits (docs/GenesisUI.md §9). Until the object
+// What the property grid edits (Engine/Documentation/Source/GenesisUI.md §9). Until the object
 // model exists (§10) the editor describes each selected object by hand with
 // an IPropertySource; later the reflection system generates them.
 

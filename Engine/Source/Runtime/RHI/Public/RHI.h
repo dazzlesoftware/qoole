@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// A thin GPU abstraction (docs/GenesisUI.md §5.3): device + queue, one
+// A thin GPU abstraction (Engine/Documentation/Source/GenesisUI.md §5.3): device + queue, one
 // swapchain per platform window, buffers, 2D textures and render targets,
 // pipelines from precompiled shaders and a command list with
 // viewport/scissor/draw-indexed. Backends: D3D12 and Vulkan, chosen at

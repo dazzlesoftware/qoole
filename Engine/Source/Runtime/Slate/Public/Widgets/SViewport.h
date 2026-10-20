@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// SViewport hosts an IViewportClient (docs/GenesisUI.md §9): the client
+// SViewport hosts an IViewportClient (Engine/Documentation/Source/GenesisUI.md §9): the client
 // renders into a render target elsewhere (the UI never touches the GPU) and
 // gets the widget's input: mouse, keys, focus, cursor queries and, while it
 // holds the capture with FReply::UseHighPrecisionMouseMovement, raw mouse

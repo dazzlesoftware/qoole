@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Commands (docs/GenesisUI.md §9). A command is defined once in a binding
+// Commands (Engine/Documentation/Source/GenesisUI.md §9). A command is defined once in a binding
 // context: name, label, description, icon, kind, default key chord.
 // FUICommandList maps commands to actions (execute, can-execute, check
 // state, visibility). Menus, toolbars and keyboard shortcuts all read the

@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Drag and drop (docs/GenesisUI.md §7.5). A widget starts a drag from
+// Drag and drop (Engine/Documentation/Source/GenesisUI.md §7.5). A widget starts a drag from
 // OnDragDetected by returning FReply::Handled().BeginDragDrop(Operation).
 // While the drag is on, widgets under the pointer get OnDragEnter /
 // OnDragOver / OnDragLeave and the one released over gets OnDrop. The

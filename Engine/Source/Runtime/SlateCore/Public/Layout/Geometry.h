@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// FGeometry: where a widget is (docs/GenesisUI.md §6.4).
+// FGeometry: where a widget is (Engine/Documentation/Source/GenesisUI.md §6.4).
 //
 // Layout happens in logical units. A geometry is the widget's local size plus
 // the transform from its local space to window pixels ("absolute" space in

@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Per-widget style structs (docs/GenesisUI.md §8). Widgets take a pointer to
+// Per-widget style structs (Engine/Documentation/Source/GenesisUI.md §8). Widgets take a pointer to
 // one as an argument and fall back to the application style by name.
 
 #pragma once

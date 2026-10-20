@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Draw elements (docs/GenesisUI.md §5.1): what widgets emit when they paint.
+// Draw elements (Engine/Documentation/Source/GenesisUI.md §5.1): what widgets emit when they paint.
 // The renderer turns an FSlateWindowElementList into GPU batches.
 //
 // Geometry is given in logical units plus a transform to window pixels

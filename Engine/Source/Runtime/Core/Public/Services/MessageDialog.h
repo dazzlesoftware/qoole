@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // Modal message boxes, replacing direct MessageBox calls.
 
 #include "CoreTypes.h"
-#include "Containers/GenesisString.h"
+#include "Containers/UnrealString.h"
 
 enum class EMessageType : uint8
 {

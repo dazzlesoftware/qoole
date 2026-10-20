@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Style brushes (docs/GenesisUI.md §8). FSlateBrush describes how a
+// Style brushes (Engine/Documentation/Source/GenesisUI.md §8). FSlateBrush describes how a
 // rectangle is filled: nothing, a solid color, a rounded box with an
 // outline, or an image (stretched or 9-sliced).
 

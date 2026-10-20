@@ -2,7 +2,7 @@
 //
 // FSlateStyleSet: a named dictionary of style values (brushes, colors, fonts,
 // margins, widget style structs). Sets register by name; FAppStyle is the
-// one widgets fall back to (docs/GenesisUI.md §8).
+// one widgets fall back to (Engine/Documentation/Source/GenesisUI.md §8).
 //
 //   const FButtonStyle& Style = FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button");
 //

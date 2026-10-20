@@ -80,7 +80,7 @@ private:
 	bool bVisible = true;
 };
 
-// IME through IMM32 (docs/GenesisUI.md §4). The IME is disabled on our
+// IME through IMM32 (Engine/Documentation/Source/GenesisUI.md §4). The IME is disabled on our
 // windows unless a text context is active, so keys go straight to games and
 // viewports; while one is active the composition is drawn inline by the
 // widget and the candidate window follows its caret.
@@ -122,7 +122,7 @@ public:
 	ITextInputMethodSystem* GetTextInputMethodSystem() override { return &TextInputMethod; }
 
 	static LRESULT CALLBACK WndProc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam);
-	static const wchar_t* GetWindowClassName() { return L"GenesisWindow"; }
+	static const wchar_t* GetWindowClassName() { return L"UnrealWindow"; }
 
 private:
 	struct FDeferredMessage

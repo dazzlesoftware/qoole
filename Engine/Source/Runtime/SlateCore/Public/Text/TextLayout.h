@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// FTextLayout (docs/GenesisUI.md §8): text -> lines, with word wrapping,
+// FTextLayout (Engine/Documentation/Source/GenesisUI.md §8): text -> lines, with word wrapping,
 // justification and hit-testing (point -> caret index, caret index ->
 // rectangle, selection rectangles). Each line is shaped by the FSlateFontCache.
 //

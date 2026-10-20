@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Maps keys, gamepad buttons and sticks to navigation (docs/GenesisUI.md
+// Maps keys, gamepad buttons and sticks to navigation (Engine/Documentation/Source/GenesisUI.md
 // §7.4). Replaceable per application (FSlateApplication::SetNavigationConfig),
 // e.g. a game that wants WASD navigation.
 

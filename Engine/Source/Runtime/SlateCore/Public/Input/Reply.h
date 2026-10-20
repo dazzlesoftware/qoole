@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// What input handlers return (docs/GenesisUI.md §7.3): handled or not, plus
+// What input handlers return (Engine/Documentation/Source/GenesisUI.md §7.3): handled or not, plus
 // requests the application applies after routing. Widgets never change
 // focus, capture or drag state directly.
 //

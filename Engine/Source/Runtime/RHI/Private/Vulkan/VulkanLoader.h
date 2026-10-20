@@ -2,7 +2,7 @@
 //
 // Runtime loading of vulkan-1.dll. Nothing links against vulkan-1.lib: the
 // headers are used with VK_NO_PROTOTYPES and every entry point is a function
-// pointer in the GenesisVk namespace, fetched with vkGetInstanceProcAddr /
+// pointer in the VulkanDynamicAPI namespace, fetched with vkGetInstanceProcAddr /
 // vkGetDeviceProcAddr. Device-level pointers come from the one live device
 // (the Vulkan RHI supports a single device at a time).
 
@@ -14,16 +14,16 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 
-#define GENESIS_VK_GLOBAL_FUNCTIONS(X) \
+#define ENUM_VK_ENTRYPOINTS_BASE(X) \
 	X(vkCreateInstance) \
 	X(vkEnumerateInstanceExtensionProperties) \
 	X(vkEnumerateInstanceLayerProperties)
 
 // May be missing (Vulkan 1.0 loader).
-#define GENESIS_VK_GLOBAL_OPTIONAL_FUNCTIONS(X) \
+#define ENUM_VK_ENTRYPOINTS_OPTIONAL_BASE(X) \
 	X(vkEnumerateInstanceVersion)
 
-#define GENESIS_VK_INSTANCE_FUNCTIONS(X) \
+#define ENUM_VK_ENTRYPOINTS_INSTANCE(X) \
 	X(vkDestroyInstance) \
 	X(vkEnumeratePhysicalDevices) \
 	X(vkGetPhysicalDeviceProperties) \
@@ -41,12 +41,12 @@
 	X(vkGetPhysicalDeviceWin32PresentationSupportKHR)
 
 // VK_EXT_debug_utils; null unless the extension was enabled.
-#define GENESIS_VK_INSTANCE_OPTIONAL_FUNCTIONS(X) \
+#define ENUM_VK_ENTRYPOINTS_OPTIONAL_INSTANCE(X) \
 	X(vkCreateDebugUtilsMessengerEXT) \
 	X(vkDestroyDebugUtilsMessengerEXT) \
 	X(vkSetDebugUtilsObjectNameEXT)
 
-#define GENESIS_VK_DEVICE_FUNCTIONS(X) \
+#define ENUM_VK_ENTRYPOINTS_DEVICE(X) \
 	X(vkDestroyDevice) \
 	X(vkGetDeviceQueue) \
 	X(vkDeviceWaitIdle) \
@@ -118,16 +118,16 @@
 	X(vkCmdCopyImageToBuffer) \
 	X(vkCmdClearColorImage)
 
-namespace GenesisVk
+namespace VulkanDynamicAPI
 {
-#define GENESIS_VK_DECLARE(Name) extern PFN_##Name Name;
+#define DECLARE_VK_ENTRYPOINTS(Name) extern PFN_##Name Name;
 	extern PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
-	GENESIS_VK_GLOBAL_FUNCTIONS(GENESIS_VK_DECLARE)
-	GENESIS_VK_GLOBAL_OPTIONAL_FUNCTIONS(GENESIS_VK_DECLARE)
-	GENESIS_VK_INSTANCE_FUNCTIONS(GENESIS_VK_DECLARE)
-	GENESIS_VK_INSTANCE_OPTIONAL_FUNCTIONS(GENESIS_VK_DECLARE)
-	GENESIS_VK_DEVICE_FUNCTIONS(GENESIS_VK_DECLARE)
-#undef GENESIS_VK_DECLARE
+	ENUM_VK_ENTRYPOINTS_BASE(DECLARE_VK_ENTRYPOINTS)
+	ENUM_VK_ENTRYPOINTS_OPTIONAL_BASE(DECLARE_VK_ENTRYPOINTS)
+	ENUM_VK_ENTRYPOINTS_INSTANCE(DECLARE_VK_ENTRYPOINTS)
+	ENUM_VK_ENTRYPOINTS_OPTIONAL_INSTANCE(DECLARE_VK_ENTRYPOINTS)
+	ENUM_VK_ENTRYPOINTS_DEVICE(DECLARE_VK_ENTRYPOINTS)
+#undef DECLARE_VK_ENTRYPOINTS
 
 	// Loads vulkan-1.dll and the global entry points. Reference counted.
 	bool LoadVulkanLibrary();

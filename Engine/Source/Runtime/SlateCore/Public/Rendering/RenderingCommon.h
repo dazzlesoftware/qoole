@@ -3,7 +3,7 @@
 // Images and brushes as SlateCore sees them: CPU-side data only. The renderer
 // uploads an image the first time it is drawn (small images into shared atlas
 // pages, large ones into their own texture). Widgets never touch the GPU
-// (docs/GenesisUI.md §3).
+// (Engine/Documentation/Source/GenesisUI.md §3).
 
 #pragma once
 

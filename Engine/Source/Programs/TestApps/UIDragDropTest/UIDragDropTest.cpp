@@ -184,4 +184,4 @@ private:
 	int32 Drops = 0;
 };
 
-GENESIS_TEST_APP(FDragDropTestApp)
+IMPLEMENT_TEST_APP(FDragDropTestApp)

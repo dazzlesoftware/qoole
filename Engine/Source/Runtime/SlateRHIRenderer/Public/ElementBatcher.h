@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Turns an FSlateWindowElementList into batches (docs/GenesisUI.md §5.2):
+// Turns an FSlateWindowElementList into batches (Engine/Documentation/Source/GenesisUI.md §5.2):
 //
 //   1. stable-sort elements by layer (ties keep submission order),
 //   2. tessellate each into one vertex format, with a batch key

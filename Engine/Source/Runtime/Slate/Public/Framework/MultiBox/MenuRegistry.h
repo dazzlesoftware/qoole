@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// The named menu registry (docs/GenesisUI.md §9). Menus and toolbars are
+// The named menu registry (Engine/Documentation/Source/GenesisUI.md §9). Menus and toolbars are
 // lists of sections and entries registered by name ("MainMenu.File",
 // "MapView.Context", "LevelEditor.ToolBar"), built into widgets lazily when
 // they open, and extendable by name from anywhere, even before the owner

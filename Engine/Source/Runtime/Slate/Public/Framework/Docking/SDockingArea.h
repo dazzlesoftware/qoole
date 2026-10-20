@@ -84,7 +84,7 @@ private:
 	bool bPrimary = false;
 };
 
-// Drags a tab (docs/GenesisUI.md §9: tabs drag out into floating windows and
+// Drags a tab (Engine/Documentation/Source/GenesisUI.md §9: tabs drag out into floating windows and
 // dock back via drop targets).
 class FDockTabDragDrop final : public FDragDropOperation
 {

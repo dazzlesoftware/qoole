@@ -98,4 +98,4 @@ private:
 	FString LastCommit = "(nothing committed yet)";
 };
 
-GENESIS_TEST_APP(FTextTestApp)
+IMPLEMENT_TEST_APP(FTextTestApp)

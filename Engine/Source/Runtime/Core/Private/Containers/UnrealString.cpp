@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
-#include "Containers/GenesisString.h"
+#include "Containers/UnrealString.h"
 
 #include "Misc/StringFormat.h"
 

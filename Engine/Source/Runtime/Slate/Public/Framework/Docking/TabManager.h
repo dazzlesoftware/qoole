@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Docking (docs/GenesisUI.md §9).
+// Docking (Engine/Documentation/Source/GenesisUI.md §9).
 //
 // FTabManager owns tab spawners (tab id -> function making the tab) and the
 // live dock areas. A layout is a tree of areas (one per window: the primary

@@ -6,7 +6,7 @@
 
 #include "CoreTypes.h"
 #include "Containers/ContainerAliases.h"
-#include "Containers/GenesisString.h"
+#include "Containers/UnrealString.h"
 #include "Containers/Name.h"
 #include "Delegates/Delegate.h"
 #include "HAL/PlatformMisc.h"

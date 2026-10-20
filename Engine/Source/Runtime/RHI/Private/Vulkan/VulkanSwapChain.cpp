@@ -4,7 +4,7 @@
 
 #include "GenericPlatform/PlatformWindow.h"
 
-using namespace GenesisVk;
+using namespace VulkanDynamicAPI;
 
 FVulkanSwapChain::FVulkanSwapChain(FVulkanDevice& InDevice, IPlatformWindow& InWindow)
 	: FRHISwapChain(&InWindow)

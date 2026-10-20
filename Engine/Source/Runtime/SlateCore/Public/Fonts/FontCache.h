@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Fonts (docs/GenesisUI.md §5.4): FreeType rasterizes, HarfBuzz shapes.
+// Fonts (Engine/Documentation/Source/GenesisUI.md §5.4): FreeType rasterizes, HarfBuzz shapes.
 //
 // - FFontFace: one font file.
 // - FCompositeFont: a primary face plus fallbacks; text is split into runs by

@@ -248,4 +248,4 @@ private:
 	bool bSyncing = false;
 };
 
-GENESIS_TEST_APP(FPropertyGridTestApp)
+IMPLEMENT_TEST_APP(FPropertyGridTestApp)

@@ -212,4 +212,4 @@ private:
 	TSharedPtr<SBox> DockHost;
 };
 
-GENESIS_TEST_APP(FDockingTestApp)
+IMPLEMENT_TEST_APP(FDockingTestApp)

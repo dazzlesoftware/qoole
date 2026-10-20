@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// FSlateApplication: platform messages, input routing (docs/GenesisUI.md §7.2),
+// FSlateApplication: platform messages, input routing (Engine/Documentation/Source/GenesisUI.md §7.2),
 // replies, hover, capture, cursors and drag and drop.
 
 #include "SlateApplicationPrivate.h"

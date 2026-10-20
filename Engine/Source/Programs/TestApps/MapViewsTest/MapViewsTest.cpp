@@ -182,4 +182,4 @@ private:
 	FVector2 OriginBefore;
 };
 
-GENESIS_TEST_APP(FMapViewsTestApp)
+IMPLEMENT_TEST_APP(FMapViewsTestApp)

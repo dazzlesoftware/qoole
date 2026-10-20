@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Editable text (docs/GenesisUI.md §8): caret, selection, word movement,
+// Editable text (Engine/Documentation/Source/GenesisUI.md §8): caret, selection, word movement,
 // undo/redo, clipboard, horizontal scrolling, password masking, optional
 // multiple lines, and IME composition drawn inline at the caret.
 //

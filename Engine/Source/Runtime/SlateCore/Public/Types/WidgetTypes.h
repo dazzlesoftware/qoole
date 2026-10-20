@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // Small enums shared by the widget core and the widgets
-// (docs/GenesisUI.md §6).
+// (Engine/Documentation/Source/GenesisUI.md §6).
 
 #pragma once
 

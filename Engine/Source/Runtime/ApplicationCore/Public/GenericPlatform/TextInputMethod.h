@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // Input method editors (IME) for languages typed through composition
-// (Chinese, Japanese, Korean...), docs/GenesisUI.md §4.
+// (Chinese, Japanese, Korean...), Engine/Documentation/Source/GenesisUI.md §4.
 //
 // A text widget that has focus activates its ITextInputMethodContext. While
 // the user composes, the platform reports the composition string; the widget

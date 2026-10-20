@@ -177,4 +177,4 @@ private:
 	TSharedPtr<STreeView<TSharedPtr<FMapNode>>> Tree;
 };
 
-GENESIS_TEST_APP(FListsTestApp)
+IMPLEMENT_TEST_APP(FListsTestApp)

@@ -5,7 +5,7 @@
 #include <cstring>
 #include <string>
 
-using namespace GenesisVk;
+using namespace VulkanDynamicAPI;
 
 // ---------------------------------------------------------------------------
 // FVulkanBuffer

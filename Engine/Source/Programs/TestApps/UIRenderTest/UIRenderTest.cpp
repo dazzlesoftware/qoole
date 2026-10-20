@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // UIRenderTest: the UI renderer on its own (milestone 2 of
-// docs/GenesisUI.md). One widget fills the window and paints the draw
+// Engine/Documentation/Source/GenesisUI.md). One widget fills the window and paints the draw
 // element showcase: boxes, images and 9-slices, rounded boxes, lines,
 // clipping, shaped text and a render target drawn into each frame. The
 // mouse wheel scrolls the clipped list.
@@ -217,4 +217,4 @@ private:
 	float ScrollBefore = 0.0f;
 };
 
-GENESIS_TEST_APP(FRenderTestApp)
+IMPLEMENT_TEST_APP(FRenderTestApp)

@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // TAttribute<T> holds either a value or a binding: a function returning T
-// (docs/GenesisUI.md §6.3).
+// (Engine/Documentation/Source/GenesisUI.md §6.3).
 //
 //   TAttribute<FString> A = "Fixed";
 //   TAttribute<FString> B = [this] { return Name; };          // binding

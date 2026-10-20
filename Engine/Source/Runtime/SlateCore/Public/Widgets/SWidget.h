@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// SWidget: the base of every widget (docs/GenesisUI.md §6).
+// SWidget: the base of every widget (Engine/Documentation/Source/GenesisUI.md §6).
 //
 // Layout and paint are retained (§6.4):
 //
@@ -262,7 +262,7 @@ public:
 	void RegisterBoundAttribute(FWidgetAttributeBase* Attribute);
 	void UnregisterBoundAttribute(FWidgetAttributeBase* Attribute);
 
-	// --- Input (docs/GenesisUI.md §7) -------------------------------------
+	// --- Input (Engine/Documentation/Source/GenesisUI.md §7) -------------------------------------
 
 	// Pointer events tunnel root -> leaf (preview) and then bubble leaf -> root.
 	virtual FReply OnPreviewMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) { (void)Geometry; (void)Event; return FReply::Unhandled(); }

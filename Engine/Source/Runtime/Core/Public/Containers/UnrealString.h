@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// FString: a UTF-8 string backed by std::u8string (docs/GenesisUI.md §2).
+// FString: a UTF-8 string backed by std::u8string (Engine/Documentation/Source/GenesisUI.md §2).
 //
 // Plain char literals and std::string are accepted and assumed to be UTF-8
 // (all modules compile with /utf-8). Lengths and indices are in bytes; use

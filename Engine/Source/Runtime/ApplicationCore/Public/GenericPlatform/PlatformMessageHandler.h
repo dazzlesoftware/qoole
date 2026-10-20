@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Callbacks from the platform layer to the application (docs/GenesisUI.md §4).
+// Callbacks from the platform layer to the application (Engine/Documentation/Source/GenesisUI.md §4).
 // Positions are client-area pixels of the given window. Every input callback
 // returns whether it was handled.
 //

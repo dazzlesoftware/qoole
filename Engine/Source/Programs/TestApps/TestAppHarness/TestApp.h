@@ -20,7 +20,7 @@
 //
 // A test application derives from FTestApp, builds its window content in
 // MakeContent, writes its script in BuildSelfTest, and ends its .cpp with
-// GENESIS_TEST_APP(FMyTestApp).
+// IMPLEMENT_TEST_APP(FMyTestApp).
 
 #pragma once
 
@@ -218,7 +218,7 @@ private:
 // The program's entry point for a test application class.
 int32 RunTestApp(const TSharedRef<FTestApp>& App);
 
-#define GENESIS_TEST_APP(AppClass) \
+#define IMPLEMENT_TEST_APP(AppClass) \
 	int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) \
 	{ \
 		return RunTestApp(TSharedRef<FTestApp>(std::make_shared<AppClass>())); \

@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// Declarative widget construction (docs/GenesisUI.md §6.5).
+// Declarative widget construction (Engine/Documentation/Source/GenesisUI.md §6.5).
 //
 //   SNew(SButton).Text("OK").OnClicked(this, &SDialog::OnOk)
 //   SAssignNew(Button, SButton).Text("OK")

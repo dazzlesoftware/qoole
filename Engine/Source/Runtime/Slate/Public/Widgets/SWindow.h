@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// SWindow: the root of a widget tree (docs/GenesisUI.md §6.6). It owns an
+// SWindow: the root of a widget tree (Engine/Documentation/Source/GenesisUI.md §6.6). It owns an
 // IPlatformWindow and draws its content plus popup layers on top of it
 // (menus, tooltips, the drag-and-drop decorator), which live inside the
 // window's client area.

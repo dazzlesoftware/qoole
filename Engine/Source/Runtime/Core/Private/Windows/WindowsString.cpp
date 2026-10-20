@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // FString conversions to and from the Windows ANSI code page.
 
-#include "Containers/GenesisString.h"
+#include "Containers/UnrealString.h"
 #include "Windows/WindowsPlatform.h"
 
 FString FString::FromAnsi(std::string_view Text)

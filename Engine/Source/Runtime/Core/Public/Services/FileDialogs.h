@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // File and folder pickers, replacing CDirDialog and CFileDialog.
 
 #include "Containers/ContainerAliases.h"
-#include "Containers/GenesisString.h"
+#include "Containers/UnrealString.h"
 
 // One entry of a picker's file type list, e.g. { "Maps", "*.qle;*.map" }.
 struct FFileTypeFilter

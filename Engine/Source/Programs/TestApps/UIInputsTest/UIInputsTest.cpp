@@ -188,4 +188,4 @@ private:
 	FColor StartColor;
 };
 
-GENESIS_TEST_APP(FInputsTestApp)
+IMPLEMENT_TEST_APP(FInputsTestApp)

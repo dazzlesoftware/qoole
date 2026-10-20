@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // The draw-element showcase of UIRenderTest (milestone 2 of
-// docs/GenesisUI.md): boxes, 9-slices, rounded boxes, lines, clipping,
+// Engine/Documentation/Source/GenesisUI.md): boxes, 9-slices, rounded boxes, lines, clipping,
 // shaped text and a render-target viewport, built directly from draw
 // elements, without widgets.
 
