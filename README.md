@@ -45,9 +45,16 @@ applications, `EngineTests.exe` and `GenesisTests.exe` are written to
 `GenesisEditor.exe` is built on Genesis UI and draws through Direct3D 12 or
 Vulkan:
 
-- Four docked map views (top, front, side, and 3D in wireframe or with
-  solid faces), an outliner, properties, prefabs, settings and a log, with
-  menus, a toolbar and rebindable shortcuts.
+- A viewport laid out like Unreal's: one to four panes in Unreal's twelve
+  arrangements (four by default: top, perspective, front, right), any pane
+  maximized. Each pane has its own toolbar: tools, grid and rotation
+  snapping, viewport type (perspective, top, bottom, left, right, front,
+  back; Alt+G/J/K/H, with Shift for the opposite side), field of view,
+  camera speed, view mode (Lit, Unlit, Wireframe; Alt+4/3/2), show flags
+  and settings. Perspective panes have a ground grid, fly with right drag
+  and W/A/S/D (the wheel sets the speed), and orbit, dolly and pan with
+  Alt + left, right and middle drag. Plus an outliner, properties, prefabs,
+  settings and a log, with menus, a toolbar and rebindable shortcuts.
 - Tools: select and move (snapped to the grid), rotate, scale, clip, and
   vertex, edge and face editing. Cut, copy, paste, duplicate and delete;
   groups, and editing inside a group; hollow, subtract and intersect;
@@ -92,7 +99,7 @@ HarfBuzz, doctest, Vulkan headers) are vendored in
     monitors), `UIViewportTest` (an RHI viewport), `UIPropertyGridTest`,
     `UICommandsTest` (commands, menu bar, toolbar, key bindings) and
     `UIDockingTest`.
-  - The map editor: `MapViewsTest` (the four views and the grid) and
+  - The map editor: `MapViewsTest` (the viewport layout, its toolbars and the grid) and
     `MapToolsTest` (the editing tools, brush operations, undo, saving).
 
   They share a harness (`TestAppHarness`) and take the editor's `-vulkan`,

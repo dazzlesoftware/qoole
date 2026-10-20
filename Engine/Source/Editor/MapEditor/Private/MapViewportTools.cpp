@@ -246,9 +246,9 @@ void FMapViewportClient::UpdateToolDrag(FVector2 Local, const FPointerEvent& Eve
 		float Angle = ScreenAngle(PivotLocal, Local) - ScreenAngle(PivotLocal, DragStart);
 		while (Angle > 180.0f) Angle -= 360.0f;
 		while (Angle < -180.0f) Angle += 360.0f;
-		if (bSnap && Settings.RotateSnapDegrees > 0.0f)
+		if (bSnap && Settings.GetRotateSnap() > 0.0f)
 		{
-			Angle = std::round(Angle / Settings.RotateSnapDegrees) * Settings.RotateSnapDegrees;
+			Angle = std::round(Angle / Settings.GetRotateSnap()) * Settings.GetRotateSnap();
 		}
 		const float Step = Angle - RotateApplied;
 		if (Step != 0.0f)

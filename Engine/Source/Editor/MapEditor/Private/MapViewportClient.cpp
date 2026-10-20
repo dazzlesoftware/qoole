@@ -14,6 +14,7 @@
 #include "Shaders/MapShaders_PSColor_SPIRV.h"
 #include "Shaders/MapShaders_VSMain_SPIRV.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -25,8 +26,35 @@ const char* ToString(EMapViewType Type)
 	{
 	case EMapViewType::Top: return "Top";
 	case EMapViewType::Front: return "Front";
-	case EMapViewType::Side: return "Side";
-	case EMapViewType::Perspective: return "3D";
+	case EMapViewType::Right: return "Right";
+	case EMapViewType::Perspective: return "Perspective";
+	case EMapViewType::Bottom: return "Bottom";
+	case EMapViewType::Back: return "Back";
+	case EMapViewType::Left: return "Left";
+	case EMapViewType::Count: break;
+	}
+	return "?";
+}
+
+TOptional<EMapViewType> MapViewTypeFromString(const FString& Name)
+{
+	for (int32 Index = 0; Index < static_cast<int32>(EMapViewType::Count); ++Index)
+	{
+		if (Name.Equals(ToString(static_cast<EMapViewType>(Index)), ESearchCase::IgnoreCase))
+		{
+			return static_cast<EMapViewType>(Index);
+		}
+	}
+	return {};
+}
+
+const char* ToString(EMapViewMode Mode)
+{
+	switch (Mode)
+	{
+	case EMapViewMode::Wireframe: return "Wireframe";
+	case EMapViewMode::Unlit: return "Unlit";
+	case EMapViewMode::Lit: return "Lit";
 	}
 	return "?";
 }
@@ -40,7 +68,11 @@ namespace
 	constexpr float MinZoom = 0.02f;
 	constexpr float MaxZoom = 16.0f;
 	constexpr float LookSpeed = 0.0035f;  // radians per raw mouse count
-	constexpr float FlySpeed = 640.0f;    // map units per second
+	constexpr float OrbitSpeed = 0.008f;  // radians per logical pixel
+	constexpr float FlySpeed = 640.0f;    // map units per second, at camera speed 1
+	constexpr float FocusDistance = 512.0f; // what a 3D camera looks at, without a selection ahead
+	constexpr float NearPlane = 2.0f;     // the perspective grid stops there
+	const Vector3d DefaultCameraOffset(-384.0f, -384.0f, 256.0f); // 3D camera from what it looks at
 
 	// Palette entries the editor draws with, besides View's VRC_* colors.
 	constexpr int ColorGridMinor = 252;
@@ -116,6 +148,45 @@ namespace
 		static const FTurnSigns Signs;
 		return Signs;
 	}
+
+	// How a 2D view of a type looks at the map.
+	SphrVector OrthoOrientation(EMapViewType Type)
+	{
+		const FTurnSigns& Signs = GetTurnSigns();
+		SphrVector Orientation;
+		switch (Type)
+		{
+		case EMapViewType::Top: Orientation.NewVector(0.0f, Signs.Pitch * DEG2RAD(-90.0f), 0.0f); break;
+		case EMapViewType::Bottom: Orientation.NewVector(0.0f, Signs.Pitch * DEG2RAD(90.0f), 0.0f); break;
+		case EMapViewType::Front: Orientation.NewVector(0.0f, 0.0f, 0.0f); break;
+		case EMapViewType::Back: Orientation.NewVector(DEG2RAD(180.0f), 0.0f, 0.0f); break;
+		case EMapViewType::Right: Orientation.NewVector(Signs.Yaw * DEG2RAD(-90.0f), 0.0f, 0.0f); break;
+		case EMapViewType::Left: Orientation.NewVector(Signs.Yaw * DEG2RAD(90.0f), 0.0f, 0.0f); break;
+		default: break;
+		}
+		return Orientation;
+	}
+
+	Vector3d Normalized(Vector3d V)
+	{
+		const float Length = V.GetMag();
+		if (Length > 1e-6f)
+		{
+			V.MultVector(1.0f / Length);
+		}
+		return V;
+	}
+
+	// While it lives, the map core's entity display (a global) follows a view's show flag.
+	class FScopedEntityDisplay
+	{
+	public:
+		explicit FScopedEntityDisplay(bool bShow) : bWasShown(View::EntitiesDisplayed()) { View::DisplayEntities(bShow); }
+		~FScopedEntityDisplay() { View::DisplayEntities(bWasShown); }
+
+	private:
+		bool bWasShown;
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -207,13 +278,170 @@ void FMapViewportClient::SetDocument(FMapDocument* InDocument)
 	RequestRedraw();
 }
 
-void FMapViewportClient::SetRenderMode(EMapRenderMode Mode)
+void FMapViewportClient::ViewChanged()
 {
-	if (RenderMode != Mode)
+	OnViewChanged.Broadcast();
+	RequestRedraw();
+}
+
+void FMapViewportClient::SetViewMode(EMapViewMode Mode)
+{
+	// Kept by orthographic views too, for when they turn perspective.
+	if (ViewMode != Mode)
 	{
-		RenderMode = Mode;
-		RequestRedraw();
+		ViewMode = Mode;
+		ViewChanged();
 	}
+}
+
+void FMapViewportClient::SetShowFlags(const FMapShowFlags& Flags)
+{
+	if (!(ShowFlags == Flags))
+	{
+		ShowFlags = Flags;
+		ViewChanged();
+	}
+}
+
+void FMapViewportClient::SetViewFOV(float Degrees)
+{
+	Degrees = FMath::Clamp(Degrees, MinViewFOV, MaxViewFOV);
+	if (ViewFOV != Degrees)
+	{
+		ViewFOV = Degrees;
+		UpdateProjection();
+		ViewChanged();
+	}
+}
+
+void FMapViewportClient::SetCameraSpeed(float Speed)
+{
+	Speed = FMath::Clamp(Speed, MinCameraSpeed, MaxCameraSpeed);
+	if (CameraSpeed != Speed)
+	{
+		CameraSpeed = Speed;
+		ViewChanged();
+	}
+}
+
+void FMapViewportClient::SetViewportType(EMapViewType InType)
+{
+	if (InType == Type || InType == EMapViewType::Count)
+	{
+		return;
+	}
+	if (!MapView || !Document)
+	{
+		Type = InType;
+		ViewChanged();
+		return;
+	}
+	if (Drag != EDrag::None)
+	{
+		OnMouseCaptureLost();
+	}
+	bHasClipLine = false;
+	GrabbedDot = EDot::None;
+
+	// Keep what the camera looks at and about as much of the map in view:
+	// a 2D view's half width at its zoom is a 3D camera's distance times
+	// tan(FOV / 2).
+	const TSharedPtr<SViewport> Widget = GetViewport();
+	const FVector2 LocalSize = Widget ? Widget->GetCachedGeometry().GetLocalSize() : FVector2(512.0f, 512.0f);
+	const float HalfWidth = FMath::Max(FMath::Max(LocalSize.X, LocalSize.Y) * 0.5f, 16.0f);
+	const float TanHalfFOV = std::tan(DEG2RAD(ViewFOV * 0.5f));
+	const bool bWasPerspective = IsPerspective();
+	float Distance = 0.0f;
+	const Vector3d Focus = GetFocusPoint(&Distance);
+	Type = InType;
+	if (IsPerspective() && !bWasPerspective)
+	{
+		Distance = FMath::Clamp(HalfWidth / Zoom / TanHalfFOV, 64.0f, 6000.0f);
+	}
+	else if (!IsPerspective() && bWasPerspective)
+	{
+		Zoom = FMath::Clamp(HalfWidth / FMath::Max(Distance * TanHalfFOV, 1.0f), MinZoom, MaxZoom);
+	}
+	PlaceCamera(Focus, Distance);
+	ViewChanged();
+}
+
+void FMapViewportClient::PlaceCamera(const Vector3d& Center, float Distance)
+{
+	Vector3d Position(Center);
+	SphrVector Orientation;
+	if (IsPerspective())
+	{
+		const Vector3d Back = Normalized(DefaultCameraOffset);
+		Vector3d Offset(Back);
+		Offset.MultVector(Distance);
+		Position.AddVector(Offset);
+		Vector3d Front(Back);
+		Front.MultVector(-1.0f);
+		Orientation.NewVector(Front, Vector3d(0.0f, 0.0f, 1.0f));
+		Yaw = Orientation.GetYaw();
+		Pitch = Orientation.GetPitch();
+	}
+	else
+	{
+		Orientation = OrthoOrientation(Type);
+	}
+	MapView->SetNewView(Document->GetScope(), Document->GetSelector(), true, &Position, &Orientation, IsPerspective(), 1,
+		IsPerspective() ? ClipDepth3D : ClipDepth2D);
+	UpdateProjection();
+	RequestRedraw();
+}
+
+Vector3d FMapViewportClient::GetFocusPoint(float* OutDistance) const
+{
+	if (!MapView)
+	{
+		if (OutDistance)
+		{
+			*OutDistance = FocusDistance;
+		}
+		return Vector3d(0.0f, 0.0f, 0.0f);
+	}
+	const Vector3d Position = MapView->GetPosition();
+	if (!IsPerspective())
+	{
+		if (OutDistance)
+		{
+			*OutDistance = 0.0f;
+		}
+		return Position;
+	}
+	const Vector3d Forward = Normalized(ViewToScope(Vector3d(0.0f, 1.0f, 0.0f)));
+	float Distance = FocusDistance;
+	Vector3d Min, Max;
+	if (Document && Document->GetSelectionBounds(Min, Max))
+	{
+		Vector3d Center(Min);
+		Center.AddVector(Max).MultVector(0.5f);
+		Center.SubVector(Position);
+		const float Ahead = Center.DotVector(Forward);
+		if (Ahead > 32.0f)
+		{
+			Distance = Ahead;
+		}
+	}
+	if (OutDistance)
+	{
+		*OutDistance = Distance;
+	}
+	Vector3d Focus(Forward);
+	Focus.MultVector(Distance);
+	return Focus.AddVector(Position);
+}
+
+int32 FMapViewportClient::GetDepthAxis() const
+{
+	if (!MapView || IsPerspective())
+	{
+		return 2;
+	}
+	float Sign;
+	return DominantAxis(ViewToScope(Vector3d(0.0f, 1.0f, 0.0f)), Sign);
 }
 
 void FMapViewportClient::OnDocumentChanged(EMapChange Change)
@@ -285,29 +513,8 @@ void FMapViewportClient::ResetCamera()
 	{
 		return;
 	}
-	Vector3d Position(0.0f, 0.0f, 0.0f);
-	SphrVector Orientation;
-	switch (Type)
-	{
-	case EMapViewType::Top: Orientation.NewVector(0.0f, DEG2RAD(-90.0f), 0.0f); break;
-	case EMapViewType::Front: Orientation.NewVector(0.0f, 0.0f, 0.0f); break;
-	case EMapViewType::Side: Orientation.NewVector(DEG2RAD(-90.0f), 0.0f, 0.0f); break;
-	case EMapViewType::Perspective:
-	{
-		const Vector3d Offset(-384.0f, -384.0f, 256.0f);
-		Position = Offset;
-		Vector3d Front(Offset);
-		Front.MultVector(-1.0f);
-		Orientation.NewVector(Front, Vector3d(0.0f, 0.0f, 1.0f));
-		Yaw = Orientation.GetYaw();
-		Pitch = Orientation.GetPitch();
-		break;
-	}
-	}
 	Zoom = 0.5f;
-	MapView->SetNewView(Document->GetScope(), Document->GetSelector(), true, &Position, &Orientation, IsPerspective(), 1,
-		IsPerspective() ? ClipDepth3D : ClipDepth2D);
-	RequestRedraw();
+	PlaceCamera(Vector3d(0.0f, 0.0f, 0.0f), DefaultCameraOffset.GetMag());
 }
 
 float FMapViewportClient::GetDpiScale() const
@@ -321,16 +528,24 @@ float FMapViewportClient::GetDrawZoom() const
 	return IsPerspective() ? 1.0f : Zoom * GetDpiScale();
 }
 
+float FMapViewportClient::GetWindowWidth() const
+{
+	// Half the larger side, in map units for 2D views; for 3D views the
+	// distance at which that half spans the field of view, in pixels.
+	const FIntPoint PixelSize = GetSize();
+	const float Half = static_cast<float>(FMath::Max(FMath::Max(PixelSize.X, PixelSize.Y), 1)) * 0.5f;
+	const float Width = IsPerspective() ? Half / std::tan(DEG2RAD(ViewFOV * 0.5f)) : Half / GetDrawZoom();
+	return static_cast<float>(FMath::Max(1, static_cast<int>(Width)));
+}
+
 void FMapViewportClient::UpdateProjection()
 {
 	const FIntPoint PixelSize = GetSize();
-	const int Width = FMath::Max(PixelSize.X, 1);
-	const int Height = FMath::Max(PixelSize.Y, 1);
-	MapDraw->Size(Width, Height);
+	MapDraw->Size(FMath::Max(PixelSize.X, 1), FMath::Max(PixelSize.Y, 1));
 	DrawZoom = GetDrawZoom();
 	if (MapView)
 	{
-		MapView->SetWindowWidth(FMath::Max(1, static_cast<int>(static_cast<float>(FMath::Max(Width, Height)) / (2.0f * DrawZoom))));
+		MapView->SetWindowWidth(static_cast<int>(GetWindowWidth()));
 	}
 }
 
@@ -399,7 +614,7 @@ bool FMapViewportClient::MapToScreen(const Vector3d& Point, FVector2& OutLocal) 
 		{
 			return false;
 		}
-		const float WinWidth = static_cast<float>(FMath::Max(PixelSize.X, PixelSize.Y)) * 0.5f;
+		const float WinWidth = GetWindowWidth();
 		X = X * WinWidth / InView.GetY();
 		Y = Y * WinWidth / InView.GetY();
 	}
@@ -494,9 +709,9 @@ void FMapViewportClient::FrameSelection()
 
 	if (IsPerspective())
 	{
-		// Back off along the view direction until the bounds fit (90 degree field of view).
-		Vector3d Back = ViewToScope(Vector3d(0.0f, -1.0f, 0.0f));
-		Back.MultVector(Radius * 1.6f);
+		// Back off along the view direction until the bounds fit the field of view.
+		Vector3d Back = Normalized(ViewToScope(Vector3d(0.0f, -1.0f, 0.0f)));
+		Back.MultVector(Radius * 1.15f / std::sin(DEG2RAD(ViewFOV * 0.5f)));
 		Vector3d Position(Center);
 		Position.AddVector(Back);
 		MapView->SetPosition(Position);
@@ -531,6 +746,7 @@ FReply FMapViewportClient::OnMouseButtonDown(const FGeometry& Geometry, const FP
 	const FVector2 Local = Geometry.AbsoluteToLocal(Event.GetAbsolutePosition());
 	DragStart = DragLast = Local;
 	DragButton = Event.GetEffectingButton();
+	bAltDrag = IsPerspective() && Event.IsAltDown();
 	switch (DragButton)
 	{
 	case EMouseButton::Left:
@@ -545,6 +761,11 @@ FReply FMapViewportClient::OnMouseButtonDown(const FGeometry& Geometry, const FP
 		Drag = EDrag::Pan;
 		return FReply::Handled().CaptureMouse(Self);
 	case EMouseButton::Right:
+		if (bAltDrag)
+		{
+			Drag = EDrag::Dolly;
+			return FReply::Handled().CaptureMouse(Self);
+		}
 		if (IsPerspective())
 		{
 			Drag = EDrag::Look;
@@ -619,12 +840,21 @@ FReply FMapViewportClient::OnMouseMove(const FGeometry& Geometry, const FPointer
 			return FReply::Handled();
 		}
 		UpdateProjection();
+		if (bAltDrag)
+		{
+			// Alt + left drag in 3D turns the camera about what it looks at.
+			Drag = EDrag::Orbit;
+			OrbitPivot = GetFocusPoint(&OrbitDistance);
+			Orbit(Local - DragStart);
+			return FReply::Handled();
+		}
 		if (BeginToolDrag(Local, Event))
 		{
 			return FReply::Handled();
 		}
 		float X, Y;
 		ToScreen(DragStart, X, Y);
+		const FScopedEntityDisplay Entities(ShowFlags.bEntities);
 		const bool bOnSelection = !IsPerspective() && !Event.IsShiftDown() && !Event.IsControlDown()
 			&& Document->GetSelector().GetNumMSelectedObjects() > 0 && MapView->IsMultiSelectionHit(X, Y);
 		if (bOnSelection)
@@ -652,7 +882,13 @@ FReply FMapViewportClient::OnMouseMove(const FGeometry& Geometry, const FPointer
 		UpdateMove(Local, Settings.bSnapToGrid && !Event.IsAltDown());
 		return FReply::Handled();
 	case EDrag::Pan:
-		PanBy(Delta);
+		PanBy(DragButton == EMouseButton::Middle && Settings.bInvertMiddleMousePan ? Delta * -1.0f : Delta);
+		return FReply::Handled();
+	case EDrag::Orbit:
+		Orbit(Delta);
+		return FReply::Handled();
+	case EDrag::Dolly:
+		Dolly(Delta.X - Delta.Y);
 		return FReply::Handled();
 	case EDrag::Rotate:
 	case EDrag::Scale:
@@ -673,9 +909,16 @@ FReply FMapViewportClient::OnMouseWheel(const FGeometry& Geometry, const FPointe
 		return FReply::Unhandled();
 	}
 	const float Wheel = Event.GetWheelDelta();
+	if (bLooking)
+	{
+		// While looking around, the wheel sets how fast W/A/S/D fly.
+		SetCameraSpeed(CameraSpeed * std::pow(1.25f, Wheel));
+		Message(FString::Format("Camera speed {:.2f}", CameraSpeed));
+		return FReply::Handled();
+	}
 	if (IsPerspective())
 	{
-		MapView->MoveRelPosition(Vector3d(0.0f, Wheel * 96.0f, 0.0f));
+		MapView->MoveRelPosition(Vector3d(0.0f, Wheel * 96.0f * FMath::Sqrt(CameraSpeed), 0.0f));
 		RequestRedraw();
 		return FReply::Handled();
 	}
@@ -699,11 +942,32 @@ FReply FMapViewportClient::OnRawMouseMove(FVector2 Delta)
 		return FReply::Unhandled();
 	}
 	const FTurnSigns& Signs = GetTurnSigns();
-	Yaw += Signs.Yaw * Delta.X * LookSpeed;
-	Pitch = FMath::Clamp(Pitch - Signs.Pitch * Delta.Y * LookSpeed, DEG2RAD(-89.0f), DEG2RAD(89.0f));
+	const float Speed = LookSpeed * Settings.MouseSensitivity;
+	Yaw += Signs.Yaw * Delta.X * Speed;
+	Pitch = FMath::Clamp(Pitch - Signs.Pitch * Delta.Y * Speed, DEG2RAD(-89.0f), DEG2RAD(89.0f));
 	MapView->SetOrientation(SphrVector(Yaw, Pitch, 0.0f));
 	RequestRedraw();
 	return FReply::Handled();
+}
+
+void FMapViewportClient::Orbit(FVector2 Delta)
+{
+	const FTurnSigns& Signs = GetTurnSigns();
+	const float Speed = OrbitSpeed * Settings.MouseSensitivity;
+	Yaw += Signs.Yaw * Delta.X * Speed;
+	Pitch = FMath::Clamp(Pitch - Signs.Pitch * Delta.Y * Speed, DEG2RAD(-89.0f), DEG2RAD(89.0f));
+	MapView->SetOrientation(SphrVector(Yaw, Pitch, 0.0f));
+	Vector3d Back = Normalized(ViewToScope(Vector3d(0.0f, -1.0f, 0.0f)));
+	Back.MultVector(OrbitDistance);
+	Vector3d Position(OrbitPivot);
+	MapView->SetPosition(Position.AddVector(Back));
+	RequestRedraw();
+}
+
+void FMapViewportClient::Dolly(float Delta)
+{
+	MapView->MoveRelPosition(Vector3d(0.0f, Delta * 2.0f * FMath::Sqrt(CameraSpeed), 0.0f));
+	RequestRedraw();
 }
 
 void FMapViewportClient::OnMouseLeave(const FPointerEvent&)
@@ -780,7 +1044,9 @@ FCursorReply FMapViewportClient::OnCursorQuery(const FGeometry&, const FPointerE
 	switch (Drag)
 	{
 	case EDrag::Move: return FCursorReply::Cursor(EMouseCursor::CardinalCross);
-	case EDrag::Pan: return FCursorReply::Cursor(EMouseCursor::GrabHand);
+	case EDrag::Pan:
+	case EDrag::Orbit:
+	case EDrag::Dolly: return FCursorReply::Cursor(EMouseCursor::GrabHand);
 	case EDrag::Look: return FCursorReply::Cursor(EMouseCursor::None);
 	default: break;
 	}
@@ -790,6 +1056,7 @@ FCursorReply FMapViewportClient::OnCursorQuery(const FGeometry&, const FPointerE
 void FMapViewportClient::SelectAt(FVector2 Local, const FPointerEvent& Event)
 {
 	UpdateProjection(); // the view may have zoomed since it last drew
+	const FScopedEntityDisplay Entities(ShowFlags.bEntities);
 	float X, Y;
 	ToScreen(Local, X, Y);
 	if (Event.IsControlDown() || Event.IsShiftDown())
@@ -808,6 +1075,7 @@ void FMapViewportClient::SelectAt(FVector2 Local, const FPointerEvent& Event)
 void FMapViewportClient::UpdateBoxSelection(bool bFinal)
 {
 	UpdateProjection(); // the view may have zoomed since it last drew
+	const FScopedEntityDisplay Entities(ShowFlags.bEntities);
 	float X1, Y1, X2, Y2;
 	ToScreen(DragStart, X1, Y1);
 	ToScreen(DragLast, X2, Y2);
@@ -895,7 +1163,7 @@ void FMapViewportClient::Fly(float DeltaSeconds)
 	if (Held(EKey::E, EKey::E)) Move.SetZ(Move.GetZ() + 1.0f);
 	if (Held(EKey::Q, EKey::Q)) Move.SetZ(Move.GetZ() - 1.0f);
 	const bool bFast = Held(EKey::LeftShift, EKey::RightShift);
-	Move.MultVector(FlySpeed * (bFast ? 4.0f : 1.0f) * FMath::Min(DeltaSeconds, 0.1f));
+	Move.MultVector(FlySpeed * CameraSpeed * (bFast ? 4.0f : 1.0f) * FMath::Min(DeltaSeconds, 0.1f));
 	MapView->MoveRelPosition(Move);
 }
 
@@ -965,6 +1233,156 @@ void FMapViewportClient::DrawGrid(FMapDraw& Draw)
 	Draw.Line(0, AxisY, static_cast<int>(Width), AxisY);
 }
 
+void FMapViewportClient::DrawPerspectiveGrid(FMapDraw& Draw, bool bDepthTested)
+{
+	// Lines on the ground plane (z = 0) around the camera, clipped to the
+	// near plane in view space and projected like the map core does.
+	const FIntPoint PixelSize = GetSize();
+	const float OrgX = static_cast<float>(FMath::Max(PixelSize.X, 1) / 2);
+	const float OrgY = static_cast<float>(FMath::Max(PixelSize.Y, 1) / 2);
+	const float WinWidth = GetWindowWidth();
+	Matrix44 ToView;
+	MapView->CalInvTransSpaceMatrix(ToView.SetIdentity());
+
+	const Vector3d& Camera = MapView->GetPosition();
+	const float Height = FMath::Max(FMath::Abs(Camera.GetZ()), 1.0f);
+	float Step = FMath::Max(Settings.GridSize, 1.0f);
+	while (Step < Height / 12.0f)
+	{
+		Step *= 2.0f;
+	}
+	const float Major = Step * 8.0f;
+	const int32 Lines = 48;
+	const float Extent = Step * static_cast<float>(Lines);
+	const float CenterX = std::round(Camera.GetX() / Step) * Step;
+	const float CenterY = std::round(Camera.GetY() / Step) * Step;
+
+	const auto Segment = [&](Vector3d A, Vector3d B)
+	{
+		ToView.Transform(A);
+		ToView.Transform(B);
+		if (A.GetY() < NearPlane && B.GetY() < NearPlane)
+		{
+			return;
+		}
+		if (A.GetY() < NearPlane || B.GetY() < NearPlane)
+		{
+			Vector3d& Behind = A.GetY() < NearPlane ? A : B;
+			const Vector3d& Ahead = A.GetY() < NearPlane ? B : A;
+			const float T = (NearPlane - Behind.GetY()) / (Ahead.GetY() - Behind.GetY());
+			Behind.NewVector(Behind.GetX() + (Ahead.GetX() - Behind.GetX()) * T, NearPlane, Behind.GetZ() + (Ahead.GetZ() - Behind.GetZ()) * T);
+		}
+		const float X1 = OrgX + A.GetX() * WinWidth / A.GetY();
+		const float Y1 = OrgY - A.GetZ() * WinWidth / A.GetY();
+		const float X2 = OrgX + B.GetX() * WinWidth / B.GetY();
+		const float Y2 = OrgY - B.GetZ() * WinWidth / B.GetY();
+		if (bDepthTested)
+		{
+			Draw.DepthLine(X1, Y1, 1.0f / A.GetY(), X2, Y2, 1.0f / B.GetY());
+		}
+		else
+		{
+			Draw.Line(static_cast<int>(X1), static_cast<int>(Y1), static_cast<int>(X2), static_cast<int>(Y2));
+		}
+	};
+
+	for (int32 Index = -Lines; Index <= Lines; ++Index)
+	{
+		const float X = CenterX + static_cast<float>(Index) * Step;
+		const float Y = CenterY + static_cast<float>(Index) * Step;
+		for (const bool bAlongY : { true, false })
+		{
+			const float Value = bAlongY ? X : Y;
+			const bool bAxis = FMath::Abs(Value) < 0.01f;
+			const bool bMajor = std::fmod(FMath::Abs(Value), Major) < 0.01f;
+			Draw.Color(bAxis ? ColorGridAxis : (bMajor ? ColorGridMajor : ColorGridMinor));
+			if (bAlongY)
+			{
+				Segment(Vector3d(X, CenterY - Extent, 0.0f), Vector3d(X, CenterY + Extent, 0.0f));
+			}
+			else
+			{
+				Segment(Vector3d(CenterX - Extent, Y, 0.0f), Vector3d(CenterX + Extent, Y, 0.0f));
+			}
+		}
+	}
+}
+
+void FMapViewportClient::DrawAxes(FSlateWindowElementList& Out, FIntPoint PixelSize)
+{
+	// X, Y and Z as seen from the camera, at the bottom left (Unreal's axis indicator).
+	const float Scale = GetDpiScale();
+	const FVector2 LocalSize = PixelSize.ToVector2() / Scale;
+	const FVector2 Origin(26.0f, LocalSize.Y - 26.0f);
+	const Vector3d Right = Normalized(ViewToScope(Vector3d(1.0f, 0.0f, 0.0f)));
+	const Vector3d Up = Normalized(ViewToScope(Vector3d(0.0f, 0.0f, 1.0f)));
+	const Vector3d Forward = Normalized(ViewToScope(Vector3d(0.0f, 1.0f, 0.0f)));
+	struct FAxis
+	{
+		const char* Name;
+		Vector3d Direction;
+		FColor Color;
+		float Depth;
+	};
+	FAxis Axes[3] = {
+		{ "X", Vector3d(1.0f, 0.0f, 0.0f), FColor(232, 74, 74), 0.0f },
+		{ "Y", Vector3d(0.0f, 1.0f, 0.0f), FColor(118, 200, 72), 0.0f },
+		{ "Z", Vector3d(0.0f, 0.0f, 1.0f), FColor(72, 132, 244), 0.0f },
+	};
+	for (FAxis& Axis : Axes)
+	{
+		Axis.Depth = Axis.Direction.DotVector(Forward);
+	}
+	std::sort(std::begin(Axes), std::end(Axes), [](const FAxis& A, const FAxis& B) { return A.Depth > B.Depth; });
+
+	const FSlateFontInfo Font = FAppStyle::Get().GetFont("BoldFont");
+	FSlateFontCache& Fonts = FSlateApplication::Get().GetFontCache();
+	const FPaintGeometry Whole = FPaintGeometry::Make(FVector2::Zero(), LocalSize, Scale);
+	for (const FAxis& Axis : Axes)
+	{
+		const FVector2 Direction(Axis.Direction.DotVector(Right), -Axis.Direction.DotVector(Up));
+		if (Direction.Size() < 0.15f)
+		{
+			continue; // pointing at or away from the camera
+		}
+		const FVector2 Tip = Origin + Direction * 18.0f;
+		Out.AddLines(6, Whole, { Origin, Tip }, Axis.Color, 2.0f);
+		if (Font.Font)
+		{
+			const TSharedRef<const FShapedGlyphSequence> Label = Fonts.ShapeText(FString(Axis.Name).View(), FSlateFontInfo(Font.Font, 10.0f), Scale);
+			const FVector2 LabelSize = Label->GetLogicalSize();
+			const FVector2 At = Origin + Direction * 27.0f - LabelSize * 0.5f;
+			Out.AddText(7, FPaintGeometry::Make(At, LabelSize, Scale), Label, Axis.Color);
+		}
+	}
+}
+
+void FMapViewportClient::DrawScaleBar(FSlateWindowElementList& Out, FIntPoint PixelSize)
+{
+	// A power-of-two length about 100 logical pixels long, next to the axes.
+	const float Scale = GetDpiScale();
+	const FVector2 LocalSize = PixelSize.ToVector2() / Scale;
+	const float Units = std::exp2(std::round(std::log2(100.0f / Zoom)));
+	const float Length = Units * Zoom;
+	if (Length < 8.0f || LocalSize.X < Length + 80.0f)
+	{
+		return;
+	}
+	const FVector2 Start(64.0f, LocalSize.Y - 14.0f);
+	const FVector2 End = Start + FVector2(Length, 0.0f);
+	const FColor Color(176, 184, 198);
+	const FPaintGeometry Whole = FPaintGeometry::Make(FVector2::Zero(), LocalSize, Scale);
+	Out.AddLines(6, Whole, { Start - FVector2(0.0f, 5.0f), Start, End, End - FVector2(0.0f, 5.0f) }, Color, 1.0f);
+	const FSlateFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
+	if (Font.Font)
+	{
+		const FString Text = FString::Format("{:.0f} units", Units);
+		const TSharedRef<const FShapedGlyphSequence> Label = FSlateApplication::Get().GetFontCache().ShapeText(Text.View(), FSlateFontInfo(Font.Font, 10.0f), Scale);
+		const FVector2 LabelSize = Label->GetLogicalSize();
+		Out.AddText(7, FPaintGeometry::Make(FVector2(Start.X + (Length - LabelSize.X) * 0.5f, Start.Y - 6.0f - LabelSize.Y), LabelSize, Scale), Label, Color);
+	}
+}
+
 void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint PixelSize)
 {
 	const float Scale = GetDpiScale();
@@ -978,33 +1396,54 @@ void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint Pix
 		Out.AddLines(3, Geo(FVector2::Zero(), PixelSize.ToVector2() / Scale), { Min, FVector2(Max.X, Min.Y), Max, FVector2(Min.X, Max.Y) },
 			FColor(120, 170, 255), 1.0f, true);
 	}
+	if (MapView && ShowFlags.bAxes)
+	{
+		DrawAxes(Out, PixelSize);
+		if (!IsPerspective())
+		{
+			DrawScaleBar(Out, PixelSize);
+		}
+	}
 
 	const FSlateFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
-	if (!Font.Font)
+	if (!Font.Font || !ShowFlags.bViewportStats)
 	{
 		return;
 	}
-	FString Label;
+	// The view's type and mode are in its toolbar; the label says the rest.
+	TArray<FString> Parts;
 	if (IsPerspective())
 	{
-		Label = RenderMode == EMapRenderMode::Solid ? FString("3D  ·  Solid") : FString("3D  ·  Wireframe");
+		if (bLooking)
+		{
+			Parts.push_back(FString::Format("Camera speed {:.2f}", CameraSpeed));
+		}
 	}
 	else if (MapView)
 	{
 		float Sign;
 		const int RightAxis = DominantAxis(ViewToScope(Vector3d(1.0f, 0.0f, 0.0f)), Sign);
 		const int UpAxis = DominantAxis(ViewToScope(Vector3d(0.0f, 0.0f, 1.0f)), Sign);
-		Label = FString::Format("{}  ·  {}/{}  ·  {:.0f}%", ToString(Type), AxisName(RightAxis), AxisName(UpAxis), Zoom * 100.0f);
+		Parts.push_back(FString::Format("{}/{}  ·  {:.0f}%", AxisName(RightAxis), AxisName(UpAxis), Zoom * 100.0f));
 		const FString Hint = GetToolHint();
 		if (!Hint.IsEmpty())
 		{
-			Label += FString::Format("  ·  {}", Hint);
+			Parts.push_back(Hint);
 		}
 	}
 	if (Document && &Document->GetScope() != &Document->GetRoot())
 	{
 		const char* Name = Document->GetScope().GetObjName();
-		Label += FString::Format("  ·  in {}", Name && Name[0] ? FString::FromAnsi(Name) : FString("a group"));
+		Parts.push_back(FString::Format("in {}", Name && Name[0] ? FString::FromAnsi(Name) : FString("a group")));
+	}
+	if (Parts.empty())
+	{
+		return;
+	}
+	FString Label = Parts[0];
+	for (SIZE_T Index = 1; Index < Parts.size(); ++Index)
+	{
+		Label += FString::Format("  ·  {}", Parts[Index]);
 	}
 	FSlateFontCache& Fonts = FSlateApplication::Get().GetFontCache();
 	const TSharedRef<const FShapedGlyphSequence> Text = Fonts.ShapeText(Label.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
@@ -1035,19 +1474,34 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	UpdateProjection();
 	MapDraw->SetLineThickness(FMath::Max(1.0f, std::floor(GetDpiScale() + 0.25f)));
 	MapDraw->Reset();
-	const bool bSolid = IsPerspective() && RenderMode == EMapRenderMode::Solid;
+	const FScopedEntityDisplay Entities(ShowFlags.bEntities);
+	const EMapViewMode Mode = GetViewMode();
+	const bool bSolid = Mode != EMapViewMode::Wireframe;
+	const bool bGrid = Settings.bShowGrid && ShowFlags.bGrid;
 	if (bSolid)
 	{
+		MapDraw->SetShaded(Mode == EMapViewMode::Lit);
 		MapDraw->ZBufTextured(false);
 		MapView->RenderSolid(false);
+		if (bGrid)
+		{
+			DrawPerspectiveGrid(*MapDraw, true);
+		}
 		// The selection on top of the faces.
 		MapView->RenderWireFrame(false, true, false);
 	}
 	else
 	{
-		if (!IsPerspective() && Settings.bShowGrid)
+		if (bGrid)
 		{
-			DrawGrid(*MapDraw);
+			if (IsPerspective())
+			{
+				DrawPerspectiveGrid(*MapDraw, false);
+			}
+			else
+			{
+				DrawGrid(*MapDraw);
+			}
 		}
 		UpdateDotDisplay();
 		MapView->RenderWireFrame(true, true, false);

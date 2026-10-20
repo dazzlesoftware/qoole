@@ -10,8 +10,9 @@
 //     pipeline (perspective-correct, like the old GPU renderer plugins).
 //
 // Colors: View draws with palette indices (VRC_* and the grid's 252-254),
-// which SetColor fills. Solid faces get a color per object and a shade per
-// facing direction, since the built-in game has no textures.
+// which SetColor fills. Solid faces get a color per object and, when shaded
+// (the Lit view mode), a shade per facing direction, since the built-in game
+// has no textures.
 //
 // Coordinates are physical pixels of the target.
 
@@ -39,6 +40,13 @@ public:
 	int GetHeight() const { return height; }
 	// Line thickness in pixels (the DPI scale, so lines stay one logical pixel).
 	void SetLineThickness(float Thickness) { LineThickness = Thickness; }
+	// Lit: faces are shaded by the way they face; Unlit: flat colors.
+	void SetShaded(bool bInShaded) { bShaded = bInShaded; }
+
+	// A line among the triangles, so the depth buffer hides it behind faces
+	// (window pixels, Q = 1 / view depth at each end). It loses to a face at
+	// the same depth.
+	void DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float Q2);
 
 	// Empties the line and triangle lists (the palette stays).
 	void Reset();
@@ -66,4 +74,5 @@ private:
 	TArray<FMapVertex> Triangles;
 	int CurrentColor = 0;
 	float LineThickness = 1.0f;
+	bool bShaded = true;
 };

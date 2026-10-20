@@ -1,9 +1,11 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// FMapViewportClient: one map view (top, front, side or 3D) in an SViewport.
-// It owns a map core View (the camera, projection and picking) and draws
-// through FMapDraw into its render target: wireframes and the grid with the
-// UI renderer, solid faces of the 3D view with a depth buffer.
+// FMapViewportClient: one map view in an SViewport, Unreal's
+// FLevelEditorViewportClient. Its viewport type (perspective, or top,
+// bottom, left, right, front or back) can change at any time. It owns a map
+// core View (the camera, projection and picking) and draws through FMapDraw
+// into its render target: wireframes and the grid with the UI renderer,
+// solid faces of a perspective view (Lit or Unlit) with a depth buffer.
 //
 // Mouse, in every view:
 //   left click          select the object under the cursor (again: the next
@@ -14,17 +16,22 @@
 //   left drag uses the current tool (FMapViewSettings::Tool), snapped to the
 //   grid unless Alt is held:
 //     Select   a drag that starts on the selection moves it
-//     Rotate   turns the selection about its center (in RotateSnapDegrees steps)
+//     Rotate   turns the selection about its center (in GetRotateSnap() steps)
 //     Scale    stretches the selection from its opposite corner (Shift: evenly)
 //     Clip     draws the clipping line; Enter keeps the marked side, Ctrl+Enter
 //              splits, Tab changes sides, Esc drops the line
 //     Vertex, Edge, Face
 //              drag the dots of the one selected brush
-// 3D view: right drag looks around (the cursor hides; W/A/S/D/Q/E fly while
-//   it is held, Shift faster), middle drag pans, the wheel moves forward.
+// Perspective views: right drag looks around (the cursor hides; W/A/S/D/Q/E
+//   fly while it is held, Shift faster, and the wheel changes the camera
+//   speed), middle drag pans, the wheel moves forward. Alt + left drag
+//   orbits about the point looked at, Alt + right drag dollies, Alt +
+//   middle drag pans.
 //
 // Every view of a document shares one FMapViewSettings (grid, snapping,
-// tool) and redraws when the document changes.
+// tool) and redraws when the document changes. View mode, field of view,
+// camera speed and show flags belong to each view. SMapViewport puts a
+// toolbar over it.
 
 #pragma once
 
@@ -37,15 +44,22 @@
 class FMapDraw;
 class View;
 
+// Unreal's ELevelViewportType. The first four are the panes of the default
+// four-pane layout, in order.
 enum class EMapViewType : uint8
 {
-	Top,
-	Front,
-	Side,
+	Top,         // looking down
+	Front,       // looking along +Y
+	Right,       // looking along -X
 	Perspective,
+	Bottom,      // looking up
+	Back,        // looking along -Y
+	Left,        // looking along +X
+	Count
 };
 
 const char* ToString(EMapViewType Type);
+TOptional<EMapViewType> MapViewTypeFromString(const FString& Name);
 
 // What a left drag does in a 2D view.
 enum class EMapTool : uint8
@@ -61,10 +75,26 @@ enum class EMapTool : uint8
 
 const char* ToString(EMapTool Tool);
 
-enum class EMapRenderMode : uint8
+// Unreal's EViewModeIndex, for the modes a map view has. Orthographic views
+// always draw wireframes.
+enum class EMapViewMode : uint8
 {
 	Wireframe,
-	Solid,
+	Unlit, // solid faces in their flat colors
+	Lit,   // solid faces shaded by the way they face
+};
+
+const char* ToString(EMapViewMode Mode);
+
+// What a view draws besides the map (Unreal's FEngineShowFlags, for this editor).
+struct FMapShowFlags
+{
+	bool bGrid = true;
+	bool bEntities = true;
+	bool bViewportStats = true; // the label at the top left
+	bool bAxes = true;          // the axis indicator at the bottom left
+
+	bool operator==(const FMapShowFlags&) const = default;
 };
 
 // Settings shared by the views of an editor.
@@ -72,9 +102,12 @@ struct FMapViewSettings
 {
 	float GridSize = 16.0f; // map units; snapping and the minor grid lines
 	bool bSnapToGrid = true;
-	bool bShowGrid = true;
+	bool bShowGrid = true; // every view; each also has its own Grid show flag
 	EMapTool Tool = EMapTool::Select;
+	bool bSnapRotation = true;
 	float RotateSnapDegrees = 15.0f;
+	float MouseSensitivity = 1.0f; // looking around, times the default speed
+	bool bInvertMiddleMousePan = false;
 
 	// Called with the map position under the cursor of a 2D view ("x y z").
 	TFunction<void(const FString&)> OnCursorText;
@@ -83,6 +116,9 @@ struct FMapViewSettings
 	// Fired when a setting changes; views redraw.
 	TMulticastDelegate<void()> OnChanged;
 	void Changed() { OnChanged.Broadcast(); }
+
+	// The rotation step tools turn by: 0 when rotation snapping is off.
+	float GetRotateSnap() const { return bSnapRotation ? RotateSnapDegrees : 0.0f; }
 
 	static constexpr float MinGridSize = 1.0f;
 	static constexpr float MaxGridSize = 256.0f;
@@ -109,15 +145,41 @@ public:
 	FMapViewportClient(FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer, FMapRenderResources& InResources, FMapViewSettings& InSettings, EMapViewType InType);
 	~FMapViewportClient() override;
 
-	EMapViewType GetType() const { return Type; }
+	EMapViewType GetViewportType() const { return Type; }
+	// Looks the other way: the camera keeps what it was looking at (2D
+	// views keep their zoom).
+	void SetViewportType(EMapViewType InType);
 	bool IsPerspective() const { return Type == EMapViewType::Perspective; }
+	bool IsOrtho() const { return !IsPerspective(); }
 
 	// The document shown (may be null); the view resets its camera.
 	void SetDocument(FMapDocument* InDocument);
 	FMapDocument* GetDocument() const { return Document; }
 
-	EMapRenderMode GetRenderMode() const { return RenderMode; }
-	void SetRenderMode(EMapRenderMode Mode);
+	// The mode drawn: always Wireframe in orthographic views.
+	EMapViewMode GetViewMode() const { return IsPerspective() ? ViewMode : EMapViewMode::Wireframe; }
+	// The mode the view has when it is a perspective view (what SetViewMode sets).
+	EMapViewMode GetPerspectiveViewMode() const { return ViewMode; }
+	void SetViewMode(EMapViewMode Mode);
+	bool SupportsViewMode(EMapViewMode Mode) const { return IsPerspective() || Mode == EMapViewMode::Wireframe; }
+
+	const FMapShowFlags& GetShowFlags() const { return ShowFlags; }
+	void SetShowFlags(const FMapShowFlags& Flags);
+
+	// Perspective views: horizontal field of view in degrees (the map core
+	// clips at 90 degrees, so that is the widest), and the flying speed.
+	float GetViewFOV() const { return ViewFOV; }
+	void SetViewFOV(float Degrees);
+	float GetCameraSpeed() const { return CameraSpeed; }
+	void SetCameraSpeed(float Speed);
+	static constexpr float MinViewFOV = 20.0f;
+	static constexpr float MaxViewFOV = 90.0f;
+	static constexpr float MinCameraSpeed = 0.1f;
+	static constexpr float MaxCameraSpeed = 32.0f;
+
+	// Fired when the type, view mode, field of view, camera speed or show
+	// flags change (toolbars and saved settings follow it).
+	TMulticastDelegate<void()> OnViewChanged;
 
 	// Camera.
 	void ResetCamera();
@@ -128,6 +190,8 @@ public:
 	// Where new objects go: the view's center (2D, at the camera depth) or a
 	// point in front of the camera (3D), in scope space.
 	Vector3d GetPlacementPoint() const;
+	// The scope axis a 2D view looks along (0 X, 1 Y, 2 Z); Z for 3D views.
+	int32 GetDepthAxis() const;
 
 	// Converts a point in the viewport (logical units) to the map, on the
 	// plane through the camera (2D views only).
@@ -162,6 +226,8 @@ private:
 		Move,
 		Pan,
 		Look,
+		Orbit,     // Alt + left drag (3D)
+		Dolly,     // Alt + right drag (3D)
 		Rotate,
 		Scale,
 		ClipLine,
@@ -169,6 +235,13 @@ private:
 	};
 
 	void CreateView();
+	// Puts the 2D camera at Center, or the 3D camera Distance from it
+	// looking at it from above.
+	void PlaceCamera(const Vector3d& Center, float Distance);
+	// What the camera looks at: the center of a 2D view, or a point in front
+	// of the 3D camera (at the selection's depth when it is ahead).
+	Vector3d GetFocusPoint(float* OutDistance = nullptr) const;
+	float GetWindowWidth() const; // the map core's projection scale (pixels)
 	void UpdateProjection();
 	float GetDpiScale() const;
 	float GetDrawZoom() const; // pixels per map unit (2D) or 1 (3D)
@@ -182,8 +255,14 @@ private:
 	void UpdateMove(FVector2 Local, bool bSnap);
 	void ReportCursor(FVector2 Local);
 	void Fly(float DeltaSeconds);
+	void Orbit(FVector2 Delta);
+	void Dolly(float Delta);
 	void DrawGrid(FMapDraw& MapDraw);
+	void DrawPerspectiveGrid(FMapDraw& MapDraw, bool bDepthTested);
 	void DrawOverlay(FSlateWindowElementList& Elements, FIntPoint PixelSize);
+	void DrawAxes(FSlateWindowElementList& Elements, FIntPoint PixelSize);
+	void DrawScaleBar(FSlateWindowElementList& Elements, FIntPoint PixelSize);
+	void ViewChanged();
 	void OnDocumentChanged(EMapChange Change);
 	void FollowScope();
 	void Message(const FString& Text) const;
@@ -207,14 +286,17 @@ private:
 
 	FMapRenderResources& Resources;
 	FMapViewSettings& Settings;
-	const EMapViewType Type;
+	EMapViewType Type;
 	FMapDocument* Document = nullptr;
 	FDelegateHandle DocumentHandle;
 	FDelegateHandle SettingsHandle;
 
 	TUniquePtr<FMapDraw> MapDraw;
 	View* MapView = nullptr;
-	EMapRenderMode RenderMode = EMapRenderMode::Wireframe;
+	EMapViewMode ViewMode = EMapViewMode::Lit;
+	FMapShowFlags ShowFlags;
+	float ViewFOV = 90.0f;
+	float CameraSpeed = 1.0f;
 	float Zoom = 0.5f;      // 2D: logical pixels per map unit
 	float DrawZoom = 1.0f;  // what FDraw scales by (it keeps a pointer)
 	float Yaw = 0.0f;       // 3D camera, radians
@@ -225,11 +307,16 @@ private:
 	FVector2 DragStart;      // logical, in the viewport
 	FVector2 DragLast;
 	bool bDragAdd = false;   // box select adds (Shift)
+	bool bAltDrag = false;   // pressed with Alt: a 3D left drag orbits
 	TArray<Object*> SelectionBeforeBox;
 	TArray<Object*> MovedObjects;
 	Vector3d MoveReference;  // selection bounds min at drag start
 	Vector3d MoveApplied;    // total applied so far
 	FVector2 MoveTotal;      // logical pixels since the drag started
+
+	// Orbit: the point turned about and the camera's distance from it.
+	Vector3d OrbitPivot;
+	float OrbitDistance = 0.0f;
 
 	// Rotate and scale.
 	Vector3d Pivot;          // scope space

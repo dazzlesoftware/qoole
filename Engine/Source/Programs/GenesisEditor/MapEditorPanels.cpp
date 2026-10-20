@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// The map editor's dockable tabs: the four views, the outliner, the
+// The map editor's dockable tabs: the viewports, the outliner, the
 // properties of the selection, the prefab library, the settings (with the
 // key bindings) and the log.
 
@@ -21,7 +21,7 @@ namespace
 {
 	const FTextBlockStyle& SmallText() { return FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"); }
 
-	const FName ViewTabIds[4] = { FName("TopView"), FName("FrontView"), FName("SideView"), FName("PerspectiveView") };
+	const FName ViewportTabId("Viewport");
 
 	FString ObjectLabel(Object* Obj)
 	{
@@ -108,12 +108,13 @@ namespace
 		bool bCapturing = false;
 	};
 
-	// The editor's settings, for a property grid.
+	// The editor's settings, for a property grid. Each viewport's own
+	// settings (view mode, camera, show flags) are in its toolbar.
 	class FEditorSettingsSource final : public IPropertySource
 	{
 	public:
-		FEditorSettingsSource(FMapViewSettings& InSettings, FMapViewportClient& InView3D, TFunction<void(float)> InSetAppScale)
-			: Settings(InSettings), View3D(InView3D), SetAppScale(std::move(InSetAppScale))
+		FEditorSettingsSource(FMapViewSettings& InSettings, TFunction<void(float)> InSetAppScale)
+			: Settings(InSettings), SetAppScale(std::move(InSetAppScale))
 		{
 		}
 
@@ -124,8 +125,11 @@ namespace
 			Out.push_back(FPropertyDesc("GridSize", EPropertyType::Enum, "Grid size", "Grid").SetOptions(GridOptions()).SetToolTip("Map units between grid lines"));
 			Out.push_back(FPropertyDesc("Snap", EPropertyType::Bool, "Snap to the grid", "Grid"));
 			Out.push_back(FPropertyDesc("ShowGrid", EPropertyType::Bool, "Show the grid", "Grid"));
+			Out.push_back(FPropertyDesc("SnapRotation", EPropertyType::Bool, "Snap rotation", "Tools"));
 			Out.push_back(FPropertyDesc("RotateSnap", EPropertyType::Float, "Rotation steps", "Tools").SetRange(0.0f, 90.0f).SetToolTip("Degrees; 0 turns freely"));
-			Out.push_back(FPropertyDesc("Solid3D", EPropertyType::Bool, "Solid 3D view", "Views"));
+			Out.push_back(FPropertyDesc("MouseSensitivity", EPropertyType::Float, "Mouse sensitivity", "Views").SetRange(0.1f, 4.0f)
+				.SetToolTip("How fast the perspective views turn with the mouse"));
+			Out.push_back(FPropertyDesc("InvertMiddleMousePan", EPropertyType::Bool, "Invert middle mouse pan", "Views"));
 			Out.push_back(FPropertyDesc("AppScale", EPropertyType::Enum, "Interface scale", "Views").SetOptions({ "100%", "125%", "150%", "200%" }));
 		}
 
@@ -142,8 +146,10 @@ namespace
 			}
 			if (Property == FName("Snap")) return Settings.bSnapToGrid;
 			if (Property == FName("ShowGrid")) return Settings.bShowGrid;
+			if (Property == FName("SnapRotation")) return Settings.bSnapRotation;
 			if (Property == FName("RotateSnap")) return Settings.RotateSnapDegrees;
-			if (Property == FName("Solid3D")) return View3D.GetRenderMode() == EMapRenderMode::Solid;
+			if (Property == FName("MouseSensitivity")) return Settings.MouseSensitivity;
+			if (Property == FName("InvertMiddleMousePan")) return Settings.bInvertMiddleMousePan;
 			if (Property == FName("AppScale"))
 			{
 				const float Scale = FSlateApplication::Get().GetApplicationScale();
@@ -157,8 +163,10 @@ namespace
 			if (Property == FName("GridSize")) Settings.GridSize = static_cast<float>(1 << FMath::Clamp(std::get<int32>(Value), 0, 8));
 			else if (Property == FName("Snap")) Settings.bSnapToGrid = std::get<bool>(Value);
 			else if (Property == FName("ShowGrid")) Settings.bShowGrid = std::get<bool>(Value);
+			else if (Property == FName("SnapRotation")) Settings.bSnapRotation = std::get<bool>(Value);
 			else if (Property == FName("RotateSnap")) Settings.RotateSnapDegrees = std::get<float>(Value);
-			else if (Property == FName("Solid3D")) View3D.SetRenderMode(std::get<bool>(Value) ? EMapRenderMode::Solid : EMapRenderMode::Wireframe);
+			else if (Property == FName("MouseSensitivity")) Settings.MouseSensitivity = std::get<float>(Value);
+			else if (Property == FName("InvertMiddleMousePan")) Settings.bInvertMiddleMousePan = std::get<bool>(Value);
 			else if (Property == FName("AppScale"))
 			{
 				static const float Scales[] = { 1.0f, 1.25f, 1.5f, 2.0f };
@@ -179,24 +187,18 @@ namespace
 		}
 
 		FMapViewSettings& Settings;
-		FMapViewportClient& View3D;
 		TFunction<void(float)> SetAppScale;
 	};
 }
 
 TSharedRef<FDockLayout> FMapEditorShell::MakeDefaultLayout()
 {
-	// The four views in a square; the outliner and prefabs, the properties,
-	// and the log and settings at the right.
-	return FDockLayout::New("MapEditor", 2)->AddArea(
+	// The viewports (one tab holding up to four panes, as in Unreal); the
+	// outliner and prefabs, the properties, and the log and settings at the
+	// right. Version 3: the four view tabs became one viewport tab.
+	return FDockLayout::New("MapEditor", 3)->AddArea(
 		FDockLayout::NewPrimaryArea()->SetOrientation(EOrientation::Horizontal)
-			->Split(FDockLayout::NewSplitter()->SetOrientation(EOrientation::Vertical)->SetSizeCoefficient(0.77f)
-				->Split(FDockLayout::NewSplitter()->SetOrientation(EOrientation::Horizontal)->SetSizeCoefficient(0.5f)
-					->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.5f)->AddTab(ViewTabIds[0]))
-					->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.5f)->AddTab(ViewTabIds[3])))
-				->Split(FDockLayout::NewSplitter()->SetOrientation(EOrientation::Horizontal)->SetSizeCoefficient(0.5f)
-					->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.5f)->AddTab(ViewTabIds[1]))
-					->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.5f)->AddTab(ViewTabIds[2]))))
+			->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.77f)->AddTab(ViewportTabId))
 			->Split(FDockLayout::NewSplitter()->SetOrientation(EOrientation::Vertical)->SetSizeCoefficient(0.23f)
 				->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.4f)->AddTab("Outliner")->AddTab("Prefabs")->SetForegroundTab("Outliner"))
 				->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.4f)->AddTab("Properties"))
@@ -206,35 +208,8 @@ TSharedRef<FDockLayout> FMapEditorShell::MakeDefaultLayout()
 void FMapEditorShell::RegisterTabs()
 {
 	FTabManager& Tabs = *TabManager;
-	static const char* const ViewNames[4] = { "Top", "Front", "Side", "3D" };
-	static const char* const ViewTips[4] = {
-		"Looking down at the map",
-		"Looking at the map from the front",
-		"Looking at the map from the side",
-		"Perspective: right drag to look around, with W/A/S/D/Q/E to fly",
-	};
-	for (int32 Index = 0; Index < 4; ++Index)
-	{
-		Tabs.RegisterTabSpawner(ViewTabIds[Index], [this, Index](const FSpawnTabArgs&)
-		{
-			const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label(ViewNames[Index]).Role(ETabRole::Document)
-			[
-				SNew(SViewport).ViewportClient(StaticCastSharedPtr<IViewportClient>(Views[Index]))
-			];
-			ViewTabs[Index] = Tab.ToSharedPtr();
-			return Tab;
-		}).SetDisplayName(FString::Format("{} View", ViewNames[Index])).SetToolTip(ViewTips[Index]);
-	}
-	TabManager->OnActiveTabChanged.AddLambda([this](const TSharedPtr<SDockTab>& Tab)
-	{
-		for (int32 Index = 0; Index < 4; ++Index)
-		{
-			if (Tab && ViewTabs[Index].lock() == Tab)
-			{
-				LastViewIndex = Index;
-			}
-		}
-	});
+	Tabs.RegisterTabSpawner(ViewportTabId, [this](const FSpawnTabArgs&) { return MakeViewportTab(); })
+		.SetDisplayName("Viewport").SetToolTip("The map views: the layout and each view's type, mode and camera are in their toolbars");
 
 	Tabs.RegisterTabSpawner("Outliner", [this](const FSpawnTabArgs&) { return MakeOutlinerTab(); })
 		.SetDisplayName("Outliner").SetToolTip("The map's objects and groups (double-click a group to edit it)");
@@ -246,6 +221,33 @@ void FMapEditorShell::RegisterTabs()
 		.SetDisplayName("Settings").SetToolTip("Grid, tools, views and key bindings");
 	Tabs.RegisterTabSpawner("Log", [this](const FSpawnTabArgs&) { return MakeLogTab(); })
 		.SetDisplayName("Log").SetToolTip("What the editor did");
+}
+
+// ----- Viewports -----
+
+TSharedRef<SDockTab> FMapEditorShell::MakeViewportTab()
+{
+	// The tools' buttons in the viewport toolbars run the editor's commands,
+	// so their tooltips show the shortcuts.
+	TArray<TSharedPtr<FUICommandInfo>> ToolCommands = { Cmd.ToolSelect, Cmd.ToolRotate, Cmd.ToolScale, Cmd.ToolClip, Cmd.ToolVertex, Cmd.ToolEdge, Cmd.ToolFace };
+	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label("Viewport").Role(ETabRole::Document)
+	[
+		SAssignNew(ViewportLayout, SMapViewportLayout, Views, &ViewSettings)
+		.Layout(ViewportLayoutType)
+		.ToolCommands(ToolCommands)
+		.ToolCommandList(Commands)
+	];
+	Tab->SetOnTabClosed(FOnTabClosed::CreateLambda([this](const TSharedRef<SDockTab>&)
+	{
+		// Reopened, the tab shows the same panes in the same layout.
+		if (ViewportLayout)
+		{
+			ViewportLayoutType = ViewportLayout->GetLayout();
+			Views = ViewportLayout->GetClients();
+		}
+		ViewportLayout.reset();
+	}));
+	return Tab;
 }
 
 // ----- Outliner -----
@@ -495,11 +497,14 @@ void FMapEditorShell::RefreshPrefabList()
 TSharedRef<SDockTab> FMapEditorShell::MakeSettingsTab()
 {
 	auto Items = std::make_shared<TArray<TSharedPtr<FUICommandInfo>>>();
-	if (const TSharedPtr<FBindingContext> Context = FInputBindingManager::Get().FindContext("MapEditor"))
+	for (const char* ContextName : { "MapEditor", "MapViewport" })
 	{
-		for (const TSharedRef<FUICommandInfo>& Command : Context->GetCommands())
+		if (const TSharedPtr<FBindingContext> Context = FInputBindingManager::Get().FindContext(ContextName))
 		{
-			Items->push_back(Command.ToSharedPtr());
+			for (const TSharedRef<FUICommandInfo>& Command : Context->GetCommands())
+			{
+				Items->push_back(Command.ToSharedPtr());
+			}
 		}
 	}
 	TSharedPtr<SPropertyGrid> Grid;
@@ -552,8 +557,7 @@ TSharedRef<SDockTab> FMapEditorShell::MakeSettingsTab()
 		]
 		]
 	];
-	Grid->SetObjects({ TSharedRef<IPropertySource>(std::make_shared<FEditorSettingsSource>(ViewSettings, *Views[static_cast<int32>(EMapViewType::Perspective)],
-		[this](float Scale) { Host.SetAppScale(Scale); })) });
+	Grid->SetObjects({ TSharedRef<IPropertySource>(std::make_shared<FEditorSettingsSource>(ViewSettings, [this](float Scale) { Host.SetAppScale(Scale); })) });
 	return Tab;
 }
 

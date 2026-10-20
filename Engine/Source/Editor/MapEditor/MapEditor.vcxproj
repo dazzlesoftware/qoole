@@ -57,6 +57,7 @@
     <ClCompile Include="Private\MapObjectProperties.cpp" />
     <ClCompile Include="Private\MapViewportClient.cpp" />
     <ClCompile Include="Private\MapViewportTools.cpp" />
+    <ClCompile Include="Private\SMapViewport.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Private\MapEditorPrivate.h" />
@@ -68,6 +69,7 @@
     <ClInclude Include="Public\MapEditorEnvironment.h" />
     <ClInclude Include="Public\MapObjectProperties.h" />
     <ClInclude Include="Public\MapViewportClient.h" />
+    <ClInclude Include="Public\SMapViewport.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Private\Shaders\BuildMapShaders.cmd" />

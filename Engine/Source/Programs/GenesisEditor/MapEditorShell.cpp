@@ -46,12 +46,13 @@ FMapEditorShell::FMapEditorShell(FHost InHost)
 	RenderResources = MakeUnique<FMapRenderResources>(*Host.Device);
 	ViewSettings.OnCursorText = [this](const FString& Text) { CursorText = Text; };
 	ViewSettings.OnMessage = [this](const FString& Text) { StatusText = Text; };
-	for (int32 Index = 0; Index < 4; ++Index)
+	// The panes of the default 2x2 layout, as in Unreal: top, perspective,
+	// front and right.
+	for (const EMapViewType Type : { EMapViewType::Top, EMapViewType::Perspective, EMapViewType::Front, EMapViewType::Right })
 	{
-		Views[Index] = std::make_shared<FMapViewportClient>(*Host.Device, *Host.Renderer, *RenderResources, ViewSettings, static_cast<EMapViewType>(Index));
-		Host.WindowRenderer->AddViewportClient(ToSharedRef(StaticCastSharedPtr<FRenderTargetViewportClient>(Views[Index])));
+		Views.push_back(std::make_shared<FMapViewportClient>(*Host.Device, *Host.Renderer, *RenderResources, ViewSettings, Type));
+		Host.WindowRenderer->AddViewportClient(ToSharedRef(StaticCastSharedPtr<FRenderTargetViewportClient>(Views.back())));
 	}
-	Views[3]->SetRenderMode(EMapRenderMode::Solid);
 	LoadEditorSettings();
 	if (!Host.SettingsDir.IsEmpty())
 	{
@@ -104,7 +105,42 @@ void FMapEditorShell::LoadEditorSettings()
 	int32 Value = 0;
 	if (Config.GetInt("MapEditor", "SnapToGrid", Value)) ViewSettings.bSnapToGrid = Value != 0;
 	if (Config.GetInt("MapEditor", "ShowGrid", Value)) ViewSettings.bShowGrid = Value != 0;
-	if (Config.GetInt("MapEditor", "Solid3D", Value)) Views[3]->SetRenderMode(Value ? EMapRenderMode::Solid : EMapRenderMode::Wireframe);
+	if (Config.GetInt("MapEditor", "SnapRotation", Value)) ViewSettings.bSnapRotation = Value != 0;
+	if (Config.GetInt("MapEditor", "InvertMiddleMousePan", Value)) ViewSettings.bInvertMiddleMousePan = Value != 0;
+	if (Config.GetString("MapEditor", "MouseSensitivity", Text))
+	{
+		ViewSettings.MouseSensitivity = FMath::Clamp(static_cast<float>(std::atof(Text.ToAnsi().c_str())), 0.1f, 4.0f);
+	}
+
+	// The viewports: the layout, then each pane's type, view mode, camera and show flags.
+	if (Config.GetString("MapEditor", "ViewportLayout", Text))
+	{
+		ViewportLayoutType = MapViewportLayoutFromString(Text).value_or(ViewportLayoutType);
+	}
+	for (SIZE_T Index = 0; Index < Views.size(); ++Index)
+	{
+		FMapViewportClient& View = *Views[Index];
+		const FString Section = FString::Format("MapEditor.Viewport{}", Index);
+		if (Config.GetString(Section, "Type", Text))
+		{
+			if (const TOptional<EMapViewType> Type = MapViewTypeFromString(Text))
+			{
+				View.SetViewportType(*Type);
+			}
+		}
+		if (Config.GetInt(Section, "ViewMode", Value)) View.SetViewMode(static_cast<EMapViewMode>(FMath::Clamp(Value, 0, 2)));
+		if (Config.GetString(Section, "FOV", Text)) View.SetViewFOV(static_cast<float>(std::atof(Text.ToAnsi().c_str())));
+		if (Config.GetString(Section, "CameraSpeed", Text)) View.SetCameraSpeed(static_cast<float>(std::atof(Text.ToAnsi().c_str())));
+		if (Config.GetInt(Section, "ShowFlags", Value))
+		{
+			FMapShowFlags Flags;
+			Flags.bGrid = (Value & 1) != 0;
+			Flags.bEntities = (Value & 2) != 0;
+			Flags.bViewportStats = (Value & 4) != 0;
+			Flags.bAxes = (Value & 8) != 0;
+			View.SetShowFlags(Flags);
+		}
+	}
 }
 
 void FMapEditorShell::SaveEditorSettings() const
@@ -114,7 +150,28 @@ void FMapEditorShell::SaveEditorSettings() const
 	Config.SetString("MapEditor", "RotateSnap", FString::Format("{}", ViewSettings.RotateSnapDegrees));
 	Config.SetInt("MapEditor", "SnapToGrid", ViewSettings.bSnapToGrid ? 1 : 0);
 	Config.SetInt("MapEditor", "ShowGrid", ViewSettings.bShowGrid ? 1 : 0);
-	Config.SetInt("MapEditor", "Solid3D", Views[3]->GetRenderMode() == EMapRenderMode::Solid ? 1 : 0);
+	Config.SetInt("MapEditor", "SnapRotation", ViewSettings.bSnapRotation ? 1 : 0);
+	Config.SetInt("MapEditor", "InvertMiddleMousePan", ViewSettings.bInvertMiddleMousePan ? 1 : 0);
+	Config.SetString("MapEditor", "MouseSensitivity", FString::Format("{}", ViewSettings.MouseSensitivity));
+
+	// In the layout's pane order (switching layouts can swap panes).
+	const TArray<TSharedPtr<FMapViewportClient>>& Panes = ViewportLayout ? ViewportLayout->GetClients() : Views;
+	Config.SetString("MapEditor", "ViewportLayout", ToString(ViewportLayout ? ViewportLayout->GetLayout() : ViewportLayoutType));
+	for (SIZE_T Index = 0; Index < Panes.size(); ++Index)
+	{
+		if (!Panes[Index])
+		{
+			continue;
+		}
+		const FMapViewportClient& View = *Panes[Index];
+		const FString Section = FString::Format("MapEditor.Viewport{}", Index);
+		Config.SetString(Section, "Type", ToString(View.GetViewportType()));
+		Config.SetInt(Section, "ViewMode", static_cast<int32>(View.GetPerspectiveViewMode()));
+		Config.SetString(Section, "FOV", FString::Format("{}", View.GetViewFOV()));
+		Config.SetString(Section, "CameraSpeed", FString::Format("{}", View.GetCameraSpeed()));
+		const FMapShowFlags& Flags = View.GetShowFlags();
+		Config.SetInt(Section, "ShowFlags", (Flags.bGrid ? 1 : 0) | (Flags.bEntities ? 2 : 0) | (Flags.bViewportStats ? 4 : 0) | (Flags.bAxes ? 8 : 0));
+	}
 }
 
 // ----- Documents -----
@@ -279,17 +336,35 @@ FString FMapEditorShell::DefaultFolder() const
 
 TSharedPtr<FMapViewportClient> FMapEditorShell::GetActiveView() const
 {
-	if (const TSharedPtr<SDockTab> Active = TabManager->GetActiveTab())
+	if (ViewportLayout && ViewportLayout->GetActiveClient())
 	{
-		for (int32 Index = 0; Index < 4; ++Index)
-		{
-			if (ViewTabs[Index].lock() == Active)
-			{
-				return Views[Index];
-			}
-		}
+		return ViewportLayout->GetActiveClient();
 	}
-	return Views[LastViewIndex];
+	return Views[0];
+}
+
+TSharedPtr<FMapViewportClient> FMapEditorShell::GetView(EMapViewType Type) const
+{
+	TSharedPtr<FMapViewportClient> Hidden;
+	for (const TSharedPtr<FMapViewportClient>& View : Views)
+	{
+		if (View->GetViewportType() != Type)
+		{
+			continue;
+		}
+		if (View->GetViewport())
+		{
+			return View;
+		}
+		Hidden = Hidden ? Hidden : View;
+	}
+	return Hidden;
+}
+
+TSharedPtr<FMapViewportClient> FMapEditorShell::GetPerspectiveView() const
+{
+	const TSharedPtr<FMapViewportClient> Active = GetActiveView();
+	return Active->IsPerspective() ? Active : GetView(EMapViewType::Perspective);
 }
 
 Vector3d FMapEditorShell::SnappedPlacement() const
@@ -402,13 +477,13 @@ void FMapEditorShell::RegisterCommands()
 	Cmd.SelectAll = Add("SelectAll", "Select All", "Select every object of the group being edited", T::Button, FInputChord(EKey::A, M::Control));
 	Cmd.SelectNone = Add("SelectNone", "Select None", "Clear the selection", T::Button, FInputChord(EKey::Escape));
 
-	Cmd.FrameSelection = Add("FrameSelection", "Frame Selection", "Fit every view to the selection (or the whole map)", T::Button, FInputChord(EKey::L, M::Control));
+	Cmd.FrameSelection = Add("FrameSelection", "Frame Selection", "Fit every view to the selection (or the whole map); a view's camera menu frames only that view", T::Button, FInputChord(EKey::L, M::Control));
 	Cmd.ResetViews = Add("ResetViews", "Reset Views", "Put every view back at the origin", T::Button, FInputChord(EKey::Home));
-	Cmd.ShowGrid = Add("ShowGrid", "Grid", "Show the grid in the 2D views", T::ToggleButton, FInputChord(EKey::G, M::Shift));
+	Cmd.ShowGrid = Add("ShowGrid", "Grid", "Show the grid in every view (each view's Show menu can hide it there)", T::ToggleButton, FInputChord(EKey::G, M::Shift));
 	Cmd.SnapToGrid = Add("SnapToGrid", "Snap", "Snap to the grid (hold Alt while dragging to move freely)", T::ToggleButton, FInputChord(EKey::N));
 	Cmd.GridSmaller = Add("GridSmaller", "Smaller Grid", "Halve the grid size", T::Button, FInputChord(EKey::LeftBracket));
 	Cmd.GridLarger = Add("GridLarger", "Larger Grid", "Double the grid size", T::Button, FInputChord(EKey::RightBracket));
-	Cmd.SolidView = Add("SolidView", "Solid 3D", "Draw the 3D view with solid faces instead of wireframes", T::ToggleButton, FInputChord(EKey::F3));
+	Cmd.SolidView = Add("SolidView", "Solid 3D", "Draw the perspective view lit, with solid faces, instead of wireframes", T::ToggleButton, FInputChord(EKey::F3));
 
 	Cmd.ToolSelect = Add("ToolSelect", "Select", "Select, and move the selection by dragging it", T::RadioButton, FInputChord(EKey::M));
 	Cmd.ToolRotate = Add("ToolRotate", "Rotate", "Turn the selection about its center by dragging", T::RadioButton, FInputChord(EKey::R));
@@ -437,6 +512,8 @@ void FMapEditorShell::RegisterCommands()
 	Cmd.ResetLayout = Add("ResetLayout", "Reset Layout", "Go back to the default window layout");
 	Cmd.About = Add("About", "About Genesis Editor", "Version and license");
 	FInputBindingManager::Get().RegisterContext(Context);
+	// The viewports' own commands, before the saved bindings are loaded.
+	FMapViewportCommands::Register();
 
 	FUICommandList& List = *Commands;
 	const auto HasDocument = [this] { return Document != nullptr; };
@@ -576,9 +653,13 @@ void FMapEditorShell::RegisterCommands()
 		[this] { return ViewSettings.GridSize < FMapViewSettings::MaxGridSize; });
 	List.MapAction(ToSharedRef(Cmd.SolidView), [this]
 	{
-		FMapViewportClient& View = *Views[static_cast<int32>(EMapViewType::Perspective)];
-		View.SetRenderMode(View.GetRenderMode() == EMapRenderMode::Solid ? EMapRenderMode::Wireframe : EMapRenderMode::Solid);
-	}, nullptr, [this] { return Views[static_cast<int32>(EMapViewType::Perspective)]->GetRenderMode() == EMapRenderMode::Solid; });
+		const TSharedPtr<FMapViewportClient> View = GetPerspectiveView();
+		View->SetViewMode(View->GetViewMode() == EMapViewMode::Wireframe ? EMapViewMode::Lit : EMapViewMode::Wireframe);
+	}, [this] { return GetPerspectiveView() != nullptr; }, [this]
+	{
+		const TSharedPtr<FMapViewportClient> View = GetPerspectiveView();
+		return View && View->GetViewMode() != EMapViewMode::Wireframe;
+	});
 
 	// Tools.
 	const TPair<TSharedPtr<FUICommandInfo>, EMapTool> Tools[] = {
@@ -660,14 +741,8 @@ void FMapEditorShell::RegisterCommands()
 	}
 	const auto RotateQuarter = [this](float Degrees)
 	{
-		// About the depth axis of the last 2D view used (the top view's by default).
-		TSharedPtr<FMapViewportClient> View = Views[LastViewIndex];
-		if (View->IsPerspective())
-		{
-			View = Views[static_cast<int32>(EMapViewType::Top)];
-		}
-		const EMapViewType Type = View->GetType();
-		const int32 Axis = Type == EMapViewType::Top ? 2 : (Type == EMapViewType::Front ? 1 : 0);
+		// About the depth axis of the 2D view used last (Z from a perspective view).
+		const int32 Axis = GetActiveView()->GetDepthAxis();
 		Document->RotateObjects(Document->GetSelection(), Axis, Degrees, SelectionCenter());
 	};
 	List.MapAction(ToSharedRef(Cmd.RotateLeft), [RotateQuarter] { RotateQuarter(90.0f); }, HasSelection);
@@ -998,6 +1073,7 @@ void FMapEditorShell::ResetLayout()
 	Outliner.reset();
 	Properties.reset();
 	PrefabList.reset();
+	ViewportLayout.reset();
 	DockArea = TabManager->RestoreFrom(MakeDefaultLayout(), Window).ToSharedPtr();
 	DockHost->SetContent(ToSharedRef(DockArea));
 	Log("Layout reset");

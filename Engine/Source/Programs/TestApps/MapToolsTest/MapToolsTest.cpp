@@ -29,7 +29,7 @@ protected:
 		Top = CreateView(EMapViewType::Top).ToSharedPtr();
 		Front = CreateView(EMapViewType::Front).ToSharedPtr();
 		Perspective = CreateView(EMapViewType::Perspective).ToSharedPtr();
-		Perspective->SetRenderMode(EMapRenderMode::Solid);
+		Perspective->SetViewMode(EMapViewMode::Lit);
 
 		const auto Pane = [this](const TSharedPtr<FMapViewportClient>& View, const char* Label) -> TSharedRef<SWidget>
 		{

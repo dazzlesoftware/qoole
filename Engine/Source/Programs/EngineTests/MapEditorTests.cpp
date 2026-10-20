@@ -340,7 +340,7 @@ namespace
 			MESSAGE(ToString(Backend), " device unavailable; skipped");
 			return;
 		}
-		F.Client->SetRenderMode(EMapRenderMode::Solid);
+		F.Client->SetViewMode(EMapViewMode::Lit);
 		const Vector3d Near(0.0f, 0.0f, 0.0f);
 		Object* Front = F.Doc->AddPrefab(PrefabPath("Cube"), Near);
 		F.Doc->ClearSelection();

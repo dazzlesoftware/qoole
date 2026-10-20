@@ -1,11 +1,12 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // The map editor's main window content: a menu bar and toolbar built from
-// commands, the four map views (top, front, side, 3D) as dockable tabs, and
-// the panels (MapEditorPanels.cpp): an outliner of the map's objects and
-// groups, the properties of the selection, the prefab library, settings
-// with the key bindings, and a log; plus a status bar. One map
-// (FMapDocument) is open at a time.
+// commands, the viewport tab (SMapViewportLayout: up to four map views laid
+// out as in Unreal, each with its own toolbar; top, perspective, front and
+// right by default), and the panels (MapEditorPanels.cpp): an outliner of
+// the map's objects and groups, the properties of the selection, the prefab
+// library, settings with the key bindings, and a log; plus a status bar.
+// One map (FMapDocument) is open at a time.
 //
 // Files: .qle maps (the editor's own format, with the game set in their
 // header) are opened and saved; .map files are imported and exported.
@@ -16,6 +17,7 @@
 #include "Framework/Docking/TabManager.h"
 #include "MapDocument.h"
 #include "MapViewportClient.h"
+#include "SMapViewport.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Views/SListView.h"
 
@@ -54,9 +56,11 @@ public:
 
 	FMapDocument* GetDocument() const { return Document.get(); }
 	FMapViewSettings& GetViewSettings() { return ViewSettings; }
-	TSharedPtr<FMapViewportClient> GetView(EMapViewType Type) const { return Views[static_cast<int32>(Type)]; }
-	// The view the user worked in last (default: top).
+	// A view of that type, preferring one on screen (null if there is none).
+	TSharedPtr<FMapViewportClient> GetView(EMapViewType Type) const;
+	// The view the user worked in last (default: the first pane).
 	TSharedPtr<FMapViewportClient> GetActiveView() const;
+	TSharedPtr<SMapViewportLayout> GetViewportLayout() const { return ViewportLayout; }
 	FTabManager& GetTabManager() const { return *TabManager; }
 	TSharedPtr<FUICommandList> GetCommandList() const { return Commands; }
 	TSharedPtr<SPropertyGrid> GetPropertyGrid() const { return Properties; }
@@ -95,12 +99,15 @@ private:
 	Vector3d SnappedPlacement() const;
 	Vector3d SelectionCenter() const;
 	void SetGridSize(float Size);
+	// The perspective view Solid 3D acts on: the active view if it is one.
+	TSharedPtr<FMapViewportClient> GetPerspectiveView() const;
 	void LoadEditorSettings();
 	void SaveEditorSettings() const;
 	void ShowAbout();
 	void SaveSelectionAsPrefab();
 
 	// Panels (MapEditorPanels.cpp).
+	TSharedRef<SDockTab> MakeViewportTab();
 	TSharedRef<SDockTab> MakeOutlinerTab();
 	TSharedRef<SDockTab> MakePropertiesTab();
 	TSharedRef<SDockTab> MakePrefabsTab();
@@ -121,9 +128,10 @@ private:
 	FDelegateHandle DocumentHandle;
 	FMapViewSettings ViewSettings;
 	TUniquePtr<FMapRenderResources> RenderResources;
-	TSharedPtr<FMapViewportClient> Views[4];
-	TWeakPtr<SDockTab> ViewTabs[4];
-	int32 LastViewIndex = 0;
+	// The panes' views, in the layout's pane order.
+	TArray<TSharedPtr<FMapViewportClient>> Views;
+	TSharedPtr<SMapViewportLayout> ViewportLayout;
+	EMapViewportLayout ViewportLayoutType = EMapViewportLayout::FourPanes2x2;
 
 	// Copies of what was cut or copied (outside any map).
 	TArray<TUniquePtr<Object>> Clipboard;

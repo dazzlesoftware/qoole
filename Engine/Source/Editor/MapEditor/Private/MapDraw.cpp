@@ -134,7 +134,7 @@ void FMapDraw::ZBufTriangle(ZPoint Points[3])
 		// shade it per side.
 		const uint32 ObjectKey = static_cast<uint32>((zbufColor - Axis * 10 + 255 * 4) % 255);
 		const float Hue = static_cast<float>((ObjectKey * 37u) % 360u);
-		Color = HsvToColor(Hue, 0.28f, 0.82f, FaceShade[Axis]);
+		Color = HsvToColor(Hue, 0.28f, 0.82f, bShaded ? FaceShade[Axis] : 0.86f);
 	}
 
 	const uint32 Packed = PackRGBA(Color);
@@ -148,5 +148,37 @@ void FMapDraw::ZBufTriangle(ZPoint Points[3])
 		Vertex.V = 0.0f;
 		Vertex.Color = Packed;
 		Triangles.push_back(Vertex);
+	}
+}
+
+void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float Q2)
+{
+	const FVector2 A(X1, Y1);
+	const FVector2 B(X2, Y2);
+	const FVector2 Delta = B - A;
+	const float Length = Delta.Size();
+	if (Length < 1e-3f)
+	{
+		return;
+	}
+	const FVector2 Normal = FVector2(-Delta.Y, Delta.X) * (LineThickness * 0.5f / Length);
+	// A little farther than it is, so faces in its plane cover it.
+	constexpr float Bias = 0.998f;
+	const uint32 Packed = PackRGBA(GetPaletteColor(CurrentColor));
+	const auto Vertex = [Packed](FVector2 P, float Q)
+	{
+		FMapVertex V;
+		V.X = P.X;
+		V.Y = P.Y;
+		V.Q = Q * Bias;
+		V.U = 0.0f;
+		V.V = 0.0f;
+		V.Color = Packed;
+		return V;
+	};
+	const FMapVertex Corners[4] = { Vertex(A + Normal, Q1), Vertex(B + Normal, Q2), Vertex(B - Normal, Q2), Vertex(A - Normal, Q1) };
+	for (const int32 Index : { 0, 1, 2, 0, 2, 3 })
+	{
+		Triangles.push_back(Corners[Index]);
 	}
 }
