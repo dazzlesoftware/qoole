@@ -32,14 +32,14 @@ namespace GenesisVk
 		VulkanModule = LoadLibraryW(L"vulkan-1.dll");
 		if (!VulkanModule)
 		{
-			GE_LOG(LogRHI, Warning, "Vulkan: vulkan-1.dll not found (no Vulkan driver installed)");
+			UE_LOG(LogRHI, Warning, "Vulkan: vulkan-1.dll not found (no Vulkan driver installed)");
 			return false;
 		}
 
 		vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(reinterpret_cast<void*>(GetProcAddress(VulkanModule, "vkGetInstanceProcAddr")));
 		if (!vkGetInstanceProcAddr)
 		{
-			GE_LOG(LogRHI, Warning, "Vulkan: vulkan-1.dll has no vkGetInstanceProcAddr");
+			UE_LOG(LogRHI, Warning, "Vulkan: vulkan-1.dll has no vkGetInstanceProcAddr");
 			FreeLibrary(VulkanModule);
 			VulkanModule = nullptr;
 			return false;
@@ -48,7 +48,7 @@ namespace GenesisVk
 		bool bOk = true;
 #define GENESIS_VK_LOAD_GLOBAL(Name) \
 		Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(VK_NULL_HANDLE, #Name)); \
-		if (!Name) { GE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
+		if (!Name) { UE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
 #define GENESIS_VK_LOAD_GLOBAL_OPTIONAL(Name) \
 		Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(VK_NULL_HANDLE, #Name));
 		GENESIS_VK_GLOBAL_FUNCTIONS(GENESIS_VK_LOAD_GLOBAL)
@@ -89,7 +89,7 @@ namespace GenesisVk
 		bool bOk = true;
 #define GENESIS_VK_LOAD_INSTANCE(Name) \
 		Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(Instance, #Name)); \
-		if (!Name) { GE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
+		if (!Name) { UE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
 #define GENESIS_VK_LOAD_INSTANCE_OPTIONAL(Name) \
 		Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(Instance, #Name));
 		GENESIS_VK_INSTANCE_FUNCTIONS(GENESIS_VK_LOAD_INSTANCE)
@@ -104,7 +104,7 @@ namespace GenesisVk
 		bool bOk = true;
 #define GENESIS_VK_LOAD_DEVICE(Name) \
 		Name = reinterpret_cast<PFN_##Name>(vkGetDeviceProcAddr(Device, #Name)); \
-		if (!Name) { GE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
+		if (!Name) { UE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
 		GENESIS_VK_DEVICE_FUNCTIONS(GENESIS_VK_LOAD_DEVICE)
 #undef GENESIS_VK_LOAD_DEVICE
 		return bOk;

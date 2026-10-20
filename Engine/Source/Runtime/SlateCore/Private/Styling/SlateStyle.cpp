@@ -121,7 +121,7 @@ void FSlateBrush::Paint(FSlateWindowElementList& Out, int32 Layer, const FPaintG
 
 void FSlateStyleSet::ReportMissing(FName Key) const
 {
-	GE_LOG(LogStyle, Warning, "Style set \"{}\" has no value \"{}\" of the requested type", Name, Key);
+	UE_LOG(LogStyle, Warning, "Style set \"{}\" has no value \"{}\" of the requested type", Name, Key);
 }
 
 void FSlateStyleSet::Register(const TSharedRef<FSlateStyleSet>& Set)

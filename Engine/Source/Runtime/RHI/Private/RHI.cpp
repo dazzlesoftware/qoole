@@ -39,7 +39,7 @@ TUniquePtr<FRHIDevice> FRHIDevice::Create(const FRHIDeviceDesc& Desc)
 	}
 	if (Device)
 	{
-		GE_LOG(LogRHI, Display, "{} device on \"{}\"", ToString(Desc.Backend), Device->GetAdapterName());
+		UE_LOG(LogRHI, Display, "{} device on \"{}\"", ToString(Desc.Backend), Device->GetAdapterName());
 	}
 	return Device;
 }

@@ -5,7 +5,7 @@
 //
 //   DECLARE_LOG_CATEGORY_EXTERN(LogRHI, Log);   // in a header
 //   DEFINE_LOG_CATEGORY(LogRHI, Log);           // in one .cpp
-//   GE_LOG(LogRHI, Warning, "Swapchain {}x{} lost", Width, Height);
+//   UE_LOG(LogRHI, Warning, "Swapchain {}x{} lost", Width, Height);
 //
 // Categories filter by verbosity at runtime; Fatal always breaks/aborts.
 
@@ -57,7 +57,7 @@ public:
 #define DECLARE_LOG_CATEGORY_EXTERN(CategoryName, DefaultVerbosity) extern FLogCategory CategoryName
 #define DEFINE_LOG_CATEGORY(CategoryName, DefaultVerbosity) FLogCategory CategoryName{ #CategoryName, ELogVerbosity::DefaultVerbosity }
 
-#define GE_LOG(Category, VerbosityName, Fmt, ...) \
+#define UE_LOG(Category, VerbosityName, Fmt, ...) \
 	do \
 	{ \
 		if (!(Category).IsSuppressed(ELogVerbosity::VerbosityName)) \

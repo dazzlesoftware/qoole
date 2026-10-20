@@ -216,7 +216,7 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 		{
 			// A map of a game the editor no longer has (Qoole's Quake, Half-Life...):
 			// it opens with the built-in game and saves as a Genesis map.
-			GE_LOG(LogMapEditor, Display, "{} is a {} map; opening it as a Genesis map", FPaths::GetCleanFilename(InPath), Header.Game);
+			UE_LOG(LogMapEditor, Display, "{} is a {} map; opening it as a Genesis map", FPaths::GetCleanFilename(InPath), Header.Game);
 			Set = &FMapEditorEnvironment::GetBuiltInGameSet();
 			bConverted = true;
 		}

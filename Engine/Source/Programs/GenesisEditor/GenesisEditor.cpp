@@ -263,7 +263,7 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 	if (!Device)
 	{
 		const FString Message = FString::Format("Could not create a {} device. See the log for details.", ToString(Backend));
-		GE_LOG(LogGenesisEditor, Error, "{}", Message);
+		UE_LOG(LogGenesisEditor, Error, "{}", Message);
 		if (SelfTestDir.IsEmpty())
 		{
 			MessageBoxW(nullptr, Message.ToWide().c_str(), L"Genesis Editor", MB_ICONERROR);
@@ -284,7 +284,7 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 	Renderer = MakeUnique<FSlateRHIRenderingPolicy>(*Device, *FontCache);
 	if (!Renderer->Initialize())
 	{
-		GE_LOG(LogGenesisEditor, Error, "UI renderer initialization failed");
+		UE_LOG(LogGenesisEditor, Error, "UI renderer initialization failed");
 		return false;
 	}
 	WindowRenderer = MakeUnique<FSlateRHIRenderer>(*Device, *Renderer);
@@ -331,7 +331,7 @@ void FMapEditorApp::SetAppScale(float Scale)
 {
 	AppScale = Scale;
 	App->SetApplicationScale(Scale);
-	GE_LOG(LogGenesisEditor, Display, "App scale {:.2f}", Scale);
+	UE_LOG(LogGenesisEditor, Display, "App scale {:.2f}", Scale);
 }
 
 int32 FMapEditorApp::Run(const FString& CommandLine)
@@ -424,7 +424,7 @@ void FMapEditorApp::Capture(const char* Name)
 	const FString Path = SelfTestDir + FString::Format("{}_{}.png", ToString(Backend), Name);
 	const bool bOk = CaptureWindowClientToPng(Hwnd, Path);
 	SetWindowPos(Hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-	GE_LOG(LogGenesisEditor, Display, "Screenshot {} -> {} ({}x{} px, DPI scale {:.2f})", bOk ? "saved" : "FAILED", Path,
+	UE_LOG(LogGenesisEditor, Display, "Screenshot {} -> {} ({}x{} px, DPI scale {:.2f})", bOk ? "saved" : "FAILED", Path,
 		MainWindow->GetPixelSize().X, MainWindow->GetPixelSize().Y, MainWindow->GetNativeWindow()->GetDpiScale());
 }
 
@@ -470,7 +470,7 @@ bool FMapEditorApp::PointAtText(std::string_view Text, bool bClick)
 	Find(*MainWindow);
 	if (!Found)
 	{
-		GE_LOG(LogGenesisEditor, Warning, "Self-test: no \"{}\" to point at", Text);
+		UE_LOG(LogGenesisEditor, Warning, "Self-test: no \"{}\" to point at", Text);
 		return false;
 	}
 	const TSharedRef<IPlatformWindow> Native = ToSharedRef(MainWindow->GetNativeWindow());
@@ -492,7 +492,7 @@ void FMapEditorApp::SimulateDpiChange(float NewScale)
 	const float Ratio = NewScale / MainWindow->GetNativeWindow()->GetDpiScale();
 	RECT Suggested{ Rect.left, Rect.top, Rect.left + FMath::RoundToInt((Rect.right - Rect.left) * Ratio), Rect.top + FMath::RoundToInt((Rect.bottom - Rect.top) * Ratio) };
 	const WORD Dpi = static_cast<WORD>(FMath::RoundToInt(NewScale * 96.0f));
-	GE_LOG(LogGenesisEditor, Display, "Simulating WM_DPICHANGED to {} dpi", Dpi);
+	UE_LOG(LogGenesisEditor, Display, "Simulating WM_DPICHANGED to {} dpi", Dpi);
 	SendMessageW(Hwnd, WM_DPICHANGED, MAKEWPARAM(Dpi, Dpi), reinterpret_cast<LPARAM>(&Suggested));
 }
 
@@ -521,7 +521,7 @@ void FMapEditorApp::TickSelfTest()
 				return P.Path;
 			}
 		}
-		GE_LOG(LogGenesisEditor, Error, "Self-test: no prefab {}", Name);
+		UE_LOG(LogGenesisEditor, Error, "Self-test: no prefab {}", Name);
 		return FString();
 	};
 	// After OpenMap the shell holds another document: look it up each time.
@@ -530,7 +530,7 @@ void FMapEditorApp::TickSelfTest()
 		FMapDocument* Doc = Shell->GetDocument();
 		Vector3d Min, Max;
 		const bool bAny = Doc->GetSelectionBounds(Min, Max);
-		GE_LOG(LogGenesisEditor, Display, "Self-test {}: {} brushes, {} entities, {} selected{}", What, Doc->CountBrushes(), Doc->CountEntities(),
+		UE_LOG(LogGenesisEditor, Display, "Self-test {}: {} brushes, {} entities, {} selected{}", What, Doc->CountBrushes(), Doc->CountEntities(),
 			Doc->GetSelection().size(),
 			bAny ? FString::Format(" at ({:.0f} {:.0f} {:.0f})-({:.0f} {:.0f} {:.0f})", Min.GetX(), Min.GetY(), Min.GetZ(), Max.GetX(), Max.GetY(), Max.GetZ()) : FString());
 	};
@@ -759,7 +759,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		catch (...)
 		{
 		}
-		GE_LOG(LogGenesisEditor, Error, "Unhandled exception: {}", What);
+		UE_LOG(LogGenesisEditor, Error, "Unhandled exception: {}", What);
 		std::abort();
 	});
 	CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);

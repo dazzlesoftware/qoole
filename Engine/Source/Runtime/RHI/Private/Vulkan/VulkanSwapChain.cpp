@@ -45,7 +45,7 @@ bool FVulkanSwapChain::Initialize()
 	SurfaceInfo.hwnd = static_cast<HWND>(Window->GetNativeHandle());
 	if (!SurfaceInfo.hwnd)
 	{
-		GE_LOG(LogRHI, Error, "Vulkan: cannot create a swapchain for a window without a native handle");
+		UE_LOG(LogRHI, Error, "Vulkan: cannot create a swapchain for a window without a native handle");
 		return false;
 	}
 	if (!VulkanUtil::Check(vkCreateWin32SurfaceKHR(Device.GetInstance(), &SurfaceInfo, nullptr, &Surface), "vkCreateWin32SurfaceKHR"))
@@ -58,7 +58,7 @@ bool FVulkanSwapChain::Initialize()
 	vkGetPhysicalDeviceSurfaceSupportKHR(Device.GetPhysicalDevice(), Device.GetQueueFamily(), Surface, &bSupported);
 	if (!bSupported)
 	{
-		GE_LOG(LogRHI, Error, "Vulkan: the graphics queue cannot present to this window");
+		UE_LOG(LogRHI, Error, "Vulkan: the graphics queue cannot present to this window");
 		return false;
 	}
 
@@ -70,7 +70,7 @@ bool FVulkanSwapChain::Initialize()
 	Formats.resize(Count);
 	if (Formats.empty())
 	{
-		GE_LOG(LogRHI, Error, "Vulkan: the surface reports no formats");
+		UE_LOG(LogRHI, Error, "Vulkan: the surface reports no formats");
 		return false;
 	}
 	SurfaceFormat = Formats[0];
@@ -90,7 +90,7 @@ bool FVulkanSwapChain::Initialize()
 	}
 	if (PixelFormat == EPixelFormat::Unknown)
 	{
-		GE_LOG(LogRHI, Error, "Vulkan: the surface supports neither B8G8R8A8_UNORM nor R8G8B8A8_UNORM");
+		UE_LOG(LogRHI, Error, "Vulkan: the surface supports neither B8G8R8A8_UNORM nor R8G8B8A8_UNORM");
 		return false;
 	}
 

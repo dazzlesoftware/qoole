@@ -112,7 +112,7 @@ void FMapTestApp::Report(const char* What) const
 {
 	Vector3d Min, Max;
 	const bool bAny = Document->GetSelectionBounds(Min, Max);
-	GE_LOG(LogTestApp, Display, "{}: {} brushes, {} entities, {} selected{}", What, Document->CountBrushes(), Document->CountEntities(), Document->GetSelection().size(),
+	UE_LOG(LogTestApp, Display, "{}: {} brushes, {} entities, {} selected{}", What, Document->CountBrushes(), Document->CountEntities(), Document->GetSelection().size(),
 		bAny ? FString::Format(" at ({:.0f} {:.0f} {:.0f})-({:.0f} {:.0f} {:.0f})", Min.GetX(), Min.GetY(), Min.GetZ(), Max.GetX(), Max.GetY(), Max.GetZ()) : FString());
 }
 

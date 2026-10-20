@@ -21,23 +21,23 @@ using SIZE_T = std::size_t;
 inline constexpr int32 INDEX_NONE = -1;
 
 #if defined(_WIN32)
-	#define GENESIS_PLATFORM_WINDOWS 1
+	#define PLATFORM_WINDOWS 1
 #else
-	#define GENESIS_PLATFORM_WINDOWS 0
+	#define PLATFORM_WINDOWS 0
 #endif
 
-// Engine.props sets this; other projects (the MFC editor, MapCore) follow the
-// usual NDEBUG convention.
-#ifndef GENESIS_DEBUG
+// Engine.props sets this; the projects that keep their own settings (MapCore,
+// GenesisTests) follow the usual NDEBUG convention.
+#ifndef UE_BUILD_DEBUG
 	#ifdef NDEBUG
-		#define GENESIS_DEBUG 0
+		#define UE_BUILD_DEBUG 0
 	#else
-		#define GENESIS_DEBUG 1
+		#define UE_BUILD_DEBUG 1
 	#endif
 #endif
 
-#define GENESIS_LIKELY(x) (x) [[likely]]
-#define GENESIS_UNLIKELY(x) (x) [[unlikely]]
+#define LIKELY(x) (!!(x))
+#define UNLIKELY(x) (!!(x))
 
 // Non-copyable helper base.
 class FNoncopyable

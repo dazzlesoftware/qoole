@@ -247,7 +247,7 @@ private:
 			const bool bContains = Pos.X >= Monitor.DisplayRect.Left && Pos.X < Monitor.DisplayRect.Right && Pos.Y >= Monitor.DisplayRect.Top && Pos.Y < Monitor.DisplayRect.Bottom;
 			if (!bContains)
 			{
-				GE_LOG(LogTestApp, Display, "Moving the main window to monitor {} ({:.0f}%)", Monitor.Name, Monitor.DpiScale * 100.0f);
+				UE_LOG(LogTestApp, Display, "Moving the main window to monitor {} ({:.0f}%)", Monitor.Name, Monitor.DpiScale * 100.0f);
 				Native->MoveWindowTo(Monitor.WorkArea.Left + 80, Monitor.WorkArea.Top + 80);
 				if (Inspector)
 				{
@@ -256,7 +256,7 @@ private:
 				return;
 			}
 		}
-		GE_LOG(LogTestApp, Display, "One monitor: nothing to move to");
+		UE_LOG(LogTestApp, Display, "One monitor: nothing to move to");
 	}
 
 	TSharedPtr<SWindow> Inspector;

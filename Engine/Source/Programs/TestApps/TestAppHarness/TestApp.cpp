@@ -212,7 +212,7 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	if (!Device)
 	{
 		const FString Message = FString::Format("Could not create a {} device. See the log for details.", ToString(Backend));
-		GE_LOG(LogTestApp, Error, "{}", Message);
+		UE_LOG(LogTestApp, Error, "{}", Message);
 		if (SelfTestDir.IsEmpty())
 		{
 			MessageBoxW(nullptr, Message.ToWide().c_str(), Info.Name.ToWide().c_str(), MB_ICONERROR);
@@ -224,7 +224,7 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	Fonts = FStarshipCoreFonts::Load(*FontCache);
 	if (!Fonts.IsValid())
 	{
-		GE_LOG(LogTestApp, Error, "The fonts could not be loaded");
+		UE_LOG(LogTestApp, Error, "The fonts could not be loaded");
 		return false;
 	}
 	const TSharedRef<FSlateStyleSet> Style = FStarshipCoreStyle::Create(Fonts);
@@ -234,7 +234,7 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	Renderer = MakeUnique<FSlateRHIRenderingPolicy>(*Device, *FontCache);
 	if (!Renderer->Initialize())
 	{
-		GE_LOG(LogTestApp, Error, "UI renderer initialization failed");
+		UE_LOG(LogTestApp, Error, "UI renderer initialization failed");
 		return false;
 	}
 	WindowRenderer = MakeUnique<FSlateRHIRenderer>(*Device, *Renderer);
@@ -268,7 +268,7 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	App->AddWindow(ToSharedRef(MainWindow));
 	MainWindow->SetContent(MakeContent());
 	OnStarted();
-	GE_LOG(LogTestApp, Display, "{} on {}: {}", Info.Name, ToString(Backend), Device->GetAdapterName());
+	UE_LOG(LogTestApp, Display, "{} on {}: {}", Info.Name, ToString(Backend), Device->GetAdapterName());
 	return true;
 }
 
@@ -311,7 +311,7 @@ void FTestApp::Shutdown()
 {
 	if (!SelfTestDir.IsEmpty())
 	{
-		GE_LOG(LogTestApp, Display, "{}: {} checks, {} failed", Info.Name, Checks, Failures);
+		UE_LOG(LogTestApp, Display, "{}: {} checks, {} failed", Info.Name, Checks, Failures);
 	}
 	if (Device)
 	{
@@ -364,7 +364,7 @@ void FTestApp::SetAppScale(float Scale)
 {
 	AppScale = Scale;
 	App->SetApplicationScale(Scale);
-	GE_LOG(LogTestApp, Display, "App scale {:.2f}", AppScale);
+	UE_LOG(LogTestApp, Display, "App scale {:.2f}", AppScale);
 }
 
 void FTestApp::SimulateDpiChange(float NewScale)
@@ -376,7 +376,7 @@ void FTestApp::SimulateDpiChange(float NewScale)
 	const float Ratio = NewScale / MainWindow->GetNativeWindow()->GetDpiScale();
 	RECT Suggested{ Rect.left, Rect.top, Rect.left + FMath::RoundToInt((Rect.right - Rect.left) * Ratio), Rect.top + FMath::RoundToInt((Rect.bottom - Rect.top) * Ratio) };
 	const WORD Dpi = static_cast<WORD>(FMath::RoundToInt(NewScale * 96.0f));
-	GE_LOG(LogTestApp, Display, "Simulating WM_DPICHANGED to {} dpi", Dpi);
+	UE_LOG(LogTestApp, Display, "Simulating WM_DPICHANGED to {} dpi", Dpi);
 	SendMessageW(Hwnd, WM_DPICHANGED, MAKEWPARAM(Dpi, Dpi), reinterpret_cast<LPARAM>(&Suggested));
 }
 
@@ -594,7 +594,7 @@ void FTestApp::Capture(const FString& Name)
 		const bool bOk = CaptureWindowClientToPng(Hwnd, Path);
 		SetWindowPos(Hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 		Expect(bOk, FString::Format("screenshot {}", Path));
-		GE_LOG(LogTestApp, Display, "Screenshot {} ({}x{} px, DPI scale {:.2f}, app scale {:.2f})", Path,
+		UE_LOG(LogTestApp, Display, "Screenshot {} ({}x{} px, DPI scale {:.2f}, app scale {:.2f})", Path,
 			Window->GetPixelSize().X, Window->GetPixelSize().Y, Window->GetNativeWindow()->GetDpiScale(), AppScale);
 	}
 }
@@ -602,7 +602,7 @@ void FTestApp::Capture(const FString& Name)
 void FTestApp::SetLastEvent(const FString& Event)
 {
 	LastEvent = Event;
-	GE_LOG(LogTestApp, Log, "{}", Event);
+	UE_LOG(LogTestApp, Log, "{}", Event);
 }
 
 bool FTestApp::Expect(bool bCondition, const FString& What)
@@ -610,12 +610,12 @@ bool FTestApp::Expect(bool bCondition, const FString& What)
 	++Checks;
 	if (bCondition)
 	{
-		GE_LOG(LogTestApp, Display, "Check passed: {}", What);
+		UE_LOG(LogTestApp, Display, "Check passed: {}", What);
 	}
 	else
 	{
 		++Failures;
-		GE_LOG(LogTestApp, Error, "Check FAILED: {}", What);
+		UE_LOG(LogTestApp, Error, "Check FAILED: {}", What);
 	}
 	return bCondition;
 }

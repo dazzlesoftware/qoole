@@ -161,7 +161,7 @@ bool FMapEditorEnvironment::Activate(const FMapGameSet& GameSet, FString* OutErr
 			break;
 		}
 	}
-	GE_LOG(LogMapEditor, Display, "Game set: {}", GameSet.Name);
+	UE_LOG(LogMapEditor, Display, "Game set: {}", GameSet.Name);
 	return true;
 }
 

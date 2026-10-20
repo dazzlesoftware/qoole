@@ -16,7 +16,7 @@ FStarshipCoreFonts FStarshipCoreFonts::Load(FSlateFontCache& FontCache, FString 
 	const TSharedPtr<FFontFace> Devanagari = FontCache.LoadFace(FontDirectory + "NotoSansDevanagari-Regular.ttf");
 	if (!Regular || !Bold)
 	{
-		GE_LOG(LogStyle, Error, "Genesis fonts not found in \"{}\"", FontDirectory);
+		UE_LOG(LogStyle, Error, "Genesis fonts not found in \"{}\"", FontDirectory);
 		return Fonts;
 	}
 	TArray<TSharedPtr<FFontFace>> RegularFaces{ Regular };

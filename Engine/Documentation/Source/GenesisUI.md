@@ -734,7 +734,7 @@ with C++20 at warning level 4):
 
 | Module | Contents |
 |---|---|
-| `Core` | `FString` (UTF-8, `std::u8string`), `FName`, container and smart-pointer aliases, `check`/`ensure`, `GE_LOG` logging, `TDelegate`/`TMulticastDelegate`, 2D math (`FVector2`, `FColor`/`FLinearColor`, `FMargin`, `FRect`, `FTransform2D`), time/file/path helpers. (Merged with milestone 1's `Core`, §14.4.) |
+| `Core` | `FString` (UTF-8, `std::u8string`), `FName`, container and smart-pointer aliases, `check`/`ensure`, `UE_LOG` logging, `TDelegate`/`TMulticastDelegate`, 2D math (`FVector2`, `FColor`/`FLinearColor`, `FMargin`, `FRect`, `FTransform2D`), time/file/path helpers. (Merged with milestone 1's `Core`, §14.4.) |
 | `ApplicationCore` | `IPlatformApplication`, `IPlatformWindow` + `FWindowDesc`, `IPlatformMessageHandler`, `ICursor`, clipboard, display metrics. Win32: per-monitor DPI v2, `WM_DPICHANGED`, deferred input, raw mouse, XInput, OS-decorated and borderless windows (UI hit-testing for title bar and resize edges, DWM shadow kept). `FNullPlatformApplication` for headless tests. |
 | `RHI` | Device + queue, swapchain per window, upload/default buffers, 2D textures and render targets, pipelines from precompiled shaders, command list. D3D12 and Vulkan backends, chosen at startup. |
 | `SlateCore` | Draw elements (`FSlateWindowElementList`: Box with image/9-slice/tiling/tint, RoundedBox, Text, Lines, CustomVerts, Viewport), layers, scissor clip stack, `FSlateTextureAtlas`, and the font system (`FSlateFontCache`: FreeType + HarfBuzz, font fallback, shaping, measurement, glyph atlas). |

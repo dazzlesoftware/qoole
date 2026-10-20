@@ -106,7 +106,7 @@ uint32 FD3D12DescriptorHeap::Allocate()
 {
 	if (FreeList.empty())
 	{
-		GE_LOG(LogRHI, Error, "D3D12 descriptor heap exhausted ({} descriptors)", Capacity);
+		UE_LOG(LogRHI, Error, "D3D12 descriptor heap exhausted ({} descriptors)", Capacity);
 		return Invalid;
 	}
 	const uint32 Index = FreeList.back();
@@ -210,7 +210,7 @@ bool FD3D12SwapChain::Initialize()
 	HRESULT Hr = Device.GetFactory()->CreateSwapChainForHwnd(Device.GetQueue(), Hwnd, &SwapDesc, nullptr, nullptr, &SwapChain1);
 	if (FAILED(Hr) || FAILED(SwapChain1.As(&SwapChain)))
 	{
-		GE_LOG(LogRHI, Error, "CreateSwapChainForHwnd failed (0x{:08X})", static_cast<uint32>(Hr));
+		UE_LOG(LogRHI, Error, "CreateSwapChainForHwnd failed (0x{:08X})", static_cast<uint32>(Hr));
 		return false;
 	}
 	Device.GetFactory()->MakeWindowAssociation(Hwnd, DXGI_MWA_NO_ALT_ENTER);
@@ -267,7 +267,7 @@ void FD3D12SwapChain::Resize(uint32 Width, uint32 Height)
 	const HRESULT Hr = SwapChain->ResizeBuffers(BufferCount, Width, Height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
 	if (FAILED(Hr))
 	{
-		GE_LOG(LogRHI, Error, "ResizeBuffers({}x{}) failed (0x{:08X})", Width, Height, static_cast<uint32>(Hr));
+		UE_LOG(LogRHI, Error, "ResizeBuffers({}x{}) failed (0x{:08X})", Width, Height, static_cast<uint32>(Hr));
 	}
 	AcquireBuffers();
 }
@@ -287,7 +287,7 @@ void FD3D12SwapChain::Present()
 	const HRESULT Hr = SwapChain->Present(1, 0);
 	if (FAILED(Hr))
 	{
-		GE_LOG(LogRHI, Error, "Present failed (0x{:08X})", static_cast<uint32>(Hr));
+		UE_LOG(LogRHI, Error, "Present failed (0x{:08X})", static_cast<uint32>(Hr));
 	}
 }
 
@@ -469,17 +469,17 @@ bool FD3D12Device::Initialize()
 		{
 			Debug->EnableDebugLayer();
 			FactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-			GE_LOG(LogRHI, Display, "D3D12 debug layer enabled");
+			UE_LOG(LogRHI, Display, "D3D12 debug layer enabled");
 		}
 		else
 		{
-			GE_LOG(LogRHI, Display, "D3D12 debug layer requested but not installed (Graphics Tools optional feature)");
+			UE_LOG(LogRHI, Display, "D3D12 debug layer requested but not installed (Graphics Tools optional feature)");
 		}
 	}
 
 	if (FAILED(CreateDXGIFactory2(FactoryFlags, IID_PPV_ARGS(&Factory))))
 	{
-		GE_LOG(LogRHI, Error, "CreateDXGIFactory2 failed");
+		UE_LOG(LogRHI, Error, "CreateDXGIFactory2 failed");
 		return false;
 	}
 
@@ -502,12 +502,12 @@ bool FD3D12Device::Initialize()
 	{
 		if (!Desc.bSoftwareAdapter)
 		{
-			GE_LOG(LogRHI, Warning, "No hardware D3D12 adapter; using WARP");
+			UE_LOG(LogRHI, Warning, "No hardware D3D12 adapter; using WARP");
 		}
 		if (FAILED(Factory->EnumWarpAdapter(IID_PPV_ARGS(&Adapter)))
 			|| FAILED(D3D12CreateDevice(Adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device))))
 		{
-			GE_LOG(LogRHI, Error, "D3D12CreateDevice failed");
+			UE_LOG(LogRHI, Error, "D3D12CreateDevice failed");
 			return false;
 		}
 	}
@@ -531,7 +531,7 @@ bool FD3D12Device::Initialize()
 	if (FAILED(Device->CreateCommandQueue(&QueueDesc, IID_PPV_ARGS(&Queue)))
 		|| FAILED(Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence))))
 	{
-		GE_LOG(LogRHI, Error, "Failed to create the D3D12 queue");
+		UE_LOG(LogRHI, Error, "Failed to create the D3D12 queue");
 		return false;
 	}
 	SetName(Queue.Get(), "RHI direct queue");
@@ -541,7 +541,7 @@ bool FD3D12Device::Initialize()
 		|| !RtvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, RtvHeapCapacity, false)
 		|| !DsvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV, DsvHeapCapacity, false))
 	{
-		GE_LOG(LogRHI, Error, "Failed to create D3D12 descriptor heaps");
+		UE_LOG(LogRHI, Error, "Failed to create D3D12 descriptor heaps");
 		return false;
 	}
 
@@ -555,7 +555,7 @@ bool FD3D12Device::Initialize()
 		|| FAILED(Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Frames[0].UploadAllocator.Get(), nullptr, IID_PPV_ARGS(&UploadList)))
 		|| FAILED(Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, ImmediateAllocator.Get(), nullptr, IID_PPV_ARGS(&ImmediateList))))
 	{
-		GE_LOG(LogRHI, Error, "Failed to create D3D12 command lists");
+		UE_LOG(LogRHI, Error, "Failed to create D3D12 command lists");
 		return false;
 	}
 	MainList->Close();
@@ -585,9 +585,9 @@ void FD3D12Device::FlushDebugMessages()
 			switch (Message->Severity)
 			{
 			case D3D12_MESSAGE_SEVERITY_CORRUPTION:
-			case D3D12_MESSAGE_SEVERITY_ERROR: GE_LOG(LogRHI, Error, "D3D12: {}", Text); break;
-			case D3D12_MESSAGE_SEVERITY_WARNING: GE_LOG(LogRHI, Warning, "D3D12: {}", Text); break;
-			default: GE_LOG(LogRHI, Verbose, "D3D12: {}", Text); break;
+			case D3D12_MESSAGE_SEVERITY_ERROR: UE_LOG(LogRHI, Error, "D3D12: {}", Text); break;
+			case D3D12_MESSAGE_SEVERITY_WARNING: UE_LOG(LogRHI, Warning, "D3D12: {}", Text); break;
+			default: UE_LOG(LogRHI, Verbose, "D3D12: {}", Text); break;
 			}
 		}
 	}
@@ -676,7 +676,7 @@ TSharedPtr<FRHIBuffer> FD3D12Device::CreateBuffer(const FRHIBufferDesc& BufferDe
 	const D3D12_RESOURCE_STATES InitialState = bUpload ? D3D12_RESOURCE_STATE_GENERIC_READ : D3D12_RESOURCE_STATE_COMMON;
 	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, InitialState, nullptr, IID_PPV_ARGS(&Resource))))
 	{
-		GE_LOG(LogRHI, Error, "Failed to create a {}-byte buffer", BufferDesc.Size);
+		UE_LOG(LogRHI, Error, "Failed to create a {}-byte buffer", BufferDesc.Size);
 		return nullptr;
 	}
 	SetName(Resource.Get(), BufferDesc.DebugName);
@@ -744,7 +744,7 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, InitialState,
 		TextureDesc.bRenderTarget ? &Clear : nullptr, IID_PPV_ARGS(&Resource))))
 	{
-		GE_LOG(LogRHI, Error, "Failed to create a {}x{} texture", TextureDesc.Width, TextureDesc.Height);
+		UE_LOG(LogRHI, Error, "Failed to create a {}x{} texture", TextureDesc.Width, TextureDesc.Height);
 		return nullptr;
 	}
 	SetName(Resource.Get(), TextureDesc.DebugName);
@@ -811,7 +811,7 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateDepthTexture(const FRHITextureDesc& 
 	ComPtr<ID3D12Resource> Resource;
 	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &Clear, IID_PPV_ARGS(&Resource))))
 	{
-		GE_LOG(LogRHI, Error, "Failed to create a {}x{} depth buffer", TextureDesc.Width, TextureDesc.Height);
+		UE_LOG(LogRHI, Error, "Failed to create a {}x{} depth buffer", TextureDesc.Width, TextureDesc.Height);
 		return nullptr;
 	}
 	SetName(Resource.Get(), TextureDesc.DebugName);
@@ -870,7 +870,7 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(uint32 PushConstantSi
 	ComPtr<ID3DBlob> Blob, Error;
 	if (FAILED(D3D12SerializeRootSignature(&RootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &Blob, &Error)))
 	{
-		GE_LOG(LogRHI, Error, "Root signature: {}", Error ? static_cast<const char*>(Error->GetBufferPointer()) : "?");
+		UE_LOG(LogRHI, Error, "Root signature: {}", Error ? static_cast<const char*>(Error->GetBufferPointer()) : "?");
 		return nullptr;
 	}
 	ComPtr<ID3D12RootSignature> RootSignature;
@@ -938,7 +938,7 @@ TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHI
 	const HRESULT Hr = Device->CreateGraphicsPipelineState(&PsoDesc, IID_PPV_ARGS(&Pso));
 	if (FAILED(Hr))
 	{
-		GE_LOG(LogRHI, Error, "CreateGraphicsPipelineState failed (0x{:08X})", static_cast<uint32>(Hr));
+		UE_LOG(LogRHI, Error, "CreateGraphicsPipelineState failed (0x{:08X})", static_cast<uint32>(Hr));
 		FlushDebugMessages();
 		return nullptr;
 	}

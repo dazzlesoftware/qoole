@@ -87,7 +87,7 @@ FSlateFontCache::FSlateFontCache()
 	}
 	else
 	{
-		GE_LOG(LogFont, Error, "FT_Init_FreeType failed");
+		UE_LOG(LogFont, Error, "FT_Init_FreeType failed");
 	}
 	Buffer = hb_buffer_create();
 }
@@ -103,7 +103,7 @@ TSharedPtr<FFontFace> FSlateFontCache::LoadFace(const FString& Path)
 	TArray<uint8> Data;
 	if (!FFileHelper::LoadFileToArray(Data, Path))
 	{
-		GE_LOG(LogFont, Error, "Cannot read font file \"{}\"", Path);
+		UE_LOG(LogFont, Error, "Cannot read font file \"{}\"", Path);
 		return nullptr;
 	}
 	return LoadFaceFromMemory(std::move(Data));
@@ -120,7 +120,7 @@ TSharedPtr<FFontFace> FSlateFontCache::LoadFaceFromMemory(TArray<uint8> Data)
 	Face->Data = std::move(Data);
 	if (FT_New_Memory_Face(Library.get(), Face->Data.data(), static_cast<FT_Long>(Face->Data.size()), 0, &Face->Face) != 0)
 	{
-		GE_LOG(LogFont, Error, "FreeType cannot open the font");
+		UE_LOG(LogFont, Error, "FreeType cannot open the font");
 		return nullptr;
 	}
 	FT_Select_Charmap(Face->Face, FT_ENCODING_UNICODE);
@@ -129,7 +129,7 @@ TSharedPtr<FFontFace> FSlateFontCache::LoadFaceFromMemory(TArray<uint8> Data)
 	Face->Id = NextFaceId++;
 	Face->FamilyName = Face->Face->family_name ? Face->Face->family_name : "";
 	Face->StyleName = Face->Face->style_name ? Face->Face->style_name : "";
-	GE_LOG(LogFont, Log, "Loaded font {} {} ({} glyphs)", Face->FamilyName, Face->StyleName, Face->Face->num_glyphs);
+	UE_LOG(LogFont, Log, "Loaded font {} {} ({} glyphs)", Face->FamilyName, Face->StyleName, Face->Face->num_glyphs);
 	return Face;
 }
 
@@ -288,7 +288,7 @@ const FCachedGlyph& FSlateFontCache::GetGlyph(const FFontFace& Face, float Pixel
 				Pages.push_back(std::move(Page));
 				PageIndex = static_cast<int32>(Pages.size()) - 1;
 				Slot2 = Pages[PageIndex]->Packer.Allocate(Width, Height);
-				GE_LOG(LogFont, Log, "Glyph atlas page {} created", PageIndex);
+				UE_LOG(LogFont, Log, "Glyph atlas page {} created", PageIndex);
 			}
 			if (Slot2)
 			{
@@ -304,7 +304,7 @@ const FCachedGlyph& FSlateFontCache::GetGlyph(const FFontFace& Face, float Pixel
 			}
 			else
 			{
-				GE_LOG(LogFont, Warning, "Glyph {} ({}x{}) does not fit an atlas page", GlyphIndex, Width, Height);
+				UE_LOG(LogFont, Warning, "Glyph {} ({}x{}) does not fit an atlas page", GlyphIndex, Width, Height);
 			}
 		}
 	}

@@ -227,7 +227,7 @@ public:
 struct FRHIDeviceDesc
 {
 	ERHIBackend Backend = ERHIBackend::D3D12;
-	bool bDebugLayer = GENESIS_DEBUG != 0; // D3D12 debug layer / Vulkan validation, when installed
+	bool bDebugLayer = UE_BUILD_DEBUG != 0; // D3D12 debug layer / Vulkan validation, when installed
 	bool bSoftwareAdapter = false;         // D3D12 WARP (headless tests); ignored by Vulkan
 };
 

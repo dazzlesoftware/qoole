@@ -84,7 +84,7 @@ void FMapEditorShell::Log(const FString& Line)
 {
 	LogLines.push_back(Line);
 	StatusText = Line;
-	GE_LOG(LogGenesisEditor, Display, "{}", Line);
+	UE_LOG(LogGenesisEditor, Display, "{}", Line);
 }
 
 // ----- Settings -----

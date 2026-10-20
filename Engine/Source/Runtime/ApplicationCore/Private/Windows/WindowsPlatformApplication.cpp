@@ -192,7 +192,7 @@ FWindowsApplication::FWindowsApplication()
 	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 	if (!AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
 	{
-		GE_LOG(LogApplicationCore, Warning, "Process is not per-monitor DPI aware (v2); text may be blurry on high-DPI monitors");
+		UE_LOG(LogApplicationCore, Warning, "Process is not per-monitor DPI aware (v2); text may be blurry on high-DPI monitors");
 	}
 
 	WNDCLASSEXW Class{ sizeof(WNDCLASSEXW) };
@@ -209,7 +209,7 @@ FWindowsApplication::FWindowsApplication()
 	Class.lpszClassName = GetWindowClassName();
 	if (!RegisterClassExW(&Class) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
 	{
-		GE_LOG(LogApplicationCore, Error, "RegisterClassEx failed ({})", GetLastError());
+		UE_LOG(LogApplicationCore, Error, "RegisterClassEx failed ({})", GetLastError());
 	}
 }
 
@@ -647,7 +647,7 @@ void FWindowsApplication::SetRawMouseInputEnabled(bool bEnable)
 	}
 	else
 	{
-		GE_LOG(LogApplicationCore, Warning, "RegisterRawInputDevices failed ({})", GetLastError());
+		UE_LOG(LogApplicationCore, Warning, "RegisterRawInputDevices failed ({})", GetLastError());
 	}
 }
 

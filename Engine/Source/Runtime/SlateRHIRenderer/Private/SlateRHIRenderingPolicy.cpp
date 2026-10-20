@@ -247,7 +247,7 @@ void FSlateRHIRenderingPolicy::UploadImage(const FSlateTextureData& Image, FImag
 			Page.Id = RegisterTexture(Page.Texture);
 			Entry.AtlasPage = static_cast<int32>(ImagePages.size()) - 1;
 			Slot = Page.Packer.Allocate(W, H);
-			GE_LOG(LogSlateRHIRenderer, Log, "Image atlas page {} created", Entry.AtlasPage);
+			UE_LOG(LogSlateRHIRenderer, Log, "Image atlas page {} created", Entry.AtlasPage);
 		}
 		check(Slot);
 		Entry.AtlasSlot = *Slot;
@@ -332,7 +332,7 @@ FRHIGraphicsPipeline* FSlateRHIRenderingPolicy::GetPipeline(ESlateShader Shader,
 	TSharedPtr<FRHIGraphicsPipeline> Pipeline = Device.CreateGraphicsPipeline(Desc);
 	if (!Pipeline)
 	{
-		GE_LOG(LogSlateRHIRenderer, Error, "Failed to create the {} pipeline", ToString(Shader));
+		UE_LOG(LogSlateRHIRenderer, Error, "Failed to create the {} pipeline", ToString(Shader));
 		return nullptr;
 	}
 	Pipelines.emplace(Key, Pipeline);

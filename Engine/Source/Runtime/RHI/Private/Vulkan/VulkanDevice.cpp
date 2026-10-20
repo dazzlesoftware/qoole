@@ -25,19 +25,19 @@ namespace
 		if (Types == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT && !(Severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT))
 		{
 			// Loader chatter (e.g. registry lookups for layers), not API misuse.
-			GE_LOG(LogRHI, Log, "Vulkan loader: {}", Message);
+			UE_LOG(LogRHI, Log, "Vulkan loader: {}", Message);
 		}
 		else if (Severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
 		{
-			GE_LOG(LogRHI, Error, "Vulkan validation: {}", Message);
+			UE_LOG(LogRHI, Error, "Vulkan validation: {}", Message);
 		}
 		else if (Severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
 		{
-			GE_LOG(LogRHI, Warning, "Vulkan validation: {}", Message);
+			UE_LOG(LogRHI, Warning, "Vulkan validation: {}", Message);
 		}
 		else
 		{
-			GE_LOG(LogRHI, Verbose, "Vulkan: {}", Message);
+			UE_LOG(LogRHI, Verbose, "Vulkan: {}", Message);
 		}
 		return VK_FALSE;
 	}
@@ -95,7 +95,7 @@ namespace VulkanUtil
 		{
 			return true;
 		}
-		GE_LOG(LogRHI, Error, "Vulkan: {} failed: {}", What, ResultToString(Result));
+		UE_LOG(LogRHI, Error, "Vulkan: {} failed: {}", What, ResultToString(Result));
 		return false;
 	}
 }
@@ -104,7 +104,7 @@ TUniquePtr<FRHIDevice> CreateVulkanDevice(const FRHIDeviceDesc& Desc)
 {
 	if (GVulkanDeviceAlive)
 	{
-		GE_LOG(LogRHI, Warning, "Vulkan: only one Vulkan device can exist at a time");
+		UE_LOG(LogRHI, Warning, "Vulkan: only one Vulkan device can exist at a time");
 		return nullptr;
 	}
 	TUniquePtr<FVulkanDevice> Device = MakeUnique<FVulkanDevice>();
@@ -200,7 +200,7 @@ bool FVulkanDevice::CreateInstance(bool bDebugLayer)
 	}
 	if (LoaderVersion < VK_API_VERSION_1_1)
 	{
-		GE_LOG(LogRHI, Warning, "Vulkan: the installed loader only supports Vulkan {}.{}; 1.1 is required",
+		UE_LOG(LogRHI, Warning, "Vulkan: the installed loader only supports Vulkan {}.{}; 1.1 is required",
 			VK_API_VERSION_MAJOR(LoaderVersion), VK_API_VERSION_MINOR(LoaderVersion));
 		return false;
 	}
@@ -216,7 +216,7 @@ bool FVulkanDevice::CreateInstance(bool bDebugLayer)
 	{
 		if (!HasExtension(Extensions, Required))
 		{
-			GE_LOG(LogRHI, Warning, "Vulkan: instance extension {} is not available", Required);
+			UE_LOG(LogRHI, Warning, "Vulkan: instance extension {} is not available", Required);
 			return false;
 		}
 		EnabledExtensions.push_back(Required);
@@ -236,11 +236,11 @@ bool FVulkanDevice::CreateInstance(bool bDebugLayer)
 		if (bHasValidation)
 		{
 			EnabledLayers.push_back(ValidationLayer);
-			GE_LOG(LogRHI, Display, "Vulkan validation layer enabled");
+			UE_LOG(LogRHI, Display, "Vulkan validation layer enabled");
 		}
 		else
 		{
-			GE_LOG(LogRHI, Display, "Vulkan: validation layer not installed; running without it");
+			UE_LOG(LogRHI, Display, "Vulkan: validation layer not installed; running without it");
 		}
 
 		// Debug utils (object names for tools, and validation messages).
@@ -275,7 +275,7 @@ bool FVulkanDevice::CreateInstance(bool bDebugLayer)
 	const VkResult Result = vkCreateInstance(&CreateInfo, nullptr, &Instance);
 	if (Result != VK_SUCCESS)
 	{
-		GE_LOG(LogRHI, Warning, "Vulkan: vkCreateInstance failed: {}", ResultToString(Result));
+		UE_LOG(LogRHI, Warning, "Vulkan: vkCreateInstance failed: {}", ResultToString(Result));
 		Instance = VK_NULL_HANDLE;
 		return false;
 	}
@@ -358,7 +358,7 @@ bool FVulkanDevice::PickPhysicalDevice()
 
 	if (!PhysicalDevice)
 	{
-		GE_LOG(LogRHI, Warning, "Vulkan: no GPU with Vulkan 1.1, graphics + presentation and VK_KHR_swapchain found");
+		UE_LOG(LogRHI, Warning, "Vulkan: no GPU with Vulkan 1.1, graphics + presentation and VK_KHR_swapchain found");
 		return false;
 	}
 	AdapterName = FString(PhysicalDeviceProperties.deviceName);
@@ -384,7 +384,7 @@ bool FVulkanDevice::CreateLogicalDevice()
 	const VkResult Result = vkCreateDevice(PhysicalDevice, &CreateInfo, nullptr, &Device);
 	if (Result != VK_SUCCESS)
 	{
-		GE_LOG(LogRHI, Warning, "Vulkan: vkCreateDevice failed: {}", ResultToString(Result));
+		UE_LOG(LogRHI, Warning, "Vulkan: vkCreateDevice failed: {}", ResultToString(Result));
 		Device = VK_NULL_HANDLE;
 		return false;
 	}
@@ -559,7 +559,7 @@ bool FVulkanDevice::AllocateMemory(const VkMemoryRequirements& Requirements, VkM
 	const uint32 TypeIndex = FindMemoryType(Requirements.memoryTypeBits, Required, Preferred);
 	if (TypeIndex == UINT32_MAX)
 	{
-		GE_LOG(LogRHI, Error, "Vulkan: no suitable memory type (bits 0x{:x}, flags 0x{:x})", Requirements.memoryTypeBits, Required);
+		UE_LOG(LogRHI, Error, "Vulkan: no suitable memory type (bits 0x{:x}, flags 0x{:x})", Requirements.memoryTypeBits, Required);
 		return false;
 	}
 	VkMemoryAllocateInfo AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
@@ -1145,6 +1145,6 @@ void FVulkanDevice::OnSwapChainDestroyed(FVulkanSwapChain* SwapChain)
 {
 	if (ArrayUtil::Remove(AcquiredSwapChains, SwapChain) > 0)
 	{
-		GE_LOG(LogRHI, Warning, "Vulkan: swapchain destroyed in the middle of a frame that draws into it");
+		UE_LOG(LogRHI, Warning, "Vulkan: swapchain destroyed in the middle of a frame that draws into it");
 	}
 }

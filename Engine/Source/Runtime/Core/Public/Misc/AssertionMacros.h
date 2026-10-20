@@ -3,7 +3,7 @@
 // check / checkf / verify / checkNoEntry / ensure / ensuref.
 //
 // - check(expr), checkf(expr, fmt, args...): compiled out (expression not
-//   evaluated) when GENESIS_DO_CHECK is 0, the default for Release builds.
+//   evaluated) when DO_CHECK is 0, the default for Release builds.
 //   A failure is logged as an error and then, like the MFC ASSERT these
 //   replace in the map core, breaks into an attached debugger or shows the C
 //   runtime's Abort/Retry/Ignore report. Ignore continues.
@@ -23,8 +23,8 @@
 #include <format>
 #include <string>
 
-#ifndef GENESIS_DO_CHECK
-	#define GENESIS_DO_CHECK GENESIS_DEBUG
+#ifndef DO_CHECK
+	#define DO_CHECK UE_BUILD_DEBUG
 #endif
 
 struct FAssertion
@@ -49,7 +49,7 @@ struct FAssertion
 	static std::string FormatText() { return {}; }
 };
 
-#if GENESIS_DO_CHECK
+#if DO_CHECK
 	#define check(expr) \
 		do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, {}); } } while (0)
 	#define checkf(expr, fmt, ...) \

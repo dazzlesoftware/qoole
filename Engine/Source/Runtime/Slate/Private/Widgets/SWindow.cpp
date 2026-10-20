@@ -163,7 +163,7 @@ bool SWindow::UpdateLayout()
 	}
 	if (NeedsLayout())
 	{
-		GE_LOG(LogSlate, Verbose, "Window \"{}\" layout did not settle in {} passes", Title, MaxPasses);
+		UE_LOG(LogSlate, Verbose, "Window \"{}\" layout did not settle in {} passes", Title, MaxPasses);
 	}
 	return true;
 }

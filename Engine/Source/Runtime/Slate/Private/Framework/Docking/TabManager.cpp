@@ -582,13 +582,13 @@ TSharedRef<FDockLayout> FTabManager::LoadLayout(const FString& SavedJson, const 
 	const TOptional<FJsonValue> Json = FJsonValue::Parse(SavedJson.View(), &Error);
 	if (!Json)
 	{
-		GE_LOG(LogSlate, Warning, "Saved layout ignored: {}", Error);
+		UE_LOG(LogSlate, Warning, "Saved layout ignored: {}", Error);
 		return Default;
 	}
 	const TSharedPtr<FDockLayout> Saved = FDockLayout::FromJson(*Json);
 	if (!Saved || Saved->Name != Default->Name || Saved->Version != Default->Version || !Saved->GetPrimaryArea())
 	{
-		GE_LOG(LogSlate, Log, "Saved layout ignored (another name or version); using the default \"{}\" v{}", Default->Name, Default->Version);
+		UE_LOG(LogSlate, Log, "Saved layout ignored (another name or version); using the default \"{}\" v{}", Default->Name, Default->Version);
 		return Default;
 	}
 	return ToSharedRef(Saved);

@@ -93,7 +93,7 @@ bool FWindowsWindow::Initialize()
 		ParentHwnd, nullptr, GetModuleHandleW(nullptr), this);
 	if (!Hwnd)
 	{
-		GE_LOG(LogApplicationCore, Error, "CreateWindowEx failed ({})", GetLastError());
+		UE_LOG(LogApplicationCore, Error, "CreateWindowEx failed ({})", GetLastError());
 		return false;
 	}
 
