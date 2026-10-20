@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The editor framework test applications that edit the demo scene
+  (DemoScene): TestApps.props plus the scene. Import it after Engine.props,
+  instead of TestApps.props.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="TestApps.props" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(GenesisTestAppsDir)DemoScene;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(GenesisTestAppsDir)DemoScene\DemoScene.cpp" />
+    <ClInclude Include="$(GenesisTestAppsDir)DemoScene\DemoScene.h" />
+  </ItemGroup>
+</Project>

@@ -38,6 +38,7 @@ and how the existing MFC editor moves onto it.
 19. [Milestone 4 notes](#19-milestone-4-notes)
 20. [Milestone 5 notes](#20-milestone-5-notes)
 21. [Milestone 6 notes](#21-milestone-6-notes)
+22. [Test applications](#22-test-applications)
 
 ---
 
@@ -1159,3 +1160,58 @@ More screenshots: [the Object menu](images/genesis-ui-m6/menu-object-d3d12-150.p
   captured showing an earlier step.
 - `GenesisTests` (the map core) and `EngineTests` pass in Debug and
   Release.
+
+## 22. Test applications
+
+`UISandbox`, which had grown from the milestone 2 showcase into the widget
+gallery and then the editor framework demo, was split into test
+applications in `source/Programs/TestApps`: one program per feature, so a
+feature can be tried, debugged and checked without the others in the way.
+The notes of milestones 2 to 4 above describe `UISandbox` as it was.
+
+| Program | What it shows |
+|---|---|
+| `UIRenderTest` | The milestone 2 draw-element showcase, without widgets: boxes, 9-slices, rounded boxes, lines, the clip stack, shaped text, a render target. |
+| `UIButtonsTest` | Buttons (styles, disabled, not focusable), check boxes with an undetermined parent, progress bars, a throbber. |
+| `UIInputsTest` | Combo boxes, sliders, spin boxes (integer, float, mixed values), color swatches and the color picker. |
+| `UITextTest` | Text blocks (wrapping, fallback fonts, justification) and text boxes (password, read-only, multi-line). |
+| `UILayoutTest` | Boxes, wrap box, grid, overlay, canvas, scale box, splitters, nested scroll boxes. |
+| `UIListsTest` | A virtualized list of 10,000 rows with multiple selection, and a tree view. |
+| `UIMenusTest` | Drop-down menus with a submenu, a menu bar, a context menu, text and custom tooltips. |
+| `UIDragDropTest` | Drag and drop with a decorator, a highlighting drop target, Escape to cancel. |
+| `UIWindowsTest` | Several windows, a borderless window with a widget title bar, DPI changes, minimize, monitors, resize, app scale. |
+| `UIViewportTest` | An RHI viewport that redraws only on change: selection, a snapped move with undo, zoom, pan. |
+| `UIPropertyGridTest` | The property grid over several objects: every property type, mixed values, search, undo, the color picker. |
+| `UICommandsTest` | Commands, the menu registry's menu bar and toolbar (dynamic sections, radio entries), shortcuts, rebinding keys. |
+| `UIDockingTest` | Tab stacks, dragging a tab onto another stack, tearing one off and docking it back, the Window menu, layout save and restore. |
+| `MapViewsTest` | The four map views of one map: grid size and visibility, zoom, pan, framing, solid and wireframe 3D, selection. |
+| `MapToolsTest` | The editing tools with the mouse (move, box select, rotate, scale, clip), hollow, subtract, groups, undo, saving and reading back `.qle` and `.map`. |
+
+They are built on `TestAppHarness`, a static library with `FTestApp`: the
+device, the UI renderer, fonts and style, the main window, the command line
+(`-d3d12` / `-vulkan`, `-appscale=`, `-debug` / `-nodebug`, `-resetlayout`,
+`-selftest=<dir>`), F2/F3 for the app scale and DPI, and helpers for
+scripts: simulated mouse and keyboard input through the application's
+platform handler, finding widgets and text, screenshots of every window,
+and checks. A test application overrides `MakeContent` and `BuildSelfTest`
+and ends with `GENESIS_TEST_APP(Class)`. `FMapTestApp`
+(`TestApps/MapTestCommon`) adds the map core, a document and its views; the
+demo scene of the framework apps is in `TestApps/DemoScene`. The shared
+MSBuild settings are `TestApps.props`, `DemoSceneTestApps.props` and
+`MapTestApps.props`.
+
+With `-selftest=<dir>` a test application runs its script and exits with 1
+when a check failed; the screenshots
+(`<App>_<backend>_<window>_<step>.png`) and the log go to `<dir>`.
+`RunTestApps.ps1` runs every one (or `-Filter` some) and prints which
+passed; `-Release` and `-Vulkan` choose the build and the backend.
+
+Scripts wait in frames, which come much faster than the display refreshes,
+so anything timed (the tooltip delay) uses `WaitSeconds`. Modifier keys are
+read from the thread's keyboard state, which `SetModifierKeys` sets; the
+scripts send no input to the rest of the desktop, but the windows are real
+and screenshots copy the screen, so the desktop has to be left alone while
+they run.
+
+`GenesisEditor -selftest=<dir>` stays the end-to-end check of the editor
+itself; `EngineTests` stays the headless suite.

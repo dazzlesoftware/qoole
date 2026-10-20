@@ -1,6 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
-#include "SandboxContent.h"
+#include "DrawShowcase.h"
 
 namespace
 {
@@ -46,7 +46,7 @@ namespace
 	}
 }
 
-FSandboxContent::FSandboxContent(FFontCache& InFontCache, FSandboxFonts InFonts)
+FDrawShowcase::FDrawShowcase(FFontCache& InFontCache, FShowcaseFonts InFonts)
 	: FontCache(InFontCache)
 	, Fonts(std::move(InFonts))
 {
@@ -90,12 +90,12 @@ FSandboxContent::FSandboxContent(FFontCache& InFontCache, FSandboxFonts InFonts)
 	}, "Icon");
 }
 
-FPaintGeometry FSandboxContent::Geo(const FSandboxFrameInfo& Frame, FRect R) const
+FPaintGeometry FDrawShowcase::Geo(const FShowcaseFrame& Frame, FRect R) const
 {
 	return FPaintGeometry::Make(R.GetTopLeft() + Frame.Origin, R.GetSize(), Frame.Scale);
 }
 
-FVector2 FSandboxContent::Text(FDrawElementList& List, int32 Layer, const FSandboxFrameInfo& Frame, FVector2 Position, std::string_view String,
+FVector2 FDrawShowcase::Text(FDrawElementList& List, int32 Layer, const FShowcaseFrame& Frame, FVector2 Position, std::string_view String,
 	const TSharedPtr<FCompositeFont>& Font, float Size, FColor Color)
 {
 	const TSharedRef<const FShapedText> Shaped = FontCache.ShapeText(String, FFontInfo(Font, Size), Frame.Scale);
@@ -103,7 +103,7 @@ FVector2 FSandboxContent::Text(FDrawElementList& List, int32 Layer, const FSandb
 	return Shaped->GetLogicalSize();
 }
 
-FRect FSandboxContent::Panel(FDrawElementList& List, const FSandboxFrameInfo& Frame, const FRect& Rect, std::string_view Title)
+FRect FDrawShowcase::Panel(FDrawElementList& List, const FShowcaseFrame& Frame, const FRect& Rect, std::string_view Title)
 {
 	const bool bHovered = Rect.Contains(Frame.MouseLogical);
 	List.AddRoundedBox(1, Geo(Frame, Rect), PanelFill, 8.0f, bHovered ? Accent : PanelOutline, 1.0f);
@@ -112,14 +112,14 @@ FRect FSandboxContent::Panel(FDrawElementList& List, const FSandboxFrameInfo& Fr
 	return FRect(Rect.Left + 14.0f, Rect.Top + 44.0f, Rect.Right - 14.0f, Rect.Bottom - 12.0f);
 }
 
-void FSandboxContent::PaintMain(FDrawElementList& List, const FSandboxFrameInfo& Frame, const TSharedPtr<FUIRenderTarget>& ViewportTarget)
+void FDrawShowcase::PaintMain(FDrawElementList& List, const FShowcaseFrame& Frame, const TSharedPtr<FUIRenderTarget>& ViewportTarget)
 {
 	const FVector2 Size = Frame.LogicalSize;
 	List.AddSolidBox(0, Geo(Frame, FRect(FVector2(), Size)), Background);
 
 	// Header.
 	List.AddBox(1, Geo(Frame, FRect(16.0f, 16.0f, 32.0f, 32.0f)), FBrush::FromImage(IconImage));
-	Text(List, 1, Frame, { 40.0f, 12.0f }, "Genesis UI Sandbox", Fonts.Bold, 20.0f, HeaderText);
+	Text(List, 1, Frame, { 40.0f, 12.0f }, "Genesis UI draw elements", Fonts.Bold, 20.0f, HeaderText);
 	const FString Info = FString::Format("{} on {}   ·   DPI {:.0f}%   ·   app scale {:.0f}%   ·   {}x{} px   ·   {:.0f} fps   ·   {} batches, {} vertices",
 		Frame.BackendName, Frame.AdapterName, Frame.DpiScale * 100.0f, Frame.AppScale * 100.0f, Frame.PixelSize.X, Frame.PixelSize.Y,
 		Frame.FramesPerSecond, Frame.Stats.Batches, Frame.Stats.Vertices);
@@ -156,7 +156,7 @@ void FSandboxContent::PaintMain(FDrawElementList& List, const FSandboxFrameInfo&
 	PaintViewport(List, Frame, Panel(List, Frame, Cell(2, 1), "Viewport (render target)"), ViewportTarget);
 }
 
-void FSandboxContent::PaintBoxes(FDrawElementList& List, const FSandboxFrameInfo& Frame, FRect Area)
+void FDrawShowcase::PaintBoxes(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	// Solid boxes with an animated hue cycle.
 	const FColor Colors[] = { Accent, Accent2, Accent3, Accent4 };
@@ -191,7 +191,7 @@ void FSandboxContent::PaintBoxes(FDrawElementList& List, const FSandboxFrameInfo
 	}
 }
 
-void FSandboxContent::PaintRoundedBoxes(FDrawElementList& List, const FSandboxFrameInfo& Frame, FRect Area)
+void FDrawShowcase::PaintRoundedBoxes(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	const float W = (Area.Width() - 24.0f) / 3.0f;
 	const float H = 44.0f;
@@ -224,7 +224,7 @@ void FSandboxContent::PaintRoundedBoxes(FDrawElementList& List, const FSandboxFr
 	}
 }
 
-void FSandboxContent::PaintLines(FDrawElementList& List, const FSandboxFrameInfo& Frame, FRect Area)
+void FDrawShowcase::PaintLines(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	// Grid of hairlines (1 and 0.5 logical units).
 	const FRect Graph(Area.Left, Area.Top, Area.Right, Area.Top + FMath::Min(120.0f, Area.Height() * 0.55f));
@@ -278,7 +278,7 @@ void FSandboxContent::PaintLines(FDrawElementList& List, const FSandboxFrameInfo
 	Text(List, 4, Frame, { Area.Left + 170.0f, Y + 26.0f }, "0.5, 1, 1.5, 2, 3 and 6 px", Fonts.Regular, 12.0f, DimText);
 }
 
-void FSandboxContent::PaintClipping(FDrawElementList& List, const FSandboxFrameInfo& Frame, FRect Area)
+void FDrawShowcase::PaintClipping(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	// A list scrolled automatically (and by the mouse wheel) inside a clip.
 	const FRect ListRect(Area.Left, Area.Top, Area.Left + Area.Width() * 0.58f, Area.Bottom);
@@ -315,7 +315,7 @@ void FSandboxContent::PaintClipping(FDrawElementList& List, const FSandboxFrameI
 	Text(List, 4, Frame, { Outer.Left, Outer.Bottom + 24.0f }, "with the mouse wheel", Fonts.Regular, 12.0f, DimText);
 }
 
-void FSandboxContent::PaintText(FDrawElementList& List, const FSandboxFrameInfo& Frame, FRect Area)
+void FDrawShowcase::PaintText(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	List.PushClip(Geo(Frame, Area.Expand(FMargin(4.0f))));
 	float Y = Area.Top;
@@ -336,7 +336,7 @@ void FSandboxContent::PaintText(FDrawElementList& List, const FSandboxFrameInfo&
 	List.PopClip();
 }
 
-void FSandboxContent::PaintViewport(FDrawElementList& List, const FSandboxFrameInfo& Frame, FRect Area, const TSharedPtr<FUIRenderTarget>& ViewportTarget)
+void FDrawShowcase::PaintViewport(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area, const TSharedPtr<FUIRenderTarget>& ViewportTarget)
 {
 	if (!ViewportTarget)
 	{
@@ -352,7 +352,7 @@ void FSandboxContent::PaintViewport(FDrawElementList& List, const FSandboxFrameI
 	List.PopClip();
 }
 
-void FSandboxContent::PaintViewportScene(FDrawElementList& List, const FSandboxFrameInfo& Frame, FIntPoint TargetSize)
+void FDrawShowcase::PaintViewportScene(FDrawElementList& List, const FShowcaseFrame& Frame, FIntPoint TargetSize)
 {
 	// A rotating fan of triangles (custom vertices) rendered into a texture
 	// and composited by a Viewport element. Drawn at the window's scale so

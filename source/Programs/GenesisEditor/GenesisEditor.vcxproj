@@ -39,7 +39,7 @@
     <ClCompile>
       <ConformanceMode>false</ConformanceMode>
       <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(GenesisEngineDir)Core\Public;$(GenesisEngineDir)ApplicationCore\Public;$(GenesisEngineDir)RHI\Public;$(GenesisEngineDir)UICore\Public;$(GenesisEngineDir)UI\Public;$(GenesisEngineDir)UIRenderer\Public;$(GenesisEngineDir)MapEditor\Public;$(GenesisSourceDir)Basic;$(GenesisSourceDir)Objects;$(GenesisSourceDir)Render;$(GenesisSourceDir)Game;$(ProjectDir);$(ProjectDir)..\UISandbox;$(GenesisExternalDir)FreeType\include;$(GenesisExternalDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisEngineDir)Core\Public;$(GenesisEngineDir)ApplicationCore\Public;$(GenesisEngineDir)RHI\Public;$(GenesisEngineDir)UICore\Public;$(GenesisEngineDir)UI\Public;$(GenesisEngineDir)UIRenderer\Public;$(GenesisEngineDir)MapEditor\Public;$(GenesisSourceDir)Basic;$(GenesisSourceDir)Objects;$(GenesisSourceDir)Render;$(GenesisSourceDir)Game;$(ProjectDir);$(ProjectDir)..\TestApps\TestAppHarness;$(GenesisExternalDir)FreeType\include;$(GenesisExternalDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -50,7 +50,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\UISandbox\Screenshot.cpp" />
+    <ClCompile Include="..\TestApps\TestAppHarness\Screenshot.cpp" />
     <ClCompile Include="GenesisEditor.cpp" />
     <ClCompile Include="MapEditorPanels.cpp" />
     <ClCompile Include="MapEditorShell.cpp" />

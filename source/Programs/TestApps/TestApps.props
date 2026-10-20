@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared settings for the test applications (source/Programs/TestApps/<App>):
+  the Genesis UI modules, the test app harness, the DPI-aware manifest.
+  Import it after Engine.props.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <GenesisTestAppsDir>$(MSBuildThisFileDirectory)</GenesisTestAppsDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(GenesisEngineDir)Core\Public;$(GenesisEngineDir)ApplicationCore\Public;$(GenesisEngineDir)RHI\Public;$(GenesisEngineDir)UICore\Public;$(GenesisEngineDir)UI\Public;$(GenesisEngineDir)UIRenderer\Public;$(GenesisTestAppsDir)TestAppHarness;$(ProjectDir);$(GenesisExternalDir)FreeType\include;$(GenesisExternalDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxguid.lib;xinput.lib;imm32.lib;shcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <Manifest>
+      <EnableDpiAwareness>false</EnableDpiAwareness>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <Manifest Include="$(GenesisTestAppsDir)TestApp.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(GenesisTestAppsDir)TestAppHarness\TestAppHarness.vcxproj">
+      <Project>{9D3E5A41-7C2B-4F6E-A1D8-3B5C7E9F0A12}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEngineDir)Core\Core.vcxproj">
+      <Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEngineDir)ApplicationCore\ApplicationCore.vcxproj">
+      <Project>{677BA165-FDBA-5E9B-8349-25D75147593A}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEngineDir)RHI\RHI.vcxproj">
+      <Project>{4EA620B2-9F21-526F-8D58-73DD975601E8}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEngineDir)UICore\UICore.vcxproj">
+      <Project>{6F3297E3-299E-599B-A2FE-946001E4FAF7}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEngineDir)UI\UI.vcxproj">
+      <Project>{3F5319A7-A0BC-4053-83E8-316D4FFD074A}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEngineDir)UIRenderer\UIRenderer.vcxproj">
+      <Project>{436BBD32-CC21-56E4-94F1-B731DD66653A}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisExternalDir)FreeType\FreeType.vcxproj">
+      <Project>{A394F7D3-D789-4C87-BF42-69FB4B7609A2}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisExternalDir)HarfBuzz\HarfBuzz.vcxproj">
+      <Project>{FFA50721-3B6E-440F-A253-4B19F430FC5D}</Project>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

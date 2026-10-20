@@ -1,17 +1,13 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// The editor framework demo (milestone 4 of docs/GenesisUI.md): a small 2D
-// "map" edited in an editor-shaped window built only from the framework:
-// commands with shortcuts, a menu bar and a toolbar from the menu registry,
-// dockable tabs (viewport, outliner, details, log, key bindings and the
-// widget gallery), a property grid with undo, and a viewport client drawn
-// through the RHI. The layout and key bindings persist between runs.
+// A small 2D "map" shared by the editor framework test applications
+// (UIViewportTest, UIPropertyGridTest, UIDockingTest): entities with an
+// undo stack of whole-scene snapshots, a property source for them, and a
+// viewport client that draws and edits them through the RHI.
 
 #pragma once
 
-#include "Framework/Docking/TabManager.h"
-#include "Framework/PropertyGrid/SPropertyGrid.h"
-#include "Gallery.h"
+#include "Framework/PropertyGrid/PropertySource.h"
 #include "RenderTargetViewportClient.h"
 
 struct FDemoEntity
@@ -53,6 +49,8 @@ public:
 	FString GetUndoDescription() const { return UndoStack.empty() ? FString() : UndoStack.back().Description; }
 	void Undo();
 	void Redo();
+	// Adds an entity of a kind (0 brush, 1 light) as an undo step and selects it.
+	int32 AddEntity(int32 Kind);
 	void DeleteSelection();
 	void Changed() { OnChanged.Broadcast(); }
 
@@ -85,6 +83,11 @@ public:
 	bool bShowGrid = true;
 	bool bSnap = true;
 	void FrameSelection();
+	float GetZoom() const { return Zoom; }
+	// How many times the viewport was drawn (it draws only when something changes).
+	int32 GetDrawCount() const { return DrawCount; }
+	// A world position in the viewport, in logical units.
+	FVector2 WorldToLocal(FVector2 World) const { return World * Zoom + Pan; }
 
 	FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	FReply OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event) override;
@@ -111,60 +114,21 @@ private:
 	FVector2 LastAbsolute;
 	TMap<int32, FVector2> DragStartPositions;
 	FDrawElementList Elements;
+	int32 DrawCount = 0;
 };
 
-class FEditorDemo : public TSharedFromThis<FEditorDemo>
+// An entity's properties for SPropertyGrid. Lights have a brightness.
+class FDemoEntitySource final : public IPropertySource
 {
 public:
-	struct FHost
-	{
-		FRHIDevice* Device = nullptr;
-		FUIRenderer* Renderer = nullptr;
-		class FUIWindowRenderer* WindowRenderer = nullptr;
-		FGalleryHost Gallery;
-		TFunction<void()> ToggleInspector;
-		TFunction<void(float)> SetAppScale;
-		TFunction<void()> Quit;
-		FString SettingsDir; // where Layout.json and Bindings.json live; empty: not saved
-	};
+	FDemoEntitySource(FDemoScene& InScene, int32 InId) : Scene(InScene), Id(InId) {}
 
-	explicit FEditorDemo(FHost InHost);
-
-	// The main window's content: menu bar, toolbar, dock area, status bar.
-	TSharedRef<SWidget> MakeContent(const TSharedRef<SWindow>& Window);
-	// Saves the layout and key bindings (on exit).
-	void SaveSettings();
-	void ResetLayout();
-
-	FDemoScene Scene;
-	TSharedPtr<FTabManager> TabManager;
-	TSharedPtr<FUICommandList> Commands;
-	TSharedPtr<SWidgetGallery> Gallery;
-	TSharedPtr<SPropertyGrid> Details;
-	TSharedPtr<FDemoViewportClient> ViewportClient;
-	TArray<FString> LogLines;
-	FString StatusText = "Ready";
-
-	// Commands (the "SandboxEditor" binding context).
-	struct FCommandSet
-	{
-		TSharedPtr<FUICommandInfo> SaveLayout, ResetLayout, Quit;
-		TSharedPtr<FUICommandInfo> Undo, Redo, Delete, SelectAll;
-		TSharedPtr<FUICommandInfo> ShowGrid, Snap, FrameSelection, ToggleInspector;
-		TSharedPtr<FUICommandInfo> AddBrush, AddLight;
-	} Cmd;
-
-	static TSharedRef<FDockLayout> MakeDefaultLayout();
+	FString GetDisplayName() const override;
+	void GetProperties(TArray<FPropertyDesc>& Out) const override;
+	FPropertyValue GetValue(FName Property) const override;
+	void SetValue(FName Property, const FPropertyValue& Value) override;
 
 private:
-	void RegisterCommands();
-	void RegisterMenus();
-	void RegisterTabs();
-	void AddEntity(int32 Kind);
-	void Log(const FString& Line);
-
-	FHost Host;
-	TWeakPtr<SWindow> MainWindow;
-	TSharedPtr<SWidget> DockArea;
-	TSharedPtr<SBox> DockHost;
+	FDemoScene& Scene;
+	int32 Id;
 };

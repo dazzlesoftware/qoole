@@ -18,8 +18,8 @@ the graphics driver. From a command line:
 
     msbuild source\Genesis.slnx -p:Configuration=Release -p:Platform=x64
 
-`GenesisEditor.exe` (`GenesisEditorD.exe` for Debug), `UISandbox.exe` and
-`EngineTests.exe` are written to `source/Exec`. `GenesisTests`, the tests of
+`GenesisEditor.exe` (`GenesisEditorD.exe` for Debug), the test
+applications and `EngineTests.exe` are written to `source/Exec`. `GenesisTests`, the tests of
 the map core, is in `source\Build\GenesisTests\x64\<Configuration>`.
 
 ## The editor
@@ -62,17 +62,25 @@ Third-party libraries (FreeType, HarfBuzz, doctest, Vulkan headers) are
 vendored in `source/External`. See sections 14 and 17 to 21 of
 [docs/GenesisUI.md](docs/GenesisUI.md) for what is there.
 
-- `UISandbox.exe` (`source/Exec`) is the Genesis UI sandbox: an
-  editor-shaped window built from the editor framework (menus, a toolbar and
-  shortcuts from commands, dockable tabs, a property grid with undo, an RHI
-  viewport, rebindable keys) with the widget gallery as one of its tabs, and
-  a borderless inspector window. It takes the same `-vulkan`, `-appscale=`,
-  `-resetlayout`, `-nodebug` / `-debug` and `-selftest=<dir>` options as
-  the editor (its settings are in `%LOCALAPPDATA%\Genesis\UISandbox`); its
-  self-test visits every gallery page, menus, a tooltip, the color picker, a
-  tab torn off and docked back, DPI changes, minimize/restore, moving
-  between monitors and resizing. Keys: F2 cycles the app scale, F3
-  simulates a DPI change, F4 shows or hides the inspector.
+- The test applications (`source/Programs/TestApps`, built to
+  `source/Exec`) each show one feature in a window of their own, so a
+  feature can be tried, debugged and checked on its own:
+  - Genesis UI: `UIRenderTest` (draw elements, without widgets),
+    `UIButtonsTest`, `UIInputsTest` (combo boxes, sliders, spin boxes,
+    colors), `UITextTest`, `UILayoutTest`, `UIListsTest`, `UIMenusTest`
+    (menus and tooltips), `UIDragDropTest`, `UIWindowsTest` (windows, DPI,
+    monitors), `UIViewportTest` (an RHI viewport), `UIPropertyGridTest`,
+    `UICommandsTest` (commands, menu bar, toolbar, key bindings) and
+    `UIDockingTest`.
+  - The map editor: `MapViewsTest` (the four views and the grid) and
+    `MapToolsTest` (the editing tools, brush operations, undo, saving).
+
+  They share a harness (`TestAppHarness`) and take the editor's `-vulkan`,
+  `-appscale=`, `-nodebug` / `-debug` and `-resetlayout` options. With
+  `-selftest=<dir>` each runs a script that drives it with simulated input,
+  checks the results, saves screenshots and a log, and exits with 1 if a
+  check failed; `source/Programs/TestApps/RunTestApps.ps1` runs them all.
+  F2 cycles the app scale and F3 simulates a DPI change.
 - `EngineTests.exe` runs the headless doctest suite: layout, input, text
   editing, list/tree, editor framework and map editor tests on the null
   platform, plus offscreen GPU tests on D3D12 (WARP) and Vulkan (skipped
