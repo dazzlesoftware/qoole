@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{436BBD32-CC21-56E4-94F1-B731DD66653A}</ProjectGuid>
+    <RootNamespace>SlateRHIRenderer</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\Build\Engine.props" />
+  </ImportGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(ProjectDir)Public;$(ProjectDir)Private;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\ElementBatcher.cpp" />
+    <ClCompile Include="Private\RenderTargetViewportClient.cpp" />
+    <ClCompile Include="Private\SlateRHIRenderingPolicy.cpp" />
+    <ClCompile Include="Private\SlateRHIRenderer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Private\Shaders\SlateShaders_PSDefault_SPIRV.h" />
+    <ClInclude Include="Private\Shaders\SlateShaders_PSLine_SPIRV.h" />
+    <ClInclude Include="Private\Shaders\SlateShaders_PSRoundedBox_SPIRV.h" />
+    <ClInclude Include="Private\Shaders\SlateShaders_VSMain_SPIRV.h" />
+    <ClInclude Include="Public\ElementBatcher.h" />
+    <ClInclude Include="Public\RenderTargetViewportClient.h" />
+    <ClInclude Include="Public\SlateRHIRenderingPolicy.h" />
+    <ClInclude Include="Public\SlateRHIRenderer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Private\Shaders\BuildSlateShaders.cmd" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="Private\Shaders\SlateShaders.hlsl">
+      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSMain -Vn g_SlateShaders_VSMain_DXIL -Fh &quot;$(IntDir)SlateShaders_VSMain_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSDefault -Vn g_SlateShaders_PSDefault_DXIL -Fh &quot;$(IntDir)SlateShaders_PSDefault_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSRoundedBox -Vn g_SlateShaders_PSRoundedBox_DXIL -Fh &quot;$(IntDir)SlateShaders_PSRoundedBox_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSLine -Vn g_SlateShaders_PSLine_DXIL -Fh &quot;$(IntDir)SlateShaders_PSLine_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
+      <Outputs>$(IntDir)SlateShaders_VSMain_DXIL.h;$(IntDir)SlateShaders_PSDefault_DXIL.h;$(IntDir)SlateShaders_PSRoundedBox_DXIL.h;$(IntDir)SlateShaders_PSLine_DXIL.h</Outputs>
+      <Message>Compiling %(Filename)%(Extension) to DXIL</Message>
+    </CustomBuild>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

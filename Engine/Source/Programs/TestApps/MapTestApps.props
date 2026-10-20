@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The map editor test applications: TestApps.props plus the map core
+  (MapCore, MapEditor) and FMapTestApp (MapTestCommon). Import it after
+  Engine.props, instead of TestApps.props.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="TestApps.props" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <!-- The map core headers are older code (see MapCoreHeaders.h). -->
+      <ConformanceMode>false</ConformanceMode>
+      <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(GenesisTestAppsDir)MapTestCommon;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(GenesisTestAppsDir)MapTestCommon\MapTestApp.cpp" />
+    <ClInclude Include="$(GenesisTestAppsDir)MapTestCommon\MapTestApp.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(GenesisEditorDir)MapCore\MapCore.vcxproj">
+      <Project>{E6B3966D-7CCB-46DB-92A6-40893ED2E9DD}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEditorDir)MapEditor\MapEditor.vcxproj">
+      <Project>{248D610E-BEDE-4C49-AFD7-43F90E5F4B54}</Project>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared settings for the Genesis Engine modules (Engine/Source/Runtime and
+  Engine/Source/Editor), the third-party libraries and the programs built on
+  them. Import it after Microsoft.Cpp.props.
+
+  The layout follows Unreal Engine: programs go to Engine\Binaries\Win64,
+  static libraries to Engine\Intermediate\Build\Win64\Lib\<Config>,
+  intermediates to Engine\Intermediate\Build\Win64\<Project>\<Config>.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="EnginePaths.props" />
+  <PropertyGroup>
+    <IntDir>$(GenesisIntermediateDir)$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir Condition="'$(ConfigurationType)'=='StaticLibrary'">$(GenesisLibDir)</OutDir>
+    <OutDir Condition="'$(ConfigurationType)'!='StaticLibrary'">$(GenesisBinariesDir)</OutDir>
+    <TargetName Condition="'$(ConfigurationType)'!='StaticLibrary' And '$(Configuration)'=='Debug'">$(ProjectName)D</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <WarningLevel>Level4</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalOptions>/utf-8 /Zc:__cplusplus /Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;NOMINMAX;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)'=='Debug'">_DEBUG;UE_BUILD_DEBUG=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)'!='Debug'">NDEBUG;UE_BUILD_DEBUG=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization Condition="'$(Configuration)'=='Debug'">Disabled</Optimization>
+      <Optimization Condition="'$(Configuration)'!='Debug'">MaxSpeed</Optimization>
+      <FunctionLevelLinking Condition="'$(Configuration)'!='Debug'">true</FunctionLevelLinking>
+      <IntrinsicFunctions Condition="'$(Configuration)'!='Debug'">true</IntrinsicFunctions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(GenesisLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <EnableCOMDATFolding Condition="'$(Configuration)'!='Debug'">true</EnableCOMDATFolding>
+      <OptimizeReferences Condition="'$(Configuration)'!='Debug'">true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Basic">
+      <UniqueIdentifier>{3A93C6A7-9C98-5489-8823-6B5CABB41262}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game">
+      <UniqueIdentifier>{797E2359-5D59-508F-A06C-C677E948A12C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Objects">
+      <UniqueIdentifier>{57C6F651-C3F0-5D3A-A518-9F134B425785}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Render">
+      <UniqueIdentifier>{C372D0E3-826D-5085-989A-400FC76F2949}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\MapCorePCH.cpp" />
+    <ClCompile Include="Private\Basic\LCommon.cpp">
+      <Filter>Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Basic\Math3D.cpp">
+      <Filter>Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Objects\EntList.cpp">
+      <Filter>Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Objects\Entity.cpp">
+      <Filter>Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Objects\Game.cpp">
+      <Filter>Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Objects\Geometry.cpp">
+      <Filter>Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Objects\Objects.cpp">
+      <Filter>Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Objects\Texture.cpp">
+      <Filter>Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Render\Clip.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Render\DrawBase.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Render\Selector.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Render\View.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\Game\MapIO.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClInclude Include="Private\MapCorePCH.h" />
+    <ClInclude Include="Public\Basic\LCommon.h">
+      <Filter>Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Basic\List.h">
+      <Filter>Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Basic\Math3D.h">
+      <Filter>Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Objects\EntList.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Objects\Entity.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Objects\Game.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Objects\Geometry.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Objects\Objects.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Objects\Texture.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Render\Clip.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Render\DrawBase.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Render\Selector.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Render\View.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Game\Mapio.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
