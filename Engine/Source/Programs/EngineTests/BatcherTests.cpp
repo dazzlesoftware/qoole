@@ -11,17 +11,17 @@ namespace
 		return FPaintGeometry::Make({ X, Y }, { W, H }, Scale);
 	}
 
-	FBatchedElements BatchList(const FDrawElementList& List, FFontCache* Fonts = nullptr)
+	FBatchedElements BatchList(const FSlateWindowElementList& List, FSlateFontCache* Fonts = nullptr)
 	{
 		FFakeResolver Resolver;
 		FBatchedElements Out;
-		FElementBatcher().Batch(List, Fonts, Resolver, Out);
+		FSlateElementBatcher().Batch(List, Fonts, Resolver, Out);
 		return Out;
 	}
 
-	TSharedRef<FUIImage> MakeImage(int32 W, int32 H)
+	TSharedRef<FSlateTextureData> MakeImage(int32 W, int32 H)
 	{
-		return FUIImage::CreateSolid(W, H, FColor::White());
+		return FSlateTextureData::CreateSolid(W, H, FColor::White());
 	}
 }
 
@@ -29,7 +29,7 @@ TEST_SUITE("Batcher")
 {
 	TEST_CASE("Compatible elements merge into one batch")
 	{
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		for (int32 I = 0; I < 3; ++I)
 		{
 			List.AddSolidBox(0, Box(I * 20.0f, 0.0f), FColor::Red());
@@ -46,7 +46,7 @@ TEST_SUITE("Batcher")
 	{
 		const auto ImageA = MakeImage(4, 4);
 		const auto ImageB = MakeImage(4, 4);
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.AddSolidBox(2, Box(0, 0), FColor::Green());        // drawn last
 		List.AddBox(1, Box(0, 0), FBrush::FromImage(ImageB));
 		List.AddBox(1, Box(0, 0), FBrush::FromImage(ImageA));
@@ -74,7 +74,7 @@ TEST_SUITE("Batcher")
 	{
 		const auto ImageA = MakeImage(4, 4);
 		const auto ImageB = MakeImage(4, 4);
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.AddBox(0, Box(0, 0), FBrush::FromImage(ImageA));
 		List.AddBox(0, Box(0, 0), FBrush::FromImage(ImageB));
 		List.AddBox(0, Box(0, 0), FBrush::FromImage(ImageA));
@@ -85,7 +85,7 @@ TEST_SUITE("Batcher")
 
 	TEST_CASE("Adjacent compatible batches merge across layers")
 	{
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.AddSolidBox(5, Box(0, 0), FColor::Red());
 		List.AddSolidBox(1, Box(0, 0), FColor::Green());
 		List.AddSolidBox(3, Box(0, 0), FColor::Blue());
@@ -101,7 +101,7 @@ TEST_SUITE("Batcher")
 
 	TEST_CASE("Shader changes split batches")
 	{
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.AddSolidBox(0, Box(0, 0), FColor::Red());
 		List.AddRoundedBox(0, Box(0, 0, 40, 20), FColor::Red(), 4.0f, FColor::White(), 1.0f);
 		List.AddRoundedBox(0, Box(0, 30, 40, 20), FColor::Red(), 4.0f);
@@ -109,36 +109,36 @@ TEST_SUITE("Batcher")
 		List.AddSolidBox(0, Box(0, 0), FColor::Red());
 		const FBatchedElements Out = BatchList(List);
 		REQUIRE(Out.Batches.size() == 4);
-		CHECK(Out.Batches[0].Shader == EUIShader::Default);
-		CHECK(Out.Batches[1].Shader == EUIShader::RoundedBox);
-		CHECK(Out.Batches[1].Blend == EUIBlend::Premultiplied);
+		CHECK(Out.Batches[0].Shader == ESlateShader::Default);
+		CHECK(Out.Batches[1].Shader == ESlateShader::RoundedBox);
+		CHECK(Out.Batches[1].Blend == ESlateBlendMode::Premultiplied);
 		CHECK(Out.Batches[1].NumElements == 2);
-		CHECK(Out.Batches[2].Shader == EUIShader::Line);
+		CHECK(Out.Batches[2].Shader == ESlateShader::Line);
 		CHECK(Out.Batches[2].NumIndices == 12); // three points: two segments
-		CHECK(Out.Batches[3].Shader == EUIShader::Default);
+		CHECK(Out.Batches[3].Shader == ESlateShader::Default);
 	}
 
 	TEST_CASE("Viewport elements draw opaque unless asked to blend")
 	{
-		struct FFakeTarget final : IUIRenderTarget
+		struct FFakeTarget final : ISlateRenderTarget
 		{
 			FIntPoint GetSize() const override { return { 64, 64 }; }
 		};
 		auto Target = std::make_shared<FFakeTarget>();
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.AddViewport(0, Box(0, 0, 64, 64), Target);
 		List.AddViewport(0, Box(0, 0, 64, 64), Target, true);
 		const FBatchedElements Out = BatchList(List);
 		REQUIRE(Out.Batches.size() == 2);
-		CHECK(Out.Batches[0].Blend == EUIBlend::Opaque);
+		CHECK(Out.Batches[0].Blend == ESlateBlendMode::Opaque);
 		CHECK(Out.Batches[0].Texture == 5000);
-		CHECK(Out.Batches[1].Blend == EUIBlend::Alpha);
+		CHECK(Out.Batches[1].Blend == ESlateBlendMode::Alpha);
 	}
 
 	TEST_CASE("9-slice boxes tessellate into nine quads, borders into eight")
 	{
 		const auto Image = MakeImage(16, 16);
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.AddBox(0, Box(0, 0, 100, 60), FBrush::NineSlice(Image, FMargin(4.0f)));
 		List.AddBox(0, Box(0, 0, 100, 60), FBrush::NineSlice(Image, FMargin(4.0f), FColor::White(), false));
 		const FBatchedElements Out = BatchList(List);
@@ -146,21 +146,21 @@ TEST_SUITE("Batcher")
 		CHECK(Out.Indices.size() == (9 + 8) * 6);
 
 		// Corner cells keep their pixel size; UVs reach 4/16 into the image.
-		const FUIVertex& TopLeftCellBR = Out.Vertices[2];
+		const FSlateVertex& TopLeftCellBR = Out.Vertices[2];
 		CHECK(TopLeftCellBR.Position == FVector2(4.0f, 4.0f));
 		CHECK(TopLeftCellBR.UV.X == doctest::Approx(0.25f));
-		const FUIVertex& Last = Out.Vertices[9 * 4 - 2]; // bottom-right corner of the last cell
+		const FSlateVertex& Last = Out.Vertices[9 * 4 - 2]; // bottom-right corner of the last cell
 		CHECK(Last.Position == FVector2(100.0f, 60.0f));
 		CHECK(Last.UV.X == doctest::Approx(1.0f));
 	}
 
 	TEST_CASE("Boxes snap to whole pixels at fractional DPI scales")
 	{
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.AddSolidBox(0, Box(10.3f, 7.1f, 33.3f, 9.9f, 1.25f), FColor::Red());
 		const FBatchedElements Out = BatchList(List);
 		REQUIRE(Out.Vertices.size() == 4);
-		for (const FUIVertex& V : Out.Vertices)
+		for (const FSlateVertex& V : Out.Vertices)
 		{
 			CHECK(V.Position.X == FMath::RoundToFloat(V.Position.X));
 			CHECK(V.Position.Y == FMath::RoundToFloat(V.Position.Y));
@@ -173,16 +173,16 @@ TEST_SUITE("Batcher")
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
 		const float Scale = 1.5f;
-		const FFontInfo Font(Fonts.Latin, 14.0f);
+		const FSlateFontInfo Font(Fonts.Latin, 14.0f);
 		const auto Shaped = Fonts.Cache.ShapeText("Hi there", Font, Scale);
 
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.AddText(0, FPaintGeometry::Make({ 10.0f, 10.0f }, Shaped->GetLogicalSize(), Scale), Shaped, FColor::White());
 		const FBatchedElements Out = BatchList(List, &Fonts.Cache);
 		REQUIRE(Out.Batches.size() == 1);
 		CHECK(Out.Batches[0].Texture == 100); // glyph page 0
 		CHECK(Out.Batches[0].NumIndices == 7 * 6); // eight glyphs, one is a space
-		for (const FUIVertex& V : Out.Vertices)
+		for (const FSlateVertex& V : Out.Vertices)
 		{
 			// Glyph bitmaps map 1:1 onto pixels.
 			CHECK(V.Position.X == FMath::RoundToFloat(V.Position.X));

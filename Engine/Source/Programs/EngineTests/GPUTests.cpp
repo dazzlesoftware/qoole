@@ -7,7 +7,7 @@
 #include "TestHelpers.h"
 
 #include "RHI.h"
-#include "UIRenderer.h"
+#include "SlateRHIRenderingPolicy.h"
 
 namespace
 {
@@ -30,7 +30,7 @@ namespace
 	}
 
 	// Renders the list into a Size x Size target and reads it back.
-	TOptional<FPixels> RenderOffscreen(ERHIBackend Backend, int32 Size, const TFunction<void(FDrawElementList&, FUIRenderer&)>& Build)
+	TOptional<FPixels> RenderOffscreen(ERHIBackend Backend, int32 Size, const TFunction<void(FSlateWindowElementList&, FSlateRHIRenderingPolicy&)>& Build)
 	{
 		FRHIDeviceDesc Desc;
 		Desc.Backend = Backend;
@@ -41,11 +41,11 @@ namespace
 			return {};
 		}
 		FTestFonts& Fonts = FTestFonts::Get();
-		FUIRenderer Renderer(*Device, Fonts.Cache);
+		FSlateRHIRenderingPolicy Renderer(*Device, Fonts.Cache);
 		REQUIRE(Renderer.Initialize());
-		const TSharedRef<FUIRenderTarget> Target = Renderer.CreateRenderTarget(Size, Size, "Test target");
+		const TSharedRef<FSlateRenderTargetRHI> Target = Renderer.CreateRenderTarget(Size, Size, "Test target");
 
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.SetViewportSize({ Size, Size });
 		Build(List, Renderer);
 
@@ -65,11 +65,11 @@ namespace
 		FTestLogCapture Log;
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const auto Checker = MakeShared<FUIImage>(2, 2, TArray<uint8>{
+		const auto Checker = MakeShared<FSlateTextureData>(2, 2, TArray<uint8>{
 			255, 0, 0, 255,   0, 255, 0, 255,
 			0, 0, 255, 255,   255, 255, 255, 255 });
 
-		const TOptional<FPixels> Result = RenderOffscreen(Backend, 128, [&](FDrawElementList& List, FUIRenderer&)
+		const TOptional<FPixels> Result = RenderOffscreen(Backend, 128, [&](FSlateWindowElementList& List, FSlateRHIRenderingPolicy&)
 		{
 			List.AddSolidBox(0, FPaintGeometry::Make({ 0.0f, 0.0f }, { 32.0f, 32.0f }, 1.0f), FColor(200, 100, 50));
 			// Two layers: the later layer must cover the earlier one.
@@ -84,7 +84,7 @@ namespace
 			// Image stretched 16x: four solid quadrants (point-like in the middles).
 			List.AddBox(0, FPaintGeometry::Make({ 64.0f, 64.0f }, { 64.0f, 64.0f }, 1.0f), FBrush::FromImage(Checker));
 			// Text.
-			const auto Shaped = Fonts.Cache.ShapeText("Hg", FFontInfo(Fonts.Latin, 24.0f), 1.0f);
+			const auto Shaped = Fonts.Cache.ShapeText("Hg", FSlateFontInfo(Fonts.Latin, 24.0f), 1.0f);
 			List.AddText(0, FPaintGeometry::Make({ 0.0f, 80.0f }, Shaped->GetLogicalSize(), 1.0f), Shaped, FColor::White());
 		});
 		if (!Result)

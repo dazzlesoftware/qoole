@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/WidgetDelegates.h"
 
@@ -17,23 +17,23 @@ enum class EButtonClickMethod : uint8
 class SButton : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SButton)
-		GE_STYLE_ARGUMENT(FButtonStyle, ButtonStyle)
-		GE_OPTIONAL_ATTRIBUTE(FString, Text) // makes an STextBlock as the content
-		GE_STYLE_ARGUMENT(FTextBlockStyle, TextStyle)
-		GE_ARGUMENT(EHorizontalAlignment, HAlign, HAlign_Center)
-		GE_ARGUMENT(EVerticalAlignment, VAlign, VAlign_Center)
-		GE_OPTIONAL_ATTRIBUTE(FMargin, ContentPadding) // overrides the style's padding
-		GE_ARGUMENT(EButtonClickMethod, ClickMethod, EButtonClickMethod::MouseUp)
-		GE_ARGUMENT(bool, IsFocusable, true)
-		GE_OPTIONAL_ATTRIBUTE(TOptional<FStyleColor>, ForegroundColor)
-		GE_EVENT(FOnClicked, OnClicked)
-		GE_EVENT(FSimpleDelegate, OnPressed)
-		GE_EVENT(FSimpleDelegate, OnReleased)
-		GE_EVENT(FSimpleDelegate, OnHovered)
-		GE_EVENT(FSimpleDelegate, OnUnhovered)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SButton)
+		SLATE_STYLE_ARGUMENT(FButtonStyle, ButtonStyle)
+		SLATE_OPTIONAL_ATTRIBUTE(FString, Text) // makes an STextBlock as the content
+		SLATE_STYLE_ARGUMENT(FTextBlockStyle, TextStyle)
+		SLATE_ARGUMENT(EHorizontalAlignment, HAlign, HAlign_Center)
+		SLATE_ARGUMENT(EVerticalAlignment, VAlign, VAlign_Center)
+		SLATE_OPTIONAL_ATTRIBUTE(FMargin, ContentPadding) // overrides the style's padding
+		SLATE_ARGUMENT(EButtonClickMethod, ClickMethod, EButtonClickMethod::MouseUp)
+		SLATE_ARGUMENT(bool, IsFocusable, true)
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<FSlateColor>, ForegroundColor)
+		SLATE_EVENT(FOnClicked, OnClicked)
+		SLATE_EVENT(FSimpleDelegate, OnPressed)
+		SLATE_EVENT(FSimpleDelegate, OnReleased)
+		SLATE_EVENT(FSimpleDelegate, OnHovered)
+		SLATE_EVENT(FSimpleDelegate, OnUnhovered)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -58,7 +58,7 @@ public:
 	EWindowZone GetWindowZoneOverride() const override { return EWindowZone::ClientArea; }
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 	void UpdatePadding();
@@ -85,14 +85,14 @@ protected:
 class SCheckBox : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SCheckBox)
-		GE_STYLE_ARGUMENT(FCheckBoxStyle, Style)
-		GE_ATTRIBUTE(ECheckBoxState, IsChecked, ECheckBoxState::Unchecked)
-		GE_EVENT(FOnCheckStateChanged, OnCheckStateChanged)
-		GE_OPTIONAL_ATTRIBUTE(FString, Text) // makes an STextBlock label
-		GE_ARGUMENT(bool, IsFocusable, true)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SCheckBox)
+		SLATE_STYLE_ARGUMENT(FCheckBoxStyle, Style)
+		SLATE_ATTRIBUTE(ECheckBoxState, IsChecked, ECheckBoxState::Unchecked)
+		SLATE_EVENT(FOnCheckStateChanged, OnCheckStateChanged)
+		SLATE_OPTIONAL_ATTRIBUTE(FString, Text) // makes an STextBlock label
+		SLATE_ARGUMENT(bool, IsFocusable, true)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -112,7 +112,7 @@ public:
 
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:

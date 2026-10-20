@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/WidgetDelegates.h"
 
@@ -12,18 +12,18 @@
 class SSlider : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SSlider)
-		GE_STYLE_ARGUMENT(FSliderStyle, Style)
-		GE_ATTRIBUTE(float, Value, 0.0f)
-		GE_ARGUMENT(float, MinValue, 0.0f)
-		GE_ARGUMENT(float, MaxValue, 1.0f)
-		GE_ARGUMENT(float, StepSize, 0.01f)
-		GE_ARGUMENT(bool, IsFocusable, true)
-		GE_OPTIONAL_ATTRIBUTE(FStyleColor, BarColor) // tints the filled part
-		GE_EVENT(FOnFloatValueChanged, OnValueChanged)
-		GE_EVENT(FSimpleDelegate, OnMouseCaptureBegin)
-		GE_EVENT(FSimpleDelegate, OnMouseCaptureEnd)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SSlider)
+		SLATE_STYLE_ARGUMENT(FSliderStyle, Style)
+		SLATE_ATTRIBUTE(float, Value, 0.0f)
+		SLATE_ARGUMENT(float, MinValue, 0.0f)
+		SLATE_ARGUMENT(float, MaxValue, 1.0f)
+		SLATE_ARGUMENT(float, StepSize, 0.01f)
+		SLATE_ARGUMENT(bool, IsFocusable, true)
+		SLATE_OPTIONAL_ATTRIBUTE(FSlateColor, BarColor) // tints the filled part
+		SLATE_EVENT(FOnFloatValueChanged, OnValueChanged)
+		SLATE_EVENT(FSimpleDelegate, OnMouseCaptureBegin)
+		SLATE_EVENT(FSimpleDelegate, OnMouseCaptureEnd)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -43,7 +43,7 @@ public:
 
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -53,7 +53,7 @@ private:
 
 	const FSliderStyle* Style = nullptr;
 	TWidgetAttribute<float, EInvalidateWidgetReason::Paint> ValueAttribute{ *this, 0.0f };
-	TOptional<FStyleColor> BarColor;
+	TOptional<FSlateColor> BarColor;
 	float MinValue = 0.0f;
 	float MaxValue = 1.0f;
 	float StepSize = 0.01f;

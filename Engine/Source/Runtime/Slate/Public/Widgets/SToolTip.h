@@ -2,18 +2,18 @@
 
 #pragma once
 
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/SCompoundWidget.h"
 
 // The standard tooltip: wrapped text or any content on a popup background.
 class SToolTip : public SCompoundWidget, public IToolTip
 {
 public:
-	GE_BEGIN_ARGS(SToolTip)
-		GE_ATTRIBUTE(FString, Text, "")
-		GE_STYLE_ARGUMENT(FToolTipStyle, Style)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SToolTip)
+		SLATE_ATTRIBUTE(FString, Text, "")
+		SLATE_STYLE_ARGUMENT(FToolTipStyle, Style)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -22,7 +22,7 @@ public:
 	bool IsEmpty() const override;
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:

@@ -2,7 +2,7 @@
 
 #include "MapEditorShell.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Framework/MultiBox/MenuRegistry.h"
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 #include "MapCoreHeaders.h"
@@ -11,7 +11,7 @@
 #include "Services/FileDialogs.h"
 #include "Services/MessageDialog.h"
 #include "Services/Services.h"
-#include "UIWindowRenderer.h"
+#include "SlateRHIRenderer.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBoxPanel.h"
 #include "Widgets/SWindow.h"
@@ -763,7 +763,7 @@ void FMapEditorShell::RegisterMenus()
 			Action.Execute = FSimpleDelegate::CreateLambda([this, Scale] { Host.SetAppScale(Scale); });
 			Action.GetCheckState = TDelegate<ECheckBoxState()>::CreateLambda([Scale]
 			{
-				return FMath::IsNearlyEqual(FUIApplication::Get().GetApplicationScale(), Scale, 0.01f) ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+				return FMath::IsNearlyEqual(FSlateApplication::Get().GetApplicationScale(), Scale, 0.01f) ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
 			});
 			Section.AddEntry(FName(FString::Format("Scale{}", Scale * 100.0f)), FString::Format("{:.0f}%", Scale * 100.0f), "", Action, EUserInterfaceActionType::RadioButton);
 		}
@@ -905,7 +905,7 @@ void FMapEditorShell::ShowAbout()
 					{
 						if (const TSharedPtr<SWindow> Window = Self->lock())
 						{
-							FUIApplication::Get().RequestDestroyWindow(ToSharedRef(Window));
+							FSlateApplication::Get().RequestDestroyWindow(ToSharedRef(Window));
 						}
 						return FReply::Handled();
 					})
@@ -913,7 +913,7 @@ void FMapEditorShell::ShowAbout()
 			]
 		];
 	*Self = About.ToSharedPtr();
-	FUIApplication::Get().AddModalWindow(About, Parent);
+	FSlateApplication::Get().AddModalWindow(About, Parent);
 }
 
 TSharedRef<SWidget> FMapEditorShell::MakeContent(const TSharedRef<SWindow>& Window)

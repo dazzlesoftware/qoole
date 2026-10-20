@@ -5,7 +5,7 @@
 // gets the widget's input: mouse, keys, focus, cursor queries and, while it
 // holds the capture with FReply::UseHighPrecisionMouseMovement, raw mouse
 // motion. The map views become viewport clients, so they dock like any
-// other panel. UIRenderer's FRenderTargetViewportClient is a base for
+// other panel. SlateRHIRenderer's FRenderTargetViewportClient is a base for
 // clients that draw with the RHI.
 
 #pragma once
@@ -21,7 +21,7 @@ public:
 	virtual ~IViewportClient() = default;
 
 	// The texture to show; nullptr draws the background.
-	virtual TSharedPtr<IUIRenderTarget> GetRenderTarget() const = 0;
+	virtual TSharedPtr<ISlateRenderTarget> GetRenderTarget() const = 0;
 	// The viewport's size in pixels changed.
 	virtual void OnResize(FIntPoint PixelSize) { (void)PixelSize; }
 	// Realtime clients are redrawn and composited every frame.
@@ -49,12 +49,12 @@ public:
 class SViewport : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SViewport)
-		GE_ARGUMENT(TSharedPtr<IViewportClient>, ViewportClient, nullptr)
-		GE_ARGUMENT(bool, IsFocusable, true)
-		GE_ARGUMENT(bool, AlphaBlend, false)
-		GE_ARGUMENT(FColor, Background, FColor(12, 13, 16))
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SViewport)
+		SLATE_ARGUMENT(TSharedPtr<IViewportClient>, ViewportClient, nullptr)
+		SLATE_ARGUMENT(bool, IsFocusable, true)
+		SLATE_ARGUMENT(bool, AlphaBlend, false)
+		SLATE_ARGUMENT(FColor, Background, FColor(12, 13, 16))
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -85,7 +85,7 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float) const override { return FVector2(64.0f, 64.0f); }
 	void OnPreArrange(const FGeometry& AllottedGeometry) override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:

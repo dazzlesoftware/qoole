@@ -39,21 +39,21 @@ public:
 
 // Hands out fake texture ids: 1 = white, 100 + n = glyph page n, image ids
 // map to 1000 + id, render targets to 5000 + n.
-class FFakeResolver final : public IUIResourceResolver
+class FFakeResolver final : public FSlateShaderResourceManager
 {
 public:
-	FUITextureId GetWhiteTexture() override { return 1; }
-	FUIResolvedTexture ResolveImage(const FUIImage& Image) override
+	FSlateTextureId GetWhiteTexture() override { return 1; }
+	FSlateResolvedTexture ResolveImage(const FSlateTextureData& Image) override
 	{
 		++ImageResolves;
 		return { 1000 + Image.GetId(), FRect(0.0f, 0.0f, 1.0f, 1.0f) };
 	}
-	FUIResolvedTexture ResolveRenderTarget(IUIRenderTarget& Target) override
+	FSlateResolvedTexture ResolveRenderTarget(ISlateRenderTarget& Target) override
 	{
 		(void)Target;
 		return { 5000, FRect(0.0f, 0.0f, 1.0f, 1.0f) };
 	}
-	FUITextureId GetGlyphPageTexture(int32 PageIndex) override { return 100 + static_cast<FUITextureId>(PageIndex); }
+	FSlateTextureId GetGlyphPageTexture(int32 PageIndex) override { return 100 + static_cast<FSlateTextureId>(PageIndex); }
 
 	int32 ImageResolves = 0;
 };
@@ -63,7 +63,7 @@ struct FTestFonts
 {
 	static FTestFonts& Get();
 
-	FFontCache Cache;
+	FSlateFontCache Cache;
 	TSharedPtr<FFontFace> Regular;
 	TSharedPtr<FFontFace> Devanagari;
 	TSharedPtr<FCompositeFont> Latin;     // Noto Sans only

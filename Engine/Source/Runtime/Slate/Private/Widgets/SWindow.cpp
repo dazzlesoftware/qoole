@@ -2,7 +2,7 @@
 
 #include "Widgets/SWindow.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Layout/LayoutUtils.h"
 
 void SWindow::Construct(const FArguments& Args)
@@ -163,7 +163,7 @@ bool SWindow::UpdateLayout()
 	}
 	if (NeedsLayout())
 	{
-		GE_LOG(LogUI, Verbose, "Window \"{}\" layout did not settle in {} passes", Title, MaxPasses);
+		GE_LOG(LogSlate, Verbose, "Window \"{}\" layout did not settle in {} passes", Title, MaxPasses);
 	}
 	return true;
 }
@@ -173,7 +173,7 @@ void SWindow::PaintWindow(const FPaintArgs& Args)
 	Elements.Reset();
 	Elements.SetViewportSize(PixelSize);
 	FWidgetStyle WidgetStyle;
-	WidgetStyle.ForegroundColor = FStyleColor(EStyleColor::Foreground).Resolve();
+	WidgetStyle.ForegroundColor = FSlateColor(EStyleColor::Foreground).Resolve();
 	const FRect Culling(0.0f, 0.0f, static_cast<float>(PixelSize.X), static_cast<float>(PixelSize.Y));
 	Paint(Args, Culling, Elements, 0, WidgetStyle);
 	ClearNeedsRepaint();
@@ -205,7 +205,7 @@ void SWindow::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChil
 	}
 }
 
-int32 SWindow::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SWindow::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	OutDrawElements.AddSolidBox(LayerId, Geometry.ToPaintGeometry(), GetBackgroundColor());
@@ -257,7 +257,7 @@ void SWindow::RequestClose()
 	{
 		return;
 	}
-	FUIApplication::Get().RequestDestroyWindow(SharedThis(this));
+	FSlateApplication::Get().RequestDestroyWindow(SharedThis(this));
 }
 
 void SWindow::NotifyWindowClosed()

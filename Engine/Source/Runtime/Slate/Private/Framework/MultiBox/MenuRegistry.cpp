@@ -2,7 +2,7 @@
 
 #include "Framework/MultiBox/MenuRegistry.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Widgets/Input/SMenuAnchor.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBoxPanel.h"
@@ -481,8 +481,8 @@ namespace
 	class SMenuBarItem final : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SMenuBarItem)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SMenuBarItem)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments&, SMenuBar* InBar, const FMenuEntry& Entry, const FMenuContext& Context);
 		void OnMouseEnter(const FGeometry& Geometry, const FPointerEvent& Event) override;
@@ -494,8 +494,8 @@ namespace
 	class SMenuBar final : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SMenuBar)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SMenuBar)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments&, const TArray<FMenuSection>& Sections, const FMenuContext& Context)
 		{
@@ -553,8 +553,8 @@ namespace
 	class SToolBarButton final : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SToolBarButton)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SToolBarButton)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments&, const FMenuEntry& InEntry, const FMenuContext& InContext)
 		{
@@ -570,8 +570,8 @@ namespace
 			{
 				Tip += "\n" + Entry.GetToolTip();
 			}
-			const FStyleBrush* Icon = Entry.Command && !Entry.Command->GetIcon().IsNone() ? FAppStyle::Get().Find<FStyleBrush>(Entry.Command->GetIcon())
-				: (!Entry.Icon.IsNone() ? FAppStyle::Get().Find<FStyleBrush>(Entry.Icon) : nullptr);
+			const FSlateBrush* Icon = Entry.Command && !Entry.Command->GetIcon().IsNone() ? FAppStyle::Get().Find<FSlateBrush>(Entry.Command->GetIcon())
+				: (!Entry.Icon.IsNone() ? FAppStyle::Get().Find<FSlateBrush>(Entry.Icon) : nullptr);
 			const TSharedRef<SHorizontalBox> Content = SNew(SHorizontalBox);
 			if (Icon)
 			{
@@ -591,13 +591,13 @@ namespace
 		}
 
 	protected:
-		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 			int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 		{
 			const bool bCheckable = Entry.GetActionType() != EUserInterfaceActionType::Button;
 			if (bCheckable && Entry.GetCheckState(Context) == ECheckBoxState::Checked)
 			{
-				const FStyleBrush& Brush = IsHovered() ? Style->ToggleButtonChecked.Hovered : Style->ToggleButtonChecked.Normal;
+				const FSlateBrush& Brush = IsHovered() ? Style->ToggleButtonChecked.Hovered : Style->ToggleButtonChecked.Normal;
 				Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 			}
 			return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, MakeChildStyle(InWidgetStyle));

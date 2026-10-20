@@ -2,7 +2,7 @@
 
 #include "Widgets/Text/SEditableText.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 
 namespace
 {
@@ -69,7 +69,7 @@ public:
 		}
 		Owner->CompositionText = Text;
 		Owner->CompositionCaret = FMath::Clamp(CaretIndex, 0, Text.Len());
-		Owner->LastCaretActivity = FUIApplication::Get().GetTime();
+		Owner->LastCaretActivity = FSlateApplication::Get().GetTime();
 		Owner->Invalidate(EInvalidateWidgetReason::Layout);
 		Owner->EnsureCaretVisible();
 	}
@@ -90,11 +90,11 @@ public:
 
 	TSharedPtr<IPlatformWindow> GetWindow() const override
 	{
-		if (!Owner || !FUIApplication::IsInitialized())
+		if (!Owner || !FSlateApplication::IsInitialized())
 		{
 			return nullptr;
 		}
-		const TSharedPtr<SWindow> Window = FUIApplication::Get().FindWindowForWidget(*Owner);
+		const TSharedPtr<SWindow> Window = FSlateApplication::Get().FindWindowForWidget(*Owner);
 		return Window ? Window->GetNativeWindow() : nullptr;
 	}
 
@@ -154,7 +154,7 @@ void SEditableText::SetText(TAttribute<FString> InText)
 	}
 }
 
-FFontInfo SEditableText::GetFont() const
+FSlateFontInfo SEditableText::GetFont() const
 {
 	return FontOverride ? *FontOverride : Style->Font;
 }
@@ -201,12 +201,12 @@ void SEditableText::SetCaret(int32 Index, bool bExtendSelection)
 
 void SEditableText::OnCaretMoved()
 {
-	LastCaretActivity = FUIApplication::IsInitialized() ? FUIApplication::Get().GetTime() : 0.0;
+	LastCaretActivity = FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetTime() : 0.0;
 	Invalidate(EInvalidateWidgetReason::Paint);
 	EnsureCaretVisible();
-	if (InputContext && FUIApplication::IsInitialized() && HasKeyboardFocus())
+	if (InputContext && FSlateApplication::IsInitialized() && HasKeyboardFocus())
 	{
-		if (ITextInputMethodSystem* Ime = FUIApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
+		if (ITextInputMethodSystem* Ime = FSlateApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
 		{
 			Ime->UpdateContextLayout(TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
 		}
@@ -263,7 +263,7 @@ int32 SEditableText::ToTextIndex(int32 DisplayIndex) const
 
 void SEditableText::UpdateLayout() const
 {
-	if (!FUIApplication::IsInitialized())
+	if (!FSlateApplication::IsInitialized())
 	{
 		return;
 	}
@@ -275,7 +275,7 @@ void SEditableText::UpdateLayout() const
 	Layout.SetFont(GetFont());
 	Layout.SetText(MakeDisplayText());
 	Layout.SetWrapWidth(bAutoWrap && ArrangedWidth > 0.0f ? ArrangedWidth : 0.0f);
-	Layout.UpdateIfNeeded(FUIApplication::Get().GetFontCache());
+	Layout.UpdateIfNeeded(FSlateApplication::Get().GetFontCache());
 }
 
 FVector2 SEditableText::ComputeDesiredSize(float LayoutScale) const
@@ -573,7 +573,7 @@ void SEditableText::CopySelection() const
 {
 	if (HasSelection() && !IsPassword.Get())
 	{
-		FUIApplication::Get().GetPlatformApplication().ClipboardCopy(GetSelectedText());
+		FSlateApplication::Get().GetPlatformApplication().ClipboardCopy(GetSelectedText());
 	}
 }
 
@@ -589,7 +589,7 @@ void SEditableText::CutSelection()
 
 void SEditableText::Paste()
 {
-	const FString Text = FUIApplication::Get().GetPlatformApplication().ClipboardPaste();
+	const FString Text = FSlateApplication::Get().GetPlatformApplication().ClipboardPaste();
 	if (!Text.IsEmpty())
 	{
 		InsertText(Text);
@@ -890,7 +890,7 @@ FReply SEditableText::OnFocusReceived(const FGeometry&, const FFocusEvent& Event
 	StartBlinking();
 	if (!IsPassword.Get() && !IsReadOnly.Get())
 	{
-		if (ITextInputMethodSystem* Ime = FUIApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
+		if (ITextInputMethodSystem* Ime = FSlateApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
 		{
 			Ime->ActivateContext(TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
 		}
@@ -900,7 +900,7 @@ FReply SEditableText::OnFocusReceived(const FGeometry&, const FFocusEvent& Event
 
 void SEditableText::OnFocusLost(const FFocusEvent&)
 {
-	if (ITextInputMethodSystem* Ime = FUIApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
+	if (ITextInputMethodSystem* Ime = FSlateApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
 	{
 		Ime->DeactivateContext(TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
 	}
@@ -916,7 +916,7 @@ void SEditableText::OnFocusLost(const FFocusEvent&)
 
 void SEditableText::StartBlinking()
 {
-	LastCaretActivity = FUIApplication::Get().GetTime();
+	LastCaretActivity = FSlateApplication::Get().GetTime();
 	if (!BlinkTimer)
 	{
 		BlinkTimer = RegisterActiveTimer(static_cast<float>(CaretBlinkPeriod), [this](double, float)
@@ -938,26 +938,26 @@ void SEditableText::StopBlinking()
 
 bool SEditableText::IsCaretVisibleNow() const
 {
-	if (!FUIApplication::IsInitialized())
+	if (!FSlateApplication::IsInitialized())
 	{
 		return true;
 	}
-	const double Since = FUIApplication::Get().GetTime() - LastCaretActivity;
+	const double Since = FSlateApplication::Get().GetTime() - LastCaretActivity;
 	return FMath::Fmod(static_cast<float>(Since), static_cast<float>(CaretBlinkPeriod * 2.0)) < static_cast<float>(CaretBlinkPeriod);
 }
 
 // ---------------------------------------------------------------------------
 // Paint
 
-int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements,
+int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
-	if (!FUIApplication::IsInitialized())
+	if (!FSlateApplication::IsInitialized())
 	{
 		return LayerId;
 	}
 	UpdateLayout();
-	FFontCache& FontCache = FUIApplication::Get().GetFontCache();
+	FSlateFontCache& FontCache = FSlateApplication::Get().GetFontCache();
 	const float Width = Geometry.Size.X;
 	const FVector2 Offset = -ScrollOffset;
 	const bool bFocused = HasKeyboardFocus();
@@ -990,7 +990,7 @@ int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 	}
 	else
 	{
-		const FColor Color = Args.bEnabled ? InWidgetStyle.Tinted(Style->Color.Resolve()) : InWidgetStyle.Tinted(FStyleColor(EStyleColor::ForegroundDisabled).Resolve());
+		const FColor Color = Args.bEnabled ? InWidgetStyle.Tinted(Style->Color.Resolve()) : InWidgetStyle.Tinted(FSlateColor(EStyleColor::ForegroundDisabled).Resolve());
 		Layout.Paint(FontCache, OutDrawElements, LayerId + 1, Geometry, Offset, Width, Color);
 	}
 
@@ -1051,10 +1051,10 @@ FReply SEditableTextBox::OnMouseButtonDown(const FGeometry&, const FPointerEvent
 	return FReply::Unhandled();
 }
 
-int32 SEditableTextBox::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SEditableTextBox::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
-	const FStyleBrush& Brush = EditableText->IsTextReadOnly() ? Style->ReadOnly
+	const FSlateBrush& Brush = EditableText->IsTextReadOnly() ? Style->ReadOnly
 		: (EditableText->HasKeyboardFocus() ? Style->Focused : (IsHovered() ? Style->Hovered : Style->Normal));
 	Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 	return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, MakeChildStyle(InWidgetStyle));

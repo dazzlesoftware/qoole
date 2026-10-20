@@ -5,8 +5,8 @@
 // - FFontFace: one font file.
 // - FCompositeFont: a primary face plus fallbacks; text is split into runs by
 //   which face has the characters (e.g. Latin + Devanagari).
-// - FFontInfo: a composite font at a size in logical units (1/96 inch).
-// - FFontCache: shapes text into glyph runs at the final pixel size
+// - FSlateFontInfo: a composite font at a size in logical units (1/96 inch).
+// - FSlateFontCache: shapes text into glyph runs at the final pixel size
 //   (size x DPI scale), measures it, and rasterizes glyphs on demand into
 //   alpha (R8) atlas pages that the renderer uploads.
 //
@@ -15,7 +15,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Rendering/AtlasPacker.h"
+#include "Textures/SlateTextureAtlas.h"
 
 struct FT_LibraryRec_;
 struct FT_FaceRec_;
@@ -42,7 +42,7 @@ public:
 	hb_font_t* GetHBFont() const { return HBFont; }
 
 private:
-	friend class FFontCache;
+	friend class FSlateFontCache;
 	FFontFace() = default;
 
 	uint32 Id = 0;
@@ -64,16 +64,16 @@ struct FCompositeFont
 	FCompositeFont(FName InName, TArray<TSharedPtr<FFontFace>> InFaces) : Name(InName), Faces(std::move(InFaces)) {}
 };
 
-struct FFontInfo
+struct FSlateFontInfo
 {
 	TSharedPtr<const FCompositeFont> Font;
 	float Size = 13.0f; // logical units (pixels at 100% scale)
 
-	FFontInfo() = default;
-	FFontInfo(TSharedPtr<const FCompositeFont> InFont, float InSize) : Font(std::move(InFont)), Size(InSize) {}
+	FSlateFontInfo() = default;
+	FSlateFontInfo(TSharedPtr<const FCompositeFont> InFont, float InSize) : Font(std::move(InFont)), Size(InSize) {}
 };
 
-struct FShapedGlyph
+struct FShapedGlyphEntry
 {
 	const FFontFace* Face = nullptr;
 	uint32 GlyphIndex = 0;
@@ -84,10 +84,10 @@ struct FShapedGlyph
 };
 
 // Text shaped at one pixel size. All metrics are in physical pixels.
-struct FShapedText
+struct FShapedGlyphSequence
 {
-	TArray<FShapedGlyph> Glyphs;
-	float PixelSize = 0.0f;   // font size in pixels (FFontInfo::Size x Scale)
+	TArray<FShapedGlyphEntry> Glyphs;
+	float PixelSize = 0.0f;   // font size in pixels (FSlateFontInfo::Size x Scale)
 	float Scale = 1.0f;       // the DPI/layout scale it was shaped for
 	float Width = 0.0f;
 	float Ascender = 0.0f;    // baseline to top of line, positive
@@ -114,32 +114,32 @@ struct FFontAtlasPage
 	static constexpr int32 Size = 1024;
 
 	TArray<uint8> Pixels; // Size x Size, one byte per pixel
-	FAtlasPacker Packer{ Size, Size, 1 };
+	FSlateTextureAtlas Packer{ Size, Size, 1 };
 	TOptional<FIntRect> DirtyRect;
 	uint32 Revision = 0;
 
 	void MarkDirty(const FIntRect& Rect);
 };
 
-class FFontCache
+class FSlateFontCache
 {
 public:
-	FFontCache();
-	~FFontCache();
-	FFontCache(const FFontCache&) = delete;
-	FFontCache& operator=(const FFontCache&) = delete;
+	FSlateFontCache();
+	~FSlateFontCache();
+	FSlateFontCache(const FSlateFontCache&) = delete;
+	FSlateFontCache& operator=(const FSlateFontCache&) = delete;
 
 	TSharedPtr<FFontFace> LoadFace(const FString& Path);
 	TSharedPtr<FFontFace> LoadFaceFromMemory(TArray<uint8> Data);
 
 	// Shapes a single line (no wrapping; newlines are not special yet).
 	// Results are cached by (text, font, pixel size).
-	TSharedRef<const FShapedText> ShapeText(std::string_view Text, const FFontInfo& Font, float Scale);
+	TSharedRef<const FShapedGlyphSequence> ShapeText(std::string_view Text, const FSlateFontInfo& Font, float Scale);
 
 	// Logical size of a single line of text.
-	FVector2 MeasureText(std::string_view Text, const FFontInfo& Font, float Scale = 1.0f);
+	FVector2 MeasureText(std::string_view Text, const FSlateFontInfo& Font, float Scale = 1.0f);
 
-	// Rasterizes on first use. PixelSize is FShapedText::PixelSize.
+	// Rasterizes on first use. PixelSize is FShapedGlyphSequence::PixelSize.
 	const FCachedGlyph& GetGlyph(const FFontFace& Face, float PixelSize, uint32 GlyphIndex);
 
 	int32 GetPageCount() const { return static_cast<int32>(Pages.size()); }
@@ -172,7 +172,7 @@ private:
 	uint32 NextFaceId = 1;
 	TArray<TUniquePtr<FFontAtlasPage>> Pages;
 	TMap<FGlyphKey, FCachedGlyph, FGlyphKeyHash> Glyphs;
-	TMap<FString, TSharedRef<const FShapedText>> ShapeCache;
+	TMap<FString, TSharedRef<const FShapedGlyphSequence>> ShapeCache;
 };
 
 DECLARE_LOG_CATEGORY_EXTERN(LogFont, Log);

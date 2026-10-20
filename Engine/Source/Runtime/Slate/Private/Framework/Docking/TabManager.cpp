@@ -2,7 +2,7 @@
 
 #include "Framework/Docking/TabManager.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/SDockingArea.h"
 
 // ---------------------------------------------------------------------------
@@ -466,9 +466,9 @@ TSharedRef<SDockingArea> FTabManager::OpenFloatingWindow(const TSharedRef<FDockA
 		}
 		return bAllClosed;
 	}));
-	if (FUIApplication::IsInitialized())
+	if (FSlateApplication::IsInitialized())
 	{
-		FUIApplication::Get().AddWindow(Window);
+		FSlateApplication::Get().AddWindow(Window);
 	}
 	TArray<TSharedRef<SDockTabStack>> Stacks;
 	Area->GatherStacks(Stacks);
@@ -582,13 +582,13 @@ TSharedRef<FDockLayout> FTabManager::LoadLayout(const FString& SavedJson, const 
 	const TOptional<FJsonValue> Json = FJsonValue::Parse(SavedJson.View(), &Error);
 	if (!Json)
 	{
-		GE_LOG(LogUI, Warning, "Saved layout ignored: {}", Error);
+		GE_LOG(LogSlate, Warning, "Saved layout ignored: {}", Error);
 		return Default;
 	}
 	const TSharedPtr<FDockLayout> Saved = FDockLayout::FromJson(*Json);
 	if (!Saved || Saved->Name != Default->Name || Saved->Version != Default->Version || !Saved->GetPrimaryArea())
 	{
-		GE_LOG(LogUI, Log, "Saved layout ignored (another name or version); using the default \"{}\" v{}", Default->Name, Default->Version);
+		GE_LOG(LogSlate, Log, "Saved layout ignored (another name or version); using the default \"{}\" v{}", Default->Name, Default->Version);
 		return Default;
 	}
 	return ToSharedRef(Saved);
@@ -615,10 +615,10 @@ void FTabManager::CloseAllAreas()
 		}
 		if (!Area->IsPrimary())
 		{
-			if (const TSharedPtr<SWindow> Window = Area->GetWindow(); Window && FUIApplication::IsInitialized())
+			if (const TSharedPtr<SWindow> Window = Area->GetWindow(); Window && FSlateApplication::IsInitialized())
 			{
 				Window->SetOnRequestClose(FRequestWindowClose());
-				FUIApplication::Get().RequestDestroyWindow(ToSharedRef(Window));
+				FSlateApplication::Get().RequestDestroyWindow(ToSharedRef(Window));
 			}
 		}
 	}
@@ -810,10 +810,10 @@ void FTabManager::OnStackEmptied(const TSharedRef<SDockTabStack>& Stack)
 	{
 		const TSharedPtr<SDockingArea> AreaPtr = StaticCastSharedPtr<SDockingArea>(Area->shared_from_this());
 		std::erase_if(Areas, [&AreaPtr](const TWeakPtr<SDockingArea>& A) { return A.lock() == AreaPtr || A.expired(); });
-		if (const TSharedPtr<SWindow> Window = Area->GetWindow(); Window && FUIApplication::IsInitialized())
+		if (const TSharedPtr<SWindow> Window = Area->GetWindow(); Window && FSlateApplication::IsInitialized())
 		{
 			Window->SetOnRequestClose(FRequestWindowClose());
-			FUIApplication::Get().RequestDestroyWindow(ToSharedRef(Window));
+			FSlateApplication::Get().RequestDestroyWindow(ToSharedRef(Window));
 		}
 	}
 }

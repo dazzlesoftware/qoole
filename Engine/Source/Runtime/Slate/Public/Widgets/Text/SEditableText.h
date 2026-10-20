@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Text/TextLayout.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SLeafWidget.h"
@@ -22,22 +22,22 @@ class FEditableTextInputContext;
 class SEditableText : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SEditableText)
-		GE_ATTRIBUTE(FString, Text, "")
-		GE_ATTRIBUTE(FString, HintText, "")
-		GE_STYLE_ARGUMENT(FEditableTextStyle, Style)
-		GE_OPTIONAL_ATTRIBUTE(FFontInfo, Font)
-		GE_ATTRIBUTE(bool, IsReadOnly, false)
-		GE_ATTRIBUTE(bool, IsPassword, false)
-		GE_ARGUMENT(bool, IsMultiLine, false)
-		GE_ARGUMENT(bool, AutoWrapText, false) // multi-line only
-		GE_ARGUMENT(bool, SelectAllTextWhenFocused, false)
-		GE_ARGUMENT(bool, RevertTextOnEscape, false)
-		GE_ARGUMENT(bool, ClearKeyboardFocusOnCommit, false)
-		GE_ATTRIBUTE(float, MinDesiredWidth, 0.0f)
-		GE_EVENT(FOnTextChanged, OnTextChanged)
-		GE_EVENT(FOnTextCommitted, OnTextCommitted)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SEditableText)
+		SLATE_ATTRIBUTE(FString, Text, "")
+		SLATE_ATTRIBUTE(FString, HintText, "")
+		SLATE_STYLE_ARGUMENT(FEditableTextStyle, Style)
+		SLATE_OPTIONAL_ATTRIBUTE(FSlateFontInfo, Font)
+		SLATE_ATTRIBUTE(bool, IsReadOnly, false)
+		SLATE_ATTRIBUTE(bool, IsPassword, false)
+		SLATE_ARGUMENT(bool, IsMultiLine, false)
+		SLATE_ARGUMENT(bool, AutoWrapText, false) // multi-line only
+		SLATE_ARGUMENT(bool, SelectAllTextWhenFocused, false)
+		SLATE_ARGUMENT(bool, RevertTextOnEscape, false)
+		SLATE_ARGUMENT(bool, ClearKeyboardFocusOnCommit, false)
+		SLATE_ATTRIBUTE(float, MinDesiredWidth, 0.0f)
+		SLATE_EVENT(FOnTextChanged, OnTextChanged)
+		SLATE_EVENT(FOnTextCommitted, OnTextCommitted)
+	SLATE_END_ARGS()
 
 	SEditableText();
 	~SEditableText() override;
@@ -97,7 +97,7 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
 	void OnPreArrange(const FGeometry& AllottedGeometry) override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -121,7 +121,7 @@ private:
 	int32 ToDisplayIndex(int32 TextIndex) const;
 	int32 ToTextIndex(int32 DisplayIndex) const;
 	void UpdateLayout() const;
-	FFontInfo GetFont() const;
+	FSlateFontInfo GetFont() const;
 
 	int32 NextCaret(int32 Index) const;
 	int32 PreviousCaret(int32 Index) const;
@@ -149,7 +149,7 @@ private:
 	TWidgetAttribute<bool, EInvalidateWidgetReason::Layout> IsPassword{ *this, false };
 	TWidgetAttribute<float, EInvalidateWidgetReason::Layout> MinDesiredWidth{ *this, 0.0f };
 	const FEditableTextStyle* Style = nullptr;
-	TOptional<FFontInfo> FontOverride;
+	TOptional<FSlateFontInfo> FontOverride;
 	bool bMultiLine = false;
 	bool bAutoWrap = false;
 	bool bSelectAllWhenFocused = false;
@@ -189,22 +189,22 @@ private:
 class SEditableTextBox : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SEditableTextBox)
-		GE_STYLE_ARGUMENT(FEditableTextBoxStyle, Style)
-		GE_ATTRIBUTE(FString, Text, "")
-		GE_ATTRIBUTE(FString, HintText, "")
-		GE_ATTRIBUTE(bool, IsReadOnly, false)
-		GE_ATTRIBUTE(bool, IsPassword, false)
-		GE_ARGUMENT(bool, IsMultiLine, false)
-		GE_ARGUMENT(bool, AutoWrapText, false)
-		GE_ARGUMENT(bool, SelectAllTextWhenFocused, false)
-		GE_ARGUMENT(bool, RevertTextOnEscape, false)
-		GE_ARGUMENT(bool, ClearKeyboardFocusOnCommit, false)
-		GE_ATTRIBUTE(float, MinDesiredWidth, 0.0f)
-		GE_OPTIONAL_ATTRIBUTE(FMargin, Padding)
-		GE_EVENT(FOnTextChanged, OnTextChanged)
-		GE_EVENT(FOnTextCommitted, OnTextCommitted)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SEditableTextBox)
+		SLATE_STYLE_ARGUMENT(FEditableTextBoxStyle, Style)
+		SLATE_ATTRIBUTE(FString, Text, "")
+		SLATE_ATTRIBUTE(FString, HintText, "")
+		SLATE_ATTRIBUTE(bool, IsReadOnly, false)
+		SLATE_ATTRIBUTE(bool, IsPassword, false)
+		SLATE_ARGUMENT(bool, IsMultiLine, false)
+		SLATE_ARGUMENT(bool, AutoWrapText, false)
+		SLATE_ARGUMENT(bool, SelectAllTextWhenFocused, false)
+		SLATE_ARGUMENT(bool, RevertTextOnEscape, false)
+		SLATE_ARGUMENT(bool, ClearKeyboardFocusOnCommit, false)
+		SLATE_ATTRIBUTE(float, MinDesiredWidth, 0.0f)
+		SLATE_OPTIONAL_ATTRIBUTE(FMargin, Padding)
+		SLATE_EVENT(FOnTextChanged, OnTextChanged)
+		SLATE_EVENT(FOnTextCommitted, OnTextCommitted)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -216,7 +216,7 @@ public:
 	FCursorReply OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const override { (void)Geometry; (void)Event; return FCursorReply::Cursor(EMouseCursor::TextEditBeam); }
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:

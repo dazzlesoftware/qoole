@@ -129,7 +129,7 @@ namespace
 	class FTestViewportClient final : public IViewportClient
 	{
 	public:
-		TSharedPtr<IUIRenderTarget> GetRenderTarget() const override { return nullptr; }
+		TSharedPtr<ISlateRenderTarget> GetRenderTarget() const override { return nullptr; }
 		void OnResize(FIntPoint Size) override { Sizes.push_back(Size); }
 		FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent& Event) override
 		{

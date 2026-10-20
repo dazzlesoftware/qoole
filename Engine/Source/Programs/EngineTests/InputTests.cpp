@@ -18,14 +18,14 @@ namespace
 	class SRecorder : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SRecorder)
-			GE_ARGUMENT(FString, Name, "")
-			GE_ARGUMENT(bool, HandleDown, false)
-			GE_ARGUMENT(bool, HandlePreview, false)
-			GE_ARGUMENT(bool, Focusable, false)
-			GE_ARGUMENT(TArray<FString>*, Log, nullptr)
-			GE_DEFAULT_SLOT(Content)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SRecorder)
+			SLATE_ARGUMENT(FString, Name, "")
+			SLATE_ARGUMENT(bool, HandleDown, false)
+			SLATE_ARGUMENT(bool, HandlePreview, false)
+			SLATE_ARGUMENT(bool, Focusable, false)
+			SLATE_ARGUMENT(TArray<FString>*, Log, nullptr)
+			SLATE_DEFAULT_SLOT(Content)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments& Args)
 		{
@@ -71,7 +71,7 @@ namespace
 	class FTestDragDrop final : public FDragDropOperation
 	{
 	public:
-		GE_DRAG_DROP_OPERATION_TYPE(FTestDragDrop, FDragDropOperation)
+		DRAG_DROP_OPERATOR_TYPE(FTestDragDrop, FDragDropOperation)
 		FString Payload;
 		bool bDropped = false;
 		bool bDropHandled = false;
@@ -86,8 +86,8 @@ namespace
 	class SDragSource final : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SDragSource)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SDragSource)
+		SLATE_END_ARGS()
 		void Construct(const FArguments&) {}
 
 		TSharedPtr<FTestDragDrop> Operation;
@@ -105,14 +105,14 @@ namespace
 
 	protected:
 		FVector2 ComputeDesiredSize(float) const override { return FVector2(40.0f, 40.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FDrawElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
+		int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FSlateWindowElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
 	};
 
 	class SDropTarget final : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SDropTarget)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SDropTarget)
+		SLATE_END_ARGS()
 		void Construct(const FArguments&) {}
 
 		TArray<FString> Log;
@@ -130,7 +130,7 @@ namespace
 
 	protected:
 		FVector2 ComputeDesiredSize(float) const override { return FVector2(40.0f, 40.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FDrawElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
+		int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FSlateWindowElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
 	};
 
 	TSharedRef<SButton> MakeButton(const char* Label, int32* Counter)
@@ -581,7 +581,7 @@ TEST_SUITE("UIInput")
 		class FEatF5 final : public IInputProcessor
 		{
 		public:
-			bool HandleKeyDownEvent(FUIApplication&, const FKeyEvent& Event) override { return Event.GetKey() == EKey::F5 && ++Count > 0; }
+			bool HandleKeyDownEvent(FSlateApplication&, const FKeyEvent& Event) override { return Event.GetKey() == EKey::F5 && ++Count > 0; }
 			int32 Count = 0;
 		};
 		FUITestApp T;

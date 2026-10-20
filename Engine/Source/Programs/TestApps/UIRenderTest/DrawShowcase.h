@@ -9,7 +9,7 @@
 
 #include "CoreMinimal.h"
 #include "Rendering/DrawElements.h"
-#include "UIRenderer.h"
+#include "SlateRHIRenderingPolicy.h"
 
 struct FShowcaseFonts
 {
@@ -30,19 +30,19 @@ struct FShowcaseFrame
 	FString BackendName;
 	FString AdapterName;
 	float FramesPerSecond = 0.0f;
-	FUIRenderStats Stats;
+	FSlateRenderStats Stats;
 	float ListScroll = 0.0f;    // mouse-wheel offset of the clipped list
 };
 
 class FDrawShowcase
 {
 public:
-	FDrawShowcase(FFontCache& InFontCache, FShowcaseFonts InFonts);
+	FDrawShowcase(FSlateFontCache& InFontCache, FShowcaseFonts InFonts);
 
 	// The showcase, filling Frame.LogicalSize at Frame.Origin.
-	void PaintMain(FDrawElementList& List, const FShowcaseFrame& Frame, const TSharedPtr<FUIRenderTarget>& ViewportTarget);
+	void PaintMain(FSlateWindowElementList& List, const FShowcaseFrame& Frame, const TSharedPtr<FSlateRenderTargetRHI>& ViewportTarget);
 	// The scene shown through the Viewport element, drawn into its render target.
-	void PaintViewportScene(FDrawElementList& List, const FShowcaseFrame& Frame, FIntPoint TargetSize);
+	void PaintViewportScene(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FIntPoint TargetSize);
 
 private:
 	struct FPanel
@@ -53,22 +53,22 @@ private:
 
 	FPaintGeometry Geo(const FShowcaseFrame& Frame, FRect LogicalRect) const;
 	// Draws text with its line box at Position; returns its logical size.
-	FVector2 Text(FDrawElementList& List, int32 Layer, const FShowcaseFrame& Frame, FVector2 Position, std::string_view String,
+	FVector2 Text(FSlateWindowElementList& List, int32 Layer, const FShowcaseFrame& Frame, FVector2 Position, std::string_view String,
 		const TSharedPtr<FCompositeFont>& Font, float Size, FColor Color);
-	FRect Panel(FDrawElementList& List, const FShowcaseFrame& Frame, const FRect& Rect, std::string_view Title);
+	FRect Panel(FSlateWindowElementList& List, const FShowcaseFrame& Frame, const FRect& Rect, std::string_view Title);
 
-	void PaintBoxes(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area);
-	void PaintRoundedBoxes(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area);
-	void PaintLines(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area);
-	void PaintClipping(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area);
-	void PaintText(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area);
-	void PaintViewport(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area, const TSharedPtr<FUIRenderTarget>& ViewportTarget);
+	void PaintBoxes(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area);
+	void PaintRoundedBoxes(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area);
+	void PaintLines(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area);
+	void PaintClipping(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area);
+	void PaintText(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area);
+	void PaintViewport(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area, const TSharedPtr<FSlateRenderTargetRHI>& ViewportTarget);
 
-	FFontCache& FontCache;
+	FSlateFontCache& FontCache;
 	FShowcaseFonts Fonts;
-	TSharedPtr<FUIImage> FrameImage;   // 9-slice source: bevelled frame
-	TSharedPtr<FUIImage> CheckerImage; // tiled pattern
-	TSharedPtr<FUIImage> GradientImage;
-	TSharedPtr<FUIImage> IconImage;    // small atlas-packed icon
-	TSharedPtr<FUIImage> HairlineImage;
+	TSharedPtr<FSlateTextureData> FrameImage;   // 9-slice source: bevelled frame
+	TSharedPtr<FSlateTextureData> CheckerImage; // tiled pattern
+	TSharedPtr<FSlateTextureData> GradientImage;
+	TSharedPtr<FSlateTextureData> IconImage;    // small atlas-packed icon
+	TSharedPtr<FSlateTextureData> HairlineImage;
 };

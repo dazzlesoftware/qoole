@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/WidgetDelegates.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SLeafWidget.h"
@@ -11,18 +11,18 @@
 class SBox : public SWidget
 {
 public:
-	GE_BEGIN_ARGS(SBox)
-		GE_ARGUMENT(EHorizontalAlignment, HAlign, HAlign_Fill)
-		GE_ARGUMENT(EVerticalAlignment, VAlign, VAlign_Fill)
-		GE_ARGUMENT(FMargin, Padding, FMargin())
-		GE_OPTIONAL_ATTRIBUTE(TOptional<float>, WidthOverride)
-		GE_OPTIONAL_ATTRIBUTE(TOptional<float>, HeightOverride)
-		GE_OPTIONAL_ATTRIBUTE(TOptional<float>, MinDesiredWidth)
-		GE_OPTIONAL_ATTRIBUTE(TOptional<float>, MinDesiredHeight)
-		GE_OPTIONAL_ATTRIBUTE(TOptional<float>, MaxDesiredWidth)
-		GE_OPTIONAL_ATTRIBUTE(TOptional<float>, MaxDesiredHeight)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SBox)
+		SLATE_ARGUMENT(EHorizontalAlignment, HAlign, HAlign_Fill)
+		SLATE_ARGUMENT(EVerticalAlignment, VAlign, VAlign_Fill)
+		SLATE_ARGUMENT(FMargin, Padding, FMargin())
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<float>, WidthOverride)
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<float>, HeightOverride)
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<float>, MinDesiredWidth)
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<float>, MinDesiredHeight)
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<float>, MaxDesiredWidth)
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<float>, MaxDesiredHeight)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -35,7 +35,7 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
 	void OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -52,37 +52,37 @@ private:
 class SBorder : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SBorder)
-		GE_STYLE_ARGUMENT(FStyleBrush, BorderImage)
-		GE_ATTRIBUTE(FStyleColor, BorderBackgroundColor, FStyleColor(FColor::White()))
-		GE_OPTIONAL_ATTRIBUTE(TOptional<FStyleColor>, ForegroundColor)
-		GE_ATTRIBUTE(FColor, ColorAndOpacity, FColor::White())
-		GE_ARGUMENT(FMargin, Padding, FMargin(2.0f))
-		GE_ARGUMENT(EHorizontalAlignment, HAlign, HAlign_Fill)
-		GE_ARGUMENT(EVerticalAlignment, VAlign, VAlign_Fill)
-		GE_EVENT(FPointerEventHandler, OnMouseButtonDown)
-		GE_EVENT(FPointerEventHandler, OnMouseDoubleClick)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SBorder)
+		SLATE_STYLE_ARGUMENT(FSlateBrush, BorderImage)
+		SLATE_ATTRIBUTE(FSlateColor, BorderBackgroundColor, FSlateColor(FColor::White()))
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<FSlateColor>, ForegroundColor)
+		SLATE_ATTRIBUTE(FColor, ColorAndOpacity, FColor::White())
+		SLATE_ARGUMENT(FMargin, Padding, FMargin(2.0f))
+		SLATE_ARGUMENT(EHorizontalAlignment, HAlign, HAlign_Fill)
+		SLATE_ARGUMENT(EVerticalAlignment, VAlign, VAlign_Fill)
+		SLATE_EVENT(FPointerEventHandler, OnMouseButtonDown)
+		SLATE_EVENT(FPointerEventHandler, OnMouseDoubleClick)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
 	void SetContent(const TSharedRef<SWidget>& Content) { ChildSlot[Content]; }
 	TSharedRef<SWidget> GetContent() const { return ChildSlot.GetWidget(); }
-	void SetBorderImage(const FStyleBrush* Brush);
-	void SetBorderBackgroundColor(TAttribute<FStyleColor> Color) { BorderBackgroundColor.Assign(Color); }
+	void SetBorderImage(const FSlateBrush* Brush);
+	void SetBorderBackgroundColor(TAttribute<FSlateColor> Color) { BorderBackgroundColor.Assign(Color); }
 	void SetPadding(const FMargin& Padding) { ChildSlot.Padding(Padding); }
 
 	FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	FReply OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event) override;
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
-	const FStyleBrush* BorderImage = nullptr;
-	TWidgetAttribute<FStyleColor, EInvalidateWidgetReason::Paint> BorderBackgroundColor{ *this, FStyleColor(FColor::White()) };
+	const FSlateBrush* BorderImage = nullptr;
+	TWidgetAttribute<FSlateColor, EInvalidateWidgetReason::Paint> BorderBackgroundColor{ *this, FSlateColor(FColor::White()) };
 	FPointerEventHandler MouseButtonDownHandler;
 	FPointerEventHandler MouseDoubleClickHandler;
 };
@@ -91,16 +91,16 @@ private:
 class SSpacer : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SSpacer)
-		GE_ATTRIBUTE(FVector2, Size, FVector2::Zero())
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SSpacer)
+		SLATE_ATTRIBUTE(FVector2, Size, FVector2::Zero())
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args) { Size.Assign(Args._Size); }
 	void SetSize(TAttribute<FVector2> InSize) { Size.Assign(InSize); }
 
 protected:
 	FVector2 ComputeDesiredSize(float) const override { return Size.Get(); }
-	int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FDrawElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
+	int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FSlateWindowElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
 
 private:
 	TWidgetAttribute<FVector2, EInvalidateWidgetReason::Layout> Size{ *this };

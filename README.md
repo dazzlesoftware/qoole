@@ -111,7 +111,7 @@ HarfBuzz, doctest, Vulkan headers) are vendored in
 - The UI shaders are in `Engine/Source/Runtime/SlateRHIRenderer/Private/Shaders`
   and the map views' in `Engine/Source/Editor/MapEditor/Private/Shaders`. DXIL is compiled
   at build time with the Windows SDK; after editing the HLSL, rerun
-  `BuildUIShaders.cmd` or `BuildMapShaders.cmd` with a SPIR-V capable
+  `BuildSlateShaders.cmd` or `BuildMapShaders.cmd` with a SPIR-V capable
   `dxc.exe` (Vulkan SDK or a DirectXShaderCompiler release) to regenerate
   the Vulkan headers.
 

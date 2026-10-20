@@ -19,10 +19,10 @@ namespace
 	class SDrawShowcase final : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SDrawShowcase)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SDrawShowcase)
+		SLATE_END_ARGS()
 
-		void Construct(const FArguments&, TFunction<FShowcaseFrame()> InGetFrame, FDrawShowcase* InShowcase, TSharedPtr<FUIRenderTarget>* InTarget)
+		void Construct(const FArguments&, TFunction<FShowcaseFrame()> InGetFrame, FDrawShowcase* InShowcase, TSharedPtr<FSlateRenderTargetRHI>* InTarget)
 		{
 			GetFrame = std::move(InGetFrame);
 			Showcase = InShowcase;
@@ -41,21 +41,21 @@ namespace
 
 	protected:
 		FVector2 ComputeDesiredSize(float) const override { return FVector2(640.0f, 480.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle&) const override
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle&) const override
 		{
 			FShowcaseFrame Frame = GetFrame();
 			Frame.Scale = Geometry.Scale;
 			Frame.Origin = Geometry.AbsolutePosition / Geometry.Scale;
 			Frame.LogicalSize = Geometry.Size;
-			Frame.MouseLogical = IsHovered() ? FUIApplication::Get().GetCursorPosition() / Geometry.Scale - Frame.Origin : FVector2(-1.0f, -1.0f);
+			Frame.MouseLogical = IsHovered() ? FSlateApplication::Get().GetCursorPosition() / Geometry.Scale - Frame.Origin : FVector2(-1.0f, -1.0f);
 			Frame.ListScroll = ListScroll;
 			// The showcase uses layers 0-6 and its own clip rectangles; re-add
 			// its elements above our layer.
-			FDrawElementList Local;
+			FSlateWindowElementList Local;
 			Local.SetViewportSize(Out.GetViewportSize());
 			Showcase->PaintMain(Local, Frame, *Target);
 			int32 MaxLayer = LayerId;
-			for (const FDrawElement& Element : Local.GetElements())
+			for (const FSlateDrawElement& Element : Local.GetElements())
 			{
 				const int32 Layer = LayerId + Element.Layer;
 				MaxLayer = FMath::Max(MaxLayer, Layer);
@@ -65,29 +65,29 @@ namespace
 				}
 				switch (Element.Type)
 				{
-				case EDrawElementType::Box: Out.AddBox(Layer, Element.Geometry, Element.Get<FBoxElement>().Brush); break;
-				case EDrawElementType::RoundedBox:
+				case EElementType::Box: Out.AddBox(Layer, Element.Geometry, Element.Get<FSlateBoxElement>().Brush); break;
+				case EElementType::RoundedBox:
 				{
-					const FRoundedBoxElement& R = Element.Get<FRoundedBoxElement>();
+					const FSlateRoundedBoxElement& R = Element.Get<FSlateRoundedBoxElement>();
 					Out.AddRoundedBox(Layer, Element.Geometry, Element.Color, R.CornerRadii, R.OutlineColor, R.OutlineWidth);
 					break;
 				}
-				case EDrawElementType::Text: Out.AddText(Layer, Element.Geometry, ToSharedRef(Element.Get<FTextElement>().Text), Element.Color); break;
-				case EDrawElementType::Lines:
+				case EElementType::Text: Out.AddText(Layer, Element.Geometry, ToSharedRef(Element.Get<FSlateTextElement>().Text), Element.Color); break;
+				case EElementType::Lines:
 				{
-					const FLinesElement& L = Element.Get<FLinesElement>();
+					const FSlateLineElement& L = Element.Get<FSlateLineElement>();
 					Out.AddLines(Layer, Element.Geometry, L.Points, Element.Color, L.Thickness, L.bClosed);
 					break;
 				}
-				case EDrawElementType::CustomVerts:
+				case EElementType::CustomVerts:
 				{
-					const FCustomVertsElement& C = Element.Get<FCustomVertsElement>();
+					const FSlateCustomVertsElement& C = Element.Get<FSlateCustomVertsElement>();
 					Out.AddCustomVerts(Layer, Element.Geometry, C.Image, C.Vertices, C.Indices);
 					break;
 				}
-				case EDrawElementType::Viewport:
+				case EElementType::Viewport:
 				{
-					const FViewportElement& V = Element.Get<FViewportElement>();
+					const FSlateViewportElement& V = Element.Get<FSlateViewportElement>();
 					Out.AddViewport(Layer, Element.Geometry, V.RenderTarget, V.bAlphaBlend, Element.Color);
 					break;
 				}
@@ -103,7 +103,7 @@ namespace
 	private:
 		TFunction<FShowcaseFrame()> GetFrame;
 		FDrawShowcase* Showcase = nullptr;
-		TSharedPtr<FUIRenderTarget>* Target = nullptr;
+		TSharedPtr<FSlateRenderTargetRHI>* Target = nullptr;
 	};
 }
 
@@ -158,7 +158,7 @@ protected:
 		Script.Capture("native")
 			.Do([this]
 			{
-				const FUIRenderStats& S = Stats();
+				const FSlateRenderStats& S = Stats();
 				Expect(S.Elements > 100 && S.Batches > 0, FString::Format("the showcase draws ({} elements, {} batches, {} vertices)", S.Elements, S.Batches, S.Vertices));
 				Expect(S.Batches < S.Elements, "batching merges elements into fewer draw calls");
 			}, 1)
@@ -207,12 +207,12 @@ private:
 		return Frame;
 	}
 
-	const FUIRenderStats& Stats() const { return GetWindowRenderer().GetStats(*GetMainWindow()->GetNativeWindow()); }
+	const FSlateRenderStats& Stats() const { return GetWindowRenderer().GetStats(*GetMainWindow()->GetNativeWindow()); }
 
 	TUniquePtr<FDrawShowcase> Showcase;
 	TSharedPtr<SDrawShowcase> Widget;
-	TSharedPtr<FUIRenderTarget> Target;
-	FDrawElementList TargetElements;
+	TSharedPtr<FSlateRenderTargetRHI> Target;
+	FSlateWindowElementList TargetElements;
 	int32 TargetFrames = 0;
 	float ScrollBefore = 0.0f;
 };

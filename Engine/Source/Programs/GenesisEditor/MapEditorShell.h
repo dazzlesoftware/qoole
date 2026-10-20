@@ -19,7 +19,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Views/SListView.h"
 
-class FUIWindowRenderer;
+class FSlateRHIRenderer;
 class SPropertyGrid;
 class SWindow;
 
@@ -29,8 +29,8 @@ public:
 	struct FHost
 	{
 		FRHIDevice* Device = nullptr;
-		FUIRenderer* Renderer = nullptr;
-		FUIWindowRenderer* WindowRenderer = nullptr;
+		FSlateRHIRenderingPolicy* Renderer = nullptr;
+		FSlateRHIRenderer* WindowRenderer = nullptr;
 		FString SettingsDir; // Layout.json, Bindings.json, Prefabs\; empty: nothing is saved
 		TFunction<void()> Quit;
 		TFunction<void(float)> SetAppScale;

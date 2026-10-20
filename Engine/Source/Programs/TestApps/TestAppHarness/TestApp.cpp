@@ -220,27 +220,27 @@ bool FTestApp::Initialize(const FString& CommandLine)
 		return false;
 	}
 
-	FontCache = std::make_shared<FFontCache>();
-	Fonts = FGenesisFonts::Load(*FontCache);
+	FontCache = std::make_shared<FSlateFontCache>();
+	Fonts = FStarshipCoreFonts::Load(*FontCache);
 	if (!Fonts.IsValid())
 	{
 		GE_LOG(LogTestApp, Error, "The fonts could not be loaded");
 		return false;
 	}
-	const TSharedRef<FStyleSet> Style = FGenesisStyle::Create(Fonts);
-	FStyleSet::Register(Style);
+	const TSharedRef<FSlateStyleSet> Style = FStarshipCoreStyle::Create(Fonts);
+	FSlateStyleSet::Register(Style);
 	FAppStyle::SetAppStyleSet(Style);
 
-	Renderer = MakeUnique<FUIRenderer>(*Device, *FontCache);
+	Renderer = MakeUnique<FSlateRHIRenderingPolicy>(*Device, *FontCache);
 	if (!Renderer->Initialize())
 	{
 		GE_LOG(LogTestApp, Error, "UI renderer initialization failed");
 		return false;
 	}
-	WindowRenderer = MakeUnique<FUIWindowRenderer>(*Device, *Renderer);
+	WindowRenderer = MakeUnique<FSlateRHIRenderer>(*Device, *Renderer);
 	WindowRenderer->OnBeginFrame.AddLambda([this](FRHICommandList& CommandList) { OnBeginFrame(CommandList); });
 
-	App = FUIApplication::Create(ToSharedRef(Platform), ToSharedRef(FontCache)).ToSharedPtr();
+	App = FSlateApplication::Create(ToSharedRef(Platform), ToSharedRef(FontCache)).ToSharedPtr();
 	App->SetRenderer(WindowRenderer.get());
 	App->SetApplicationScale(AppScale);
 	App->RegisterInputPreProcessor(TSharedRef<IInputProcessor>(StaticCastSharedPtr<IInputProcessor>(shared_from_this())));
@@ -320,7 +320,7 @@ void FTestApp::Shutdown()
 	if (App)
 	{
 		App->SetRenderer(nullptr);
-		FUIApplication::Shutdown();
+		FSlateApplication::Shutdown();
 	}
 	App.reset();
 	MainWindow.reset();
@@ -392,7 +392,7 @@ FString FTestApp::GetStatusLine() const
 		AppScale * 100.0f, FramesPerSecond);
 }
 
-bool FTestApp::HandleKeyDownEvent(FUIApplication&, const FKeyEvent& Event)
+bool FTestApp::HandleKeyDownEvent(FSlateApplication&, const FKeyEvent& Event)
 {
 	switch (Event.GetKey())
 	{

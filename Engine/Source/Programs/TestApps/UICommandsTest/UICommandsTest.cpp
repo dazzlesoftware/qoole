@@ -29,8 +29,8 @@ namespace
 	class SChordEditor final : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SChordEditor)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SChordEditor)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments&, const TSharedRef<FUICommandInfo>& InCommand, TFunction<void(const FString&)> InLog)
 		{

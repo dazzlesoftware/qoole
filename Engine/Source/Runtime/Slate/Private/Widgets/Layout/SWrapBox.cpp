@@ -158,7 +158,7 @@ void SCanvas::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChil
 	}
 }
 
-int32 SCanvas::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SCanvas::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	int32 MaxLayer = LayerId;

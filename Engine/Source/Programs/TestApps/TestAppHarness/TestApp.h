@@ -24,12 +24,12 @@
 
 #pragma once
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "CoreMinimal.h"
 #include "RHI.h"
-#include "Styling/GenesisStyle.h"
-#include "UIRenderer.h"
-#include "UIWindowRenderer.h"
+#include "Styling/StarshipCoreStyle.h"
+#include "SlateRHIRenderingPolicy.h"
+#include "SlateRHIRenderer.h"
 #include "Widgets/SWindow.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTestApp, Log);
@@ -86,15 +86,15 @@ public:
 	int32 Run(const FString& CommandLine);
 
 	// IInputProcessor: F2 and F3.
-	bool HandleKeyDownEvent(FUIApplication& App, const FKeyEvent& Event) override;
+	bool HandleKeyDownEvent(FSlateApplication& App, const FKeyEvent& Event) override;
 
 	// ----- For scripts and content -----
 	FRHIDevice& GetDevice() const { return *Device; }
-	FUIRenderer& GetRenderer() const { return *Renderer; }
-	FUIWindowRenderer& GetWindowRenderer() const { return *WindowRenderer; }
-	FFontCache& GetFontCache() const { return *FontCache; }
-	const FGenesisFonts& GetFonts() const { return Fonts; }
-	FUIApplication& GetApp() const { return *App; }
+	FSlateRHIRenderingPolicy& GetRenderer() const { return *Renderer; }
+	FSlateRHIRenderer& GetWindowRenderer() const { return *WindowRenderer; }
+	FSlateFontCache& GetFontCache() const { return *FontCache; }
+	const FStarshipCoreFonts& GetFonts() const { return Fonts; }
+	FSlateApplication& GetApp() const { return *App; }
 	IPlatformApplication& GetPlatform() const { return *Platform; }
 	const TSharedPtr<SWindow>& GetMainWindow() const { return MainWindow; }
 	ERHIBackend GetBackend() const { return Backend; }
@@ -188,11 +188,11 @@ private:
 	FTestAppInfo Info;
 	TSharedPtr<IPlatformApplication> Platform;
 	TUniquePtr<FRHIDevice> Device;
-	TSharedPtr<FFontCache> FontCache;
-	FGenesisFonts Fonts;
-	TUniquePtr<FUIRenderer> Renderer;
-	TUniquePtr<FUIWindowRenderer> WindowRenderer;
-	TSharedPtr<FUIApplication> App;
+	TSharedPtr<FSlateFontCache> FontCache;
+	FStarshipCoreFonts Fonts;
+	TUniquePtr<FSlateRHIRenderingPolicy> Renderer;
+	TUniquePtr<FSlateRHIRenderer> WindowRenderer;
+	TSharedPtr<FSlateApplication> App;
 	TSharedPtr<SWindow> MainWindow;
 	TUniquePtr<FFileOutputDevice> FileLog;
 	TUniquePtr<IConfigStore> Config;

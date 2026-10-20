@@ -1,7 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
 // Draw elements (docs/GenesisUI.md §5.1): what widgets emit when they paint.
-// The renderer turns an FDrawElementList into GPU batches.
+// The renderer turns an FSlateWindowElementList into GPU batches.
 //
 // Geometry is given in logical units plus a transform to window pixels
 // (DPI scale and layout offset), so the renderer can snap to pixels and
@@ -13,7 +13,7 @@
 
 #include "CoreMinimal.h"
 #include "Fonts/FontCache.h"
-#include "Rendering/UIImage.h"
+#include "Rendering/RenderingCommon.h"
 
 #include <variant>
 
@@ -52,7 +52,7 @@ struct FPaintGeometry
 	FRect GetPixelBounds() const;
 };
 
-enum class EDrawElementType : uint8
+enum class EElementType : uint8
 {
 	Box,
 	RoundedBox,
@@ -62,65 +62,65 @@ enum class EDrawElementType : uint8
 	Viewport,
 };
 
-const char* ToString(EDrawElementType Type);
+const char* ToString(EElementType Type);
 
-struct FBoxElement
+struct FSlateBoxElement
 {
 	FBrush Brush;
 };
 
-struct FRoundedBoxElement
+struct FSlateRoundedBoxElement
 {
 	FColor OutlineColor = FColor::Transparent();
 	float OutlineWidth = 0.0f;            // logical units, drawn inside the rectangle
 	TStaticArray<float, 4> CornerRadii{}; // logical units: top-left, top-right, bottom-right, bottom-left
 };
 
-struct FTextElement
+struct FSlateTextElement
 {
-	TSharedPtr<const FShapedText> Text;
+	TSharedPtr<const FShapedGlyphSequence> Text;
 };
 
-struct FLinesElement
+struct FSlateLineElement
 {
 	TArray<FVector2> Points; // local units
 	float Thickness = 1.0f;  // logical units
 	bool bClosed = false;
 };
 
-struct FUIVertex2D
+struct FSlateVertex2D
 {
 	FVector2 Position; // local units
 	FVector2 UV;
 	FColor Color;
 };
 
-struct FCustomVertsElement
+struct FSlateCustomVertsElement
 {
-	TSharedPtr<FUIImage> Image; // nullptr: untextured
-	TArray<FUIVertex2D> Vertices;
+	TSharedPtr<FSlateTextureData> Image; // nullptr: untextured
+	TArray<FSlateVertex2D> Vertices;
 	TArray<uint32> Indices;
 };
 
-struct FViewportElement
+struct FSlateViewportElement
 {
-	TSharedPtr<IUIRenderTarget> RenderTarget;
+	TSharedPtr<ISlateRenderTarget> RenderTarget;
 	bool bAlphaBlend = false; // false: the target's alpha is ignored
 };
 
-struct FDrawElement
+struct FSlateDrawElement
 {
-	EDrawElementType Type = EDrawElementType::Box;
+	EElementType Type = EElementType::Box;
 	int32 Layer = 0;
-	int32 ClipIndex = INDEX_NONE; // into FDrawElementList::GetClipRects; INDEX_NONE = unclipped
+	int32 ClipIndex = INDEX_NONE; // into FSlateWindowElementList::GetClipRects; INDEX_NONE = unclipped
 	FPaintGeometry Geometry;
 	FColor Color = FColor::White(); // fill / tint / text color
-	std::variant<FBoxElement, FRoundedBoxElement, FTextElement, FLinesElement, FCustomVertsElement, FViewportElement> Data;
+	std::variant<FSlateBoxElement, FSlateRoundedBoxElement, FSlateTextElement, FSlateLineElement, FSlateCustomVertsElement, FSlateViewportElement> Data;
 
 	template <typename T> const T& Get() const { return std::get<T>(Data); }
 };
 
-class FDrawElementList
+class FSlateWindowElementList
 {
 public:
 	void Reset();
@@ -136,10 +136,10 @@ public:
 	// Geometry's top-left is the top-left of the line box (baseline at
 	// Text->GetLogicalBaseline()). The text must have been shaped for this
 	// geometry's scale.
-	void AddText(int32 Layer, const FPaintGeometry& Geometry, const TSharedRef<const FShapedText>& Text, FColor Color);
+	void AddText(int32 Layer, const FPaintGeometry& Geometry, const TSharedRef<const FShapedGlyphSequence>& Text, FColor Color);
 	void AddLines(int32 Layer, const FPaintGeometry& Geometry, TArray<FVector2> Points, FColor Color, float Thickness = 1.0f, bool bClosed = false);
-	void AddCustomVerts(int32 Layer, const FPaintGeometry& Geometry, TSharedPtr<FUIImage> Image, TArray<FUIVertex2D> Vertices, TArray<uint32> Indices);
-	void AddViewport(int32 Layer, const FPaintGeometry& Geometry, TSharedPtr<IUIRenderTarget> RenderTarget, bool bAlphaBlend = false, FColor Tint = FColor::White());
+	void AddCustomVerts(int32 Layer, const FPaintGeometry& Geometry, TSharedPtr<FSlateTextureData> Image, TArray<FSlateVertex2D> Vertices, TArray<uint32> Indices);
+	void AddViewport(int32 Layer, const FPaintGeometry& Geometry, TSharedPtr<ISlateRenderTarget> RenderTarget, bool bAlphaBlend = false, FColor Tint = FColor::White());
 
 	// Clips everything added until the matching PopClip to the geometry's
 	// rectangle, intersected with the current clip. The geometry must be
@@ -151,16 +151,16 @@ public:
 	// The current scissor in pixels, or nothing when unclipped.
 	TOptional<FIntRect> GetCurrentClip() const;
 
-	const TArray<FDrawElement>& GetElements() const { return Elements; }
+	const TArray<FSlateDrawElement>& GetElements() const { return Elements; }
 	const TArray<FIntRect>& GetClipRects() const { return ClipRects; }
 	int32 GetCulledCount() const { return CulledCount; }
 
 private:
-	FDrawElement& Add(EDrawElementType Type, int32 Layer, const FPaintGeometry& Geometry, FColor Color);
+	FSlateDrawElement& Add(EElementType Type, int32 Layer, const FPaintGeometry& Geometry, FColor Color);
 	// True when the element would be invisible under the current clip.
 	bool IsCulled(const FRect& PixelBounds);
 
-	TArray<FDrawElement> Elements;
+	TArray<FSlateDrawElement> Elements;
 	TArray<FIntRect> ClipRects;   // every clip state ever pushed this frame
 	TArray<int32> ClipStack;      // indices into ClipRects
 	FIntPoint ViewportSize{ 0, 0 };

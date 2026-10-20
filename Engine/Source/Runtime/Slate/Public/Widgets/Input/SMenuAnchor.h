@@ -12,14 +12,14 @@ class IMenu;
 class SMenuAnchor : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SMenuAnchor)
-		GE_ARGUMENT(EMenuPlacement, Placement, EMenuPlacement::BelowAnchor)
-		GE_NAMED_SLOT(MenuContent)            // fixed menu content
-		GE_EVENT(FOnGetContent, OnGetMenuContent) // or built on each open
-		GE_EVENT(FOnIsOpenChanged, OnMenuOpenChanged)
-		GE_ARGUMENT(bool, FocusMenuOnOpen, true)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SMenuAnchor)
+		SLATE_ARGUMENT(EMenuPlacement, Placement, EMenuPlacement::BelowAnchor)
+		SLATE_NAMED_SLOT(MenuContent)            // fixed menu content
+		SLATE_EVENT(FOnGetContent, OnGetMenuContent) // or built on each open
+		SLATE_EVENT(FOnIsOpenChanged, OnMenuOpenChanged)
+		SLATE_ARGUMENT(bool, FocusMenuOnOpen, true)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -51,17 +51,17 @@ private:
 class SComboButton : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SComboButton)
-		GE_STYLE_ARGUMENT(FButtonStyle, ButtonStyle)
-		GE_OPTIONAL_ATTRIBUTE(FString, Text)
-		GE_NAMED_SLOT(ButtonContent)
-		GE_NAMED_SLOT(MenuContent)
-		GE_EVENT(FOnGetContent, OnGetMenuContent)
-		GE_EVENT(FOnIsOpenChanged, OnMenuOpenChanged)
-		GE_ARGUMENT(EMenuPlacement, Placement, EMenuPlacement::ComboBox)
-		GE_ARGUMENT(bool, HasDownArrow, true)
-		GE_ARGUMENT(bool, IsFocusable, true)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SComboButton)
+		SLATE_STYLE_ARGUMENT(FButtonStyle, ButtonStyle)
+		SLATE_OPTIONAL_ATTRIBUTE(FString, Text)
+		SLATE_NAMED_SLOT(ButtonContent)
+		SLATE_NAMED_SLOT(MenuContent)
+		SLATE_EVENT(FOnGetContent, OnGetMenuContent)
+		SLATE_EVENT(FOnIsOpenChanged, OnMenuOpenChanged)
+		SLATE_ARGUMENT(EMenuPlacement, Placement, EMenuPlacement::ComboBox)
+		SLATE_ARGUMENT(bool, HasDownArrow, true)
+		SLATE_ARGUMENT(bool, IsFocusable, true)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -78,15 +78,15 @@ private:
 class SMenuEntry : public SButton
 {
 public:
-	GE_BEGIN_ARGS(SMenuEntry)
-		GE_ATTRIBUTE(FString, Text, "")
-		GE_OPTIONAL_ATTRIBUTE(FString, InputGesture) // shortcut text on the right
-		GE_ARGUMENT(bool, ShowCheck, false)          // reserve a check-mark column
-		GE_ATTRIBUTE(ECheckBoxState, CheckState, ECheckBoxState::Unchecked)
-		GE_EVENT(FSimpleDelegate, OnSelected)
-		GE_NAMED_SLOT(SubMenu)                      // makes it open a submenu instead
-		GE_EVENT(FOnGetContent, OnGetSubMenu)       // or builds the submenu when it opens
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SMenuEntry)
+		SLATE_ATTRIBUTE(FString, Text, "")
+		SLATE_OPTIONAL_ATTRIBUTE(FString, InputGesture) // shortcut text on the right
+		SLATE_ARGUMENT(bool, ShowCheck, false)          // reserve a check-mark column
+		SLATE_ATTRIBUTE(ECheckBoxState, CheckState, ECheckBoxState::Unchecked)
+		SLATE_EVENT(FSimpleDelegate, OnSelected)
+		SLATE_NAMED_SLOT(SubMenu)                      // makes it open a submenu instead
+		SLATE_EVENT(FOnGetContent, OnGetSubMenu)       // or builds the submenu when it opens
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 

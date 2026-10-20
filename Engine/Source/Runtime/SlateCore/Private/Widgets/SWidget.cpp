@@ -166,7 +166,7 @@ void SWidget::ArrangeTree(const FGeometry& AllottedGeometry)
 // ---------------------------------------------------------------------------
 // Paint and hit-testing
 
-int32 SWidget::Paint(const FPaintArgs& Args, const FRect& CullingRect, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SWidget::Paint(const FPaintArgs& Args, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const EVisibility V = GetVisibility();
 	if (!IsPainted(V) || !bEverArranged || RenderOpacity <= 0.0f)
@@ -209,7 +209,7 @@ int32 SWidget::Paint(const FPaintArgs& Args, const FRect& CullingRect, FDrawElem
 	return FMath::Max(MaxLayer, LayerId);
 }
 
-int32 SWidget::PaintArrangedChildren(const FPaintArgs& Args, const FRect& CullingRect, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SWidget::PaintArrangedChildren(const FPaintArgs& Args, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	int32 MaxLayer = LayerId;
 	for (const FArrangedWidget& Child : ArrangedChildrenCache)
@@ -298,9 +298,9 @@ void SWidget::SetVolatile(bool bInVolatile)
 		return;
 	}
 	bVolatile = bInVolatile;
-	if (bVolatile && FUIApplicationBase::IsInitialized())
+	if (bVolatile && FSlateApplicationBase::IsInitialized())
 	{
-		FUIApplicationBase::Get().RegisterVolatileWidget(TSharedRef<SWidget>(shared_from_this()));
+		FSlateApplicationBase::Get().RegisterVolatileWidget(TSharedRef<SWidget>(shared_from_this()));
 	}
 }
 
@@ -409,9 +409,9 @@ FString SWidget::GetTypeName() const
 
 TSharedPtr<IToolTip> SWidget::GetToolTip()
 {
-	if (!ToolTip && ToolTipText.IsSet() && FUIApplicationBase::IsInitialized())
+	if (!ToolTip && ToolTipText.IsSet() && FSlateApplicationBase::IsInitialized())
 	{
-		ToolTip = FUIApplicationBase::Get().MakeToolTip(ToolTipText).ToSharedPtr();
+		ToolTip = FSlateApplicationBase::Get().MakeToolTip(ToolTipText).ToSharedPtr();
 	}
 	return ToolTip;
 }
@@ -434,17 +434,17 @@ void SWidget::SetHovered(bool bHovered, bool bDirectly)
 
 bool SWidget::HasKeyboardFocus() const
 {
-	return FUIApplicationBase::IsInitialized() && FUIApplicationBase::Get().HasFocus(this);
+	return FSlateApplicationBase::IsInitialized() && FSlateApplicationBase::Get().HasFocus(this);
 }
 
 bool SWidget::HasFocusedDescendants() const
 {
-	return FUIApplicationBase::IsInitialized() && FUIApplicationBase::Get().HasFocusedDescendants(this);
+	return FSlateApplicationBase::IsInitialized() && FSlateApplicationBase::Get().HasFocusedDescendants(this);
 }
 
 bool SWidget::HasMouseCapture() const
 {
-	return FUIApplicationBase::IsInitialized() && FUIApplicationBase::Get().HasMouseCapture(this);
+	return FSlateApplicationBase::IsInitialized() && FSlateApplicationBase::Get().HasMouseCapture(this);
 }
 
 FCursorReply SWidget::OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const
@@ -460,11 +460,11 @@ FCursorReply SWidget::OnCursorQuery(const FGeometry& Geometry, const FPointerEve
 
 TSharedRef<FActiveTimerHandle> SWidget::RegisterActiveTimer(float Period, FWidgetActiveTimerDelegate Delegate)
 {
-	const double Now = FUIApplicationBase::IsInitialized() ? FUIApplicationBase::Get().GetTime() : 0.0;
+	const double Now = FSlateApplicationBase::IsInitialized() ? FSlateApplicationBase::Get().GetTime() : 0.0;
 	auto Handle = MakeShared<FActiveTimerHandle>(Period, std::move(Delegate), Now + Period);
-	if (FUIApplicationBase::IsInitialized())
+	if (FSlateApplicationBase::IsInitialized())
 	{
-		FUIApplicationBase::Get().RegisterActiveTimer(TSharedRef<SWidget>(shared_from_this()), Handle);
+		FSlateApplicationBase::Get().RegisterActiveTimer(TSharedRef<SWidget>(shared_from_this()), Handle);
 	}
 	return Handle;
 }
@@ -472,9 +472,9 @@ TSharedRef<FActiveTimerHandle> SWidget::RegisterActiveTimer(float Period, FWidge
 void SWidget::UnRegisterActiveTimer(const TSharedRef<FActiveTimerHandle>& Handle)
 {
 	Handle->bPendingRemoval = true;
-	if (FUIApplicationBase::IsInitialized())
+	if (FSlateApplicationBase::IsInitialized())
 	{
-		FUIApplicationBase::Get().UnRegisterActiveTimer(TSharedRef<SWidget>(shared_from_this()), Handle);
+		FSlateApplicationBase::Get().UnRegisterActiveTimer(TSharedRef<SWidget>(shared_from_this()), Handle);
 	}
 }
 
@@ -485,9 +485,9 @@ void SWidget::SetCanTick(bool bInCanTick)
 		return;
 	}
 	bCanTick = bInCanTick;
-	if (bCanTick && FUIApplicationBase::IsInitialized())
+	if (bCanTick && FSlateApplicationBase::IsInitialized())
 	{
-		FUIApplicationBase::Get().RegisterTickingWidget(TSharedRef<SWidget>(shared_from_this()));
+		FSlateApplicationBase::Get().RegisterTickingWidget(TSharedRef<SWidget>(shared_from_this()));
 	}
 }
 
@@ -572,14 +572,14 @@ FWidgetStyle SCompoundWidget::MakeChildStyle(const FWidgetStyle& InWidgetStyle) 
 {
 	FWidgetStyle Style = InWidgetStyle;
 	Style.BlendColorAndOpacityTint(ColorAndOpacity.Get());
-	if (const TOptional<FStyleColor>& Foreground = ForegroundColor.Get())
+	if (const TOptional<FSlateColor>& Foreground = ForegroundColor.Get())
 	{
 		Style.SetForegroundColor(Foreground->Resolve());
 	}
 	return Style;
 }
 
-int32 SCompoundWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SCompoundWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	(void)Geometry;
@@ -597,7 +597,7 @@ public:
 
 protected:
 	FVector2 ComputeDesiredSize(float) const override { return FVector2::Zero(); }
-	int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FDrawElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
+	int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FSlateWindowElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
 };
 
 TSharedRef<SWidget> SNullWidget::NullWidget()

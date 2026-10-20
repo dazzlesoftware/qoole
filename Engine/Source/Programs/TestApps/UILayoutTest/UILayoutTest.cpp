@@ -40,11 +40,11 @@ protected:
 		}
 
 		const TSharedRef<SGridPanel> Grid = SNew(SGridPanel);
-		const FStyleColor Colors[] = { EStyleColor::Primary, EStyleColor::Success, EStyleColor::Warning, EStyleColor::Error };
+		const FSlateColor Colors[] = { EStyleColor::Primary, EStyleColor::Success, EStyleColor::Warning, EStyleColor::Error };
 		for (int32 I = 0; I < 4; ++I)
 		{
 			Grid->AddSlot(I % 2, I / 2).Padding(3.0f)[SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Colors[I]).Padding(FMargin(10.0f))
-				[SNew(STextBlock).Text(FString::Format("Cell {},{}", I % 2, I / 2)).ColorAndOpacity(FStyleColor(EStyleColor::ForegroundInverted))]];
+				[SNew(STextBlock).Text(FString::Format("Cell {},{}", I % 2, I / 2)).ColorAndOpacity(FSlateColor(EStyleColor::ForegroundInverted))]];
 		}
 		Grid->AddSlot(0, 2).ColumnSpan(2).Padding(3.0f)[Cell("Spanning two columns")];
 		Grid->SetColumnFill(1, 1.0f);

@@ -2,7 +2,7 @@
 
 #include "DemoScene.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Widgets/SViewport.h"
 
 namespace
@@ -224,7 +224,7 @@ void FDemoEntitySource::SetValue(FName Property, const FPropertyValue& Value)
 // ---------------------------------------------------------------------------
 // Viewport client
 
-FDemoViewportClient::FDemoViewportClient(FRHIDevice& InDevice, FUIRenderer& InRenderer, FDemoScene& InScene)
+FDemoViewportClient::FDemoViewportClient(FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer, FDemoScene& InScene)
 	: FRenderTargetViewportClient(InDevice, InRenderer), Scene(InScene)
 {
 }
@@ -398,7 +398,7 @@ FCursorReply FDemoViewportClient::OnCursorQuery(const FGeometry& Geometry, const
 	return PickEntity(ToWorld(Geometry, Event.GetAbsolutePosition())) != INDEX_NONE ? FCursorReply::Cursor(EMouseCursor::Hand) : FCursorReply::Cursor(EMouseCursor::Crosshairs);
 }
 
-void FDemoViewportClient::Draw(FRHICommandList& CommandList, FUIRenderTarget& RenderTarget)
+void FDemoViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRHI& RenderTarget)
 {
 	++DrawCount;
 	const TSharedPtr<SViewport> ViewportWidget = GetViewport();
@@ -438,9 +438,9 @@ void FDemoViewportClient::Draw(FRHICommandList& CommandList, FUIRenderTarget& Re
 		Elements.AddSolidBox(2, Geo(FVector2(0.0f, Pan.Y), FVector2(View.X, 1.0f)), FColor(60, 90, 60));
 	}
 
-	const FFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
-	FFontCache& Fonts = FUIApplication::Get().GetFontCache();
-	const FColor Selected = FStyleColor(EStyleColor::Primary).Resolve();
+	const FSlateFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
+	FSlateFontCache& Fonts = FSlateApplication::Get().GetFontCache();
+	const FColor Selected = FSlateColor(EStyleColor::Primary).Resolve();
 	for (const FDemoEntity& E : Scene.Entities)
 	{
 		if (!E.bVisible)
@@ -473,14 +473,14 @@ void FDemoViewportClient::Draw(FRHICommandList& CommandList, FUIRenderTarget& Re
 		}
 		if (Font.Font && Zoom >= 0.5f)
 		{
-			const TSharedRef<const FShapedText> Text = Fonts.ShapeText(E.Name.View(), FFontInfo(Font.Font, 11.0f), Scale);
+			const TSharedRef<const FShapedGlyphSequence> Text = Fonts.ShapeText(E.Name.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
 			Elements.AddText(6, Geo(P + FVector2(2.0f, -16.0f), Text->GetLogicalSize()), Text, bSelected ? Selected : FColor(200, 205, 215));
 		}
 	}
 	if (Font.Font)
 	{
 		const FString Hint = FString::Format("Zoom {:.0f}%   ·   left: select/move   middle: pan   right: pan (raw mouse)   wheel: zoom", Zoom * 100.0f);
-		const TSharedRef<const FShapedText> Text = Fonts.ShapeText(Hint.View(), FFontInfo(Font.Font, 11.0f), Scale);
+		const TSharedRef<const FShapedGlyphSequence> Text = Fonts.ShapeText(Hint.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
 		Elements.AddText(7, Geo(FVector2(8.0f, View.Y - 20.0f), Text->GetLogicalSize()), Text, FColor(140, 146, 160));
 	}
 	Renderer.Render(CommandList, RenderTarget.GetTexture(), Elements, FLinearColor(0.0f, 0.0f, 0.0f, 1.0f));

@@ -13,9 +13,9 @@ void STextBlock::Construct(const FArguments& Args)
 	}
 	if (Args._ColorAndOpacity.IsSet())
 	{
-		const TAttribute<FStyleColor> Color = Args._ColorAndOpacity;
-		ColorAndOpacity.Assign(Color.IsBound() ? TAttribute<TOptional<FStyleColor>>([Color] { return TOptional<FStyleColor>(Color.Get()); })
-			: TAttribute<TOptional<FStyleColor>>(TOptional<FStyleColor>(Color.Get())));
+		const TAttribute<FSlateColor> Color = Args._ColorAndOpacity;
+		ColorAndOpacity.Assign(Color.IsBound() ? TAttribute<TOptional<FSlateColor>>([Color] { return TOptional<FSlateColor>(Color.Get()); })
+			: TAttribute<TOptional<FSlateColor>>(TOptional<FSlateColor>(Color.Get())));
 	}
 	Justification = Args._Justification;
 	bAutoWrap = Args._AutoWrapText;
@@ -25,7 +25,7 @@ void STextBlock::Construct(const FArguments& Args)
 	Layout.SetJustification(Justification);
 }
 
-void STextBlock::SetFont(const FFontInfo& InFont)
+void STextBlock::SetFont(const FSlateFontInfo& InFont)
 {
 	FontOverride = InFont;
 	Invalidate(EInvalidateWidgetReason::Layout);
@@ -40,7 +40,7 @@ void STextBlock::SetAutoWrapText(bool bWrap)
 	}
 }
 
-FFontInfo STextBlock::GetEffectiveFont() const
+FSlateFontInfo STextBlock::GetEffectiveFont() const
 {
 	return FontOverride ? *FontOverride : TextStyle->Font;
 }
@@ -60,8 +60,8 @@ float STextBlock::GetEffectiveWrapWidth() const
 
 FVector2 STextBlock::ComputeDesiredSize(float LayoutScale) const
 {
-	const FFontInfo Font = GetEffectiveFont();
-	if (!Font.Font || !FUIApplicationBase::IsInitialized())
+	const FSlateFontInfo Font = GetEffectiveFont();
+	if (!Font.Font || !FSlateApplicationBase::IsInitialized())
 	{
 		return Margin.GetDesiredSize();
 	}
@@ -69,7 +69,7 @@ FVector2 STextBlock::ComputeDesiredSize(float LayoutScale) const
 	Layout.SetFont(Font);
 	Layout.SetScale(LayoutScale);
 	Layout.SetWrapWidth(GetEffectiveWrapWidth());
-	Layout.UpdateIfNeeded(FUIApplicationBase::Get().GetFontCache());
+	Layout.UpdateIfNeeded(FSlateApplicationBase::Get().GetFontCache());
 	FVector2 Size = Layout.GetSize() + Margin.GetDesiredSize();
 	Size.X = FMath::Max(Size.X, MinDesiredWidth.Get());
 	return Size;
@@ -88,19 +88,19 @@ void STextBlock::OnPreArrange(const FGeometry& AllottedGeometry)
 	}
 }
 
-int32 STextBlock::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements,
+int32 STextBlock::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
-	if (!FUIApplicationBase::IsInitialized() || Layout.GetLines().empty())
+	if (!FSlateApplicationBase::IsInitialized() || Layout.GetLines().empty())
 	{
 		return LayerId;
 	}
 	FColor Color;
 	if (!Args.bEnabled)
 	{
-		Color = InWidgetStyle.Tinted(FStyleColor(EStyleColor::ForegroundDisabled).Resolve());
+		Color = InWidgetStyle.Tinted(FSlateColor(EStyleColor::ForegroundDisabled).Resolve());
 	}
-	else if (const TOptional<FStyleColor>& Explicit = ColorAndOpacity.Get())
+	else if (const TOptional<FSlateColor>& Explicit = ColorAndOpacity.Get())
 	{
 		Color = InWidgetStyle.Tinted(Explicit->Resolve());
 	}
@@ -113,7 +113,7 @@ int32 STextBlock::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, con
 		Color = InWidgetStyle.GetForegroundColor();
 	}
 
-	FFontCache& FontCache = FUIApplicationBase::Get().GetFontCache();
+	FSlateFontCache& FontCache = FSlateApplicationBase::Get().GetFontCache();
 	const float AreaWidth = Geometry.Size.X - Margin.Left - Margin.Right;
 	const FVector2 Offset(Margin.Left, Margin.Top);
 	if (TextStyle->ShadowOffset.X != 0.0f || TextStyle->ShadowOffset.Y != 0.0f)

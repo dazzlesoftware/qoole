@@ -59,7 +59,7 @@ protected:
 	// Rows are generated again (reusing widgets) at the next layout.
 	void RefreshRows();
 
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 	TSharedPtr<SListPanel> Panel;

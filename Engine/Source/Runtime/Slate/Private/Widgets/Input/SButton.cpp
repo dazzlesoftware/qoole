@@ -2,14 +2,14 @@
 
 #include "Widgets/Input/SButton.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Widgets/Text/STextBlock.h"
 
 namespace
 {
 	bool IsAcceptKey(const FKeyEvent& Event)
 	{
-		return FUIApplication::Get().GetNavigationConfig().GetNavigationActionFromKey(Event) == EUINavigationAction::Accept;
+		return FSlateApplication::Get().GetNavigationConfig().GetNavigationActionFromKey(Event) == EUINavigationAction::Accept;
 	}
 }
 
@@ -197,17 +197,17 @@ void SButton::OnFocusLost(const FFocusEvent&)
 	Invalidate(EInvalidateWidgetReason::Paint);
 }
 
-int32 SButton::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SButton::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const bool bHovered = IsHovered() && Args.bEnabled;
-	const FStyleBrush& Brush = !Args.bEnabled ? Style->Disabled : (bIsPressed ? Style->Pressed : (bHovered ? Style->Hovered : Style->Normal));
+	const FSlateBrush& Brush = !Args.bEnabled ? Style->Disabled : (bIsPressed ? Style->Pressed : (bHovered ? Style->Hovered : Style->Normal));
 	Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 
 	FWidgetStyle ChildStyle = MakeChildStyle(InWidgetStyle);
 	if (!GetForegroundColor())
 	{
-		const FStyleColor& Foreground = !Args.bEnabled ? Style->DisabledForeground
+		const FSlateColor& Foreground = !Args.bEnabled ? Style->DisabledForeground
 			: (bIsPressed ? Style->PressedForeground : (bHovered ? Style->HoveredForeground : Style->NormalForeground));
 		ChildStyle.SetForegroundColor(Foreground.Resolve());
 	}
@@ -306,14 +306,14 @@ void SCheckBox::OnFocusLost(const FFocusEvent&)
 	Invalidate(EInvalidateWidgetReason::Paint);
 }
 
-int32 SCheckBox::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SCheckBox::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const float Box = Style->BoxSize;
 	const FRect BoxRect(0.0f, (Geometry.Size.Y - Box) * 0.5f, Box, (Geometry.Size.Y + Box) * 0.5f);
 	const ECheckBoxState State = CheckedState.Get();
 	const bool bHovered = IsHovered() && Args.bEnabled;
-	const FStyleBrush& Brush = !Args.bEnabled ? Style->BoxDisabled
+	const FSlateBrush& Brush = !Args.bEnabled ? Style->BoxDisabled
 		: (State != ECheckBoxState::Unchecked ? (bHovered ? Style->BoxCheckedHovered : Style->BoxChecked) : (bHovered ? Style->BoxHovered : Style->Box));
 	Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(BoxRect), InWidgetStyle.ColorAndOpacityTint);
 

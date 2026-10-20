@@ -90,9 +90,9 @@ class SHorizontalBox : public SBoxPanel
 public:
 	using FSlot = SBoxPanel::FSlot;
 
-	GE_BEGIN_ARGS(SHorizontalBox)
-		GE_SLOTS(SBoxPanel::FSlot, Slots)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SHorizontalBox)
+		SLATE_SLOT_ARGUMENT(SBoxPanel::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	SHorizontalBox() : SBoxPanel(EOrientation::Horizontal) {}
 	void Construct(FArguments& Args) { ConstructSlots(Args._Slots); }
@@ -103,9 +103,9 @@ class SVerticalBox : public SBoxPanel
 public:
 	using FSlot = SBoxPanel::FSlot;
 
-	GE_BEGIN_ARGS(SVerticalBox)
-		GE_SLOTS(SBoxPanel::FSlot, Slots)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SVerticalBox)
+		SLATE_SLOT_ARGUMENT(SBoxPanel::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	SVerticalBox() : SBoxPanel(EOrientation::Vertical) {}
 	void Construct(FArguments& Args) { ConstructSlots(Args._Slots); }

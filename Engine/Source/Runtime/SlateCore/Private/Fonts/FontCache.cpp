@@ -78,7 +78,7 @@ void FFontAtlasPage::MarkDirty(const FIntRect& Rect)
 
 // ---------------------------------------------------------------------------
 
-FFontCache::FFontCache()
+FSlateFontCache::FSlateFontCache()
 {
 	FT_Library RawLibrary = nullptr;
 	if (FT_Init_FreeType(&RawLibrary) == 0)
@@ -92,13 +92,13 @@ FFontCache::FFontCache()
 	Buffer = hb_buffer_create();
 }
 
-FFontCache::~FFontCache()
+FSlateFontCache::~FSlateFontCache()
 {
 	ShapeCache.clear();
 	hb_buffer_destroy(Buffer);
 }
 
-TSharedPtr<FFontFace> FFontCache::LoadFace(const FString& Path)
+TSharedPtr<FFontFace> FSlateFontCache::LoadFace(const FString& Path)
 {
 	TArray<uint8> Data;
 	if (!FFileHelper::LoadFileToArray(Data, Path))
@@ -109,7 +109,7 @@ TSharedPtr<FFontFace> FFontCache::LoadFace(const FString& Path)
 	return LoadFaceFromMemory(std::move(Data));
 }
 
-TSharedPtr<FFontFace> FFontCache::LoadFaceFromMemory(TArray<uint8> Data)
+TSharedPtr<FFontFace> FSlateFontCache::LoadFaceFromMemory(TArray<uint8> Data)
 {
 	if (!Library || Data.empty())
 	{
@@ -133,7 +133,7 @@ TSharedPtr<FFontFace> FFontCache::LoadFaceFromMemory(TArray<uint8> Data)
 	return Face;
 }
 
-TSharedRef<const FShapedText> FFontCache::ShapeText(std::string_view Text, const FFontInfo& Font, float Scale)
+TSharedRef<const FShapedGlyphSequence> FSlateFontCache::ShapeText(std::string_view Text, const FSlateFontInfo& Font, float Scale)
 {
 	check(Font.Font && !Font.Font->Faces.empty() && Scale > 0.0f);
 	const float PixelSize = Font.Size * Scale;
@@ -145,7 +145,7 @@ TSharedRef<const FShapedText> FFontCache::ShapeText(std::string_view Text, const
 		return It->second;
 	}
 
-	auto Result = std::make_shared<FShapedText>();
+	auto Result = std::make_shared<FShapedGlyphSequence>();
 	Result->PixelSize = static_cast<float>(Size26_6) / 64.0f;
 	Result->Scale = Scale;
 
@@ -226,7 +226,7 @@ TSharedRef<const FShapedText> FFontCache::ShapeText(std::string_view Text, const
 		const hb_glyph_position_t* Positions = hb_buffer_get_glyph_positions(Buffer, nullptr);
 		for (unsigned int I = 0; I < Count; ++I)
 		{
-			FShapedGlyph Glyph;
+			FShapedGlyphEntry Glyph;
 			Glyph.Face = &Face;
 			Glyph.GlyphIndex = Infos[I].codepoint;
 			Glyph.Cluster = Infos[I].cluster;
@@ -243,17 +243,17 @@ TSharedRef<const FShapedText> FFontCache::ShapeText(std::string_view Text, const
 	Result->Descender = FMath::CeilToFloat(Descender);
 	Result->LineHeight = Result->Ascender + Result->Descender + FMath::RoundToFloat(FMath::Max(0.0f, LineGap));
 
-	TSharedRef<const FShapedText> Shared(std::static_pointer_cast<const FShapedText>(Result));
+	TSharedRef<const FShapedGlyphSequence> Shared(std::static_pointer_cast<const FShapedGlyphSequence>(Result));
 	ShapeCache.emplace(Key, Shared);
 	return Shared;
 }
 
-FVector2 FFontCache::MeasureText(std::string_view Text, const FFontInfo& Font, float Scale)
+FVector2 FSlateFontCache::MeasureText(std::string_view Text, const FSlateFontInfo& Font, float Scale)
 {
 	return ShapeText(Text, Font, Scale)->GetLogicalSize();
 }
 
-const FCachedGlyph& FFontCache::GetGlyph(const FFontFace& Face, float PixelSize, uint32 GlyphIndex)
+const FCachedGlyph& FSlateFontCache::GetGlyph(const FFontFace& Face, float PixelSize, uint32 GlyphIndex)
 {
 	const int32 Size26_6 = ToSize26_6(PixelSize);
 	const FGlyphKey Key{ Face.GetId(), Size26_6, GlyphIndex };

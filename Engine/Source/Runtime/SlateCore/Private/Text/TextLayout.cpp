@@ -5,11 +5,11 @@
 namespace
 {
 	// Caret stops of a shaped run: the first glyph of each cluster, plus the end.
-	void BuildStops(const FShapedText& Shaped, int32 Begin, int32 End, TArray<FTextCaretStop>& Out)
+	void BuildStops(const FShapedGlyphSequence& Shaped, int32 Begin, int32 End, TArray<FTextCaretStop>& Out)
 	{
 		Out.clear();
 		int32 Last = -1;
-		for (const FShapedGlyph& Glyph : Shaped.Glyphs)
+		for (const FShapedGlyphEntry& Glyph : Shaped.Glyphs)
 		{
 			const int32 Index = Begin + static_cast<int32>(Glyph.Cluster);
 			if (Index > Last && Index < End)
@@ -51,7 +51,7 @@ void FTextLayout::SetText(const FString& InText)
 	}
 }
 
-void FTextLayout::SetFont(const FFontInfo& InFont)
+void FTextLayout::SetFont(const FSlateFontInfo& InFont)
 {
 	if (Font.Font != InFont.Font || Font.Size != InFont.Size)
 	{
@@ -83,7 +83,7 @@ void FTextLayout::SetScale(float InScale)
 	}
 }
 
-void FTextLayout::UpdateIfNeeded(FFontCache& FontCache)
+void FTextLayout::UpdateIfNeeded(FSlateFontCache& FontCache)
 {
 	if (bDirty)
 	{
@@ -92,10 +92,10 @@ void FTextLayout::UpdateIfNeeded(FFontCache& FontCache)
 	}
 }
 
-void FTextLayout::AddLine(FFontCache& FontCache, int32 Begin, int32 End, bool bEndsParagraph, float& Y)
+void FTextLayout::AddLine(FSlateFontCache& FontCache, int32 Begin, int32 End, bool bEndsParagraph, float& Y)
 {
 	const std::string_view View = Text.View().substr(static_cast<SIZE_T>(Begin), static_cast<SIZE_T>(End - Begin));
-	const TSharedRef<const FShapedText> Shaped = FontCache.ShapeText(View, Font, Scale);
+	const TSharedRef<const FShapedGlyphSequence> Shaped = FontCache.ShapeText(View, Font, Scale);
 	FTextLine& Line = Lines.emplace_back();
 	Line.Begin = Begin;
 	Line.End = End;
@@ -117,7 +117,7 @@ void FTextLayout::AddLine(FFontCache& FontCache, int32 Begin, int32 End, bool bE
 	Y += Line.Height;
 }
 
-void FTextLayout::Layout(FFontCache& FontCache)
+void FTextLayout::Layout(FSlateFontCache& FontCache)
 {
 	Lines.clear();
 	Size = FVector2::Zero();
@@ -148,7 +148,7 @@ void FTextLayout::Layout(FFontCache& FontCache)
 		{
 			// Shape the paragraph once and break it greedily at spaces using
 			// its caret stops; each resulting line is then shaped on its own.
-			const TSharedRef<const FShapedText> Shaped = FontCache.ShapeText(All.substr(ParagraphBegin, ContentEnd - ParagraphBegin), Font, Scale);
+			const TSharedRef<const FShapedGlyphSequence> Shaped = FontCache.ShapeText(All.substr(ParagraphBegin, ContentEnd - ParagraphBegin), Font, Scale);
 			TArray<FTextCaretStop> Stops;
 			BuildStops(*Shaped, ParagraphBegin, ContentEnd, Stops);
 
@@ -365,7 +365,7 @@ int32 FTextLayout::SnapToCaretStop(int32 Index) const
 	return Best;
 }
 
-void FTextLayout::Paint(FFontCache& FontCache, FDrawElementList& Out, int32 Layer, const FGeometry& Geometry, FVector2 Offset, float AreaWidth, FColor Color) const
+void FTextLayout::Paint(FSlateFontCache& FontCache, FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, FVector2 Offset, float AreaWidth, FColor Color) const
 {
 	if (!Font.Font || Color.A == 0)
 	{
@@ -380,7 +380,7 @@ void FTextLayout::Paint(FFontCache& FontCache, FDrawElementList& Out, int32 Laye
 			continue;
 		}
 		const std::string_view View = Text.View().substr(static_cast<SIZE_T>(Line.Begin), static_cast<SIZE_T>(Line.End - Line.Begin));
-		const TSharedRef<const FShapedText> Shaped = FontCache.ShapeText(View, Font, PaintScale);
+		const TSharedRef<const FShapedGlyphSequence> Shaped = FontCache.ShapeText(View, Font, PaintScale);
 		const FVector2 Position = Offset + FVector2(GetLineOffsetX(Line, AreaWidth), Line.Y);
 		Out.AddText(Layer, Base.MakeChild(Position, Shaped->GetLogicalSize()), Shaped, Color);
 	}

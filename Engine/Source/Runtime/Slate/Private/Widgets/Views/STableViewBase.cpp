@@ -9,8 +9,8 @@
 class STableViewBase::SListPanel final : public SPanel
 {
 public:
-	GE_BEGIN_ARGS(SListPanel)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SListPanel)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments&, STableViewBase* InOwner) { Owner = InOwner; }
 
@@ -272,7 +272,7 @@ void STableViewBase::UpdateScrollBar(float ViewHeight)
 	}
 }
 
-int32 STableViewBase::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 STableViewBase::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	(void)Geometry;

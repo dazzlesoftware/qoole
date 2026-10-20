@@ -11,13 +11,13 @@ using FOnColorChanged = TDelegate<void(FColor)>;
 class SColorBlock : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SColorBlock)
-		GE_ATTRIBUTE(FColor, Color, FColor::White())
-		GE_ARGUMENT(FVector2, Size, (FVector2(28.0f, 16.0f)))
-		GE_ARGUMENT(float, CornerRadius, 3.0f)
-		GE_ATTRIBUTE(bool, IsUndetermined, false) // several different colors
-		GE_EVENT(FPointerEventHandler, OnMouseButtonDown)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SColorBlock)
+		SLATE_ATTRIBUTE(FColor, Color, FColor::White())
+		SLATE_ARGUMENT(FVector2, Size, (FVector2(28.0f, 16.0f)))
+		SLATE_ARGUMENT(float, CornerRadius, 3.0f)
+		SLATE_ATTRIBUTE(bool, IsUndetermined, false) // several different colors
+		SLATE_EVENT(FPointerEventHandler, OnMouseButtonDown)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 	FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
@@ -28,7 +28,7 @@ public:
 
 protected:
 	FVector2 ComputeDesiredSize(float) const override { return Size; }
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -45,13 +45,13 @@ private:
 class SColorPicker : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SColorPicker)
-		GE_ATTRIBUTE(FColor, TargetColor, FColor::White())
-		GE_ARGUMENT(bool, UseAlpha, true)
-		GE_EVENT(FOnColorChanged, OnColorChanged)
-		GE_EVENT(FSimpleDelegate, OnInteractionBegin)
-		GE_EVENT(FSimpleDelegate, OnInteractionEnd)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SColorPicker)
+		SLATE_ATTRIBUTE(FColor, TargetColor, FColor::White())
+		SLATE_ARGUMENT(bool, UseAlpha, true)
+		SLATE_EVENT(FOnColorChanged, OnColorChanged)
+		SLATE_EVENT(FSimpleDelegate, OnInteractionBegin)
+		SLATE_EVENT(FSimpleDelegate, OnInteractionEnd)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -62,7 +62,7 @@ public:
 	static TOptional<FColor> FromHex(const FString& Hex);
 
 private:
-	TSharedRef<SWidget> MakeChannel(const char* Label, int32 Channel, FStyleColor BarColor);
+	TSharedRef<SWidget> MakeChannel(const char* Label, int32 Channel, FSlateColor BarColor);
 
 	FColor Color;
 	bool bUseAlpha = true;

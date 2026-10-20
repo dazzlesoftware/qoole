@@ -24,13 +24,13 @@
     <ClCompile Include="Private\Fonts\FontCache.cpp">
       <Filter>Private\Fonts</Filter>
     </ClCompile>
-    <ClCompile Include="Private\Rendering\AtlasPacker.cpp">
+    <ClCompile Include="Private\Textures\SlateTextureAtlas.cpp">
       <Filter>Private\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Private\Rendering\DrawElements.cpp">
       <Filter>Private\Rendering</Filter>
     </ClCompile>
-    <ClCompile Include="Private\Rendering\UIImage.cpp">
+    <ClCompile Include="Private\Rendering\RenderingCommon.cpp">
       <Filter>Private\Rendering</Filter>
     </ClCompile>
   </ItemGroup>
@@ -38,13 +38,13 @@
     <ClInclude Include="Public\Fonts\FontCache.h">
       <Filter>Public\Fonts</Filter>
     </ClInclude>
-    <ClInclude Include="Public\Rendering\AtlasPacker.h">
+    <ClInclude Include="Public\Textures\SlateTextureAtlas.h">
       <Filter>Public\Rendering</Filter>
     </ClInclude>
     <ClInclude Include="Public\Rendering\DrawElements.h">
       <Filter>Public\Rendering</Filter>
     </ClInclude>
-    <ClInclude Include="Public\Rendering\UIImage.h">
+    <ClInclude Include="Public\Rendering\RenderingCommon.h">
       <Filter>Public\Rendering</Filter>
     </ClInclude>
   </ItemGroup>

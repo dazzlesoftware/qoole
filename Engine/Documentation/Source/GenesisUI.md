@@ -136,9 +136,17 @@ Engine/
 ```
 
 `FPaths::FindContentDir` finds `Engine/Content` by walking up from the
-executable in `Engine/Binaries/Win64`. Class names keep their Genesis UI
-spelling (`FUIApplication`, `FUIRenderer`...); only the modules and folders
-were renamed.
+executable in `Engine/Binaries/Win64`.
+
+**Slate names.** Classes, macros and headers use Unreal Slate's names where
+Slate has the same thing: `FSlateApplication`, `FSlateUser`,
+`FSlateWindowElementList` / `FSlateDrawElement`, `FSlateBrush`,
+`FSlateColor`, `FSlateStyleSet`, `FStarshipCoreStyle`, `FSlateFontCache`,
+`FSlateRenderer` (implemented by `FSlateRHIRenderer`),
+`FSlateRHIRenderingPolicy`, `FSlateElementBatcher`, `SLATE_BEGIN_ARGS`...
+Types Slate has no direct match for take a `Slate` prefix
+(`FSlateTextureId`, `ESlateBlendMode`, `ISlateRenderTarget`). The milestone
+notes below use the current names.
 
 ## 3. Layers
 
@@ -210,7 +218,7 @@ of the first milestone. It is what layout and input tests run on.
 
 ### 5.1 Draw elements
 
-Widgets paint into an `FDrawElementList` for their window. Element kinds:
+Widgets paint into an `FSlateWindowElementList` for their window. Element kinds:
 
 | Element | Use |
 |---|---|
@@ -282,7 +290,7 @@ Every widget derives from `SWidget`. Subclasses implement:
 |---|---|
 | `FVector2 ComputeDesiredSize(float LayoutScale)` | Measure, bottom-up. |
 | `void ArrangeChildren(const FGeometry&, FArrangedChildren&)` | Arrange, top-down. |
-| `int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect& Culling, FDrawElementList&, int32 Layer, const FWidgetStyle&)` | Paint. |
+| `int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect& Culling, FSlateWindowElementList&, int32 Layer, const FWidgetStyle&)` | Paint. |
 | `FChildren& GetChildren()` | Tree access. |
 
 plus optional input handlers (§7). Shared state on the base: visibility,
@@ -377,7 +385,7 @@ SNew(SVerticalBox)
 
 ## 7. Input, focus and the application loop
 
-Module `Slate`, class `FUIApplication`.
+Module `Slate`, class `FSlateApplication`.
 
 ### 7.1 Frame
 
@@ -415,7 +423,7 @@ headless platform.
 
 ### 7.4 Users, focus and navigation
 
-- `FUIUser` holds per-user state: focus path, pointer capture, cursor, hover
+- `FSlateUser` holds per-user state: focus path, pointer capture, cursor, hover
   path, drag operation, tooltip. Input devices map to users, so split-screen
   players each get their own focus. The editor uses user 0.
 - Widgets opt into focus. Focus changes deliver focus-lost/focus-received
@@ -439,7 +447,7 @@ headless platform.
 
 ## 8. Styling and text
 
-**Styles.** `FStyleSet` is a named dictionary of brushes, colors, fonts,
+**Styles.** `FSlateStyleSet` is a named dictionary of brushes, colors, fonts,
 margins and per-widget style structs (`FButtonStyle`: normal/hovered/
 pressed/disabled brushes, padding, text style…). Sets register by name in a
 global registry; widgets take a style argument and fall back to the active
@@ -729,8 +737,8 @@ with C++20 at warning level 4):
 | `Core` | `FString` (UTF-8, `std::u8string`), `FName`, container and smart-pointer aliases, `check`/`ensure`, `GE_LOG` logging, `TDelegate`/`TMulticastDelegate`, 2D math (`FVector2`, `FColor`/`FLinearColor`, `FMargin`, `FRect`, `FTransform2D`), time/file/path helpers. (Merged with milestone 1's `Core`, §14.4.) |
 | `ApplicationCore` | `IPlatformApplication`, `IPlatformWindow` + `FWindowDesc`, `IPlatformMessageHandler`, `ICursor`, clipboard, display metrics. Win32: per-monitor DPI v2, `WM_DPICHANGED`, deferred input, raw mouse, XInput, OS-decorated and borderless windows (UI hit-testing for title bar and resize edges, DWM shadow kept). `FNullPlatformApplication` for headless tests. |
 | `RHI` | Device + queue, swapchain per window, upload/default buffers, 2D textures and render targets, pipelines from precompiled shaders, command list. D3D12 and Vulkan backends, chosen at startup. |
-| `SlateCore` | Draw elements (`FDrawElementList`: Box with image/9-slice/tiling/tint, RoundedBox, Text, Lines, CustomVerts, Viewport), layers, scissor clip stack, `FAtlasPacker`, and the font system (`FFontCache`: FreeType + HarfBuzz, font fallback, shaping, measurement, glyph atlas). |
-| `SlateRHIRenderer` | `FElementBatcher` (GPU-free: tessellate, batch key, stable layer sort, merge) and `FUIRenderer` (atlases for small images, glyph-page upload, per-frame buffers, pipelines). One HLSL file, `UIShaders.hlsl`. |
+| `SlateCore` | Draw elements (`FSlateWindowElementList`: Box with image/9-slice/tiling/tint, RoundedBox, Text, Lines, CustomVerts, Viewport), layers, scissor clip stack, `FSlateTextureAtlas`, and the font system (`FSlateFontCache`: FreeType + HarfBuzz, font fallback, shaping, measurement, glyph atlas). |
+| `SlateRHIRenderer` | `FSlateElementBatcher` (GPU-free: tessellate, batch key, stable layer sort, merge) and `FSlateRHIRenderingPolicy` (atlases for small images, glyph-page upload, per-frame buffers, pipelines). One HLSL file, `SlateShaders.hlsl`. |
 
 Programs: `Engine/Source/Programs/UISandbox` (two windows, either backend, scripted
 self-test with screenshots) and `Engine/Source/Programs/EngineTests` (doctest:
@@ -760,7 +768,7 @@ More screenshots: [Vulkan 150%](Images/genesis-ui-m2/uisandbox-vulkan-150.png),
   `(1, 1, 1, R)` on both backends so glyph masks use the image shader.
 - DXIL is compiled at build time with the Windows SDK's `dxc` (shader model
   6.0) rather than `fxc`, so one HLSL source serves both backends. SPIR-V
-  headers are pre-generated by `SlateRHIRenderer/Private/Shaders/BuildUIShaders.cmd`
+  headers are pre-generated by `SlateRHIRenderer/Private/Shaders/BuildSlateShaders.cmd`
   (needs a SPIR-V-capable `dxc`). Vulkan flips Y with a negative viewport
   height (core in 1.1), so no `-fvk-invert-y`.
 - Colors are sRGB-encoded and blended in sRGB space, like most desktop UI
@@ -794,10 +802,10 @@ Built in milestone 3:
 
 | Module | Contents |
 |---|---|
-| `SlateCore` | `SWidget` with retained measure/arrange/paint/hit-testing (§6.4), `TAttribute` and `TWidgetAttribute` (§6.3), slots and `TPanelChildren`, `SLeafWidget` / `SCompoundWidget` / `SPanel`, the declarative syntax (`SNew`, `SAssignNew`, `GE_BEGIN_ARGS`...), `FGeometry`, input events, `FReply` / `FCursorReply` / `FNavigationReply`, `FDragDropOperation`, `FUIApplicationBase`, styles (`FStylePalette`, `FStyleColor`, `FStyleBrush`, widget style structs, `FStyleSet`, `FAppStyle`), `FTextLayout`, and `IUIWindowRenderer`. |
-| `Slate` (new) | `FUIApplication` (frame loop, routing, focus, navigation, capture, hover, drag and drop, tooltips, menu stack, input pre-processors, modal windows, per-user focus), `FNavigationConfig`, the `Genesis` style set, `SWindow`, and the widgets: `SBox`, `SBorder`, `SSpacer`, `SHorizontalBox`, `SVerticalBox`, `SOverlay`, `SWidgetSwitcher`, `SGridPanel`, `SWrapBox`, `SCanvas` (anchors), `SScaleBox`, `SScrollBar`, `SScrollBox`, `SSplitter`, `STextBlock`, `SEditableText`, `SEditableTextBox`, `SImage`, `SSeparator`, `SProgressBar`, `SThrobber`, `SButton`, `SCheckBox`, `SToolTip`, `SMenuAnchor`, `SComboButton`, `SMenuEntry`, and the virtualized `SListView<T>` / `STreeView<T>` / `STableRow<T>`. |
+| `SlateCore` | `SWidget` with retained measure/arrange/paint/hit-testing (§6.4), `TAttribute` and `TWidgetAttribute` (§6.3), slots and `TPanelChildren`, `SLeafWidget` / `SCompoundWidget` / `SPanel`, the declarative syntax (`SNew`, `SAssignNew`, `SLATE_BEGIN_ARGS`...), `FGeometry`, input events, `FReply` / `FCursorReply` / `FNavigationReply`, `FDragDropOperation`, `FSlateApplicationBase`, styles (`FStyleTheme`, `FSlateColor`, `FSlateBrush`, widget style structs, `FSlateStyleSet`, `FAppStyle`), `FTextLayout`, and `FSlateRenderer`. |
+| `Slate` (new) | `FSlateApplication` (frame loop, routing, focus, navigation, capture, hover, drag and drop, tooltips, menu stack, input pre-processors, modal windows, per-user focus), `FNavigationConfig`, the `Genesis` style set, `SWindow`, and the widgets: `SBox`, `SBorder`, `SSpacer`, `SHorizontalBox`, `SVerticalBox`, `SOverlay`, `SWidgetSwitcher`, `SGridPanel`, `SWrapBox`, `SCanvas` (anchors), `SScaleBox`, `SScrollBar`, `SScrollBox`, `SSplitter`, `STextBlock`, `SEditableText`, `SEditableTextBox`, `SImage`, `SSeparator`, `SProgressBar`, `SThrobber`, `SButton`, `SCheckBox`, `SToolTip`, `SMenuAnchor`, `SComboButton`, `SMenuEntry`, and the virtualized `SListView<T>` / `STreeView<T>` / `STableRow<T>`. |
 | `ApplicationCore` | `ITextInputMethodSystem` / `ITextInputMethodContext`: IMM32 on Windows (the IME stays off until a text field activates a context; the composition is drawn inline and the candidate window follows the caret), scripted composition on the null platform. |
-| `SlateRHIRenderer` | `FUIWindowRenderer`: `IUIWindowRenderer` on the RHI (a swapchain per window, all windows in one GPU frame, `OnBeginFrame` for render targets). |
+| `SlateRHIRenderer` | `FSlateRHIRenderer`: `FSlateRenderer` on the RHI (a swapchain per window, all windows in one GPU frame, `OnBeginFrame` for render targets). |
 
 `UISandbox` is now the widget gallery: six pages (buttons and toggles,
 text, layout panels, lists and trees, menus/tooltips/drag and drop, and the
@@ -908,7 +916,7 @@ Built in milestone 4:
 | `Core` | `FJsonValue` (`Serialization/Json.h`): a small JSON value with ordered objects, pretty printing, and parsing that reports line and column. Layouts and key bindings use it. |
 | `SlateCore` | `FReply::UseHighPrecisionMouseMovement` and `SWidget::OnRawMouseMove` (raw mouse deltas while the cursor is hidden and locked), the drop position and a cancel flag on `FDragDropOperation`, and the styles of the new widgets. |
 | `Slate` | **Commands** (`Framework/Commands`): `FInputChord`, `FUICommandInfo`, `FBindingContext`, `FInputBindingManager` (lookup by chord through parent contexts, user rebinding saved as a JSON diff of the defaults), `FUIAction`, `FUICommandList`, and `SCommandBindingScope`, which turns key presses under it into commands. **Menus and toolbars** (`Framework/MultiBox`): `FMenuRegistry` with named menus, sections, entries placed before/after/first, dynamic sections, parent menus, and `GenerateMenuWidget` / `GenerateMenuBar` / `GenerateToolBar`. **Docking** (`Framework/Docking`): `FTabManager`, tab spawners, `FDockLayout` (areas, splitters, stacks, floating windows) with JSON save/restore and a version fallback, `SDockTab`, `SDockTabStack`, `SDockingSplitter`, `SDockingArea`; tabs drag between stacks, onto a stack's edges, and out into windows and back. **Property grid** (`Framework/PropertyGrid`): `IPropertySource`, `FPropertyDesc`, `SPropertyGrid` (categories, search, multiple values, transactions for undo, resizable name column). **Widgets**: `SViewport` / `IViewportClient`, `SSlider`, `SSpinBox<T>` (`SNumericEntryBox<T>`), `SComboBox<T>`, `SColorBlock` and `SColorPicker`; menu entries gained check marks and lazily built submenus. |
-| `SlateRHIRenderer` | `FRenderTargetViewportClient`: a viewport client that owns an RHI render target sized to the widget in pixels, redraws on request, and is drawn by `FUIWindowRenderer` before the windows that show it. |
+| `SlateRHIRenderer` | `FRenderTargetViewportClient`: a viewport client that owns an RHI render target sized to the widget in pixels, redraws on request, and is drawn by `FSlateRHIRenderer` before the windows that show it. |
 
 `UISandbox` now opens an editor-shaped window built only from the
 framework: a small 2D "map" with a viewport (select, move with snapping,

@@ -19,8 +19,8 @@ namespace
 	class FSwatchDragDrop final : public FDragDropOperation
 	{
 	public:
-		GE_DRAG_DROP_OPERATION_TYPE(FSwatchDragDrop, FDragDropOperation)
-		FStyleColor Color;
+		DRAG_DROP_OPERATOR_TYPE(FSwatchDragDrop, FDragDropOperation)
+		FSlateColor Color;
 		FString Name;
 
 		TSharedPtr<SWidget> GetDefaultDecorator() const override
@@ -39,10 +39,10 @@ namespace
 	class SSwatch final : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SSwatch)
-			GE_ARGUMENT(FStyleColor, Color, FStyleColor(FColor::White()))
-			GE_ARGUMENT(FString, Name, "")
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SSwatch)
+			SLATE_ARGUMENT(FSlateColor, Color, FSlateColor(FColor::White()))
+			SLATE_ARGUMENT(FString, Name, "")
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments& Args)
 		{
@@ -66,15 +66,15 @@ namespace
 
 	protected:
 		FVector2 ComputeDesiredSize(float) const override { return FVector2(40.0f, 40.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
 		{
 			Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), Style.Tinted(Color.Resolve()), 6.0f,
-				IsHovered() ? FStyleColor(EStyleColor::ForegroundHover).Resolve() : FColor::Transparent(), 2.0f);
+				IsHovered() ? FSlateColor(EStyleColor::ForegroundHover).Resolve() : FColor::Transparent(), 2.0f);
 			return LayerId;
 		}
 
 	private:
-		FStyleColor Color;
+		FSlateColor Color;
 		FString Name;
 	};
 
@@ -82,9 +82,9 @@ namespace
 	class SDropZone final : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SDropZone)
-			GE_EVENT(TDelegate<void(const FString&)>, OnDropped)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SDropZone)
+			SLATE_EVENT(TDelegate<void(const FString&)>, OnDropped)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments& Args) { OnDropped = Args._OnDropped; }
 
@@ -115,16 +115,16 @@ namespace
 
 	protected:
 		FVector2 ComputeDesiredSize(float) const override { return FVector2(160.0f, 90.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
 		{
 			Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), Style.Tinted(Fill.Resolve()), 8.0f,
-				Style.Tinted((bHighlight ? FStyleColor(EStyleColor::Primary) : FStyleColor(EStyleColor::Border)).Resolve()), bHighlight ? 3.0f : 1.5f);
+				Style.Tinted((bHighlight ? FSlateColor(EStyleColor::Primary) : FSlateColor(EStyleColor::Border)).Resolve()), bHighlight ? 3.0f : 1.5f);
 			return LayerId;
 		}
 
 	private:
 		TDelegate<void(const FString&)> OnDropped;
-		FStyleColor Fill = FStyleColor(EStyleColor::Recessed);
+		FSlateColor Fill = FSlateColor(EStyleColor::Recessed);
 		bool bHighlight = false;
 	};
 }
@@ -142,7 +142,7 @@ protected:
 		for (const auto& [Name, Color] : SwatchColors)
 		{
 			TSharedPtr<SSwatch> Swatch;
-			Swatches->AddSlot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))[SAssignNew(Swatch, SSwatch).Name(Name).Color(FStyleColor(Color))];
+			Swatches->AddSlot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))[SAssignNew(Swatch, SSwatch).Name(Name).Color(FSlateColor(Color))];
 			SwatchWidgets.push_back(Swatch);
 		}
 		return TestFrame(*this, "Drag and drop", TestPage({

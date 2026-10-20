@@ -24,7 +24,7 @@ TEST_SUITE("Text")
 	{
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const FFontInfo Font(Fonts.Latin, 16.0f);
+		const FSlateFontInfo Font(Fonts.Latin, 16.0f);
 
 		const FVector2 Empty = Fonts.Cache.MeasureText("", Font);
 		const FVector2 Short = Fonts.Cache.MeasureText("Hello", Font);
@@ -50,9 +50,9 @@ TEST_SUITE("Text")
 	{
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const auto Shaped = Fonts.Cache.ShapeText("Typography", FFontInfo(Fonts.Latin, 20.0f), 1.0f);
+		const auto Shaped = Fonts.Cache.ShapeText("Typography", FSlateFontInfo(Fonts.Latin, 20.0f), 1.0f);
 		float Sum = 0.0f;
-		for (const FShapedGlyph& Glyph : Shaped->Glyphs)
+		for (const FShapedGlyphEntry& Glyph : Shaped->Glyphs)
 		{
 			Sum += Glyph.Advance;
 		}
@@ -65,13 +65,13 @@ TEST_SUITE("Text")
 	{
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const FFontInfo Font(Fonts.Composite, 18.0f);
+		const FSlateFontInfo Font(Fonts.Composite, 18.0f);
 		const std::string_view Namaste = "नमस्ते"; // 6 code points
 		const auto Shaped = Fonts.Cache.ShapeText(Namaste, Font, 1.0f);
 		CHECK(FUtf8::CountCodePoints(Namaste) == 6);
 		// स + ् + त form a conjunct and े is a mark: fewer glyphs than code points.
 		CHECK(Shaped->Glyphs.size() < 6);
-		for (const FShapedGlyph& Glyph : Shaped->Glyphs)
+		for (const FShapedGlyphEntry& Glyph : Shaped->Glyphs)
 		{
 			CHECK(Glyph.Face == Fonts.Devanagari.get());
 			CHECK(Glyph.GlyphIndex != 0); // no .notdef boxes
@@ -80,7 +80,7 @@ TEST_SUITE("Text")
 		const auto Mixed = Fonts.Cache.ShapeText("Hello नमस्ते!", Font, 1.0f);
 		bool bUsedLatin = false;
 		bool bUsedDevanagari = false;
-		for (const FShapedGlyph& Glyph : Mixed->Glyphs)
+		for (const FShapedGlyphEntry& Glyph : Mixed->Glyphs)
 		{
 			bUsedLatin |= Glyph.Face == Fonts.Regular.get();
 			bUsedDevanagari |= Glyph.Face == Fonts.Devanagari.get();
@@ -90,14 +90,14 @@ TEST_SUITE("Text")
 		CHECK(bUsedDevanagari);
 		CHECK(Mixed->Width > Shaped->Width);
 		// The line is tall enough for Devanagari's head line and marks.
-		CHECK(Mixed->LineHeight >= Fonts.Cache.ShapeText("Hello", FFontInfo(Fonts.Latin, 18.0f), 1.0f)->LineHeight);
+		CHECK(Mixed->LineHeight >= Fonts.Cache.ShapeText("Hello", FSlateFontInfo(Fonts.Latin, 18.0f), 1.0f)->LineHeight);
 	}
 
 	TEST_CASE("Shaping results are cached per pixel size")
 	{
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const FFontInfo Font(Fonts.Latin, 12.0f);
+		const FSlateFontInfo Font(Fonts.Latin, 12.0f);
 		const auto A = Fonts.Cache.ShapeText("cache me", Font, 1.0f);
 		const auto B = Fonts.Cache.ShapeText("cache me", Font, 1.0f);
 		const auto C = Fonts.Cache.ShapeText("cache me", Font, 2.0f);
@@ -110,9 +110,9 @@ TEST_SUITE("Text")
 	{
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const auto Shaped = Fonts.Cache.ShapeText("A", FFontInfo(Fonts.Latin, 40.0f), 1.0f);
+		const auto Shaped = Fonts.Cache.ShapeText("A", FSlateFontInfo(Fonts.Latin, 40.0f), 1.0f);
 		REQUIRE(Shaped->Glyphs.size() == 1);
-		const FShapedGlyph& Glyph = Shaped->Glyphs[0];
+		const FShapedGlyphEntry& Glyph = Shaped->Glyphs[0];
 		const FCachedGlyph& First = Fonts.Cache.GetGlyph(*Glyph.Face, Shaped->PixelSize, Glyph.GlyphIndex);
 		const FCachedGlyph& Again = Fonts.Cache.GetGlyph(*Glyph.Face, Shaped->PixelSize, Glyph.GlyphIndex);
 		CHECK(&First == &Again);

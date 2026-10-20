@@ -43,29 +43,29 @@
   <ItemGroup>
     <ClCompile Include="Private\ElementBatcher.cpp" />
     <ClCompile Include="Private\RenderTargetViewportClient.cpp" />
-    <ClCompile Include="Private\UIRenderer.cpp" />
-    <ClCompile Include="Private\UIWindowRenderer.cpp" />
+    <ClCompile Include="Private\SlateRHIRenderingPolicy.cpp" />
+    <ClCompile Include="Private\SlateRHIRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Private\Shaders\UIShaders_PSDefault_SPIRV.h" />
-    <ClInclude Include="Private\Shaders\UIShaders_PSLine_SPIRV.h" />
-    <ClInclude Include="Private\Shaders\UIShaders_PSRoundedBox_SPIRV.h" />
-    <ClInclude Include="Private\Shaders\UIShaders_VSMain_SPIRV.h" />
+    <ClInclude Include="Private\Shaders\SlateShaders_PSDefault_SPIRV.h" />
+    <ClInclude Include="Private\Shaders\SlateShaders_PSLine_SPIRV.h" />
+    <ClInclude Include="Private\Shaders\SlateShaders_PSRoundedBox_SPIRV.h" />
+    <ClInclude Include="Private\Shaders\SlateShaders_VSMain_SPIRV.h" />
     <ClInclude Include="Public\ElementBatcher.h" />
     <ClInclude Include="Public\RenderTargetViewportClient.h" />
-    <ClInclude Include="Public\UIRenderer.h" />
-    <ClInclude Include="Public\UIWindowRenderer.h" />
+    <ClInclude Include="Public\SlateRHIRenderingPolicy.h" />
+    <ClInclude Include="Public\SlateRHIRenderer.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Private\Shaders\BuildUIShaders.cmd" />
+    <None Include="Private\Shaders\BuildSlateShaders.cmd" />
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="Private\Shaders\UIShaders.hlsl">
-      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSMain -Vn g_UIShaders_VSMain_DXIL -Fh &quot;$(IntDir)UIShaders_VSMain_DXIL.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSDefault -Vn g_UIShaders_PSDefault_DXIL -Fh &quot;$(IntDir)UIShaders_PSDefault_DXIL.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSRoundedBox -Vn g_UIShaders_PSRoundedBox_DXIL -Fh &quot;$(IntDir)UIShaders_PSRoundedBox_DXIL.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSLine -Vn g_UIShaders_PSLine_DXIL -Fh &quot;$(IntDir)UIShaders_PSLine_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
-      <Outputs>$(IntDir)UIShaders_VSMain_DXIL.h;$(IntDir)UIShaders_PSDefault_DXIL.h;$(IntDir)UIShaders_PSRoundedBox_DXIL.h;$(IntDir)UIShaders_PSLine_DXIL.h</Outputs>
+    <CustomBuild Include="Private\Shaders\SlateShaders.hlsl">
+      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSMain -Vn g_SlateShaders_VSMain_DXIL -Fh &quot;$(IntDir)SlateShaders_VSMain_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSDefault -Vn g_SlateShaders_PSDefault_DXIL -Fh &quot;$(IntDir)SlateShaders_PSDefault_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSRoundedBox -Vn g_SlateShaders_PSRoundedBox_DXIL -Fh &quot;$(IntDir)SlateShaders_PSRoundedBox_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSLine -Vn g_SlateShaders_PSLine_DXIL -Fh &quot;$(IntDir)SlateShaders_PSLine_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
+      <Outputs>$(IntDir)SlateShaders_VSMain_DXIL.h;$(IntDir)SlateShaders_PSDefault_DXIL.h;$(IntDir)SlateShaders_PSRoundedBox_DXIL.h;$(IntDir)SlateShaders_PSLine_DXIL.h</Outputs>
       <Message>Compiling %(Filename)%(Extension) to DXIL</Message>
     </CustomBuild>
   </ItemGroup>

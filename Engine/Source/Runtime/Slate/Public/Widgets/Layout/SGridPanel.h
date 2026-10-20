@@ -26,9 +26,9 @@ public:
 		int32 RowSpanValue = 1;
 	};
 
-	GE_BEGIN_ARGS(SGridPanel)
-		GE_SLOTS(SGridPanel::FSlot, Slots)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SGridPanel)
+		SLATE_SLOT_ARGUMENT(SGridPanel::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	static FSlot Slot(int32 Column, int32 Row) { return FSlot(Column, Row); }
 

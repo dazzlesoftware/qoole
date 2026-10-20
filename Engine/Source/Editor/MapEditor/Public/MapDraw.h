@@ -43,7 +43,7 @@ public:
 	// Empties the line and triangle lists (the palette stays).
 	void Reset();
 	// Moves the lines drawn since the last call into Out as one element.
-	void FlushLines(FDrawElementList& Out, int32 Layer);
+	void FlushLines(FSlateWindowElementList& Out, int32 Layer);
 	const TArray<FMapVertex>& GetTriangles() const { return Triangles; }
 
 	FColor GetPaletteColor(int Index) const;
@@ -61,7 +61,7 @@ public:
 	void ZBufRender() override {}
 
 private:
-	TArray<FUIVertex2D> LineVertices;
+	TArray<FSlateVertex2D> LineVertices;
 	TArray<uint32> LineIndices;
 	TArray<FMapVertex> Triangles;
 	int CurrentColor = 0;

@@ -17,16 +17,16 @@ public:
 	using FOnGenerateWidget = TDelegate<TSharedRef<SWidget>(OptionType)>;
 	using FOnSelectionChanged = TDelegate<void(OptionType, ESelectInfo)>;
 
-	GE_BEGIN_ARGS(SComboBox)
-		GE_ARGUMENT(const TArray<OptionType>*, OptionsSource, nullptr)
-		GE_EVENT(FOnGenerateWidget, OnGenerateWidget)
-		GE_EVENT(FOnSelectionChanged, OnSelectionChanged)
-		GE_ARGUMENT(TOptional<OptionType>, InitiallySelectedItem, TOptional<OptionType>())
-		GE_STYLE_ARGUMENT(FButtonStyle, ButtonStyle)
-		GE_ARGUMENT(float, MaxListHeight, 320.0f)
-		GE_ARGUMENT(bool, IsFocusable, true)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SComboBox)
+		SLATE_ARGUMENT(const TArray<OptionType>*, OptionsSource, nullptr)
+		SLATE_EVENT(FOnGenerateWidget, OnGenerateWidget)
+		SLATE_EVENT(FOnSelectionChanged, OnSelectionChanged)
+		SLATE_ARGUMENT(TOptional<OptionType>, InitiallySelectedItem, TOptional<OptionType>())
+		SLATE_STYLE_ARGUMENT(FButtonStyle, ButtonStyle)
+		SLATE_ARGUMENT(float, MaxListHeight, 320.0f)
+		SLATE_ARGUMENT(bool, IsFocusable, true)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args)
 	{
@@ -58,9 +58,9 @@ private:
 	class SComboList : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SComboList)
-			GE_DEFAULT_SLOT(Content)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SComboList)
+			SLATE_DEFAULT_SLOT(Content)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments& Args, SComboBox* InOwner)
 		{
@@ -118,7 +118,7 @@ private:
 		{
 			if (const TSharedPtr<SWidget> Pinned = WeakList.lock())
 			{
-				FUIApplication::Get().SetKeyboardFocus(Pinned, EFocusCause::SetDirectly);
+				FSlateApplication::Get().SetKeyboardFocus(Pinned, EFocusCause::SetDirectly);
 			}
 			return EActiveTimerReturn::Stop;
 		});

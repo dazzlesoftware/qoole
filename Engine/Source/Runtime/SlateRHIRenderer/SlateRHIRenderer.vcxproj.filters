@@ -15,37 +15,37 @@
     <ClCompile Include="Private\ElementBatcher.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="Private\UIRenderer.cpp">
+    <ClCompile Include="Private\SlateRHIRenderingPolicy.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Private\Shaders\UIShaders_PSDefault_SPIRV.h">
+    <ClInclude Include="Private\Shaders\SlateShaders_PSDefault_SPIRV.h">
       <Filter>Private\Shaders</Filter>
     </ClInclude>
-    <ClInclude Include="Private\Shaders\UIShaders_PSLine_SPIRV.h">
+    <ClInclude Include="Private\Shaders\SlateShaders_PSLine_SPIRV.h">
       <Filter>Private\Shaders</Filter>
     </ClInclude>
-    <ClInclude Include="Private\Shaders\UIShaders_PSRoundedBox_SPIRV.h">
+    <ClInclude Include="Private\Shaders\SlateShaders_PSRoundedBox_SPIRV.h">
       <Filter>Private\Shaders</Filter>
     </ClInclude>
-    <ClInclude Include="Private\Shaders\UIShaders_VSMain_SPIRV.h">
+    <ClInclude Include="Private\Shaders\SlateShaders_VSMain_SPIRV.h">
       <Filter>Private\Shaders</Filter>
     </ClInclude>
     <ClInclude Include="Public\ElementBatcher.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="Public\UIRenderer.h">
+    <ClInclude Include="Public\SlateRHIRenderingPolicy.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Private\Shaders\BuildUIShaders.cmd">
+    <None Include="Private\Shaders\BuildSlateShaders.cmd">
       <Filter>Private\Shaders</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="Private\Shaders\UIShaders.hlsl">
+    <CustomBuild Include="Private\Shaders\SlateShaders.hlsl">
       <Filter>Private\Shaders</Filter>
     </CustomBuild>
   </ItemGroup>

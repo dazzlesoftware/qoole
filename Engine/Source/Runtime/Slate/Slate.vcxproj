@@ -41,15 +41,14 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Private\Application\NavigationConfig.cpp" />
-    <ClCompile Include="Private\Application\UIApplication.cpp" />
-    <ClCompile Include="Private\Application\UIApplicationInput.cpp" />
+    <ClCompile Include="Private\Framework\Application\NavigationConfig.cpp" />
+    <ClCompile Include="Private\Framework\Application\SlateApplication.cpp" />
+    <ClCompile Include="Private\Framework\Application\SlateApplicationInput.cpp" />
     <ClCompile Include="Private\Framework\Commands\UICommands.cpp" />
     <ClCompile Include="Private\Framework\Docking\SDockingArea.cpp" />
     <ClCompile Include="Private\Framework\Docking\TabManager.cpp" />
     <ClCompile Include="Private\Framework\MultiBox\MenuRegistry.cpp" />
     <ClCompile Include="Private\Framework\PropertyGrid\SPropertyGrid.cpp" />
-    <ClCompile Include="Private\Styling\GenesisStyle.cpp" />
     <ClCompile Include="Private\Widgets\Input\SButton.cpp" />
     <ClCompile Include="Private\Widgets\Input\SColorPicker.cpp" />
     <ClCompile Include="Private\Widgets\Input\SMenuAnchor.cpp" />
@@ -68,16 +67,15 @@
     <ClCompile Include="Private\Widgets\Views\STableViewBase.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Private\Application\UIApplicationPrivate.h" />
-    <ClInclude Include="Public\Application\NavigationConfig.h" />
-    <ClInclude Include="Public\Application\UIApplication.h" />
+    <ClInclude Include="Private\Framework\Application\SlateApplicationPrivate.h" />
+    <ClInclude Include="Public\Framework\Application\NavigationConfig.h" />
+    <ClInclude Include="Public\Framework\Application\SlateApplication.h" />
     <ClInclude Include="Public\Framework\Commands\UICommands.h" />
     <ClInclude Include="Public\Framework\Docking\SDockingArea.h" />
     <ClInclude Include="Public\Framework\Docking\TabManager.h" />
     <ClInclude Include="Public\Framework\MultiBox\MenuRegistry.h" />
     <ClInclude Include="Public\Framework\PropertyGrid\PropertySource.h" />
     <ClInclude Include="Public\Framework\PropertyGrid\SPropertyGrid.h" />
-    <ClInclude Include="Public\Styling\GenesisStyle.h" />
     <ClInclude Include="Public\Widgets\Input\SButton.h" />
     <ClInclude Include="Public\Widgets\Input\SColorPicker.h" />
     <ClInclude Include="Public\Widgets\Input\SComboBox.h" />

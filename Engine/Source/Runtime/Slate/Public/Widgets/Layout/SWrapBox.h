@@ -17,14 +17,14 @@ public:
 		FSlot() : TAlignmentMixin<FSlot>(HAlign_Left, VAlign_Top) {}
 	};
 
-	GE_BEGIN_ARGS(SWrapBox)
+	SLATE_BEGIN_ARGS(SWrapBox)
 		// Width to wrap at for the desired size. With UseAllottedSize, the
 		// box wraps at its arranged width instead.
-		GE_ATTRIBUTE(float, PreferredSize, 300.0f)
-		GE_ARGUMENT(bool, UseAllottedSize, false)
-		GE_ARGUMENT(FVector2, InnerSlotPadding, FVector2::Zero())
-		GE_SLOTS(SWrapBox::FSlot, Slots)
-	GE_END_ARGS()
+		SLATE_ATTRIBUTE(float, PreferredSize, 300.0f)
+		SLATE_ARGUMENT(bool, UseAllottedSize, false)
+		SLATE_ARGUMENT(FVector2, InnerSlotPadding, FVector2::Zero())
+		SLATE_SLOT_ARGUMENT(SWrapBox::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	static FSlot Slot() { return FSlot(); }
 
@@ -90,9 +90,9 @@ public:
 		int32 ZOrderValue = 0;
 	};
 
-	GE_BEGIN_ARGS(SCanvas)
-		GE_SLOTS(SCanvas::FSlot, Slots)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SCanvas)
+		SLATE_SLOT_ARGUMENT(SCanvas::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	static FSlot Slot() { return FSlot(); }
 
@@ -105,7 +105,7 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
 	void OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -133,14 +133,14 @@ enum class EStretchDirection : uint8
 class SScaleBox : public SPanel
 {
 public:
-	GE_BEGIN_ARGS(SScaleBox)
-		GE_ARGUMENT(EStretch, Stretch, EStretch::ScaleToFit)
-		GE_ARGUMENT(EStretchDirection, StretchDirection, EStretchDirection::Both)
-		GE_ATTRIBUTE(float, UserSpecifiedScale, 1.0f)
-		GE_ARGUMENT(EHorizontalAlignment, HAlign, HAlign_Center)
-		GE_ARGUMENT(EVerticalAlignment, VAlign, VAlign_Center)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SScaleBox)
+		SLATE_ARGUMENT(EStretch, Stretch, EStretch::ScaleToFit)
+		SLATE_ARGUMENT(EStretchDirection, StretchDirection, EStretchDirection::Both)
+		SLATE_ATTRIBUTE(float, UserSpecifiedScale, 1.0f)
+		SLATE_ARGUMENT(EHorizontalAlignment, HAlign, HAlign_Center)
+		SLATE_ARGUMENT(EVerticalAlignment, VAlign, VAlign_Center)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 

@@ -2,7 +2,7 @@
 
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Layout/LayoutUtils.h"
 #include "Widgets/Input/SColorPicker.h"
 #include "Widgets/Input/SComboBox.h"
@@ -18,8 +18,8 @@ namespace
 	class SPropertyRow final : public SPanel
 	{
 	public:
-		GE_BEGIN_ARGS(SPropertyRow)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SPropertyRow)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments&, SPropertyGrid* InGrid, const TSharedRef<SWidget>& Name, const TSharedRef<SWidget>& Value, int32 InIndex)
 		{
@@ -49,11 +49,11 @@ namespace
 			ArrangeSlotChild(AllottedGeometry, ArrangedChildren, Children[1], FVector2(Split, 0.0f), FVector2(AllottedGeometry.Size.X - Split, AllottedGeometry.Size.Y));
 		}
 
-		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 			int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 		{
 			const FPropertyGridStyle& Style = FAppStyle::Get().GetWidgetStyle<FPropertyGridStyle>("PropertyGrid");
-			const FStyleBrush& Brush = IsHovered() ? Style.RowHovered : (Index % 2 ? Style.RowOdd : Style.RowEven);
+			const FSlateBrush& Brush = IsHovered() ? Style.RowHovered : (Index % 2 ? Style.RowOdd : Style.RowEven);
 			Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 			const float Split = FMath::RoundToFloat(Geometry.Size.X * Grid->GetNameColumnFraction());
 			OutDrawElements.AddSolidBox(LayerId, Geometry.ToPaintGeometry(FRect(Split, 0.0f, Split + 1.0f, Geometry.Size.Y)), InWidgetStyle.Tinted(Style.Divider.Resolve()));
@@ -70,8 +70,8 @@ namespace
 	class SCategoryHeader final : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SCategoryHeader)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SCategoryHeader)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments&, SPropertyGrid* InGrid, const FString& InCategory)
 		{
@@ -92,7 +92,7 @@ namespace
 		}
 
 	protected:
-		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 			int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 		{
 			const FPropertyGridStyle& Style = FAppStyle::Get().GetWidgetStyle<FPropertyGridStyle>("PropertyGrid");
@@ -113,8 +113,8 @@ namespace
 	// The colored X/Y/Z letter in front of a vector component.
 	TSharedRef<SWidget> AxisLabel(const char* Axis, FColor Color)
 	{
-		return SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(FStyleColor(Color.WithAlpha(150))).Padding(FMargin(4.0f, 0.0f))
-			.VAlign(VAlign_Center)[SNew(STextBlock).Text(Axis).TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText")).ColorAndOpacity(FStyleColor(EStyleColor::ForegroundHover))];
+		return SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(FSlateColor(Color.WithAlpha(150))).Padding(FMargin(4.0f, 0.0f))
+			.VAlign(VAlign_Center)[SNew(STextBlock).Text(Axis).TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText")).ColorAndOpacity(FSlateColor(EStyleColor::ForegroundHover))];
 	}
 
 	float GetComponent(const FPropertyValue& Value, int32 Component)
@@ -246,7 +246,7 @@ void SPropertyGrid::SetNameColumnFraction(float Fraction)
 
 void SPropertyGrid::OpenColorPicker(FName Property, const FGeometry& SwatchGeometry)
 {
-	FUIApplication& App = FUIApplication::Get();
+	FSlateApplication& App = FSlateApplication::Get();
 	const TSharedPtr<SWindow> Window = App.FindWindowForWidget(*this);
 	if (!Window)
 	{

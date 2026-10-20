@@ -6,13 +6,13 @@
 // OnDragOver / OnDragLeave and the one released over gets OnDrop. The
 // operation's decorator widget follows the cursor.
 //
-// Operation types declare themselves with GE_DRAG_DROP_OPERATION_TYPE so
+// Operation types declare themselves with DRAG_DROP_OPERATOR_TYPE so
 // targets can test what is being dragged:
 //
 //   class FItemDragDrop : public FDragDropOperation
 //   {
 //   public:
-//       GE_DRAG_DROP_OPERATION_TYPE(FItemDragDrop, FDragDropOperation)
+//       DRAG_DROP_OPERATOR_TYPE(FItemDragDrop, FDragDropOperation)
 //       int32 ItemIndex = 0;
 //   };
 //   if (TSharedPtr<FItemDragDrop> Op = Event.GetOperationAs<FItemDragDrop>()) ...
@@ -23,7 +23,7 @@
 
 class SWidget;
 
-#define GE_DRAG_DROP_OPERATION_TYPE(Type, Base) \
+#define DRAG_DROP_OPERATOR_TYPE(Type, Base) \
 	static const void* GetStaticTypeId() { static const char Id = 0; return &Id; } \
 	bool IsOfTypeImpl(const void* TypeId) const override { return TypeId == GetStaticTypeId() || Base::IsOfTypeImpl(TypeId); }
 

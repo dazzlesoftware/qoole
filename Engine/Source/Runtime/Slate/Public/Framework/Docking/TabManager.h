@@ -125,14 +125,14 @@ using FCanCloseTab = TDelegate<bool()>;
 class SDockTab : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SDockTab)
-		GE_ATTRIBUTE(FString, Label, "")
-		GE_ARGUMENT(ETabRole, Role, ETabRole::Panel)
-		GE_ARGUMENT(bool, Closable, true)
-		GE_EVENT(FOnTabClosed, OnTabClosed)
-		GE_EVENT(FCanCloseTab, CanClose)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SDockTab)
+		SLATE_ATTRIBUTE(FString, Label, "")
+		SLATE_ARGUMENT(ETabRole, Role, ETabRole::Panel)
+		SLATE_ARGUMENT(bool, Closable, true)
+		SLATE_EVENT(FOnTabClosed, OnTabClosed)
+		SLATE_EVENT(FCanCloseTab, CanClose)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 

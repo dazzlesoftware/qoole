@@ -4,30 +4,30 @@
 
 #pragma once
 
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/SLeafWidget.h"
 
 class SImage : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SImage)
-		GE_STYLE_ARGUMENT(FStyleBrush, Image)
-		GE_ATTRIBUTE(FStyleColor, ColorAndOpacity, FStyleColor(FColor::White()))
-		GE_OPTIONAL_ATTRIBUTE(FVector2, DesiredSizeOverride)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SImage)
+		SLATE_STYLE_ARGUMENT(FSlateBrush, Image)
+		SLATE_ATTRIBUTE(FSlateColor, ColorAndOpacity, FSlateColor(FColor::White()))
+		SLATE_OPTIONAL_ATTRIBUTE(FVector2, DesiredSizeOverride)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
-	void SetImage(const FStyleBrush* InImage);
-	void SetColorAndOpacity(TAttribute<FStyleColor> Color) { ColorAndOpacity.Assign(Color); }
+	void SetImage(const FSlateBrush* InImage);
+	void SetColorAndOpacity(TAttribute<FSlateColor> Color) { ColorAndOpacity.Assign(Color); }
 
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
-	const FStyleBrush* Image = nullptr;
-	TWidgetAttribute<FStyleColor, EInvalidateWidgetReason::Paint> ColorAndOpacity{ *this, FStyleColor(FColor::White()) };
+	const FSlateBrush* Image = nullptr;
+	TWidgetAttribute<FSlateColor, EInvalidateWidgetReason::Paint> ColorAndOpacity{ *this, FSlateColor(FColor::White()) };
 	TOptional<FVector2> DesiredSizeOverride;
 };
 
@@ -35,17 +35,17 @@ private:
 class SSeparator : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SSeparator)
-		GE_ARGUMENT(EOrientation, Orientation, EOrientation::Horizontal)
-		GE_STYLE_ARGUMENT(FSeparatorStyle, Style)
-		GE_ARGUMENT(float, Padding, 4.0f) // space on both sides of the line
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SSeparator)
+		SLATE_ARGUMENT(EOrientation, Orientation, EOrientation::Horizontal)
+		SLATE_STYLE_ARGUMENT(FSeparatorStyle, Style)
+		SLATE_ARGUMENT(float, Padding, 4.0f) // space on both sides of the line
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -58,11 +58,11 @@ private:
 class SProgressBar : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SProgressBar)
-		GE_STYLE_ARGUMENT(FProgressBarStyle, Style)
-		GE_OPTIONAL_ATTRIBUTE(TOptional<float>, Percent) // 0..1; unset = busy
-		GE_OPTIONAL_ATTRIBUTE(FStyleColor, FillColor)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SProgressBar)
+		SLATE_STYLE_ARGUMENT(FProgressBarStyle, Style)
+		SLATE_OPTIONAL_ATTRIBUTE(TOptional<float>, Percent) // 0..1; unset = busy
+		SLATE_OPTIONAL_ATTRIBUTE(FSlateColor, FillColor)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 	void SetPercent(TAttribute<TOptional<float>> InPercent);
@@ -70,34 +70,34 @@ public:
 
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
 	const FProgressBarStyle* Style = nullptr;
 	TWidgetAttribute<TOptional<float>, EInvalidateWidgetReason::Paint> Percent{ *this };
-	TOptional<FStyleColor> FillColor;
+	TOptional<FSlateColor> FillColor;
 };
 
 // Pulsing dots for "working on it".
 class SThrobber : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SThrobber)
-		GE_ARGUMENT(int32, NumPieces, 3)
-		GE_ARGUMENT(float, PieceSize, 8.0f)
-		GE_ARGUMENT(FStyleColor, Color, FStyleColor(EStyleColor::Primary))
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SThrobber)
+		SLATE_ARGUMENT(int32, NumPieces, 3)
+		SLATE_ARGUMENT(float, PieceSize, 8.0f)
+		SLATE_ARGUMENT(FSlateColor, Color, FSlateColor(EStyleColor::Primary))
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
 	int32 NumPieces = 3;
 	float PieceSize = 8.0f;
-	FStyleColor Color;
+	FSlateColor Color;
 };

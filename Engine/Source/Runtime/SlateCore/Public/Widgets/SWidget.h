@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "Application/UIApplicationBase.h"
+#include "Application/SlateApplicationBase.h"
 #include "Input/Reply.h"
 #include "Layout/ArrangedChildren.h"
 #include "Widgets/Attribute.h"
@@ -177,7 +177,7 @@ public:
 
 	// Paints this widget and its children at their stored geometry. Returns
 	// the highest layer used.
-	int32 Paint(const FPaintArgs& Args, const FRect& CullingRect, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const;
+	int32 Paint(const FPaintArgs& Args, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const;
 
 	// Finds the widgets under Position (window pixels), root to leaf.
 	bool HitTest(FVector2 Position, TArray<TSharedRef<SWidget>>& OutPath);
@@ -313,7 +313,7 @@ protected:
 	// Gives each visible child its geometry.
 	virtual void OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const = 0;
 	// Draws the widget; returns the highest layer used.
-	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const = 0;
 	// Called during ArrangeTree before OnArrangeChildren, once the widget's
 	// geometry is known: virtualizing panels create the children they need
@@ -321,7 +321,7 @@ protected:
 	virtual void OnPreArrange(const FGeometry& AllottedGeometry) { (void)AllottedGeometry; }
 
 	// Paints the arranged children at LayerId; returns the highest layer used.
-	int32 PaintArrangedChildren(const FPaintArgs& Args, const FRect& CullingRect, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const;
+	int32 PaintArrangedChildren(const FPaintArgs& Args, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const;
 
 	template <typename T>
 	TSharedRef<T> SharedThis(T* This) { return TSharedRef<T>(StaticCastSharedPtr<T>(This->shared_from_this())); }

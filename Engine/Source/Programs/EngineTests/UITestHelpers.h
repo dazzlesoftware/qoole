@@ -8,9 +8,9 @@
 
 #include "TestHelpers.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Null/NullPlatformApplication.h"
-#include "Styling/GenesisStyle.h"
+#include "Styling/StarshipCoreStyle.h"
 #include "Widgets/Layout/SBox.h"
 
 class FUITestApp
@@ -48,19 +48,19 @@ public:
 	static FRect RectOf(const SWidget& Widget);
 
 	FNullPlatformApplication& GetPlatform() { return *Platform; }
-	FUIApplication& GetApp() { return *App; }
+	FSlateApplication& GetApp() { return *App; }
 	FNullPlatformWindow& Native(const TSharedRef<SWindow>& Window) { return static_cast<FNullPlatformWindow&>(*Window->GetNativeWindow()); }
 
 	double Time = 1000.0;
 
 private:
 	TSharedPtr<FNullPlatformApplication> Platform;
-	TSharedPtr<FUIApplication> App;
+	TSharedPtr<FSlateApplication> App;
 };
 
 // The fonts and style used by every UI test (loaded once).
 struct FUITestStyle
 {
 	static void EnsureInitialized();
-	static TSharedRef<FFontCache> GetFontCache();
+	static TSharedRef<FSlateFontCache> GetFontCache();
 };

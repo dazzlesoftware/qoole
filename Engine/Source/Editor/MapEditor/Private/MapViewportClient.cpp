@@ -5,9 +5,9 @@
 #include "MapDraw.h"
 #include "MapEditorPrivate.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontCache.h"
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 
 #include "MapShaders_PSColor_DXIL.h"
 #include "MapShaders_VSMain_DXIL.h"
@@ -164,7 +164,7 @@ FRHITexture& FMapRenderResources::GetWhiteTexture()
 
 // ---------------------------------------------------------------------------
 
-FMapViewportClient::FMapViewportClient(FRHIDevice& InDevice, FUIRenderer& InRenderer, FMapRenderResources& InResources,
+FMapViewportClient::FMapViewportClient(FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer, FMapRenderResources& InResources,
 	FMapViewSettings& InSettings, EMapViewType InType)
 	: FRenderTargetViewportClient(InDevice, InRenderer)
 	, Resources(InResources)
@@ -965,7 +965,7 @@ void FMapViewportClient::DrawGrid(FMapDraw& Draw)
 	Draw.Line(0, AxisY, static_cast<int>(Width), AxisY);
 }
 
-void FMapViewportClient::DrawOverlay(FDrawElementList& Out, FIntPoint PixelSize)
+void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint PixelSize)
 {
 	const float Scale = GetDpiScale();
 	const auto Geo = [Scale](FVector2 Position, FVector2 Extent) { return FPaintGeometry::Make(Position, Extent, Scale); };
@@ -979,7 +979,7 @@ void FMapViewportClient::DrawOverlay(FDrawElementList& Out, FIntPoint PixelSize)
 			FColor(120, 170, 255), 1.0f, true);
 	}
 
-	const FFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
+	const FSlateFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
 	if (!Font.Font)
 	{
 		return;
@@ -1006,14 +1006,14 @@ void FMapViewportClient::DrawOverlay(FDrawElementList& Out, FIntPoint PixelSize)
 		const char* Name = Document->GetScope().GetObjName();
 		Label += FString::Format("  ·  in {}", Name && Name[0] ? FString::FromAnsi(Name) : FString("a group"));
 	}
-	FFontCache& Fonts = FUIApplication::Get().GetFontCache();
-	const TSharedRef<const FShapedText> Text = Fonts.ShapeText(Label.View(), FFontInfo(Font.Font, 11.0f), Scale);
+	FSlateFontCache& Fonts = FSlateApplication::Get().GetFontCache();
+	const TSharedRef<const FShapedGlyphSequence> Text = Fonts.ShapeText(Label.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
 	const FVector2 TextSize = Text->GetLogicalSize();
 	Out.AddRoundedBox(4, Geo(FVector2(6.0f, 6.0f), TextSize + FVector2(12.0f, 6.0f)), FColor(12, 13, 16, 190), 4.0f);
 	Out.AddText(5, Geo(FVector2(12.0f, 9.0f), TextSize), Text, FColor(176, 184, 198));
 }
 
-void FMapViewportClient::Draw(FRHICommandList& CommandList, FUIRenderTarget& RenderTarget)
+void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRHI& RenderTarget)
 {
 	const FIntPoint PixelSize = RenderTarget.GetSize();
 	const FLinearColor Clear(BackgroundColor.R / 255.0f, BackgroundColor.G / 255.0f, BackgroundColor.B / 255.0f, 1.0f);

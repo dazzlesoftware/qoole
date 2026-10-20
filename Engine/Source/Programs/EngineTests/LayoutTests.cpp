@@ -19,9 +19,9 @@ namespace
 	class STestLeaf : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(STestLeaf)
-			GE_ATTRIBUTE(FVector2, Size, (FVector2(10.0f, 10.0f)))
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(STestLeaf)
+			SLATE_ATTRIBUTE(FVector2, Size, (FVector2(10.0f, 10.0f)))
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments& Args) { Size.Assign(Args._Size); }
 		void SetSize(TAttribute<FVector2> InSize) { Size.Assign(InSize); }
@@ -35,7 +35,7 @@ namespace
 			++MeasureCount;
 			return Size.Get();
 		}
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle&) const override
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle&) const override
 		{
 			++PaintCount;
 			Out.AddSolidBox(LayerId, Geometry.ToPaintGeometry(), FColor::White());
@@ -104,7 +104,7 @@ TEST_SUITE("UILayout")
 		const TArray<TSharedRef<SWidget>> Path = Window->HitTestAt(FVector2(50.0f, 50.0f));
 		REQUIRE(!Path.empty());
 		CHECK(&Path.back().Get() == Front.get());
-		const TArray<FDrawElement>& Elements = Window->GetDrawElements().GetElements();
+		const TArray<FSlateDrawElement>& Elements = Window->GetDrawElements().GetElements();
 		REQUIRE(Elements.size() == 3); // background + two leaves
 		CHECK(Elements[2].Layer > Elements[1].Layer);
 	}
@@ -275,7 +275,7 @@ TEST_SUITE("UILayout")
 	TEST_CASE("Text layout: hard line breaks, caret rectangles and hit-testing agree")
 	{
 		FUITestStyle::EnsureInitialized();
-		FFontCache& Fonts = *FUITestStyle::GetFontCache();
+		FSlateFontCache& Fonts = *FUITestStyle::GetFontCache();
 		FTextLayout Layout;
 		Layout.SetFont(FAppStyle::Get().GetFont("NormalFont"));
 		Layout.SetText("Hello\nWorld wide");

@@ -35,7 +35,7 @@ void SOverlay::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChi
 	}
 }
 
-int32 SOverlay::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SOverlay::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	// Each child starts above everything the previous one drew.

@@ -23,7 +23,7 @@
 // Settings (grid, tools, the last folder, layout, key bindings) and the
 // prefabs you save are kept in %LOCALAPPDATA%\Genesis\Editor.
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "CoreMinimal.h"
 #include "GenericPlatform/PlatformDialogs.h"
 #include "MapCoreHeaders.h"
@@ -33,9 +33,9 @@
 #include "Misc/App.h"
 #include "Services/ConfigStore.h"
 #include "Services/Services.h"
-#include "Styling/GenesisStyle.h"
-#include "UIRenderer.h"
-#include "UIWindowRenderer.h"
+#include "Styling/StarshipCoreStyle.h"
+#include "SlateRHIRenderingPolicy.h"
+#include "SlateRHIRenderer.h"
 #include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
 #include "Widgets/Text/STextBlock.h"
@@ -159,10 +159,10 @@ private:
 
 	TSharedPtr<IPlatformApplication> Platform;
 	TUniquePtr<FRHIDevice> Device;
-	TSharedPtr<FFontCache> FontCache;
-	TUniquePtr<FUIRenderer> Renderer;
-	TUniquePtr<FUIWindowRenderer> WindowRenderer;
-	TSharedPtr<FUIApplication> App;
+	TSharedPtr<FSlateFontCache> FontCache;
+	TUniquePtr<FSlateRHIRenderingPolicy> Renderer;
+	TUniquePtr<FSlateRHIRenderer> WindowRenderer;
+	TSharedPtr<FSlateApplication> App;
 	TSharedPtr<SWindow> MainWindow;
 	TSharedPtr<FMapEditorShell> Shell;
 	TUniquePtr<FFileOutputDevice> FileLog;
@@ -271,24 +271,24 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 		return false;
 	}
 
-	FontCache = std::make_shared<FFontCache>();
-	const FGenesisFonts Fonts = FGenesisFonts::Load(*FontCache);
+	FontCache = std::make_shared<FSlateFontCache>();
+	const FStarshipCoreFonts Fonts = FStarshipCoreFonts::Load(*FontCache);
 	if (!Fonts.IsValid())
 	{
 		return false;
 	}
-	const TSharedRef<FStyleSet> Style = FGenesisStyle::Create(Fonts);
-	FStyleSet::Register(Style);
+	const TSharedRef<FSlateStyleSet> Style = FStarshipCoreStyle::Create(Fonts);
+	FSlateStyleSet::Register(Style);
 	FAppStyle::SetAppStyleSet(Style);
 
-	Renderer = MakeUnique<FUIRenderer>(*Device, *FontCache);
+	Renderer = MakeUnique<FSlateRHIRenderingPolicy>(*Device, *FontCache);
 	if (!Renderer->Initialize())
 	{
 		GE_LOG(LogGenesisEditor, Error, "UI renderer initialization failed");
 		return false;
 	}
-	WindowRenderer = MakeUnique<FUIWindowRenderer>(*Device, *Renderer);
-	App = FUIApplication::Create(ToSharedRef(Platform), ToSharedRef(FontCache)).ToSharedPtr();
+	WindowRenderer = MakeUnique<FSlateRHIRenderer>(*Device, *Renderer);
+	App = FSlateApplication::Create(ToSharedRef(Platform), ToSharedRef(FontCache)).ToSharedPtr();
 	App->SetRenderer(WindowRenderer.get());
 	App->SetApplicationScale(AppScale);
 
@@ -376,7 +376,7 @@ void FMapEditorApp::Shutdown()
 	if (App)
 	{
 		App->SetRenderer(nullptr);
-		FUIApplication::Shutdown();
+		FSlateApplication::Shutdown();
 	}
 	App.reset();
 	MainWindow.reset();

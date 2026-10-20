@@ -11,7 +11,7 @@
 #pragma once
 
 #include "GenericPlatform/PlatformWindow.h"
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/SPanel.h"
 #include "Widgets/WidgetDelegates.h"
 
@@ -30,28 +30,28 @@ enum class EPopupLayer : uint8
 class SWindow : public SPanel
 {
 public:
-	GE_BEGIN_ARGS(SWindow)
-		GE_ARGUMENT(FString, Title, "Genesis")
-		GE_ARGUMENT(FVector2, ClientSize, (FVector2(800.0f, 600.0f)))
-		GE_ARGUMENT(TOptional<FIntPoint>, ScreenPosition, TOptional<FIntPoint>())
-		GE_ARGUMENT(EWindowType, Type, EWindowType::Normal)
-		GE_ARGUMENT(bool, UseOSBorder, true)
-		GE_ARGUMENT(bool, Sizable, true)
-		GE_ARGUMENT(bool, SupportsMinimize, true)
-		GE_ARGUMENT(bool, SupportsMaximize, true)
-		GE_ARGUMENT(bool, IsTopmost, false)
-		GE_ARGUMENT(bool, AppearsInTaskbar, true)
-		GE_ARGUMENT(bool, AcceptsFileDrops, false)
+	SLATE_BEGIN_ARGS(SWindow)
+		SLATE_ARGUMENT(FString, Title, "Genesis")
+		SLATE_ARGUMENT(FVector2, ClientSize, (FVector2(800.0f, 600.0f)))
+		SLATE_ARGUMENT(TOptional<FIntPoint>, ScreenPosition, TOptional<FIntPoint>())
+		SLATE_ARGUMENT(EWindowType, Type, EWindowType::Normal)
+		SLATE_ARGUMENT(bool, UseOSBorder, true)
+		SLATE_ARGUMENT(bool, Sizable, true)
+		SLATE_ARGUMENT(bool, SupportsMinimize, true)
+		SLATE_ARGUMENT(bool, SupportsMaximize, true)
+		SLATE_ARGUMENT(bool, IsTopmost, false)
+		SLATE_ARGUMENT(bool, AppearsInTaskbar, true)
+		SLATE_ARGUMENT(bool, AcceptsFileDrops, false)
 		// Borderless windows: the height of the UI-drawn title bar, which the
 		// OS treats as the caption (drag to move) unless a widget there
 		// claims the point (buttons do).
-		GE_ARGUMENT(float, TitleBarHeight, 0.0f)
-		GE_STYLE_ARGUMENT(FWindowStyle, Style)
-		GE_OPTIONAL_ATTRIBUTE(FStyleColor, BackgroundColor)
-		GE_EVENT(FOnWindowClosed, OnWindowClosed)
-		GE_EVENT(FRequestWindowClose, OnRequestClose)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+		SLATE_ARGUMENT(float, TitleBarHeight, 0.0f)
+		SLATE_STYLE_ARGUMENT(FWindowStyle, Style)
+		SLATE_OPTIONAL_ATTRIBUTE(FSlateColor, BackgroundColor)
+		SLATE_EVENT(FOnWindowClosed, OnWindowClosed)
+		SLATE_EVENT(FRequestWindowClose, OnRequestClose)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -93,7 +93,7 @@ public:
 	bool UpdateLayout();
 	// Paints the whole window into its element list.
 	void PaintWindow(const FPaintArgs& Args);
-	const FDrawElementList& GetDrawElements() const { return Elements; }
+	const FSlateWindowElementList& GetDrawElements() const { return Elements; }
 	FColor GetBackgroundColor() const;
 
 	// Hit-tests popups first, then the content (window pixels).
@@ -119,7 +119,7 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
 	void OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -134,7 +134,7 @@ private:
 	TPanelChildren<FWindowSlot> Children{ this };
 	TSharedPtr<IPlatformWindow> NativeWindow;
 	const FWindowStyle* Style = nullptr;
-	TOptional<FStyleColor> BackgroundColor;
+	TOptional<FSlateColor> BackgroundColor;
 	FString Title;
 	FVector2 InitialClientSize;
 	TOptional<FIntPoint> InitialScreenPosition;
@@ -152,7 +152,7 @@ private:
 
 	float Scale = 1.0f;
 	FIntPoint PixelSize{ 0, 0 };
-	FDrawElementList Elements;
+	FSlateWindowElementList Elements;
 	bool bClosed = false;
 	bool bIsModal = false;
 };

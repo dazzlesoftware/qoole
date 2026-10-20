@@ -147,7 +147,7 @@ private:
 		Add(Line("Renderer", true), 10.0f);
 		Add(Line([this]
 		{
-			const FUIRenderStats& Stats = GetWindowRenderer().GetStats(*GetMainWindow()->GetNativeWindow());
+			const FSlateRenderStats& Stats = GetWindowRenderer().GetStats(*GetMainWindow()->GetNativeWindow());
 			return FString::Format("{}: {}\nMain window: {} elements, {} batches\nGlyph atlas pages: {}\nFrames: {}", ToString(GetBackend()), GetDevice().GetAdapterName(),
 				Stats.Elements, Stats.Batches, GetFontCache().GetPageCount(), GetApp().GetFrameNumber());
 		}));

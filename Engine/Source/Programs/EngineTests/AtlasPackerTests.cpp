@@ -2,7 +2,7 @@
 
 #include "TestHelpers.h"
 
-#include "Rendering/AtlasPacker.h"
+#include "Textures/SlateTextureAtlas.h"
 
 #include <random>
 
@@ -20,7 +20,7 @@ TEST_SUITE("AtlasPacker")
 	TEST_CASE("Allocations stay inside the page and never overlap, padding included")
 	{
 		constexpr int32 Padding = 1;
-		FAtlasPacker Packer(256, 256, Padding);
+		FSlateTextureAtlas Packer(256, 256, Padding);
 		std::mt19937 Random(1234);
 		std::uniform_int_distribution<int32> Size(1, 24);
 
@@ -54,7 +54,7 @@ TEST_SUITE("AtlasPacker")
 
 	TEST_CASE("Full page and oversized requests fail; reset frees everything")
 	{
-		FAtlasPacker Packer(64, 64, 0);
+		FSlateTextureAtlas Packer(64, 64, 0);
 		CHECK_FALSE(Packer.Allocate(65, 1));
 		REQUIRE(Packer.Allocate(64, 32));
 		REQUIRE(Packer.Allocate(64, 32));
@@ -66,7 +66,7 @@ TEST_SUITE("AtlasPacker")
 
 	TEST_CASE("Bottom-left placement fills rows before stacking")
 	{
-		FAtlasPacker Packer(100, 100, 0);
+		FSlateTextureAtlas Packer(100, 100, 0);
 		const FIntRect A = *Packer.Allocate(40, 10);
 		const FIntRect B = *Packer.Allocate(40, 10);
 		const FIntRect C = *Packer.Allocate(40, 10); // does not fit the first row

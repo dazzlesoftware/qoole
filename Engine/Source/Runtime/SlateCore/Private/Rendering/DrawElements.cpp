@@ -2,16 +2,16 @@
 
 #include "Rendering/DrawElements.h"
 
-const char* ToString(EDrawElementType Type)
+const char* ToString(EElementType Type)
 {
 	switch (Type)
 	{
-	case EDrawElementType::Box: return "Box";
-	case EDrawElementType::RoundedBox: return "RoundedBox";
-	case EDrawElementType::Text: return "Text";
-	case EDrawElementType::Lines: return "Lines";
-	case EDrawElementType::CustomVerts: return "CustomVerts";
-	case EDrawElementType::Viewport: return "Viewport";
+	case EElementType::Box: return "Box";
+	case EElementType::RoundedBox: return "RoundedBox";
+	case EElementType::Text: return "Text";
+	case EElementType::Lines: return "Lines";
+	case EElementType::CustomVerts: return "CustomVerts";
+	case EElementType::Viewport: return "Viewport";
 	}
 	return "?";
 }
@@ -37,7 +37,7 @@ FRect FPaintGeometry::GetPixelBounds() const
 
 // ---------------------------------------------------------------------------
 
-void FDrawElementList::Reset()
+void FSlateWindowElementList::Reset()
 {
 	Elements.clear();
 	ClipRects.clear();
@@ -45,7 +45,7 @@ void FDrawElementList::Reset()
 	CulledCount = 0;
 }
 
-bool FDrawElementList::IsCulled(const FRect& PixelBounds)
+bool FSlateWindowElementList::IsCulled(const FRect& PixelBounds)
 {
 	if (PixelBounds.Right < PixelBounds.Left || PixelBounds.Bottom < PixelBounds.Top)
 	{
@@ -64,9 +64,9 @@ bool FDrawElementList::IsCulled(const FRect& PixelBounds)
 	return false;
 }
 
-FDrawElement& FDrawElementList::Add(EDrawElementType Type, int32 Layer, const FPaintGeometry& Geometry, FColor Color)
+FSlateDrawElement& FSlateWindowElementList::Add(EElementType Type, int32 Layer, const FPaintGeometry& Geometry, FColor Color)
 {
-	FDrawElement& Element = Elements.emplace_back();
+	FSlateDrawElement& Element = Elements.emplace_back();
 	Element.Type = Type;
 	Element.Layer = Layer;
 	Element.ClipIndex = ClipStack.empty() ? INDEX_NONE : ClipStack.back();
@@ -75,34 +75,34 @@ FDrawElement& FDrawElementList::Add(EDrawElementType Type, int32 Layer, const FP
 	return Element;
 }
 
-void FDrawElementList::AddBox(int32 Layer, const FPaintGeometry& Geometry, const FBrush& Brush)
+void FSlateWindowElementList::AddBox(int32 Layer, const FPaintGeometry& Geometry, const FBrush& Brush)
 {
 	if (Brush.DrawType == EBrushDrawType::NoDrawType || Brush.Tint.A == 0 || IsCulled(Geometry.GetPixelBounds()))
 	{
 		return;
 	}
-	Add(EDrawElementType::Box, Layer, Geometry, Brush.Tint).Data = FBoxElement{ Brush };
+	Add(EElementType::Box, Layer, Geometry, Brush.Tint).Data = FSlateBoxElement{ Brush };
 }
 
-void FDrawElementList::AddRoundedBox(int32 Layer, const FPaintGeometry& Geometry, FColor Fill, float CornerRadius, FColor OutlineColor, float OutlineWidth)
+void FSlateWindowElementList::AddRoundedBox(int32 Layer, const FPaintGeometry& Geometry, FColor Fill, float CornerRadius, FColor OutlineColor, float OutlineWidth)
 {
 	AddRoundedBox(Layer, Geometry, Fill, { CornerRadius, CornerRadius, CornerRadius, CornerRadius }, OutlineColor, OutlineWidth);
 }
 
-void FDrawElementList::AddRoundedBox(int32 Layer, const FPaintGeometry& Geometry, FColor Fill, const TStaticArray<float, 4>& CornerRadii, FColor OutlineColor, float OutlineWidth)
+void FSlateWindowElementList::AddRoundedBox(int32 Layer, const FPaintGeometry& Geometry, FColor Fill, const TStaticArray<float, 4>& CornerRadii, FColor OutlineColor, float OutlineWidth)
 {
 	if ((Fill.A == 0 && (OutlineColor.A == 0 || OutlineWidth <= 0.0f)) || IsCulled(Geometry.GetPixelBounds()))
 	{
 		return;
 	}
-	FRoundedBoxElement Data;
+	FSlateRoundedBoxElement Data;
 	Data.OutlineColor = OutlineColor;
 	Data.OutlineWidth = OutlineWidth;
 	Data.CornerRadii = CornerRadii;
-	Add(EDrawElementType::RoundedBox, Layer, Geometry, Fill).Data = Data;
+	Add(EElementType::RoundedBox, Layer, Geometry, Fill).Data = Data;
 }
 
-void FDrawElementList::AddText(int32 Layer, const FPaintGeometry& Geometry, const TSharedRef<const FShapedText>& Text, FColor Color)
+void FSlateWindowElementList::AddText(int32 Layer, const FPaintGeometry& Geometry, const TSharedRef<const FShapedGlyphSequence>& Text, FColor Color)
 {
 	const FPaintGeometry Bounds(Geometry.Transform, Text->GetLogicalSize());
 	if (Text->Glyphs.empty() || Color.A == 0 || IsCulled(Bounds.GetPixelBounds()))
@@ -111,10 +111,10 @@ void FDrawElementList::AddText(int32 Layer, const FPaintGeometry& Geometry, cons
 	}
 	ensuref(FMath::IsNearlyEqual(Geometry.GetScale(), Text->Scale, 0.01f),
 		"Text shaped at scale {} drawn at scale {}; it will not be pixel-exact", Text->Scale, Geometry.GetScale());
-	Add(EDrawElementType::Text, Layer, Geometry, Color).Data = FTextElement{ Text.ToSharedPtr() };
+	Add(EElementType::Text, Layer, Geometry, Color).Data = FSlateTextElement{ Text.ToSharedPtr() };
 }
 
-void FDrawElementList::AddLines(int32 Layer, const FPaintGeometry& Geometry, TArray<FVector2> Points, FColor Color, float Thickness, bool bClosed)
+void FSlateWindowElementList::AddLines(int32 Layer, const FPaintGeometry& Geometry, TArray<FVector2> Points, FColor Color, float Thickness, bool bClosed)
 {
 	if (Points.size() < 2 || Color.A == 0)
 	{
@@ -132,37 +132,37 @@ void FDrawElementList::AddLines(int32 Layer, const FPaintGeometry& Geometry, TAr
 	{
 		return;
 	}
-	FLinesElement Data;
+	FSlateLineElement Data;
 	Data.Points = std::move(Points);
 	Data.Thickness = Thickness;
 	Data.bClosed = bClosed;
-	Add(EDrawElementType::Lines, Layer, Geometry, Color).Data = std::move(Data);
+	Add(EElementType::Lines, Layer, Geometry, Color).Data = std::move(Data);
 }
 
-void FDrawElementList::AddCustomVerts(int32 Layer, const FPaintGeometry& Geometry, TSharedPtr<FUIImage> Image, TArray<FUIVertex2D> Vertices, TArray<uint32> Indices)
+void FSlateWindowElementList::AddCustomVerts(int32 Layer, const FPaintGeometry& Geometry, TSharedPtr<FSlateTextureData> Image, TArray<FSlateVertex2D> Vertices, TArray<uint32> Indices)
 {
 	if (Vertices.empty() || Indices.size() < 3)
 	{
 		return;
 	}
 	check(Indices.size() % 3 == 0);
-	FCustomVertsElement Data;
+	FSlateCustomVertsElement Data;
 	Data.Image = std::move(Image);
 	Data.Vertices = std::move(Vertices);
 	Data.Indices = std::move(Indices);
-	Add(EDrawElementType::CustomVerts, Layer, Geometry, FColor::White()).Data = std::move(Data);
+	Add(EElementType::CustomVerts, Layer, Geometry, FColor::White()).Data = std::move(Data);
 }
 
-void FDrawElementList::AddViewport(int32 Layer, const FPaintGeometry& Geometry, TSharedPtr<IUIRenderTarget> RenderTarget, bool bAlphaBlend, FColor Tint)
+void FSlateWindowElementList::AddViewport(int32 Layer, const FPaintGeometry& Geometry, TSharedPtr<ISlateRenderTarget> RenderTarget, bool bAlphaBlend, FColor Tint)
 {
 	if (!RenderTarget || IsCulled(Geometry.GetPixelBounds()))
 	{
 		return;
 	}
-	Add(EDrawElementType::Viewport, Layer, Geometry, Tint).Data = FViewportElement{ std::move(RenderTarget), bAlphaBlend };
+	Add(EElementType::Viewport, Layer, Geometry, Tint).Data = FSlateViewportElement{ std::move(RenderTarget), bAlphaBlend };
 }
 
-TOptional<FIntRect> FDrawElementList::GetCurrentClip() const
+TOptional<FIntRect> FSlateWindowElementList::GetCurrentClip() const
 {
 	if (ClipStack.empty())
 	{
@@ -171,7 +171,7 @@ TOptional<FIntRect> FDrawElementList::GetCurrentClip() const
 	return ClipRects[ClipStack.back()];
 }
 
-void FDrawElementList::PushClip(const FPaintGeometry& Geometry)
+void FSlateWindowElementList::PushClip(const FPaintGeometry& Geometry)
 {
 	ensuref(Geometry.Transform.IsAxisAligned(), "Clipping supports axis-aligned rectangles only");
 	const FRect Bounds = Geometry.GetPixelBounds();
@@ -180,7 +180,7 @@ void FDrawElementList::PushClip(const FPaintGeometry& Geometry)
 		FMath::RoundToInt(Bounds.Right), FMath::RoundToInt(Bounds.Bottom)));
 }
 
-void FDrawElementList::PushClipPixels(const FIntRect& PixelRect)
+void FSlateWindowElementList::PushClipPixels(const FIntRect& PixelRect)
 {
 	FIntRect Rect = PixelRect;
 	if (const TOptional<FIntRect> Current = GetCurrentClip())
@@ -195,7 +195,7 @@ void FDrawElementList::PushClipPixels(const FIntRect& PixelRect)
 	ClipStack.push_back(static_cast<int32>(ClipRects.size()) - 1);
 }
 
-void FDrawElementList::PopClip()
+void FSlateWindowElementList::PopClip()
 {
 	if (ensuref(!ClipStack.empty(), "PopClip without PushClip"))
 	{

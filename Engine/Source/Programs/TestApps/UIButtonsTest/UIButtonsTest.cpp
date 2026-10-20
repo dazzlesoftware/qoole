@@ -54,7 +54,7 @@ protected:
 
 			TestSection("Progress", "A bound fraction, a busy bar and a throbber (these repaint every frame; the rest of the window only when something changes).",
 				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 4.0f))[SNew(SProgressBar).Percent([] { return TOptional<float>(FMath::Fmod(static_cast<float>(FUIApplication::Get().GetTime()) * 0.2f, 1.0f)); })]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 4.0f))[SNew(SProgressBar).Percent([] { return TOptional<float>(FMath::Fmod(static_cast<float>(FSlateApplication::Get().GetTime()) * 0.2f, 1.0f)); })]
 				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 4.0f))[SNew(SProgressBar)]
 				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 8.0f)).HAlign(HAlign_Left)[SNew(SThrobber)]),
 		}));
@@ -76,7 +76,7 @@ protected:
 			.Do([this] { PointAtText("Not focusable", true); })
 			.Check("a button that is not focusable keeps focus where it was", [this]
 			{
-				return FUIApplication::Get().GetKeyboardFocusedWidget().get() == DefaultButton.get();
+				return FSlateApplication::Get().GetKeyboardFocusedWidget().get() == DefaultButton.get();
 			})
 			// Check boxes: Brushes starts on and Entities off, so the parent is
 			// undetermined until both match.

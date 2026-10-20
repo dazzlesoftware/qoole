@@ -2,7 +2,7 @@
 
 #include "Framework/Docking/SDockingArea.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
@@ -224,19 +224,19 @@ void SDockingArea::GatherStacks(TArray<TSharedRef<SDockTabStack>>& Out) const
 	Walk(*this);
 }
 
-int32 SDockingArea::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SDockingArea::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	if (ChildNodes.empty())
 	{
 		// An empty primary area says how to fill it.
-		const FFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
-		if (Font.Font && FUIApplication::IsInitialized())
+		const FSlateFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
+		if (Font.Font && FSlateApplication::IsInitialized())
 		{
-			const TSharedRef<const FShapedText> Text = FUIApplication::Get().GetFontCache().ShapeText("Open a panel from the Window menu", Font, Geometry.Scale);
+			const TSharedRef<const FShapedGlyphSequence> Text = FSlateApplication::Get().GetFontCache().ShapeText("Open a panel from the Window menu", Font, Geometry.Scale);
 			const FVector2 Size = Text->GetLogicalSize();
 			OutDrawElements.AddText(LayerId, Geometry.ToPaintGeometry((Geometry.Size - Size) * 0.5f, Size), Text,
-				InWidgetStyle.Tinted(FStyleColor(EStyleColor::ForegroundSecondary).Resolve()));
+				InWidgetStyle.Tinted(FSlateColor(EStyleColor::ForegroundSecondary).Resolve()));
 		}
 		return LayerId;
 	}
@@ -274,8 +274,8 @@ namespace
 	class SDockTabButton final : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SDockTabButton)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SDockTabButton)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments&, const TSharedRef<SDockTab>& InTab, SDockTabStack* InStack)
 		{
@@ -332,7 +332,7 @@ namespace
 			}
 			auto Operation = std::make_shared<FDockTabDragDrop>();
 			Operation->Tab = T;
-			if (const TSharedPtr<SWindow> Window = FUIApplication::Get().FindWindowForWidget(*Stack))
+			if (const TSharedPtr<SWindow> Window = FSlateApplication::Get().FindWindowForWidget(*Stack))
 			{
 				Operation->SourceSize = Stack->GetCachedGeometry().GetLayoutBoundingRect().GetSize() / Window->GetScale();
 			}
@@ -342,20 +342,20 @@ namespace
 		EWindowZone GetWindowZoneOverride() const override { return EWindowZone::ClientArea; }
 
 	protected:
-		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 			int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 		{
 			const FDockTabStyle& Style = DockStyle();
 			const bool bForeground = IsForeground();
 			const bool bActiveStack = Stack->IsActiveStack();
-			const FStyleBrush& Brush = bForeground ? (bActiveStack ? Style.Active : Style.Foreground) : (IsHovered() ? Style.Hovered : Style.Normal);
+			const FSlateBrush& Brush = bForeground ? (bActiveStack ? Style.Active : Style.Foreground) : (IsHovered() ? Style.Hovered : Style.Normal);
 			Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 			if (bForeground && bActiveStack)
 			{
 				Style.ActiveIndicator.Paint(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FRect(0.0f, 0.0f, Geometry.Size.X, 2.0f)), InWidgetStyle.ColorAndOpacityTint);
 			}
 			FWidgetStyle ChildStyle = MakeChildStyle(InWidgetStyle);
-			ChildStyle.SetForegroundColor(FStyleColor(bForeground ? EStyleColor::ForegroundHover : EStyleColor::ForegroundSecondary).Resolve());
+			ChildStyle.SetForegroundColor(FSlateColor(bForeground ? EStyleColor::ForegroundHover : EStyleColor::ForegroundSecondary).Resolve());
 			return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, ChildStyle);
 		}
 
@@ -624,7 +624,7 @@ FReply SDockTabStack::OnDrop(const FGeometry& Geometry, const FDragDropEvent& Ev
 	return FReply::Handled();
 }
 
-int32 SDockTabStack::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SDockTabStack::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	int32 MaxLayer = SDockingNode::OnPaint(Args, Geometry, CullingRect, OutDrawElements, LayerId, InWidgetStyle);

@@ -13,7 +13,7 @@
 #pragma once
 
 #include "Framework/PropertyGrid/PropertySource.h"
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/WidgetDelegates.h"
 
@@ -25,14 +25,14 @@ using FOnPropertyTransaction = TDelegate<void(const FString& Description)>;
 class SPropertyGrid : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SPropertyGrid)
-		GE_STYLE_ARGUMENT(FPropertyGridStyle, Style)
-		GE_ARGUMENT(float, NameColumnFraction, 0.4f)
-		GE_ARGUMENT(bool, ShowSearch, true)
-		GE_EVENT(FOnPropertyTransaction, OnBeginTransaction)
-		GE_EVENT(FSimpleDelegate, OnEndTransaction)
-		GE_EVENT(FSimpleDelegate, OnPropertyChanged) // after every change
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SPropertyGrid)
+		SLATE_STYLE_ARGUMENT(FPropertyGridStyle, Style)
+		SLATE_ARGUMENT(float, NameColumnFraction, 0.4f)
+		SLATE_ARGUMENT(bool, ShowSearch, true)
+		SLATE_EVENT(FOnPropertyTransaction, OnBeginTransaction)
+		SLATE_EVENT(FSimpleDelegate, OnEndTransaction)
+		SLATE_EVENT(FSimpleDelegate, OnPropertyChanged) // after every change
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 

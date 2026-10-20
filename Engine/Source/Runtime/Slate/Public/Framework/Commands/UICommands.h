@@ -214,10 +214,10 @@ private:
 class SCommandBindingScope : public SCompoundWidget
 {
 public:
-	GE_BEGIN_ARGS(SCommandBindingScope)
-		GE_ARGUMENT(TSharedPtr<FUICommandList>, CommandList, nullptr)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SCommandBindingScope)
+		SLATE_ARGUMENT(TSharedPtr<FUICommandList>, CommandList, nullptr)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args)
 	{

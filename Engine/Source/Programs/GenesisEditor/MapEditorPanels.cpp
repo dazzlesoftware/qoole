@@ -6,7 +6,7 @@
 
 #include "MapEditorShell.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 #include "MapCoreHeaders.h"
 #include "MapObjectProperties.h"
@@ -50,8 +50,8 @@ namespace
 	class SChordEditor final : public SCompoundWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SChordEditor)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SChordEditor)
+		SLATE_END_ARGS()
 
 		void Construct(const FArguments&, const TSharedRef<FUICommandInfo>& InCommand, TFunction<void(const FString&)> InLog)
 		{
@@ -146,7 +146,7 @@ namespace
 			if (Property == FName("Solid3D")) return View3D.GetRenderMode() == EMapRenderMode::Solid;
 			if (Property == FName("AppScale"))
 			{
-				const float Scale = FUIApplication::Get().GetApplicationScale();
+				const float Scale = FSlateApplication::Get().GetApplicationScale();
 				return static_cast<int32>(Scale >= 1.9f ? 3 : (Scale >= 1.4f ? 2 : (Scale >= 1.2f ? 1 : 0)));
 			}
 			return false;

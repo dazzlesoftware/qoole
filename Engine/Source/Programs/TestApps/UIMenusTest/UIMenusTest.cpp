@@ -79,7 +79,7 @@ protected:
 					{
 						return FReply::Unhandled();
 					}
-					FUIApplication& UIApp = FUIApplication::Get();
+					FSlateApplication& UIApp = FSlateApplication::Get();
 					const TSharedPtr<SWindow> Window = UIApp.FindWindowForWidget(*ContextArea);
 					const FVector2 Position = Event.GetAbsolutePosition() / (Window ? Window->GetScale() : 1.0f);
 					UIApp.PushMenu(ToSharedRef(StaticCastSharedPtr<SWidget>(ContextArea)), MakeMenuContent("Edit"), Position);

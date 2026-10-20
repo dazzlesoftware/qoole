@@ -2,7 +2,7 @@
 
 #include "Framework/Commands/UICommands.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 
 // ---------------------------------------------------------------------------
 // FInputChord

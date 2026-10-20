@@ -78,7 +78,7 @@ private:
 class FDemoViewportClient final : public FRenderTargetViewportClient
 {
 public:
-	FDemoViewportClient(FRHIDevice& InDevice, FUIRenderer& InRenderer, FDemoScene& InScene);
+	FDemoViewportClient(FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer, FDemoScene& InScene);
 
 	bool bShowGrid = true;
 	bool bSnap = true;
@@ -98,7 +98,7 @@ public:
 	FCursorReply OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const override;
 
 protected:
-	void Draw(FRHICommandList& CommandList, FUIRenderTarget& Target) override;
+	void Draw(FRHICommandList& CommandList, FSlateRenderTargetRHI& Target) override;
 
 private:
 	FVector2 ToWorld(const FGeometry& Geometry, FVector2 Absolute) const;
@@ -113,7 +113,7 @@ private:
 	FVector2 DragStartWorld;
 	FVector2 LastAbsolute;
 	TMap<int32, FVector2> DragStartPositions;
-	FDrawElementList Elements;
+	FSlateWindowElementList Elements;
 	int32 DrawCount = 0;
 };
 

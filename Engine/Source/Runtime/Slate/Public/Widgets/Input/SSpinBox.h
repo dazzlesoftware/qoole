@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Widgets/Text/SEditableText.h"
 
 #include <charconv>
@@ -22,20 +22,20 @@ public:
 	using FOnValueCommitted = TDelegate<void(NumericType, ETextCommit)>;
 	static constexpr bool bIsInteger = std::is_integral_v<NumericType>;
 
-	GE_BEGIN_ARGS(SSpinBox)
-		GE_STYLE_ARGUMENT(FSpinBoxStyle, Style)
-		GE_ATTRIBUTE(TOptional<NumericType>, Value, TOptional<NumericType>(NumericType{}))
-		GE_ARGUMENT(TOptional<NumericType>, MinValue, TOptional<NumericType>())
-		GE_ARGUMENT(TOptional<NumericType>, MaxValue, TOptional<NumericType>())
-		GE_ARGUMENT(float, Delta, 0.0f)            // value per logical unit dragged; 0 picks one
-		GE_ARGUMENT(int32, FractionalDigits, 3)    // shown for floating-point values
-		GE_ATTRIBUTE(float, MinDesiredWidth, 60.0f)
-		GE_ARGUMENT(FString, UndeterminedText, "Multiple Values")
-		GE_EVENT(FOnValueChanged, OnValueChanged)      // every change, including while dragging
-		GE_EVENT(FOnValueCommitted, OnValueCommitted)  // typed and committed, or a drag ended
-		GE_EVENT(FSimpleDelegate, OnBeginSliderMovement)
-		GE_EVENT(FOnValueChanged, OnEndSliderMovement)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SSpinBox)
+		SLATE_STYLE_ARGUMENT(FSpinBoxStyle, Style)
+		SLATE_ATTRIBUTE(TOptional<NumericType>, Value, TOptional<NumericType>(NumericType{}))
+		SLATE_ARGUMENT(TOptional<NumericType>, MinValue, TOptional<NumericType>())
+		SLATE_ARGUMENT(TOptional<NumericType>, MaxValue, TOptional<NumericType>())
+		SLATE_ARGUMENT(float, Delta, 0.0f)            // value per logical unit dragged; 0 picks one
+		SLATE_ARGUMENT(int32, FractionalDigits, 3)    // shown for floating-point values
+		SLATE_ATTRIBUTE(float, MinDesiredWidth, 60.0f)
+		SLATE_ARGUMENT(FString, UndeterminedText, "Multiple Values")
+		SLATE_EVENT(FOnValueChanged, OnValueChanged)      // every change, including while dragging
+		SLATE_EVENT(FOnValueCommitted, OnValueCommitted)  // typed and committed, or a drag ended
+		SLATE_EVENT(FSimpleDelegate, OnBeginSliderMovement)
+		SLATE_EVENT(FOnValueChanged, OnEndSliderMovement)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args)
 	{
@@ -218,11 +218,11 @@ public:
 	}
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 	{
 		const bool bActive = bDragging || Text->HasKeyboardFocus();
-		const FStyleBrush& Brush = bActive ? Style->Active : (IsHovered() ? Style->Hovered : Style->Normal);
+		const FSlateBrush& Brush = bActive ? Style->Active : (IsHovered() ? Style->Hovered : Style->Normal);
 		Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 		const TOptional<NumericType> Value = ValueAttribute.Get();
 		if (MinValue && MaxValue && Value && *MaxValue > *MinValue && !Text->HasKeyboardFocus())

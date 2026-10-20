@@ -15,7 +15,7 @@ void SImage::Construct(const FArguments& Args)
 	}
 }
 
-void SImage::SetImage(const FStyleBrush* InImage)
+void SImage::SetImage(const FSlateBrush* InImage)
 {
 	if (Image != InImage)
 	{
@@ -33,7 +33,7 @@ FVector2 SImage::ComputeDesiredSize(float) const
 	return Image ? Image->GetImageSize() : FVector2::Zero();
 }
 
-int32 SImage::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SImage::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	if (Image && Image->IsVisible())
 	{
@@ -63,7 +63,7 @@ FVector2 SSeparator::ComputeDesiredSize(float) const
 	return Orientation == EOrientation::Horizontal ? FVector2(0.0f, Cross) : FVector2(Cross, 0.0f);
 }
 
-int32 SSeparator::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SSeparator::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const FRect Line = Orientation == EOrientation::Horizontal
 		? FRect(0.0f, (Geometry.Size.Y - Style->Thickness) * 0.5f, Geometry.Size.X, (Geometry.Size.Y + Style->Thickness) * 0.5f)
@@ -97,7 +97,7 @@ FVector2 SProgressBar::ComputeDesiredSize(float) const
 	return FVector2(Style->Thickness * 4.0f, Style->Thickness);
 }
 
-int32 SProgressBar::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SProgressBar::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	Style->Background.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 	const float Width = Geometry.Size.X;
@@ -143,7 +143,7 @@ FVector2 SThrobber::ComputeDesiredSize(float) const
 	return FVector2(PieceSize * (NumPieces * 2 - 1), PieceSize);
 }
 
-int32 SThrobber::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SThrobber::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const FColor Base = InWidgetStyle.Tinted(Color.Resolve());
 	for (int32 I = 0; I < NumPieces; ++I)

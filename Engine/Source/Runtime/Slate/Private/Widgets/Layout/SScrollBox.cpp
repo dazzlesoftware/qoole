@@ -123,7 +123,7 @@ void SScrollBar::OnMouseLeave(const FPointerEvent&)
 	}
 }
 
-int32 SScrollBar::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SScrollBar::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	Style->Track.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 	if (!IsNeeded())
@@ -131,7 +131,7 @@ int32 SScrollBar::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FR
 		return LayerId;
 	}
 	const auto [Start, Length] = GetThumb(Geometry);
-	const FStyleBrush& Thumb = bDragging ? Style->ThumbDragged : (bThumbHovered ? Style->ThumbHovered : Style->Thumb);
+	const FSlateBrush& Thumb = bDragging ? Style->ThumbDragged : (bThumbHovered ? Style->ThumbHovered : Style->Thumb);
 	const float Inset = 2.0f;
 	const FRect Rect = Orientation == EOrientation::Vertical
 		? FRect(Inset, Start, Geometry.Size.X - Inset, Start + Length)
@@ -147,8 +147,8 @@ int32 SScrollBar::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FR
 class SScrollBox::SScrollPanel final : public SPanel
 {
 public:
-	GE_BEGIN_ARGS(SScrollPanel)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SScrollPanel)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments&, SScrollBox* InOwner, EOrientation InOrientation)
 	{
@@ -543,7 +543,7 @@ FCursorReply SSplitter::OnCursorQuery(const FGeometry& Geometry, const FPointerE
 	return SPanel::OnCursorQuery(Geometry, Event);
 }
 
-int32 SSplitter::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SSplitter::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const int32 MaxLayer = PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId, InWidgetStyle);

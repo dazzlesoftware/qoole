@@ -95,7 +95,7 @@ void FMapDraw::Line(int X1, int Y1, int X2, int Y2)
 	}
 }
 
-void FMapDraw::FlushLines(FDrawElementList& Out, int32 Layer)
+void FMapDraw::FlushLines(FSlateWindowElementList& Out, int32 Layer)
 {
 	if (LineVertices.empty())
 	{

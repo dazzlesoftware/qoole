@@ -2,7 +2,7 @@
 //
 // FTextLayout (docs/GenesisUI.md §8): text -> lines, with word wrapping,
 // justification and hit-testing (point -> caret index, caret index ->
-// rectangle, selection rectangles). Each line is shaped by the FFontCache.
+// rectangle, selection rectangles). Each line is shaped by the FSlateFontCache.
 //
 // Indices are byte offsets into the UTF-8 text. Caret stops are at shaping
 // cluster boundaries, so a caret never lands inside a conjunct or a base +
@@ -37,7 +37,7 @@ class FTextLayout
 {
 public:
 	void SetText(const FString& InText);
-	void SetFont(const FFontInfo& InFont);
+	void SetFont(const FSlateFontInfo& InFont);
 	// Lines wrap at word boundaries to fit this width; <= 0 disables wrapping.
 	void SetWrapWidth(float InWrapWidth);
 	void SetJustification(ETextJustify InJustify);
@@ -45,12 +45,12 @@ public:
 	void SetScale(float InScale);
 
 	const FString& GetText() const { return Text; }
-	const FFontInfo& GetFont() const { return Font; }
+	const FSlateFontInfo& GetFont() const { return Font; }
 	float GetWrapWidth() const { return WrapWidth; }
 	float GetScale() const { return Scale; }
 
 	// Lays the text out again if anything changed.
-	void UpdateIfNeeded(FFontCache& FontCache);
+	void UpdateIfNeeded(FSlateFontCache& FontCache);
 	bool IsDirty() const { return bDirty; }
 
 	// Size of the laid-out text (widest line x total height).
@@ -78,15 +78,15 @@ public:
 
 	// Draws the lines with their top-left at Offset in Geometry's local space.
 	// Text is shaped at the geometry's paint scale.
-	void Paint(FFontCache& FontCache, FDrawElementList& Out, int32 Layer, const FGeometry& Geometry, FVector2 Offset, float AreaWidth, FColor Color) const;
+	void Paint(FSlateFontCache& FontCache, FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, FVector2 Offset, float AreaWidth, FColor Color) const;
 
 private:
-	void Layout(FFontCache& FontCache);
-	void AddLine(FFontCache& FontCache, int32 Begin, int32 End, bool bEndsParagraph, float& Y);
+	void Layout(FSlateFontCache& FontCache);
+	void AddLine(FSlateFontCache& FontCache, int32 Begin, int32 End, bool bEndsParagraph, float& Y);
 	const FTextLine* FindLine(int32 Index) const;
 
 	FString Text;
-	FFontInfo Font;
+	FSlateFontInfo Font;
 	float WrapWidth = 0.0f;
 	float Scale = 1.0f;
 	ETextJustify Justify = ETextJustify::Left;

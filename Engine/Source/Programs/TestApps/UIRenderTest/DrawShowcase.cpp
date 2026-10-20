@@ -16,7 +16,7 @@ namespace
 	constexpr FColor Accent3 = FColor(112, 214, 140);
 	constexpr FColor Accent4 = FColor(232, 98, 120);
 
-	TSharedRef<FUIImage> MakeImage(int32 W, int32 H, const TFunction<FColor(int32, int32)>& Pixel, const char* Name)
+	TSharedRef<FSlateTextureData> MakeImage(int32 W, int32 H, const TFunction<FColor(int32, int32)>& Pixel, const char* Name)
 	{
 		TArray<uint8> Pixels(SIZE_T(W) * H * 4);
 		for (int32 Y = 0; Y < H; ++Y)
@@ -31,7 +31,7 @@ namespace
 				P[3] = C.A;
 			}
 		}
-		return MakeShared<FUIImage>(W, H, std::move(Pixels), FName(Name));
+		return MakeShared<FSlateTextureData>(W, H, std::move(Pixels), FName(Name));
 	}
 
 	FColor Lerp(FColor A, FColor B, float T)
@@ -46,7 +46,7 @@ namespace
 	}
 }
 
-FDrawShowcase::FDrawShowcase(FFontCache& InFontCache, FShowcaseFonts InFonts)
+FDrawShowcase::FDrawShowcase(FSlateFontCache& InFontCache, FShowcaseFonts InFonts)
 	: FontCache(InFontCache)
 	, Fonts(std::move(InFonts))
 {
@@ -77,7 +77,7 @@ FDrawShowcase::FDrawShowcase(FFontCache& InFontCache, FShowcaseFonts InFonts)
 		return T < 0.5f ? Lerp(Accent4, Accent2, T * 2.0f) : Lerp(Accent2, Accent3, (T - 0.5f) * 2.0f);
 	}, "Gradient");
 
-	HairlineImage = FUIImage::CreateSolid(3, 3, FColor::White(), FName("Hairline")).ToSharedPtr();
+	HairlineImage = FSlateTextureData::CreateSolid(3, 3, FColor::White(), FName("Hairline")).ToSharedPtr();
 
 	// A 16x16 "G" icon.
 	IconImage = MakeImage(16, 16, [](int32 X, int32 Y)
@@ -95,15 +95,15 @@ FPaintGeometry FDrawShowcase::Geo(const FShowcaseFrame& Frame, FRect R) const
 	return FPaintGeometry::Make(R.GetTopLeft() + Frame.Origin, R.GetSize(), Frame.Scale);
 }
 
-FVector2 FDrawShowcase::Text(FDrawElementList& List, int32 Layer, const FShowcaseFrame& Frame, FVector2 Position, std::string_view String,
+FVector2 FDrawShowcase::Text(FSlateWindowElementList& List, int32 Layer, const FShowcaseFrame& Frame, FVector2 Position, std::string_view String,
 	const TSharedPtr<FCompositeFont>& Font, float Size, FColor Color)
 {
-	const TSharedRef<const FShapedText> Shaped = FontCache.ShapeText(String, FFontInfo(Font, Size), Frame.Scale);
+	const TSharedRef<const FShapedGlyphSequence> Shaped = FontCache.ShapeText(String, FSlateFontInfo(Font, Size), Frame.Scale);
 	List.AddText(Layer, FPaintGeometry::Make(Position + Frame.Origin, Shaped->GetLogicalSize(), Frame.Scale), Shaped, Color);
 	return Shaped->GetLogicalSize();
 }
 
-FRect FDrawShowcase::Panel(FDrawElementList& List, const FShowcaseFrame& Frame, const FRect& Rect, std::string_view Title)
+FRect FDrawShowcase::Panel(FSlateWindowElementList& List, const FShowcaseFrame& Frame, const FRect& Rect, std::string_view Title)
 {
 	const bool bHovered = Rect.Contains(Frame.MouseLogical);
 	List.AddRoundedBox(1, Geo(Frame, Rect), PanelFill, 8.0f, bHovered ? Accent : PanelOutline, 1.0f);
@@ -112,7 +112,7 @@ FRect FDrawShowcase::Panel(FDrawElementList& List, const FShowcaseFrame& Frame, 
 	return FRect(Rect.Left + 14.0f, Rect.Top + 44.0f, Rect.Right - 14.0f, Rect.Bottom - 12.0f);
 }
 
-void FDrawShowcase::PaintMain(FDrawElementList& List, const FShowcaseFrame& Frame, const TSharedPtr<FUIRenderTarget>& ViewportTarget)
+void FDrawShowcase::PaintMain(FSlateWindowElementList& List, const FShowcaseFrame& Frame, const TSharedPtr<FSlateRenderTargetRHI>& ViewportTarget)
 {
 	const FVector2 Size = Frame.LogicalSize;
 	List.AddSolidBox(0, Geo(Frame, FRect(FVector2(), Size)), Background);
@@ -156,7 +156,7 @@ void FDrawShowcase::PaintMain(FDrawElementList& List, const FShowcaseFrame& Fram
 	PaintViewport(List, Frame, Panel(List, Frame, Cell(2, 1), "Viewport (render target)"), ViewportTarget);
 }
 
-void FDrawShowcase::PaintBoxes(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
+void FDrawShowcase::PaintBoxes(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	// Solid boxes with an animated hue cycle.
 	const FColor Colors[] = { Accent, Accent2, Accent3, Accent4 };
@@ -191,7 +191,7 @@ void FDrawShowcase::PaintBoxes(FDrawElementList& List, const FShowcaseFrame& Fra
 	}
 }
 
-void FDrawShowcase::PaintRoundedBoxes(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
+void FDrawShowcase::PaintRoundedBoxes(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	const float W = (Area.Width() - 24.0f) / 3.0f;
 	const float H = 44.0f;
@@ -224,7 +224,7 @@ void FDrawShowcase::PaintRoundedBoxes(FDrawElementList& List, const FShowcaseFra
 	}
 }
 
-void FDrawShowcase::PaintLines(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
+void FDrawShowcase::PaintLines(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	// Grid of hairlines (1 and 0.5 logical units).
 	const FRect Graph(Area.Left, Area.Top, Area.Right, Area.Top + FMath::Min(120.0f, Area.Height() * 0.55f));
@@ -278,7 +278,7 @@ void FDrawShowcase::PaintLines(FDrawElementList& List, const FShowcaseFrame& Fra
 	Text(List, 4, Frame, { Area.Left + 170.0f, Y + 26.0f }, "0.5, 1, 1.5, 2, 3 and 6 px", Fonts.Regular, 12.0f, DimText);
 }
 
-void FDrawShowcase::PaintClipping(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
+void FDrawShowcase::PaintClipping(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	// A list scrolled automatically (and by the mouse wheel) inside a clip.
 	const FRect ListRect(Area.Left, Area.Top, Area.Left + Area.Width() * 0.58f, Area.Bottom);
@@ -315,7 +315,7 @@ void FDrawShowcase::PaintClipping(FDrawElementList& List, const FShowcaseFrame& 
 	Text(List, 4, Frame, { Outer.Left, Outer.Bottom + 24.0f }, "with the mouse wheel", Fonts.Regular, 12.0f, DimText);
 }
 
-void FDrawShowcase::PaintText(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area)
+void FDrawShowcase::PaintText(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area)
 {
 	List.PushClip(Geo(Frame, Area.Expand(FMargin(4.0f))));
 	float Y = Area.Top;
@@ -336,7 +336,7 @@ void FDrawShowcase::PaintText(FDrawElementList& List, const FShowcaseFrame& Fram
 	List.PopClip();
 }
 
-void FDrawShowcase::PaintViewport(FDrawElementList& List, const FShowcaseFrame& Frame, FRect Area, const TSharedPtr<FUIRenderTarget>& ViewportTarget)
+void FDrawShowcase::PaintViewport(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FRect Area, const TSharedPtr<FSlateRenderTargetRHI>& ViewportTarget)
 {
 	if (!ViewportTarget)
 	{
@@ -352,7 +352,7 @@ void FDrawShowcase::PaintViewport(FDrawElementList& List, const FShowcaseFrame& 
 	List.PopClip();
 }
 
-void FDrawShowcase::PaintViewportScene(FDrawElementList& List, const FShowcaseFrame& Frame, FIntPoint TargetSize)
+void FDrawShowcase::PaintViewportScene(FSlateWindowElementList& List, const FShowcaseFrame& Frame, FIntPoint TargetSize)
 {
 	// A rotating fan of triangles (custom vertices) rendered into a texture
 	// and composited by a Viewport element. Drawn at the window's scale so
@@ -362,7 +362,7 @@ void FDrawShowcase::PaintViewportScene(FDrawElementList& List, const FShowcaseFr
 	List.SetViewportSize(TargetSize);
 	List.AddSolidBox(0, FPaintGeometry::Make({}, Size, Scale), FColor(14, 16, 22));
 
-	TArray<FUIVertex2D> Vertices;
+	TArray<FSlateVertex2D> Vertices;
 	TArray<uint32> Indices;
 	const FColor Colors[] = { Accent, Accent2, Accent3, Accent4 };
 	const float Spin = static_cast<float>(Frame.Time) * 0.9f;

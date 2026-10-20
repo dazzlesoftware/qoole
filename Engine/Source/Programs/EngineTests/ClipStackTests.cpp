@@ -8,7 +8,7 @@ TEST_SUITE("ClipStack")
 {
 	TEST_CASE("Nested clips intersect and pop back")
 	{
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.SetViewportSize({ 800, 600 });
 		CHECK_FALSE(List.GetCurrentClip());
 
@@ -28,7 +28,7 @@ TEST_SUITE("ClipStack")
 		CHECK_FALSE(List.GetCurrentClip());
 		List.AddSolidBox(0, FPaintGeometry::Make({ 300.0f, 300.0f }, { 10.0f, 10.0f }, 1.0f), FColor::White());
 
-		const TArray<FDrawElement>& Elements = List.GetElements();
+		const TArray<FSlateDrawElement>& Elements = List.GetElements();
 		REQUIRE(Elements.size() == 4);
 		CHECK(Elements[0].ClipIndex == 0);
 		CHECK(Elements[1].ClipIndex == 1);
@@ -39,14 +39,14 @@ TEST_SUITE("ClipStack")
 
 	TEST_CASE("Clips are in pixels at the geometry's DPI scale")
 	{
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.PushClip(FPaintGeometry::Make({ 10.0f, 10.0f }, { 100.0f, 50.0f }, 1.5f));
 		CHECK(*List.GetCurrentClip() == FIntRect(15, 15, 165, 90));
 	}
 
 	TEST_CASE("Elements outside the clip are culled; disjoint clips cull everything")
 	{
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		List.PushClip(FPaintGeometry::Make({ 0.0f, 0.0f }, { 50.0f, 50.0f }, 1.0f));
 		List.AddSolidBox(0, FPaintGeometry::Make({ 100.0f, 100.0f }, { 10.0f, 10.0f }, 1.0f), FColor::Red());
 		CHECK(List.GetElements().empty());
@@ -63,7 +63,7 @@ TEST_SUITE("ClipStack")
 
 	TEST_CASE("Batches carry the clip of their elements")
 	{
-		FDrawElementList List;
+		FSlateWindowElementList List;
 		const FPaintGeometry Box = FPaintGeometry::Make({ 10.0f, 10.0f }, { 10.0f, 10.0f }, 1.0f);
 		List.AddSolidBox(0, Box, FColor::Red());
 		List.PushClip(FPaintGeometry::Make({ 0.0f, 0.0f }, { 100.0f, 100.0f }, 1.0f));
@@ -74,7 +74,7 @@ TEST_SUITE("ClipStack")
 
 		FFakeResolver Resolver;
 		FBatchedElements Out;
-		FElementBatcher().Batch(List, nullptr, Resolver, Out);
+		FSlateElementBatcher().Batch(List, nullptr, Resolver, Out);
 		REQUIRE(Out.Batches.size() == 3);
 		CHECK(Out.Batches[0].ClipIndex == INDEX_NONE);
 		CHECK(Out.Batches[1].ClipIndex == 0);

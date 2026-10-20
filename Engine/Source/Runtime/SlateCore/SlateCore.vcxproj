@@ -43,15 +43,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Private\Fonts\FontCache.cpp" />
-    <ClCompile Include="Private\Rendering\AtlasPacker.cpp" />
+    <ClCompile Include="Private\Textures\SlateTextureAtlas.cpp" />
     <ClCompile Include="Private\Rendering\DrawElements.cpp" />
-    <ClCompile Include="Private\Rendering\UIImage.cpp" />
-    <ClCompile Include="Private\Styling\Style.cpp" />
+    <ClCompile Include="Private\Rendering\RenderingCommon.cpp" />
+    <ClCompile Include="Private\Styling\SlateStyle.cpp" />
+    <ClCompile Include="Private\Styling\StarshipCoreStyle.cpp" />
     <ClCompile Include="Private\Text\TextLayout.cpp" />
     <ClCompile Include="Private\Widgets\SWidget.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Public\Application\UIApplicationBase.h" />
+    <ClInclude Include="Public\Application\SlateApplicationBase.h" />
     <ClInclude Include="Public\Fonts\FontCache.h" />
     <ClInclude Include="Public\Input\DragAndDrop.h" />
     <ClInclude Include="Public\Input\Events.h" />
@@ -60,13 +61,15 @@
     <ClInclude Include="Public\Layout\Children.h" />
     <ClInclude Include="Public\Layout\Geometry.h" />
     <ClInclude Include="Public\Layout\LayoutUtils.h" />
-    <ClInclude Include="Public\Rendering\AtlasPacker.h" />
+    <ClInclude Include="Public\Textures\SlateTextureAtlas.h" />
     <ClInclude Include="Public\Rendering\DrawElements.h" />
-    <ClInclude Include="Public\Rendering\UIImage.h" />
-    <ClInclude Include="Public\Rendering\WindowRenderer.h" />
-    <ClInclude Include="Public\Styling\StyleSet.h" />
-    <ClInclude Include="Public\Styling\StyleTypes.h" />
-    <ClInclude Include="Public\Styling\WidgetStyles.h" />
+    <ClInclude Include="Public\Rendering\RenderingCommon.h" />
+    <ClInclude Include="Public\Rendering\SlateRenderer.h" />
+    <ClInclude Include="Public\Styling\SlateStyle.h" />
+    <ClInclude Include="Public\Styling\SlateBrush.h" />
+    <ClInclude Include="Public\Styling\SlateTypes.h" />
+    <ClInclude Include="Public\Styling\SlateColor.h" />
+    <ClInclude Include="Public\Styling\StarshipCoreStyle.h" />
     <ClInclude Include="Public\Text\TextLayout.h" />
     <ClInclude Include="Public\Types\WidgetTypes.h" />
     <ClInclude Include="Public\Widgets\Attribute.h" />

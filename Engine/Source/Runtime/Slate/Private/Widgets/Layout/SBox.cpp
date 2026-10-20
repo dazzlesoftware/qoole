@@ -50,7 +50,7 @@ void SBox::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildre
 	ArrangeSlotChild(AllottedGeometry, ArrangedChildren, ChildSlotStorage.Slot, FVector2::Zero(), AllottedGeometry.Size);
 }
 
-int32 SBox::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SBox::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId, InWidgetStyle);
 }
@@ -70,7 +70,7 @@ void SBorder::Construct(const FArguments& Args)
 	}
 }
 
-void SBorder::SetBorderImage(const FStyleBrush* Brush)
+void SBorder::SetBorderImage(const FSlateBrush* Brush)
 {
 	if (BorderImage != Brush)
 	{
@@ -89,7 +89,7 @@ FReply SBorder::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPoint
 	return MouseDoubleClickHandler.IsBound() ? MouseDoubleClickHandler.Execute(Geometry, Event) : FReply::Unhandled();
 }
 
-int32 SBorder::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SBorder::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	if (BorderImage && BorderImage->IsVisible())

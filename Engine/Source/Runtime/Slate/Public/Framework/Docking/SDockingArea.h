@@ -29,9 +29,9 @@ protected:
 class SDockingSplitter : public SDockingNode
 {
 public:
-	GE_BEGIN_ARGS(SDockingSplitter)
-		GE_ARGUMENT(EOrientation, Orientation, EOrientation::Horizontal)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SDockingSplitter)
+		SLATE_ARGUMENT(EOrientation, Orientation, EOrientation::Horizontal)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -61,9 +61,9 @@ protected:
 class SDockingArea : public SDockingSplitter
 {
 public:
-	GE_BEGIN_ARGS(SDockingArea)
-		GE_ARGUMENT(EOrientation, Orientation, EOrientation::Horizontal)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SDockingArea)
+		SLATE_ARGUMENT(EOrientation, Orientation, EOrientation::Horizontal)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args, const TSharedRef<FTabManager>& InTabManager, bool bInPrimary, const TSharedPtr<SWindow>& InWindow);
 
@@ -75,7 +75,7 @@ public:
 	void GatherStacks(TArray<TSharedRef<SDockTabStack>>& Out) const;
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -89,7 +89,7 @@ private:
 class FDockTabDragDrop final : public FDragDropOperation
 {
 public:
-	GE_DRAG_DROP_OPERATION_TYPE(FDockTabDragDrop, FDragDropOperation)
+	DRAG_DROP_OPERATOR_TYPE(FDockTabDragDrop, FDragDropOperation)
 
 	TSharedPtr<SDockTab> Tab;
 	FVector2 SourceSize = FVector2(480.0f, 320.0f); // logical, for a new window
@@ -102,8 +102,8 @@ public:
 class SDockTabStack : public SDockingNode
 {
 public:
-	GE_BEGIN_ARGS(SDockTabStack)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SDockTabStack)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args, const TSharedRef<FTabManager>& InTabManager);
 
@@ -142,7 +142,7 @@ public:
 	FDropTarget ComputeDropTarget(const FGeometry& Geometry, FVector2 AbsolutePosition, const SDockTab& Dragged) const;
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:

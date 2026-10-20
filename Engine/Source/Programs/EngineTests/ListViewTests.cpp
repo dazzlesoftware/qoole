@@ -192,7 +192,7 @@ TEST_SUITE("UIViews")
 		class FRowDrag final : public FDragDropOperation
 		{
 		public:
-			GE_DRAG_DROP_OPERATION_TYPE(FRowDrag, FDragDropOperation)
+			DRAG_DROP_OPERATOR_TYPE(FRowDrag, FDragDropOperation)
 			int32 Item = 0;
 		};
 

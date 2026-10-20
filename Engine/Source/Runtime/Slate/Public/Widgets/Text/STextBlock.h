@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Text/TextLayout.h"
 #include "Widgets/SLeafWidget.h"
 
@@ -14,24 +14,24 @@
 class STextBlock : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(STextBlock)
-		GE_ATTRIBUTE(FString, Text, "")
-		GE_STYLE_ARGUMENT(FTextBlockStyle, TextStyle)
-		GE_OPTIONAL_ATTRIBUTE(FFontInfo, Font)
-		GE_OPTIONAL_ATTRIBUTE(FStyleColor, ColorAndOpacity)
-		GE_ARGUMENT(ETextJustify, Justification, ETextJustify::Left)
-		GE_ARGUMENT(bool, AutoWrapText, false) // wrap at the arranged width
-		GE_ATTRIBUTE(float, WrapTextAt, 0.0f)    // wrap at a fixed width (> 0)
-		GE_ARGUMENT(FMargin, Margin, FMargin())
-		GE_ATTRIBUTE(float, MinDesiredWidth, 0.0f)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(STextBlock)
+		SLATE_ATTRIBUTE(FString, Text, "")
+		SLATE_STYLE_ARGUMENT(FTextBlockStyle, TextStyle)
+		SLATE_OPTIONAL_ATTRIBUTE(FSlateFontInfo, Font)
+		SLATE_OPTIONAL_ATTRIBUTE(FSlateColor, ColorAndOpacity)
+		SLATE_ARGUMENT(ETextJustify, Justification, ETextJustify::Left)
+		SLATE_ARGUMENT(bool, AutoWrapText, false) // wrap at the arranged width
+		SLATE_ATTRIBUTE(float, WrapTextAt, 0.0f)    // wrap at a fixed width (> 0)
+		SLATE_ARGUMENT(FMargin, Margin, FMargin())
+		SLATE_ATTRIBUTE(float, MinDesiredWidth, 0.0f)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
 	const FString& GetText() const { return Text.Get(); }
 	void SetText(TAttribute<FString> InText) { Text.Assign(InText); }
-	void SetColorAndOpacity(TAttribute<FStyleColor> Color) { ColorAndOpacity.Assign(TAttribute<TOptional<FStyleColor>>::Create([Color] { return TOptional<FStyleColor>(Color.Get()); })); }
-	void SetFont(const FFontInfo& InFont);
+	void SetColorAndOpacity(TAttribute<FSlateColor> Color) { ColorAndOpacity.Assign(TAttribute<TOptional<FSlateColor>>::Create([Color] { return TOptional<FSlateColor>(Color.Get()); })); }
+	void SetFont(const FSlateFontInfo& InFont);
 	void SetAutoWrapText(bool bWrap);
 	void SetWrapTextAt(float Width) { WrapTextAt.Set(Width); }
 
@@ -41,20 +41,20 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
 	void OnPreArrange(const FGeometry& AllottedGeometry) override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
-	FFontInfo GetEffectiveFont() const;
+	FSlateFontInfo GetEffectiveFont() const;
 	float GetEffectiveWrapWidth() const;
 
 	TWidgetAttribute<FString, EInvalidateWidgetReason::Layout> Text{ *this };
-	TWidgetAttribute<TOptional<FStyleColor>, EInvalidateWidgetReason::Paint> ColorAndOpacity{ *this };
+	TWidgetAttribute<TOptional<FSlateColor>, EInvalidateWidgetReason::Paint> ColorAndOpacity{ *this };
 	TWidgetAttribute<float, EInvalidateWidgetReason::Layout> WrapTextAt{ *this, 0.0f };
 	TWidgetAttribute<float, EInvalidateWidgetReason::Layout> MinDesiredWidth{ *this, 0.0f };
 	const FTextBlockStyle* TextStyle = nullptr;
 	bool bExplicitStyle = false;
-	TOptional<FFontInfo> FontOverride;
+	TOptional<FSlateFontInfo> FontOverride;
 	ETextJustify Justification = ETextJustify::Left;
 	FMargin Margin;
 	bool bAutoWrap = false;

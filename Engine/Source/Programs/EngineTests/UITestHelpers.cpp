@@ -4,9 +4,9 @@
 
 namespace
 {
-	TSharedPtr<FFontCache>& SharedFontCache()
+	TSharedPtr<FSlateFontCache>& SharedFontCache()
 	{
-		static TSharedPtr<FFontCache> Cache;
+		static TSharedPtr<FSlateFontCache> Cache;
 		return Cache;
 	}
 }
@@ -17,15 +17,15 @@ void FUITestStyle::EnsureInitialized()
 	{
 		return;
 	}
-	SharedFontCache() = std::make_shared<FFontCache>();
-	const FGenesisFonts Fonts = FGenesisFonts::Load(*SharedFontCache());
+	SharedFontCache() = std::make_shared<FSlateFontCache>();
+	const FStarshipCoreFonts Fonts = FStarshipCoreFonts::Load(*SharedFontCache());
 	REQUIRE(Fonts.IsValid());
-	const TSharedRef<FStyleSet> Style = FGenesisStyle::Create(Fonts);
-	FStyleSet::Register(Style);
+	const TSharedRef<FSlateStyleSet> Style = FStarshipCoreStyle::Create(Fonts);
+	FSlateStyleSet::Register(Style);
 	FAppStyle::SetAppStyleSet(Style);
 }
 
-TSharedRef<FFontCache> FUITestStyle::GetFontCache()
+TSharedRef<FSlateFontCache> FUITestStyle::GetFontCache()
 {
 	EnsureInitialized();
 	return ToSharedRef(SharedFontCache());
@@ -35,14 +35,14 @@ FUITestApp::FUITestApp(float DpiScale)
 {
 	FUITestStyle::EnsureInitialized();
 	Platform = std::make_shared<FNullPlatformApplication>(DpiScale);
-	App = FUIApplication::Create(TSharedRef<IPlatformApplication>(StaticCastSharedPtr<IPlatformApplication>(Platform)), FUITestStyle::GetFontCache()).ToSharedPtr();
+	App = FSlateApplication::Create(TSharedRef<IPlatformApplication>(StaticCastSharedPtr<IPlatformApplication>(Platform)), FUITestStyle::GetFontCache()).ToSharedPtr();
 	App->SetTimeSource([this]() { return Time; });
 }
 
 FUITestApp::~FUITestApp()
 {
 	App.reset();
-	FUIApplication::Shutdown();
+	FSlateApplication::Shutdown();
 }
 
 TSharedRef<SWindow> FUITestApp::AddWindow(const TSharedRef<SWidget>& Content, FVector2 Size)
@@ -144,7 +144,7 @@ void FUITestApp::Type(std::string_view Text)
 
 FRect FUITestApp::RectOf(const SWidget& Widget)
 {
-	const TSharedPtr<SWindow> Window = FUIApplication::Get().FindWindowForWidget(Widget);
+	const TSharedPtr<SWindow> Window = FSlateApplication::Get().FindWindowForWidget(Widget);
 	REQUIRE(Window);
 	return Widget.GetCachedGeometry().GetLayoutBoundingRect().Scale(1.0f / Window->GetScale());
 }

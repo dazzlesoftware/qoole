@@ -12,9 +12,9 @@ public:
 	{
 	};
 
-	GE_BEGIN_ARGS(SOverlay)
-		GE_SLOTS(SOverlay::FSlot, Slots)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SOverlay)
+		SLATE_SLOT_ARGUMENT(SOverlay::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	static FSlot Slot() { return FSlot(); }
 
@@ -29,7 +29,7 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
 	void OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 	TPanelChildren<FSlot> Children{ this };
@@ -44,10 +44,10 @@ public:
 	{
 	};
 
-	GE_BEGIN_ARGS(SWidgetSwitcher)
-		GE_ATTRIBUTE(int32, WidgetIndex, 0)
-		GE_SLOTS(SWidgetSwitcher::FSlot, Slots)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SWidgetSwitcher)
+		SLATE_ATTRIBUTE(int32, WidgetIndex, 0)
+		SLATE_SLOT_ARGUMENT(SWidgetSwitcher::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	static FSlot Slot() { return FSlot(); }
 

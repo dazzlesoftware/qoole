@@ -84,7 +84,7 @@ protected:
 		AddNumber("Brightness", SAssignNew(Slider, SSlider).Value([this] { return Brightness; }).StepSize(0.05f)
 			.OnValueChanged([this](float Value) { Brightness = Value; SetLastEvent(FString::Format("Brightness {:.2f}", Value)); }),
 			TAttribute<FString>([this] { return FString::Format("{:.2f}", Brightness); }));
-		AddNumber("Volume (tinted)", SNew(SSlider).Value([this] { return Volume; }).BarColor(FStyleColor(EStyleColor::Success))
+		AddNumber("Volume (tinted)", SNew(SSlider).Value([this] { return Volume; }).BarColor(FSlateColor(EStyleColor::Success))
 			.OnValueChanged([this](float Value) { Volume = Value; }),
 			TAttribute<FString>([this] { return FString::Format("{:.2f}", Volume); }));
 		AddNumber("Disabled slider", SNew(SSlider).Value(0.3f).IsEnabled(false), FString("0.30"));

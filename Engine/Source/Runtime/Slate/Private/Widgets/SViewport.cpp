@@ -2,7 +2,7 @@
 
 #include "Widgets/SViewport.h"
 
-#include "Styling/StyleTypes.h"
+#include "Styling/SlateBrush.h"
 
 void SViewport::Construct(const FArguments& Args)
 {
@@ -41,16 +41,16 @@ void SViewport::OnPreArrange(const FGeometry& AllottedGeometry)
 	}
 }
 
-int32 SViewport::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SViewport::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	OutDrawElements.AddSolidBox(LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.Tinted(Background));
-	if (const TSharedPtr<IUIRenderTarget> Target = Client ? Client->GetRenderTarget() : nullptr)
+	if (const TSharedPtr<ISlateRenderTarget> Target = Client ? Client->GetRenderTarget() : nullptr)
 	{
 		OutDrawElements.AddViewport(LayerId + 1, Geometry.ToPaintGeometry(), Target, bAlphaBlend, InWidgetStyle.ColorAndOpacityTint);
 	}
 	if (HasKeyboardFocus())
 	{
-		OutDrawElements.AddRoundedBox(LayerId + 2, Geometry.ToPaintGeometry(), FColor::Transparent(), 0.0f, InWidgetStyle.Tinted(FStyleColor(EStyleColor::Primary).Resolve()), 1.0f);
+		OutDrawElements.AddRoundedBox(LayerId + 2, Geometry.ToPaintGeometry(), FColor::Transparent(), 0.0f, InWidgetStyle.Tinted(FSlateColor(EStyleColor::Primary).Resolve()), 1.0f);
 	}
 	return LayerId + 2;
 }

@@ -62,7 +62,7 @@ TSharedRef<SWidget> TestFrame(FTestApp& App, const FString& Title, const TShared
 				+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(STextBlock).TextStyle(&TestTextStyle("SmallText")).Text([&App] { return App.GetLastEvent(); })]
 				+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).TextStyle(&TestTextStyle("SmallText")).Text([]
 				{
-					const TSharedPtr<SWidget> Focused = FUIApplication::Get().GetKeyboardFocusedWidget();
+					const TSharedPtr<SWidget> Focused = FSlateApplication::Get().GetKeyboardFocusedWidget();
 					return FString::Format("Focus: {}   ·   F2 app scale, F3 DPI", Focused ? Focused->GetTypeName() : FString("none"));
 				})]
 			]

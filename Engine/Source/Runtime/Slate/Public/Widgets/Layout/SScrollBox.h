@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "Styling/StyleSet.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/Layout/SBoxPanel.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SLeafWidget.h"
@@ -14,11 +14,11 @@
 class SScrollBar : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SScrollBar)
-		GE_STYLE_ARGUMENT(FScrollBarStyle, Style)
-		GE_ARGUMENT(EOrientation, Orientation, EOrientation::Vertical)
-		GE_EVENT(FOnUserScrolled, OnUserScrolled)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SScrollBar)
+		SLATE_STYLE_ARGUMENT(FScrollBarStyle, Style)
+		SLATE_ARGUMENT(EOrientation, Orientation, EOrientation::Vertical)
+		SLATE_EVENT(FOnUserScrolled, OnUserScrolled)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
@@ -38,7 +38,7 @@ public:
 
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:
@@ -67,15 +67,15 @@ public:
 	{
 	};
 
-	GE_BEGIN_ARGS(SScrollBox)
-		GE_ARGUMENT(EOrientation, Orientation, EOrientation::Vertical)
-		GE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
-		GE_ARGUMENT(bool, ScrollBarAlwaysVisible, false)
-		GE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible) // Collapsed hides it for good
-		GE_ARGUMENT(float, WheelScrollAmount, 48.0f) // logical units per wheel notch
-		GE_EVENT(FOnUserScrolled, OnUserScrolled)    // new offset, logical units
-		GE_SLOTS(SScrollBox::FSlot, Slots)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SScrollBox)
+		SLATE_ARGUMENT(EOrientation, Orientation, EOrientation::Vertical)
+		SLATE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
+		SLATE_ARGUMENT(bool, ScrollBarAlwaysVisible, false)
+		SLATE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible) // Collapsed hides it for good
+		SLATE_ARGUMENT(float, WheelScrollAmount, 48.0f) // logical units per wheel notch
+		SLATE_EVENT(FOnUserScrolled, OnUserScrolled)    // new offset, logical units
+		SLATE_SLOT_ARGUMENT(SScrollBox::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	static FSlot Slot() { return FSlot(); }
 
@@ -140,11 +140,11 @@ public:
 		FOnFloatValueChanged OnResized;
 	};
 
-	GE_BEGIN_ARGS(SSplitter)
-		GE_ARGUMENT(EOrientation, Orientation, EOrientation::Horizontal)
-		GE_STYLE_ARGUMENT(FSplitterStyle, Style)
-		GE_SLOTS(SSplitter::FSlot, Slots)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SSplitter)
+		SLATE_ARGUMENT(EOrientation, Orientation, EOrientation::Horizontal)
+		SLATE_STYLE_ARGUMENT(FSplitterStyle, Style)
+		SLATE_SLOT_ARGUMENT(SSplitter::FSlot, Slots)
+	SLATE_END_ARGS()
 
 	static FSlot Slot() { return FSlot(); }
 
@@ -166,7 +166,7 @@ public:
 protected:
 	FVector2 ComputeDesiredSize(float LayoutScale) const override;
 	void OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const override;
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override;
 
 private:

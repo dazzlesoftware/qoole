@@ -15,7 +15,7 @@
 #include "MapObjectProperties.h"
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 #include "MapViewportClient.h"
-#include "UIRenderer.h"
+#include "SlateRHIRenderingPolicy.h"
 #include "Widgets/SViewport.h"
 
 #include <filesystem>
@@ -260,7 +260,7 @@ namespace
 		// Declared so that the application (which keeps the window, the
 		// viewport and so the client) goes before what the client uses.
 		TUniquePtr<FRHIDevice> Device;
-		TUniquePtr<FUIRenderer> Renderer;
+		TUniquePtr<FSlateRHIRenderingPolicy> Renderer;
 		TUniquePtr<FMapRenderResources> Resources;
 		FMapViewSettings Settings;
 		TUniquePtr<FMapDocument> Doc;
@@ -279,7 +279,7 @@ namespace
 			{
 				return false;
 			}
-			Renderer = MakeUnique<FUIRenderer>(*Device, *FUITestStyle::GetFontCache());
+			Renderer = MakeUnique<FSlateRHIRenderingPolicy>(*Device, *FUITestStyle::GetFontCache());
 			REQUIRE(Renderer->Initialize());
 			Resources = MakeUnique<FMapRenderResources>(*Device);
 			Doc = FMapDocument::CreateNew();
@@ -311,7 +311,7 @@ namespace
 			Client->RenderIfNeeded(CommandList);
 			Device->EndFrame();
 			TArray<uint8> Pixels;
-			auto* Target = static_cast<FUIRenderTarget*>(Client->GetRenderTarget().get());
+			auto* Target = static_cast<FSlateRenderTargetRHI*>(Client->GetRenderTarget().get());
 			REQUIRE(Target);
 			REQUIRE(Device->ReadbackTexture(Target->GetTexture(), Pixels));
 			return Pixels;

@@ -2,7 +2,7 @@
 
 #include "Widgets/Input/SMenuAnchor.h"
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBoxPanel.h"
 #include "Widgets/SToolTip.h"
@@ -33,7 +33,7 @@ bool SToolTip::IsEmpty() const
 	return !bHasCustomContent && Text.Get().IsEmpty();
 }
 
-int32 SToolTip::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+int32 SToolTip::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	Style->Background.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
@@ -113,7 +113,7 @@ void SMenuAnchor::SetIsOpen(bool bOpen, bool bFocusMenu)
 	{
 		return;
 	}
-	FUIApplication& App = FUIApplication::Get();
+	FSlateApplication& App = FSlateApplication::Get();
 	if (!bOpen)
 	{
 		if (const TSharedPtr<IMenu> Pinned = Menu.lock())
@@ -172,13 +172,13 @@ namespace
 	class SDownArrow final : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SDownArrow)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SDownArrow)
+		SLATE_END_ARGS()
 		void Construct(const FArguments&) {}
 
 	protected:
 		FVector2 ComputeDesiredSize(float) const override { return FVector2(10.0f, 10.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
 		{
 			const FVector2 C = Geometry.Size * 0.5f;
 			Out.AddLines(LayerId, Geometry.ToPaintGeometry(), { C + FVector2(-3.5f, -1.5f), C + FVector2(0.0f, 2.0f), C + FVector2(3.5f, -1.5f) }, Style.GetForegroundColor(), 1.5f);
@@ -190,14 +190,14 @@ namespace
 	class SCheckMark final : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SCheckMark)
-			GE_ATTRIBUTE(ECheckBoxState, State, ECheckBoxState::Unchecked)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SCheckMark)
+			SLATE_ATTRIBUTE(ECheckBoxState, State, ECheckBoxState::Unchecked)
+		SLATE_END_ARGS()
 		void Construct(const FArguments& Args) { State.Assign(Args._State); }
 
 	protected:
 		FVector2 ComputeDesiredSize(float) const override { return FVector2(14.0f, 14.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
 		{
 			const float S = Geometry.Size.Y;
 			if (State.Get() == ECheckBoxState::Checked)
@@ -219,13 +219,13 @@ namespace
 	class SRightArrow final : public SLeafWidget
 	{
 	public:
-		GE_BEGIN_ARGS(SRightArrow)
-		GE_END_ARGS()
+		SLATE_BEGIN_ARGS(SRightArrow)
+		SLATE_END_ARGS()
 		void Construct(const FArguments&) {}
 
 	protected:
 		FVector2 ComputeDesiredSize(float) const override { return FVector2(10.0f, 10.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
 		{
 			const FVector2 C = Geometry.Size * 0.5f;
 			Out.AddLines(LayerId, Geometry.ToPaintGeometry(), { C + FVector2(-1.5f, -3.5f), C + FVector2(2.0f, 0.0f), C + FVector2(-1.5f, 3.5f) }, Style.GetForegroundColor(), 1.5f);
@@ -288,7 +288,7 @@ void SMenuEntry::Construct(const FArguments& Args)
 	if (Args._InputGesture.IsSet())
 	{
 		Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(24.0f, 0.0f, 0.0f, 0.0f))
-			[SNew(STextBlock).Text(Args._InputGesture).ColorAndOpacity(FStyleColor(EStyleColor::ForegroundSecondary))];
+			[SNew(STextBlock).Text(Args._InputGesture).ColorAndOpacity(FSlateColor(EStyleColor::ForegroundSecondary))];
 	}
 	TSharedRef<SWidget> Content = Row;
 	if (Args._SubMenu.Widget || Args._OnGetSubMenu.IsBound())
@@ -322,7 +322,7 @@ FReply SMenuEntry::HandleClicked()
 		return FReply::Handled();
 	}
 	OnSelected.ExecuteIfBound();
-	FUIApplication::Get().DismissAllMenus();
+	FSlateApplication::Get().DismissAllMenus();
 	return FReply::Handled();
 }
 
@@ -339,7 +339,7 @@ FReply SMenuEntry::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
 void SMenuEntry::OnMouseEnter(const FGeometry& Geometry, const FPointerEvent& Event)
 {
 	SButton::OnMouseEnter(Geometry, Event);
-	FUIApplication& App = FUIApplication::Get();
+	FSlateApplication& App = FSlateApplication::Get();
 	// Hovering an entry closes submenus of its siblings and opens its own.
 	if (const TSharedPtr<IMenu> Menu = App.FindMenuContaining(*this))
 	{

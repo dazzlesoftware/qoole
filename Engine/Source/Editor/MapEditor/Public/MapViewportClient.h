@@ -106,7 +106,7 @@ private:
 class FMapViewportClient final : public FRenderTargetViewportClient
 {
 public:
-	FMapViewportClient(FRHIDevice& InDevice, FUIRenderer& InRenderer, FMapRenderResources& InResources, FMapViewSettings& InSettings, EMapViewType InType);
+	FMapViewportClient(FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer, FMapRenderResources& InResources, FMapViewSettings& InSettings, EMapViewType InType);
 	~FMapViewportClient() override;
 
 	EMapViewType GetType() const { return Type; }
@@ -151,7 +151,7 @@ public:
 	FCursorReply OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const override;
 
 protected:
-	void Draw(FRHICommandList& CommandList, FUIRenderTarget& Target) override;
+	void Draw(FRHICommandList& CommandList, FSlateRenderTargetRHI& Target) override;
 
 private:
 	enum class EDrag : uint8
@@ -183,7 +183,7 @@ private:
 	void ReportCursor(FVector2 Local);
 	void Fly(float DeltaSeconds);
 	void DrawGrid(FMapDraw& MapDraw);
-	void DrawOverlay(FDrawElementList& Elements, FIntPoint PixelSize);
+	void DrawOverlay(FSlateWindowElementList& Elements, FIntPoint PixelSize);
 	void OnDocumentChanged(EMapChange Change);
 	void FollowScope();
 	void Message(const FString& Text) const;
@@ -254,5 +254,5 @@ private:
 	FVector2 CursorLocal{ -1.0f, -1.0f };
 
 	TSharedPtr<FRHITexture> DepthBuffer;
-	FDrawElementList Elements;
+	FSlateWindowElementList Elements;
 };

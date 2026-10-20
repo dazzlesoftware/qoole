@@ -2,14 +2,14 @@
 
 #include "ElementBatcher.h"
 
-const char* ToString(EUIShader Shader)
+const char* ToString(ESlateShader Shader)
 {
 	switch (Shader)
 	{
-	case EUIShader::Default: return "Default";
-	case EUIShader::RoundedBox: return "RoundedBox";
-	case EUIShader::Line: return "Line";
-	case EUIShader::Count: break;
+	case ESlateShader::Default: return "Default";
+	case ESlateShader::RoundedBox: return "RoundedBox";
+	case ESlateShader::Line: return "Line";
+	case ESlateShader::Count: break;
 	}
 	return "?";
 }
@@ -25,9 +25,9 @@ void FBatchedElements::Reset()
 
 namespace
 {
-	FUIVertex MakeVertex(FVector2 Position, FVector2 UV, FColor Color)
+	FSlateVertex MakeVertex(FVector2 Position, FVector2 UV, FColor Color)
 	{
-		FUIVertex V{};
+		FSlateVertex V{};
 		V.Position = Position;
 		V.UV = UV;
 		V.Color = Color;
@@ -41,7 +41,7 @@ namespace
 	}
 }
 
-void FElementBatcher::Batch(const FDrawElementList& Elements, FFontCache* InFontCache, IUIResourceResolver& InResolver, FBatchedElements& InOut)
+void FSlateElementBatcher::Batch(const FSlateWindowElementList& Elements, FSlateFontCache* InFontCache, FSlateShaderResourceManager& InResolver, FBatchedElements& InOut)
 {
 	Out = &InOut;
 	FontCache = InFontCache;
@@ -50,7 +50,7 @@ void FElementBatcher::Batch(const FDrawElementList& Elements, FFontCache* InFont
 	Out->ClipRects = Elements.GetClipRects();
 	Out->ViewportSize = Elements.GetViewportSize();
 
-	const TArray<FDrawElement>& List = Elements.GetElements();
+	const TArray<FSlateDrawElement>& List = Elements.GetElements();
 	TArray<int32> Order(List.size());
 	for (int32 I = 0; I < static_cast<int32>(Order.size()); ++I)
 	{
@@ -60,34 +60,34 @@ void FElementBatcher::Batch(const FDrawElementList& Elements, FFontCache* InFont
 
 	for (int32 Index : Order)
 	{
-		const FDrawElement& Element = List[Index];
+		const FSlateDrawElement& Element = List[Index];
 		CurrentElement = &Element;
 		bNewElement = true;
 		switch (Element.Type)
 		{
-		case EDrawElementType::Box: AddBox(Element); break;
-		case EDrawElementType::RoundedBox: AddRoundedBox(Element); break;
-		case EDrawElementType::Text: AddText(Element); break;
-		case EDrawElementType::Lines: AddLines(Element); break;
-		case EDrawElementType::CustomVerts: AddCustomVerts(Element); break;
-		case EDrawElementType::Viewport: AddViewport(Element); break;
+		case EElementType::Box: AddBox(Element); break;
+		case EElementType::RoundedBox: AddRoundedBox(Element); break;
+		case EElementType::Text: AddText(Element); break;
+		case EElementType::Lines: AddLines(Element); break;
+		case EElementType::CustomVerts: AddCustomVerts(Element); break;
+		case EElementType::Viewport: AddViewport(Element); break;
 		}
 	}
 
 	// Drop batches that ended up empty (e.g. text of only spaces).
-	std::erase_if(Out->Batches, [](const FUIBatch& B) { return B.NumIndices == 0; });
+	std::erase_if(Out->Batches, [](const FSlateRenderBatch& B) { return B.NumIndices == 0; });
 	CurrentElement = nullptr;
 	Out = nullptr;
 }
 
-void FElementBatcher::UseKey(const FKey& Key)
+void FSlateElementBatcher::UseKey(const FKey& Key)
 {
-	TArray<FUIBatch>& Batches = Out->Batches;
+	TArray<FSlateRenderBatch>& Batches = Out->Batches;
 	const bool bSame = !Batches.empty() && Batches.back().Shader == Key.Shader && Batches.back().Blend == Key.Blend
 		&& Batches.back().Texture == Key.Texture && Batches.back().ClipIndex == Key.ClipIndex;
 	if (!bSame)
 	{
-		FUIBatch& Batch = Batches.emplace_back();
+		FSlateRenderBatch& Batch = Batches.emplace_back();
 		Batch.Layer = CurrentElement->Layer;
 		Batch.Shader = Key.Shader;
 		Batch.Blend = Key.Blend;
@@ -104,25 +104,25 @@ void FElementBatcher::UseKey(const FKey& Key)
 	}
 }
 
-uint32 FElementBatcher::AddVertex(const FUIVertex& Vertex)
+uint32 FSlateElementBatcher::AddVertex(const FSlateVertex& Vertex)
 {
 	Out->Vertices.push_back(Vertex);
 	return static_cast<uint32>(Out->Vertices.size() - 1);
 }
 
-void FElementBatcher::AddQuad(uint32 V0)
+void FSlateElementBatcher::AddQuad(uint32 V0)
 {
 	const uint32 Quad[6] = { V0, V0 + 1, V0 + 2, V0, V0 + 2, V0 + 3 };
 	Out->Indices.insert(Out->Indices.end(), std::begin(Quad), std::end(Quad));
 	Out->Batches.back().NumIndices += 6;
 }
 
-FVector2 FElementBatcher::Snap(FVector2 Pixel) const
+FVector2 FSlateElementBatcher::Snap(FVector2 Pixel) const
 {
 	return bPixelSnapping ? Pixel.Round() : Pixel;
 }
 
-void FElementBatcher::AddImageQuad(const FTransform2D& Transform, const FRect& LocalRect, const FRect& UV, FColor Color, bool bSnap)
+void FSlateElementBatcher::AddImageQuad(const FTransform2D& Transform, const FRect& LocalRect, const FRect& UV, FColor Color, bool bSnap)
 {
 	FVector2 P[4];
 	if (bSnap && Transform.IsAxisAligned())
@@ -150,13 +150,13 @@ void FElementBatcher::AddImageQuad(const FTransform2D& Transform, const FRect& L
 	AddQuad(V0);
 }
 
-void FElementBatcher::AddBox(const FDrawElement& Element)
+void FSlateElementBatcher::AddBox(const FSlateDrawElement& Element)
 {
-	const FBrush& Brush = Element.Get<FBoxElement>().Brush;
+	const FBrush& Brush = Element.Get<FSlateBoxElement>().Brush;
 	const FPaintGeometry& Geometry = Element.Geometry;
 	const FVector2 Size = Geometry.LocalSize;
 
-	FUIResolvedTexture Texture;
+	FSlateResolvedTexture Texture;
 	if (Brush.Image)
 	{
 		Texture = Resolver->ResolveImage(*Brush.Image);
@@ -165,7 +165,7 @@ void FElementBatcher::AddBox(const FDrawElement& Element)
 	{
 		Texture.Id = Resolver->GetWhiteTexture();
 	}
-	UseKey({ EUIShader::Default, EUIBlend::Alpha, Texture.Id, Element.ClipIndex });
+	UseKey({ ESlateShader::Default, ESlateBlendMode::Alpha, Texture.Id, Element.ClipIndex });
 
 	// The part of the texture the brush uses.
 	const FRect Region(MapUV(Texture.UVRect, Brush.UVRegion.GetTopLeft()), MapUV(Texture.UVRect, Brush.UVRegion.GetBottomRight()));
@@ -233,10 +233,10 @@ void FElementBatcher::AddBox(const FDrawElement& Element)
 	}
 }
 
-void FElementBatcher::AddRoundedBox(const FDrawElement& Element)
+void FSlateElementBatcher::AddRoundedBox(const FSlateDrawElement& Element)
 {
-	const FRoundedBoxElement& Data = Element.Get<FRoundedBoxElement>();
-	UseKey({ EUIShader::RoundedBox, EUIBlend::Premultiplied, Resolver->GetWhiteTexture(), Element.ClipIndex });
+	const FSlateRoundedBoxElement& Data = Element.Get<FSlateRoundedBoxElement>();
+	UseKey({ ESlateShader::RoundedBox, ESlateBlendMode::Premultiplied, Resolver->GetWhiteTexture(), Element.ClipIndex });
 
 	// Work in pixels when axis-aligned (snapped edges stay crisp), else in
 	// local units with LocalToPixel converting to pixels.
@@ -254,7 +254,7 @@ void FElementBatcher::AddRoundedBox(const FDrawElement& Element)
 	const FVector2 HalfPixels = Rect.GetSize() * (0.5f * LocalToPixel);
 	const float MaxRadius = FMath::Min(HalfPixels.X, HalfPixels.Y);
 
-	FUIVertex Base{};
+	FSlateVertex Base{};
 	Base.Color = Element.Color;
 	Base.SecondaryColor = Data.OutlineColor;
 	Base.Params0[0] = HalfPixels.X;
@@ -274,7 +274,7 @@ void FElementBatcher::AddRoundedBox(const FDrawElement& Element)
 	uint32 V0 = 0;
 	for (int32 I = 0; I < 4; ++I)
 	{
-		FUIVertex V = Base;
+		FSlateVertex V = Base;
 		V.Position = Transform.TransformPoint(Corners[I]);
 		V.UV = (Corners[I] - Center) * LocalToPixel; // pixels from the center
 		const uint32 Index = AddVertex(V);
@@ -286,9 +286,9 @@ void FElementBatcher::AddRoundedBox(const FDrawElement& Element)
 	AddQuad(V0);
 }
 
-void FElementBatcher::AddText(const FDrawElement& Element)
+void FSlateElementBatcher::AddText(const FSlateDrawElement& Element)
 {
-	const FShapedText& Text = *Element.Get<FTextElement>().Text;
+	const FShapedGlyphSequence& Text = *Element.Get<FSlateTextElement>().Text;
 	if (!ensuref(FontCache, "Text elements need a font cache"))
 	{
 		return;
@@ -303,14 +303,14 @@ void FElementBatcher::AddText(const FDrawElement& Element)
 	}
 	const float InvPage = 1.0f / static_cast<float>(FFontAtlasPage::Size);
 
-	for (const FShapedGlyph& Glyph : Text.Glyphs)
+	for (const FShapedGlyphEntry& Glyph : Text.Glyphs)
 	{
 		const FCachedGlyph& Cached = FontCache->GetGlyph(*Glyph.Face, Text.PixelSize, Glyph.GlyphIndex);
 		if (Cached.PageIndex < 0)
 		{
 			continue;
 		}
-		UseKey({ EUIShader::Default, EUIBlend::Alpha, Resolver->GetGlyphPageTexture(Cached.PageIndex), Element.ClipIndex });
+		UseKey({ ESlateShader::Default, ESlateBlendMode::Alpha, Resolver->GetGlyphPageTexture(Cached.PageIndex), Element.ClipIndex });
 
 		const float W = static_cast<float>(Cached.AtlasRect.Width());
 		const float H = static_cast<float>(Cached.AtlasRect.Height());
@@ -330,10 +330,10 @@ void FElementBatcher::AddText(const FDrawElement& Element)
 	}
 }
 
-void FElementBatcher::AddLines(const FDrawElement& Element)
+void FSlateElementBatcher::AddLines(const FSlateDrawElement& Element)
 {
-	const FLinesElement& Data = Element.Get<FLinesElement>();
-	UseKey({ EUIShader::Line, EUIBlend::Alpha, Resolver->GetWhiteTexture(), Element.ClipIndex });
+	const FSlateLineElement& Data = Element.Get<FSlateLineElement>();
+	UseKey({ ESlateShader::Line, ESlateBlendMode::Alpha, Resolver->GetWhiteTexture(), Element.ClipIndex });
 
 	TArray<FVector2> Points;
 	Points.reserve(Data.Points.size() + 1);
@@ -403,7 +403,7 @@ void FElementBatcher::AddLines(const FDrawElement& Element)
 		if (!bClosed && I == 0) Along = -DirOut * 1.0f;
 		if (!bClosed && I == Count - 1) Along = DirIn * 1.0f;
 
-		FUIVertex V{};
+		FSlateVertex V{};
 		V.Color = Element.Color;
 		V.Params0[0] = HalfWidth;
 		V.Params0[1] = Fade;
@@ -423,10 +423,10 @@ void FElementBatcher::AddLines(const FDrawElement& Element)
 	}
 }
 
-void FElementBatcher::AddCustomVerts(const FDrawElement& Element)
+void FSlateElementBatcher::AddCustomVerts(const FSlateDrawElement& Element)
 {
-	const FCustomVertsElement& Data = Element.Get<FCustomVertsElement>();
-	FUIResolvedTexture Texture;
+	const FSlateCustomVertsElement& Data = Element.Get<FSlateCustomVertsElement>();
+	FSlateResolvedTexture Texture;
 	if (Data.Image)
 	{
 		Texture = Resolver->ResolveImage(*Data.Image);
@@ -435,10 +435,10 @@ void FElementBatcher::AddCustomVerts(const FDrawElement& Element)
 	{
 		Texture.Id = Resolver->GetWhiteTexture();
 	}
-	UseKey({ EUIShader::Default, EUIBlend::Alpha, Texture.Id, Element.ClipIndex });
+	UseKey({ ESlateShader::Default, ESlateBlendMode::Alpha, Texture.Id, Element.ClipIndex });
 
 	const uint32 Base = static_cast<uint32>(Out->Vertices.size());
-	for (const FUIVertex2D& Vertex : Data.Vertices)
+	for (const FSlateVertex2D& Vertex : Data.Vertices)
 	{
 		AddVertex(MakeVertex(Element.Geometry.Transform.TransformPoint(Vertex.Position), MapUV(Texture.UVRect, Vertex.UV), Vertex.Color));
 	}
@@ -450,10 +450,10 @@ void FElementBatcher::AddCustomVerts(const FDrawElement& Element)
 	Out->Batches.back().NumIndices += static_cast<uint32>(Data.Indices.size());
 }
 
-void FElementBatcher::AddViewport(const FDrawElement& Element)
+void FSlateElementBatcher::AddViewport(const FSlateDrawElement& Element)
 {
-	const FViewportElement& Data = Element.Get<FViewportElement>();
-	const FUIResolvedTexture Texture = Resolver->ResolveRenderTarget(*Data.RenderTarget);
-	UseKey({ EUIShader::Default, Data.bAlphaBlend ? EUIBlend::Alpha : EUIBlend::Opaque, Texture.Id, Element.ClipIndex });
+	const FSlateViewportElement& Data = Element.Get<FSlateViewportElement>();
+	const FSlateResolvedTexture Texture = Resolver->ResolveRenderTarget(*Data.RenderTarget);
+	UseKey({ ESlateShader::Default, Data.bAlphaBlend ? ESlateBlendMode::Alpha : ESlateBlendMode::Opaque, Texture.Id, Element.ClipIndex });
 	AddImageQuad(Element.Geometry.Transform, FRect(FVector2(), Element.Geometry.LocalSize), Texture.UVRect, Element.Color, true);
 }

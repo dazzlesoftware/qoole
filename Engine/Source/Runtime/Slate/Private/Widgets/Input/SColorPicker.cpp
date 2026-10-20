@@ -24,16 +24,16 @@ FReply SColorBlock::OnMouseButtonDown(const FGeometry& Geometry, const FPointerE
 	return OnClick.IsBound() ? OnClick.Execute(Geometry, Event) : FReply::Unhandled();
 }
 
-int32 SColorBlock::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SColorBlock::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const FVector2 S = Geometry.Size;
-	const FColor Border = InWidgetStyle.Tinted(FStyleColor(EStyleColor::Border).Resolve());
+	const FColor Border = InWidgetStyle.Tinted(FSlateColor(EStyleColor::Border).Resolve());
 	if (IsUndetermined.Get())
 	{
 		// Diagonal stripes of grey: "several values".
-		OutDrawElements.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.Tinted(FStyleColor(EStyleColor::Input).Resolve()), CornerRadius, Border, 1.0f);
+		OutDrawElements.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.Tinted(FSlateColor(EStyleColor::Input).Resolve()), CornerRadius, Border, 1.0f);
 		OutDrawElements.AddLines(LayerId + 1, Geometry.ToPaintGeometry(), { FVector2(4.0f, S.Y - 3.0f), FVector2(S.X - 4.0f, 3.0f) },
-			InWidgetStyle.Tinted(FStyleColor(EStyleColor::ForegroundSecondary).Resolve()), 1.5f);
+			InWidgetStyle.Tinted(FSlateColor(EStyleColor::ForegroundSecondary).Resolve()), 1.5f);
 		return LayerId + 1;
 	}
 	const FColor C = Color.Get();
@@ -100,7 +100,7 @@ void SColorPicker::SetColor(FColor NewColor, bool bNotify)
 	}
 }
 
-TSharedRef<SWidget> SColorPicker::MakeChannel(const char* Label, int32 Channel, FStyleColor BarColor)
+TSharedRef<SWidget> SColorPicker::MakeChannel(const char* Label, int32 Channel, FSlateColor BarColor)
 {
 	const auto Get = [this, Channel]() -> uint8
 	{
@@ -155,12 +155,12 @@ void SColorPicker::Construct(const FArguments& Args)
 		[
 			SNew(SColorBlock).Size(FVector2(240.0f, 36.0f)).CornerRadius(4.0f).Color([this] { return Color; })
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 2.0f))[MakeChannel("R", 0, FStyleColor(FColor(235, 80, 80)))]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 2.0f))[MakeChannel("G", 1, FStyleColor(FColor(90, 210, 110)))]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 2.0f))[MakeChannel("B", 2, FStyleColor(FColor(90, 150, 255)))];
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 2.0f))[MakeChannel("R", 0, FSlateColor(FColor(235, 80, 80)))]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 2.0f))[MakeChannel("G", 1, FSlateColor(FColor(90, 210, 110)))]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 2.0f))[MakeChannel("B", 2, FSlateColor(FColor(90, 150, 255)))];
 	if (bUseAlpha)
 	{
-		Box->AddSlot().AutoHeight().Padding(FMargin(0.0f, 2.0f))[MakeChannel("A", 3, FStyleColor(EStyleColor::ForegroundSecondary))];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.0f, 2.0f))[MakeChannel("A", 3, FSlateColor(EStyleColor::ForegroundSecondary))];
 	}
 	Box->AddSlot().AutoHeight().Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
 	[

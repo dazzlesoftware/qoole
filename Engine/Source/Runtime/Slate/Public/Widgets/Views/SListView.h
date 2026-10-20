@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "Application/UIApplication.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Views/STableViewBase.h"
 
@@ -51,8 +51,8 @@ using FOnCanAcceptRowDrop = TDelegate<bool(const FDragDropEvent&)>;
 class SExpanderArrow : public SLeafWidget
 {
 public:
-	GE_BEGIN_ARGS(SExpanderArrow)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SExpanderArrow)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments&, TFunction<bool()> InIsExpanded, TFunction<bool()> InHasChildren, TFunction<void()> InToggle)
 	{
@@ -73,14 +73,14 @@ public:
 
 protected:
 	FVector2 ComputeDesiredSize(float) const override { return FVector2(16.0f, 16.0f); }
-	int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FDrawElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+	int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
 	{
 		if (!HasChildren())
 		{
 			return LayerId;
 		}
 		const FVector2 C = Geometry.Size * 0.5f;
-		const FColor Color = IsHovered() ? Style.Tinted(FStyleColor(EStyleColor::ForegroundHover).Resolve()) : Style.GetForegroundColor();
+		const FColor Color = IsHovered() ? Style.Tinted(FSlateColor(EStyleColor::ForegroundHover).Resolve()) : Style.GetForegroundColor();
 		const TArray<FVector2> Points = IsExpanded()
 			? TArray<FVector2>{ C + FVector2(-4.0f, -2.0f), C + FVector2(0.0f, 2.5f), C + FVector2(4.0f, -2.0f) }
 			: TArray<FVector2>{ C + FVector2(-2.0f, -4.0f), C + FVector2(2.5f, 0.0f), C + FVector2(-2.0f, 4.0f) };
@@ -100,14 +100,14 @@ template <typename ItemType>
 class STableRow : public SCompoundWidget, public ITableRow
 {
 public:
-	GE_BEGIN_ARGS(STableRow)
-		GE_STYLE_ARGUMENT(FTableRowStyle, Style)
-		GE_ARGUMENT(FMargin, Padding, FMargin(4.0f, 2.0f))
-		GE_EVENT(FOnDragRowDetected, OnDragDetected)
-		GE_EVENT(FOnRowDrop, OnDrop)
-		GE_EVENT(FOnCanAcceptRowDrop, OnCanAcceptDrop)
-		GE_DEFAULT_SLOT(Content)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(STableRow)
+		SLATE_STYLE_ARGUMENT(FTableRowStyle, Style)
+		SLATE_ARGUMENT(FMargin, Padding, FMargin(4.0f, 2.0f))
+		SLATE_EVENT(FOnDragRowDetected, OnDragDetected)
+		SLATE_EVENT(FOnRowDrop, OnDrop)
+		SLATE_EVENT(FOnCanAcceptRowDrop, OnCanAcceptDrop)
+		SLATE_DEFAULT_SLOT(Content)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args, const TSharedRef<STableViewBase>& InOwner)
 	{
@@ -200,14 +200,14 @@ public:
 	}
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FDrawElementList& OutDrawElements,
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 	{
 		const ITypedTableView<ItemType>* View = GetView();
 		const FTableRowStyle& RowStyle = Style ? *Style : (View ? View->Private_GetRowStyle() : FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("TableRow"));
 		const bool bSelected = View && View->Private_IsItemSelected(Item);
 		const bool bFocused = View && View->Private_IsViewFocused();
-		const FStyleBrush& Brush = bSelected ? (IsHovered() ? RowStyle.SelectedHovered : (bFocused ? RowStyle.ActiveSelected : RowStyle.InactiveSelected))
+		const FSlateBrush& Brush = bSelected ? (IsHovered() ? RowStyle.SelectedHovered : (bFocused ? RowStyle.ActiveSelected : RowStyle.InactiveSelected))
 			: (IsHovered() ? RowStyle.Hovered : (IndexInList % 2 ? RowStyle.Odd : RowStyle.Even));
 		Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 
@@ -276,17 +276,17 @@ public:
 	using FOnSelectionChanged = TDelegate<void(ItemType, ESelectInfo)>;
 	using FOnMouseButtonDoubleClick = TDelegate<void(ItemType)>;
 
-	GE_BEGIN_ARGS(SListView)
-		GE_ARGUMENT(const TArray<ItemType>*, ListItemsSource, nullptr)
-		GE_EVENT(FOnGenerateRow, OnGenerateRow)
-		GE_EVENT(FOnSelectionChanged, OnSelectionChanged)
-		GE_EVENT(FOnMouseButtonDoubleClick, OnMouseButtonDoubleClick)
-		GE_ARGUMENT(ESelectionMode, SelectionMode, ESelectionMode::Single)
-		GE_STYLE_ARGUMENT(FTableRowStyle, RowStyle)
-		GE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
-		GE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible)
-		GE_ARGUMENT(float, WheelScrollAmount, 48.0f)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(SListView)
+		SLATE_ARGUMENT(const TArray<ItemType>*, ListItemsSource, nullptr)
+		SLATE_EVENT(FOnGenerateRow, OnGenerateRow)
+		SLATE_EVENT(FOnSelectionChanged, OnSelectionChanged)
+		SLATE_EVENT(FOnMouseButtonDoubleClick, OnMouseButtonDoubleClick)
+		SLATE_ARGUMENT(ESelectionMode, SelectionMode, ESelectionMode::Single)
+		SLATE_STYLE_ARGUMENT(FTableRowStyle, RowStyle)
+		SLATE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
+		SLATE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible)
+		SLATE_ARGUMENT(float, WheelScrollAmount, 48.0f)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args)
 	{
@@ -579,19 +579,19 @@ public:
 	using FOnSelectionChanged = typename Super::FOnSelectionChanged;
 	using FOnMouseButtonDoubleClick = typename Super::FOnMouseButtonDoubleClick;
 
-	GE_BEGIN_ARGS(STreeView)
-		GE_ARGUMENT(const TArray<ItemType>*, TreeItemsSource, nullptr)
-		GE_EVENT(FOnGetChildren, OnGetChildren)
-		GE_EVENT(FOnExpansionChanged, OnExpansionChanged)
-		GE_EVENT(FOnGenerateRow, OnGenerateRow)
-		GE_EVENT(FOnSelectionChanged, OnSelectionChanged)
-		GE_EVENT(FOnMouseButtonDoubleClick, OnMouseButtonDoubleClick)
-		GE_ARGUMENT(ESelectionMode, SelectionMode, ESelectionMode::Single)
-		GE_STYLE_ARGUMENT(FTableRowStyle, RowStyle)
-		GE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
-		GE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible)
-		GE_ARGUMENT(float, WheelScrollAmount, 48.0f)
-	GE_END_ARGS()
+	SLATE_BEGIN_ARGS(STreeView)
+		SLATE_ARGUMENT(const TArray<ItemType>*, TreeItemsSource, nullptr)
+		SLATE_EVENT(FOnGetChildren, OnGetChildren)
+		SLATE_EVENT(FOnExpansionChanged, OnExpansionChanged)
+		SLATE_EVENT(FOnGenerateRow, OnGenerateRow)
+		SLATE_EVENT(FOnSelectionChanged, OnSelectionChanged)
+		SLATE_EVENT(FOnMouseButtonDoubleClick, OnMouseButtonDoubleClick)
+		SLATE_ARGUMENT(ESelectionMode, SelectionMode, ESelectionMode::Single)
+		SLATE_STYLE_ARGUMENT(FTableRowStyle, RowStyle)
+		SLATE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
+		SLATE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible)
+		SLATE_ARGUMENT(float, WheelScrollAmount, 48.0f)
+	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args)
 	{

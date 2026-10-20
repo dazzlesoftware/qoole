@@ -128,7 +128,7 @@ void SSlider::OnFocusLost(const FFocusEvent&)
 	Invalidate(EInvalidateWidgetReason::Paint);
 }
 
-int32 SSlider::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FDrawElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SSlider::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	FColor Tint = InWidgetStyle.ColorAndOpacityTint;
 	if (!Args.bEnabled)
