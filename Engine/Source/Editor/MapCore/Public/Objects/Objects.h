@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "entity.h"
 #include "LCommon.h"
 #include "StaticMesh.h"
+#include "Landscape.h"
 
 //==================== Object ====================
 
@@ -98,8 +99,17 @@ class Object : public ElmNode, public TransSpace {
   bool HasMesh(void) const { return mesh != nullptr; };
   const StaticMesh &GetMesh(void) const { check(mesh != nullptr); return *mesh; };
   const std::shared_ptr<const StaticMesh> &GetMeshPtr(void) const { return mesh; };
-  // Returns the mesh it held.
+  // Returns the mesh it held. A landscape's leaf stops being one.
   std::shared_ptr<const StaticMesh> SetMesh(std::shared_ptr<const StaticMesh> meshPtr);
+
+  //===== Landscape (Genesis) =====
+  // A landscape leaf holds the heightfield and draws, picks and bounds with
+  // its mesh (HasMesh is true too).
+  bool HasLandscape(void) const { return landscape != nullptr; };
+  const Landscape &GetLandscape(void) const { check(landscape != nullptr); return *landscape; };
+  const std::shared_ptr<const Landscape> &GetLandscapePtr(void) const { return landscape; };
+  // Returns the landscape it held (null takes the landscape and its mesh away).
+  std::shared_ptr<const Landscape> SetLandscape(std::shared_ptr<const Landscape> landPtr);
 
   //===== Entity Info =====
   bool HasEntity(void) const;
@@ -206,6 +216,7 @@ class Object : public ElmNode, public TransSpace {
   Geometry *brush;
   Entity *entityPtr;
   std::shared_ptr<const StaticMesh> mesh;
+  std::shared_ptr<const Landscape> landscape;
   bool viewTag;
   bool itemApprx;
   bool treeAttrib;

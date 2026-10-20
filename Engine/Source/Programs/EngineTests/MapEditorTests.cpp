@@ -12,6 +12,10 @@
 #include "MapCoreHeaders.h"
 #include "MapDocument.h"
 #include "MapEditorEnvironment.h"
+#include "MapHeightmap.h"
+#include "MapLandscapeTextures.h"
+#include "HAL/File.h"
+#include "MapLandscapeMode.h"
 #include "MapObjectProperties.h"
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 #include "MapViewportClient.h"
@@ -1168,6 +1172,964 @@ TEST_SUITE("MapEditor")
 		for (const FString& Problem : Log.Problems)
 		{
 			MESSAGE(Problem.c_str());
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Landscapes: heightfields sculpted in the Landscape mode.
+
+
+namespace
+{
+	float HeightAt(const Object& Land, int32 X, int32 Y)
+	{
+		return Land.GetLandscape().GetHeight(X, Y);
+	}
+
+	bool AllFlat(const Object& Land)
+	{
+		for (const float H : Land.GetLandscape().GetHeights())
+		{
+			if (H != 0.0f)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("A landscape is a grid of heights centered on its pivot, with a mesh to draw and pick")
+	{
+		EnsureMapCore();
+		const Landscape Field(4, 2, 32.0f);
+		CHECK(Field.GetPointsX() == 5);
+		CHECK(Field.GetPointsY() == 3);
+		CHECK(Field.GetHeights().size() == 15);
+		CHECK(Same(Field.GetPoint(0, 0), Vector3d(-64.0f, -32.0f, 0.0f)));
+		CHECK(Same(Field.GetPoint(4, 2), Vector3d(64.0f, 32.0f, 0.0f)));
+		CHECK(Field.GetMesh()->GetTriangles().size() == 16);
+		CHECK(Field.GetMesh()->GetEdgeList().NumOfElm() == 4 * 3 + 5 * 2);
+
+		std::vector<float> Heights(15, 0.0f);
+		Heights[7] = 10.0f; // (2, 1), the middle
+		const std::shared_ptr<const Landscape> Bumped = Field.WithHeights(Heights);
+		REQUIRE(Bumped);
+		CHECK(Bumped->GetHeight(2, 1) == 10.0f);
+		CHECK(FMath::Abs(Bumped->SampleHeight(16.0f, 0.0f) - 5.0f) < 0.01f); // halfway to the next point
+		CHECK(Bumped->SampleHeight(1000.0f, 1000.0f) == 0.0f);                 // clamped at the edge
+		CHECK(!Field.WithHeights(std::vector<float>(3, 0.0f)));
+		CHECK(Field.GetHeight(2, 1) == 0.0f); // the original never changes
+
+		// The mesh follows the heights: a ray down hits the bump's top.
+		float Depth = 0.0f;
+		REQUIRE(Bumped->GetMesh()->HitMesh(Line(Vector3d(0.0f, 0.0f, 100.0f), Vector3d(0.0f, 0.0f, -1.0f)), 0.0f, 1000.0f, Depth));
+		CHECK(FMath::Abs(Depth - 90.0f) < 0.01f);
+	}
+
+	TEST_CASE("The Landscape mode sculpts, smooths, flattens and roughens, a stroke at a time")
+	{
+		EnsureMapCore();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		Mode.NewQuadsX = 32;
+		Mode.NewQuadsY = 32;
+		Mode.NewQuadSize = 32.0f;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		CHECK(Land->HasLandscape());
+		CHECK(Land->HasMesh());
+		CHECK(Doc->GetUndoDescription() == "Add Landscape");
+		CHECK(AllFlat(*Land));
+
+		// A ray from above finds it.
+		Vector3d Hit;
+		CHECK(Mode.TraceLandscape(Vector3d(40.0f, -20.0f, 500.0f), Vector3d(0.0f, 0.0f, -1.0f), Hit) == Land);
+		CHECK(Same(Hit, Vector3d(40.0f, -20.0f, 0.0f)));
+		CHECK(!Mode.TraceLandscape(Vector3d(5000.0f, 0.0f, 500.0f), Vector3d(0.0f, 0.0f, -1.0f), Hit));
+
+		// Sculpt: a stroke at the middle raises it, not the corner; one undo step.
+		Mode.Tool = ELandscapeTool::Sculpt;
+		Mode.Brush.Radius = 128.0f;
+		Mode.Brush.Strength = 1.0f;
+		Mode.Brush.Falloff = 0.5f;
+		const Vector3d Middle(0.0f, 0.0f, 0.0f);
+		REQUIRE(Mode.BeginStroke(*Land, Middle, false));
+		CHECK(Mode.IsStroking());
+		for (int32 Tick = 0; Tick < 10; ++Tick)
+		{
+			Mode.ApplyAt(*Land, Middle, 1.0f / 60.0f, false);
+		}
+		Mode.EndStroke();
+		CHECK(!Doc->IsInTransaction());
+		const float Raised = HeightAt(*Land, 16, 16);
+		CHECK(Raised > 40.0f); // 256 units a second at full strength, 11 steps of 1/60 s
+		CHECK(HeightAt(*Land, 16 + 3, 16) < Raised); // falloff
+		CHECK(HeightAt(*Land, 0, 0) == 0.0f);         // outside the brush
+		CHECK(Doc->GetUndoDescription() == "Landscape Sculpt");
+		Doc->Undo();
+		CHECK(AllFlat(*Land));
+		Doc->Redo();
+		CHECK(HeightAt(*Land, 16, 16) == Raised);
+
+		// Shift lowers.
+		Mode.BeginStroke(*Land, Middle, true);
+		Mode.EndStroke();
+		CHECK(HeightAt(*Land, 16, 16) < Raised);
+
+		// Smooth brings the peak down toward its neighbours.
+		const float Peak = HeightAt(*Land, 16, 16);
+		Mode.Tool = ELandscapeTool::Smooth;
+		Mode.Brush.Radius = 64.0f;
+		Mode.BeginStroke(*Land, Middle, false);
+		Mode.ApplyAt(*Land, Middle, 0.5f, false);
+		Mode.EndStroke();
+		CHECK(HeightAt(*Land, 16, 16) < Peak);
+
+		// Flatten pulls the ground to where the stroke began (the edge, 0).
+		Mode.Tool = ELandscapeTool::Flatten;
+		Mode.Brush.Radius = 256.0f;
+		const Vector3d Edge(-400.0f, -400.0f, 0.0f);
+		Mode.BeginStroke(*Land, Edge, false);
+		for (int32 Tick = 0; Tick < 30; ++Tick)
+		{
+			Mode.ApplyAt(*Land, Middle, 0.1f, false);
+		}
+		Mode.EndStroke();
+		CHECK(FMath::Abs(HeightAt(*Land, 16, 16)) < 1.0f);
+
+		// Noise roughens a flat landscape.
+		while (Doc->CanUndo() && Doc->GetUndoDescription() != "Add Landscape")
+		{
+			Doc->Undo();
+		}
+		CHECK(AllFlat(*Land));
+		Mode.Tool = ELandscapeTool::Noise;
+		Mode.BeginStroke(*Land, Middle, false);
+		Mode.ApplyAt(*Land, Middle, 0.2f, false);
+		Mode.EndStroke();
+		CHECK(!AllFlat(*Land));
+	}
+
+	TEST_CASE("Landscapes are saved in .qle with their heights and left out of .map")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Land = Doc->AddLandscape(40, 24, 16.0f, Vector3d(32.0f, 0.0f, -16.0f));
+		REQUIRE(Land);
+		std::vector<float> Heights = Land->GetLandscape().GetHeights();
+		for (SIZE_T Index = 0; Index < Heights.size(); ++Index)
+		{
+			Heights[Index] = static_cast<float>(Index % 17) * 2.5f;
+		}
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithHeights(Heights));
+		Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 64.0f));
+		FString Error;
+		const FString Qle = Temp.File("land.qle");
+		REQUIRE(Doc->Save(Qle, Error));
+
+		TUniquePtr<FMapDocument> Reopened = FMapDocument::Open(Qle, Error);
+		REQUIRE(Reopened);
+		Object* Loaded = nullptr;
+		for (Object* Obj : Reopened->GetObjects())
+		{
+			Loaded = Obj->HasLandscape() ? Obj : Loaded;
+		}
+		REQUIRE(Loaded);
+		CHECK(Loaded->GetLandscape().GetQuadsX() == 40);
+		CHECK(Loaded->GetLandscape().GetQuadsY() == 24);
+		CHECK(Loaded->GetLandscape().GetQuadSize() == 16.0f);
+		CHECK(Loaded->GetLandscape().GetHeights() == Heights);
+		CHECK(Same(PositionOf(Loaded), Vector3d(32.0f, 0.0f, -16.0f)));
+		CHECK(Reopened->CountBrushes() == 1);
+
+		const FString Map = Temp.File("land.map");
+		REQUIRE(Doc->Save(Map, Error));
+		TUniquePtr<FMapDocument> Imported = FMapDocument::Open(Map, Error);
+		REQUIRE(Imported);
+		CHECK(Imported->CountMeshes() == 0);
+		CHECK(Imported->CountBrushes() == 1);
+	}
+
+	TEST_CASE("In the Landscape mode a click on a landscape in the 3D view sculpts it")
+	{
+		FTestLogCapture Log;
+		FViewFixture F;
+		if (!F.Create(ERHIBackend::D3D12, EMapViewType::Perspective))
+		{
+			MESSAGE("D3D12 device unavailable; skipped");
+			return;
+		}
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(F.Doc.get());
+		Mode.NewQuadsX = 32;
+		Mode.NewQuadsY = 32;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		F.Doc->ClearSelection();
+		F.Client->ResetCamera();
+		F.Settings.EditorMode = &Mode;
+		F.Render();
+		const FVector2 Center = F.At(Vector3d(0.0f, 0.0f, 0.0f));
+		Vector3d RayOrigin, RayDirection, RayHit;
+		REQUIRE(F.Client->GetCursorRay(Center, RayOrigin, RayDirection));
+		CHECK(Mode.TraceLandscape(RayOrigin, RayDirection, RayHit) == Land);
+		CHECK(FMath::Abs(RayHit.GetZ()) < 0.01f);
+		// A click without the mode selects the landscape; with it, a quick
+		// second press (a double click) is a stroke.
+		F.Settings.EditorMode = nullptr;
+		F.T.Click(ToSharedRef(F.Window), Center);
+		CHECK(F.Doc->IsSelected(Land));
+		F.Doc->ClearSelection();
+		F.Settings.EditorMode = &Mode;
+		F.T.MouseMove(ToSharedRef(F.Window), Center);
+		F.T.MouseDown(ToSharedRef(F.Window), Center);
+		F.T.Tick();
+		CHECK(Mode.IsStroking());
+		CHECK(F.Doc->IsInTransaction());
+		F.Render(); // ticks the stroke
+		F.T.MouseUp(ToSharedRef(F.Window), Center);
+		F.T.Tick();
+		CHECK(!Mode.IsStroking());
+		CHECK(!F.Doc->IsInTransaction());
+		CHECK(F.Doc->GetUndoDescription() == "Landscape Sculpt");
+		CHECK(HeightAt(*Land, 16, 16) > 0.0f);
+		CHECK(F.Doc->GetSelection().empty()); // the press sculpted instead of selecting
+		const TArray<uint8> Lit = F.Render();
+		CHECK(PixelAt(Lit, static_cast<int32>(Center.X), static_cast<int32>(Center.Y)) != PixelAt(Lit, 1, 1));
+		F.Settings.EditorMode = nullptr;
+		CHECK(Log.Problems.empty());
+		for (const FString& Problem : Log.Problems)
+		{
+			MESSAGE(Problem.c_str());
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Landscape paint layers.
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("Paint layers color a landscape's mesh, blended over the ground's own color")
+	{
+		EnsureMapCore();
+		const Landscape Field(2, 2, 32.0f);
+		CHECK(!Field.GetMesh()->HasVertexColors());
+		LandscapeLayer Red = Field.MakeLayer("Red", 255, 0, 0);
+		CHECK(Red.weights.size() == 9);
+		Red.weights[4] = 1.0f;  // the middle, all red
+		Red.weights[0] = 0.5f;  // a corner, half
+		const std::shared_ptr<const Landscape> Painted = Field.WithLayers({ Red });
+		REQUIRE(Painted);
+		CHECK(Painted->GetNumLayers() == 1);
+		CHECK(Painted->GetWeight(0, 1, 1) == 1.0f);
+		const StaticMesh& Mesh = *Painted->GetMesh();
+		REQUIRE(Mesh.HasVertexColors());
+		CHECK((Mesh.GetVertexColor(4) & 0xFFFFFFu) == 0x0000FFu); // red
+		unsigned char R, G, B;
+		Landscape::GetBaseColor(R, G, B);
+		CHECK((Mesh.GetVertexColor(8) & 0xFFu) == R); // unpainted: the ground's color
+		CHECK(((Mesh.GetVertexColor(0) >> 8) & 0xFFu) == static_cast<unsigned int>(G * 0.5f + 0.5f));
+		// Sculpting keeps the paint.
+		const std::shared_ptr<const Landscape> Raised = Painted->WithHeights(std::vector<float>(9, 10.0f));
+		REQUIRE(Raised);
+		CHECK(Raised->GetWeight(0, 1, 1) == 1.0f);
+		// Weights must match the grid.
+		LandscapeLayer Short = Red;
+		Short.weights.resize(3);
+		CHECK(!Field.WithLayers({ Short }));
+	}
+
+	TEST_CASE("Painting a layer makes the others give way, erasing takes it off, and layers are undoable")
+	{
+		EnsureMapCore();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		Mode.NewQuadsX = 16;
+		Mode.NewQuadsY = 16;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		Doc->ClearSelection();
+		CHECK(Mode.GetTargetLandscape() == Land);
+
+		REQUIRE(Mode.AddLayer(*Land));
+		REQUIRE(Mode.AddLayer(*Land));
+		CHECK(Doc->GetUndoDescription() == "Add Paint Layer");
+		REQUIRE(Land->GetLandscape().GetNumLayers() == 2);
+		CHECK(Land->GetLandscape().GetLayers()[0].name == "Grass");
+		CHECK(Land->GetLandscape().GetLayers()[1].name == "Rock");
+		CHECK(Mode.SelectedLayer == 1);
+
+		// Grass at full strength over the middle.
+		Mode.Tool = ELandscapeTool::Paint;
+		Mode.SelectedLayer = 0;
+		Mode.Brush.Radius = 96.0f;
+		Mode.Brush.Strength = 1.0f;
+		Mode.Brush.Falloff = 0.0f;
+		const Vector3d Middle(0.0f, 0.0f, 0.0f);
+		Mode.BeginStroke(*Land, Middle, false);
+		Mode.ApplyAt(*Land, Middle, 0.5f, false);
+		Mode.EndStroke();
+		CHECK(Doc->GetUndoDescription() == "Landscape Paint");
+		CHECK(Land->GetLandscape().GetWeight(0, 8, 8) == 1.0f);
+		CHECK(Land->GetLandscape().GetWeight(0, 0, 0) == 0.0f);
+
+		// Rock over it: grass gives way, the two never add up to more than 1.
+		Mode.SelectedLayer = 1;
+		Mode.Brush.Strength = 0.25f;
+		Mode.BeginStroke(*Land, Middle, false);
+		Mode.ApplyAt(*Land, Middle, 0.25f, false);
+		Mode.EndStroke();
+		const float Rock = Land->GetLandscape().GetWeight(1, 8, 8);
+		const float Grass = Land->GetLandscape().GetWeight(0, 8, 8);
+		CHECK(Rock > 0.2f);
+		CHECK(Grass < 1.0f);
+		CHECK(Rock + Grass <= 1.0001f);
+
+		// Shift takes it off again.
+		Mode.BeginStroke(*Land, Middle, true);
+		Mode.ApplyAt(*Land, Middle, 1.0f, true);
+		Mode.EndStroke();
+		CHECK(Land->GetLandscape().GetWeight(1, 8, 8) == 0.0f);
+
+		// Undo steps back through the strokes, one each.
+		Doc->Undo();
+		CHECK(Land->GetLandscape().GetWeight(1, 8, 8) == Rock);
+		Doc->Undo();
+		CHECK(Land->GetLandscape().GetWeight(0, 8, 8) == 1.0f);
+
+		// Renaming, recoloring and removing.
+		CHECK(Mode.RenameLayer(*Land, 1, "Cliff"));
+		CHECK(Land->GetLandscape().GetLayers()[1].name == "Cliff");
+		CHECK(Mode.SetLayerColor(*Land, 1, FColor(10, 20, 30)));
+		CHECK(Land->GetLandscape().GetLayers()[1].b == 30);
+		CHECK(Doc->GetUndoDescription() == "Change Paint Layer Color");
+		CHECK(Mode.RemoveLayer(*Land, 0));
+		CHECK(Land->GetLandscape().GetNumLayers() == 1);
+		CHECK(Land->GetLandscape().GetLayers()[0].name == "Cliff");
+		CHECK(Mode.SelectedLayer == 0);
+		Doc->Undo();
+		CHECK(Land->GetLandscape().GetNumLayers() == 2);
+		CHECK(Land->GetLandscape().GetWeight(0, 8, 8) == 1.0f);
+
+		// Painting without a layer does nothing.
+		Mode.SelectedLayer = 5;
+		CHECK(!Mode.ApplyAt(*Land, Middle, 0.5f, false));
+	}
+
+	TEST_CASE("Paint layers are saved in .qle with their names, colors and weights")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Land = Doc->AddLandscape(20, 10, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		LandscapeLayer Sand = Land->GetLandscape().MakeLayer("Wet Sand", 200, 180, 120);
+		for (SIZE_T Index = 0; Index < Sand.weights.size(); ++Index)
+		{
+			Sand.weights[Index] = static_cast<float>(Index % 5) * 0.25f;
+		}
+		LandscapeLayer Snow = Land->GetLandscape().MakeLayer("Snow", 240, 240, 250);
+		Snow.weights[3] = 0.5f;
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({ Sand, Snow }), "Paint");
+		FString Error;
+		const FString Qle = Temp.File("layers.qle");
+		REQUIRE(Doc->Save(Qle, Error));
+
+		TUniquePtr<FMapDocument> Reopened = FMapDocument::Open(Qle, Error);
+		REQUIRE(Reopened);
+		Object* Loaded = nullptr;
+		for (Object* Obj : Reopened->GetObjects())
+		{
+			Loaded = Obj->HasLandscape() ? Obj : Loaded;
+		}
+		REQUIRE(Loaded);
+		const std::vector<LandscapeLayer>& Layers = Loaded->GetLandscape().GetLayers();
+		REQUIRE(Layers.size() == 2);
+		CHECK(Layers[0].name == "Wet Sand");
+		CHECK(Layers[0].r == 200);
+		CHECK(Layers[0].g == 180);
+		CHECK(Layers[0].b == 120);
+		CHECK(Layers[0].weights == Sand.weights);
+		CHECK(Layers[1].name == "Snow");
+		CHECK(Layers[1].weights == Snow.weights);
+		CHECK(Loaded->GetMesh().HasVertexColors());
+	}
+
+	TEST_CASE("A painted layer shows in its color in the Lit view")
+	{
+		FTestLogCapture Log;
+		FViewFixture F;
+		if (!F.Create(ERHIBackend::D3D12, EMapViewType::Perspective))
+		{
+			MESSAGE("D3D12 device unavailable; skipped");
+			return;
+		}
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(F.Doc.get());
+		Mode.NewQuadsX = 32;
+		Mode.NewQuadsY = 32;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		REQUIRE(Mode.AddLayer(*Land, "Red", FColor(220, 30, 30)));
+		F.Doc->ClearSelection();
+		F.Client->ResetCamera();
+		F.Client->SetViewMode(EMapViewMode::Lit);
+		F.Render();
+		const FVector2 Center = F.At(Vector3d(0.0f, 0.0f, 0.0f));
+		const int32 X = static_cast<int32>(Center.X);
+		const int32 Y = static_cast<int32>(Center.Y);
+		const FColor Before = PixelAt(F.Render(), X, Y);
+
+		Mode.Tool = ELandscapeTool::Paint;
+		Mode.Brush.Radius = 200.0f;
+		Mode.Brush.Strength = 1.0f;
+		Mode.BeginStroke(*Land, Vector3d(0.0f, 0.0f, 0.0f), false);
+		Mode.ApplyAt(*Land, Vector3d(0.0f, 0.0f, 0.0f), 1.0f, false);
+		Mode.EndStroke();
+		const FColor After = PixelAt(F.Render(), X, Y);
+		CHECK(After != Before);
+		CHECK(After.R > After.G + 40);
+		CHECK(After.R > After.B + 40);
+		CHECK(Log.Problems.empty());
+		for (const FString& Problem : Log.Problems)
+		{
+			MESSAGE(Problem.c_str());
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Heightmap and weightmap import and export.
+
+namespace
+{
+	// A landscape with a slope along X and a bump toward +Y.
+	std::shared_ptr<const Landscape> MakeTestTerrain(int32 QuadsX, int32 QuadsY)
+	{
+		std::vector<float> Heights;
+		for (int32 Y = 0; Y <= QuadsY; ++Y)
+		{
+			for (int32 X = 0; X <= QuadsX; ++X)
+			{
+				Heights.push_back(static_cast<float>(X) * 4.0f - 30.0f + (Y == QuadsY ? 100.0f : 0.0f));
+			}
+		}
+		return Landscape::Create(QuadsX, QuadsY, 32.0f, Heights);
+	}
+
+	void WriteBytes(const FString& Path, const TArray<uint8>& Bytes)
+	{
+		FFile File;
+		REQUIRE(File.Open(Path, EFileOpenMode::Write));
+		REQUIRE(File.Write(Bytes.data(), static_cast<int64>(Bytes.size())) == static_cast<int64>(Bytes.size()));
+	}
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("Heightmaps round-trip through 16-bit PNG and RAW, the image's top at +Y")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Land = Doc->AddLandscape(MakeTestTerrain(12, 7), Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+
+		FString Error;
+		const FString Png = Temp.File("terrain.png");
+		const FString Raw = Temp.File("terrain.r16");
+		REQUIRE(Mode.ExportHeightmap(*Land, Png, Error));
+		REQUIRE(Mode.ExportHeightmap(*Land, Raw, Error));
+		FHeightmap Map;
+		REQUIRE(FHeightmap::Load(Png, Map, Error));
+		CHECK(Map.Width == 13);
+		CHECK(Map.Height == 8);
+		// Mid-grey is 0; the bump (+Y, the last row) is the image's top row.
+		CHECK(Map.At(0, 0) > Map.At(0, 7));
+		CHECK(Map.At(0, 7) == static_cast<uint16>(32768 - 30 * 128));
+		// A non-square .r16 can't say its size, so it doesn't load.
+		CHECK(!FHeightmap::Load(Raw, Map, Error));
+		CHECK(Error.Contains("square"));
+
+		// Into a fresh landscape: the same heights.
+		Object* Imported = Mode.ImportLandscape(Png, Vector3d(0.0f, 0.0f, 0.0f), Error);
+		REQUIRE(Imported);
+		CHECK(Doc->GetUndoDescription() == "Import Landscape");
+		const Landscape& Copy = Imported->GetLandscape();
+		REQUIRE(Copy.GetQuadsX() == 12);
+		REQUIRE(Copy.GetQuadsY() == 7);
+		for (int32 Y = 0; Y <= 7; ++Y)
+		{
+			for (int32 X = 0; X <= 12; ++X)
+			{
+				CHECK(std::fabs((Copy.GetHeight(X, Y)) - (Land->GetLandscape().GetHeight(X, Y))) <= 0.01);
+			}
+		}
+
+		// Square ones round-trip through RAW too, and onto a landscape of
+		// another size (stretched).
+		Object* Square = Doc->AddLandscape(MakeTestTerrain(8, 8), Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Mode.ExportHeightmap(*Square, Raw, Error));
+		REQUIRE(FHeightmap::Load(Raw, Map, Error));
+		CHECK(Map.Width == 9);
+		Object* Flat = Doc->AddLandscape(16, 16, 16.0f, Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Mode.ImportHeightmap(*Flat, Raw, Error));
+		CHECK(Doc->GetUndoDescription() == "Import Heightmap");
+		CHECK(std::fabs((Flat->GetLandscape().GetHeight(16, 16)) - (Square->GetLandscape().GetHeight(8, 8))) <= 0.01);
+		CHECK(std::fabs((Flat->GetLandscape().GetHeight(8, 0)) - (Square->GetLandscape().GetHeight(4, 0))) <= 0.01);
+		Doc->Undo();
+		CHECK(Flat->GetLandscape().GetHeight(16, 16) == 0.0f);
+
+		// The Z range scales heights: twice the range, twice as tall.
+		Mode.HeightmapZRange = 1024.0f;
+		Object* Taller = Mode.ImportLandscape(Png, Vector3d(0.0f, 0.0f, 0.0f), Error);
+		REQUIRE(Taller);
+		CHECK(std::fabs((Taller->GetLandscape().GetHeight(0, 0)) - (-60.0f)) <= 0.02);
+	}
+
+	TEST_CASE("Heightmap import reads 8-bit images, resamples big ones and reports bad files")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		FString Error;
+
+		// 1025 x 1025 16-bit RAW: more than MaxQuads, so half the points at
+		// twice the quad size, over the same extent.
+		const int32 Side = 1025;
+		TArray<uint8> Bytes(static_cast<SIZE_T>(Side) * Side * 2);
+		for (int32 Y = 0; Y < Side; ++Y)
+		{
+			for (int32 X = 0; X < Side; ++X)
+			{
+				const uint16 Value = static_cast<uint16>(FMath::Min(X * 64, 65535));
+				const SIZE_T I = (static_cast<SIZE_T>(Y) * Side + X) * 2;
+				Bytes[I] = static_cast<uint8>(Value & 0xFF);
+				Bytes[I + 1] = static_cast<uint8>(Value >> 8);
+			}
+		}
+		const FString Big = Temp.File("big.raw");
+		WriteBytes(Big, Bytes);
+		Mode.NewQuadSize = 10.0f;
+		Object* Land = Mode.ImportLandscape(Big, Vector3d(0.0f, 0.0f, 0.0f), Error);
+		REQUIRE(Land);
+		CHECK(Land->GetLandscape().GetQuadsX() == Landscape::MaxQuads);
+		CHECK(Land->GetLandscape().GetQuadsY() == Landscape::MaxQuads);
+		CHECK(Land->GetLandscape().GetSizeX() == doctest::Approx(10240.0f));
+		CHECK(std::fabs((Land->GetLandscape().GetHeight(512, 0)) - ((65535.0f - 32768.0f) / 128.0f)) <= 0.01);
+
+		// An 8-bit RAW (bytes making a square): white is the top of the range.
+		const FString Byte8 = Temp.File("eight.raw");
+		WriteBytes(Byte8, TArray<uint8>(9, 255));
+		FHeightmap Map;
+		REQUIRE(FHeightmap::Load(Byte8, Map, Error));
+		CHECK(Map.Width == 3);
+		CHECK(Map.At(1, 1) == 65535);
+
+		// Bad files say why.
+		WriteBytes(Temp.File("odd.raw"), TArray<uint8>(7, 0));
+		CHECK(!Mode.ImportLandscape(Temp.File("odd.raw"), Vector3d(0.0f, 0.0f, 0.0f), Error));
+		CHECK(Error.Contains("square"));
+		WriteBytes(Temp.File("junk.png"), TArray<uint8>(64, 7));
+		CHECK(!Mode.ImportLandscape(Temp.File("junk.png"), Vector3d(0.0f, 0.0f, 0.0f), Error));
+		CHECK(Error.Contains("image"));
+		CHECK(!Mode.ImportLandscape(Temp.File("missing.png"), Vector3d(0.0f, 0.0f, 0.0f), Error));
+		CHECK(Error.Contains("exist"));
+	}
+
+	TEST_CASE("Weightmaps export a layer as 8-bit and import it back, the other layers giving way")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		Object* Land = Doc->AddLandscape(10, 10, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		REQUIRE(Mode.AddLayer(*Land));
+		REQUIRE(Mode.AddLayer(*Land));
+		// Grass a gradient over X, Rock everywhere it fits.
+		std::vector<LandscapeLayer> Layers = Land->GetLandscape().GetLayers();
+		for (int32 Y = 0; Y <= 10; ++Y)
+		{
+			for (int32 X = 0; X <= 10; ++X)
+			{
+				const SIZE_T I = static_cast<SIZE_T>(Y) * 11 + X;
+				Layers[0].weights[I] = static_cast<float>(X) / 10.0f * (Y == 10 ? 1.0f : 0.5f);
+				Layers[1].weights[I] = 1.0f - Layers[0].weights[I];
+			}
+		}
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers(Layers), "Paint");
+
+		FString Error;
+		const FString Png = Temp.File("grass.png");
+		const FString Raw = Temp.File("grass.raw");
+		REQUIRE(Mode.ExportWeightmap(*Land, 0, Png, Error));
+		REQUIRE(Mode.ExportWeightmap(*Land, 0, Raw, Error));
+		CHECK(std::filesystem::file_size(std::filesystem::path(Raw.ToWide())) == 121); // 8 bits a point
+		FHeightmap Map;
+		REQUIRE(FHeightmap::Load(Png, Map, Error));
+		CHECK(Map.Width == 11);
+		CHECK(Map.At(10, 0) == 65535);  // the top row is +Y: full grass at the right
+		CHECK(Map.At(10, 10) == 128 * 257);
+		CHECK(!Mode.ExportWeightmap(*Land, 5, Png, Error));
+
+		// Onto Rock: all of it where the map is white, so Grass gives way.
+		REQUIRE(Mode.ImportWeightmap(*Land, 1, Raw, Error));
+		CHECK(Doc->GetUndoDescription() == "Import Weightmap");
+		const Landscape& After = Land->GetLandscape();
+		for (int32 Y = 0; Y <= 10; ++Y)
+		{
+			for (int32 X = 0; X <= 10; ++X)
+			{
+				CHECK(After.GetWeight(0, X, Y) + After.GetWeight(1, X, Y) <= 1.0001f);
+				CHECK(std::fabs((After.GetWeight(1, X, Y)) - (Layers[0].weights[static_cast<SIZE_T>(Y) * 11 + X])) <= 1.0 / 255.0 + 1e-4);
+			}
+		}
+		CHECK(After.GetWeight(0, 10, 10) == 0.0f); // Rock is all of it there
+		CHECK(After.GetWeight(0, 0, 0) == 0.0f);   // Rock is none of it, and Grass was none
+		Doc->Undo();
+		CHECK(Land->GetLandscape().GetWeight(1, 0, 0) == 1.0f);
+		CHECK(!Mode.ImportWeightmap(*Land, 2, Png, Error));
+	}
+
+	TEST_CASE("An imported heightmap's top is at the top of the Top view")
+	{
+		FTestLogCapture Log;
+		FViewFixture F;
+		if (!F.Create(ERHIBackend::D3D12, EMapViewType::Top))
+		{
+			MESSAGE("D3D12 device unavailable; skipped");
+			return;
+		}
+		// +Y, where the image's top row goes, is up on the screen.
+		CHECK(F.At(Vector3d(0.0f, 64.0f, 0.0f)).Y < F.At(Vector3d(0.0f, -64.0f, 0.0f)).Y);
+		CHECK(F.At(Vector3d(64.0f, 0.0f, 0.0f)).X > F.At(Vector3d(-64.0f, 0.0f, 0.0f)).X);
+		CHECK(Log.Problems.empty());
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Landscape layer textures.
+
+namespace
+{
+	// A 24-bit BMP of the given BGR texels (rows from the top), which WIC reads.
+	void WriteBmp(const FString& Path, int32 Width, int32 Height, const TArray<FColor>& Texels)
+	{
+		const int32 RowBytes = (Width * 3 + 3) & ~3;
+		const uint32 DataSize = static_cast<uint32>(RowBytes * Height);
+		TArray<uint8> Bytes(54 + DataSize, 0);
+		const auto Put32 = [&Bytes](SIZE_T At, uint32 V) { for (int32 I = 0; I < 4; ++I) Bytes[At + I] = static_cast<uint8>(V >> (8 * I)); };
+		Bytes[0] = 'B';
+		Bytes[1] = 'M';
+		Put32(2, 54 + DataSize);
+		Put32(10, 54);
+		Put32(14, 40);
+		Put32(18, static_cast<uint32>(Width));
+		Put32(22, static_cast<uint32>(-Height)); // top-down
+		Bytes[26] = 1;
+		Bytes[28] = 24;
+		Put32(34, DataSize);
+		for (int32 Y = 0; Y < Height; ++Y)
+		{
+			for (int32 X = 0; X < Width; ++X)
+			{
+				const FColor& C = Texels[static_cast<SIZE_T>(Y) * Width + X];
+				uint8* Out = &Bytes[54 + static_cast<SIZE_T>(Y) * RowBytes + static_cast<SIZE_T>(X) * 3];
+				Out[0] = C.B;
+				Out[1] = C.G;
+				Out[2] = C.R;
+			}
+		}
+		FFile File;
+		REQUIRE(File.Open(Path, EFileOpenMode::Write));
+		REQUIRE(File.Write(Bytes.data(), static_cast<int64>(Bytes.size())) == static_cast<int64>(Bytes.size()));
+	}
+
+	// One layer over all of a landscape.
+	std::shared_ptr<const Landscape> Covered(const Landscape& Land, const char* Name, FColor Color, const std::string& Texture, float Tiling = 512.0f)
+	{
+		LandscapeLayer Layer = Land.MakeLayer(Name, Color.R, Color.G, Color.B);
+		Layer.texture = Texture;
+		Layer.tiling = Tiling;
+		std::fill(Layer.weights.begin(), Layer.weights.end(), 1.0f);
+		return Land.WithLayers({ Layer });
+	}
+
+	// The image's mean color, and how much it varies.
+	void Stats(const FLandscapeBake& Bake, float Mean[3], float& Spread)
+	{
+		double Sum[3] = { 0, 0, 0 };
+		double Squares = 0;
+		const SIZE_T Count = static_cast<SIZE_T>(Bake.GetWidth()) * Bake.GetHeight();
+		for (SIZE_T I = 0; I < Count; ++I)
+		{
+			for (int32 C = 0; C < 3; ++C)
+			{
+				Sum[C] += Bake.GetPixels()[I * 4 + C];
+			}
+			Squares += static_cast<double>(Bake.GetPixels()[I * 4 + 1]) * Bake.GetPixels()[I * 4 + 1];
+		}
+		for (int32 C = 0; C < 3; ++C)
+		{
+			Mean[C] = static_cast<float>(Sum[C] / static_cast<double>(Count));
+		}
+		Spread = static_cast<float>(std::sqrt(FMath::Max(Squares / static_cast<double>(Count) - static_cast<double>(Mean[1]) * Mean[1], 0.0)));
+	}
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("The built-in landscape textures tint their layer's color without changing it on average")
+	{
+		FLandscapeTextureLibrary& Library = FLandscapeTextureLibrary::Get();
+		REQUIRE(FLandscapeTextureLibrary::GetBuiltInNames().size() == 5);
+		for (const FString& Name : FLandscapeTextureLibrary::GetBuiltInNames())
+		{
+			CAPTURE(Name);
+			const FLandscapeTexture* Texture = Library.Find(std::string(FLandscapeTextureLibrary::BuiltIn(Name).View()));
+			REQUIRE(Texture);
+			CHECK(Texture->bTint);
+			CHECK(Texture->Mips.front().Width == 256);
+			CHECK(Texture->Mips.back().Width == 1);
+			// The smallest mip is the mean: about 128, the layer's own color.
+			CHECK(std::abs(static_cast<int32>(Texture->Mips.back().Pixels[0]) - 128) <= 16);
+			// It wraps: U and U + 1 are the same texel.
+			float A[3], B[3];
+			Texture->Sample(0.3f, 0.7f, 0.0f, A);
+			Texture->Sample(1.3f, -0.3f, 0.0f, B);
+			CHECK(std::fabs(A[0] - B[0]) < 0.01f);
+		}
+		CHECK(!Library.Find("builtin:Lava"));
+		CHECK(!Library.Find(""));
+		CHECK(FLandscapeTextureLibrary::DisplayName("builtin:Rock") == "Rock");
+		CHECK(FLandscapeTextureLibrary::DisplayName("C:/Art/Moss Big.png") == "Moss Big.png");
+		CHECK(FLandscapeTextureLibrary::DisplayName("") == "None");
+	}
+
+	TEST_CASE("A landscape's layers bake into one image: textures, plain colors, the ground's own color")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		const Landscape Field(16, 8, 32.0f);
+		CHECK(!FLandscapeTextureLibrary::IsTextured(Field));
+		CHECK(FLandscapeBake::GetTexelsPerQuad(Field) == 16);
+		CHECK(FLandscapeBake::GetTexelsPerQuad(Landscape(512, 4, 32.0f)) == 4);
+
+		// Grass all over: the grass color on average, with detail in it.
+		FLandscapeBake Bake;
+		const std::shared_ptr<const Landscape> Grass = Covered(Field, "Grass", FColor(92, 146, 62), "builtin:Grass", 128.0f);
+		REQUIRE(FLandscapeTextureLibrary::IsTextured(*Grass));
+		const FIntRect All = Bake.Update(Grass);
+		CHECK(All == FIntRect(0, 0, 256, 128));
+		CHECK(Bake.GetWidth() == 256);
+		CHECK(Bake.GetHeight() == 128);
+		float Mean[3], Spread;
+		Stats(Bake, Mean, Spread);
+		CHECK(std::fabs(Mean[0] - 92.0f) < 14.0f);
+		CHECK(std::fabs(Mean[1] - 146.0f) < 18.0f);
+		CHECK(Spread > 6.0f);
+		CHECK(Bake.Update(Grass).IsEmpty()); // nothing changed
+
+		// A plain-colored layer is flat; where none is painted, the ground's color.
+		LandscapeLayer Plain = Field.MakeLayer("Red", 200, 20, 20);
+		for (const SIZE_T Corner : { SIZE_T(0), SIZE_T(1), SIZE_T(17), SIZE_T(18) })
+		{
+			Plain.weights[Corner] = 1.0f; // all of quad 0
+		}
+		FLandscapeBake PlainBake;
+		PlainBake.Update(Field.WithLayers({ Plain }));
+		CHECK(PlainBake.GetTexel(0, 0) == FColor(200, 20, 20, 255));
+		unsigned char R, G, B;
+		Landscape::GetBaseColor(R, G, B);
+		CHECK(PlainBake.GetTexel(200, 100) == FColor(R, G, B, 255));
+
+		// An image file, as it is: a 2 x 1 red and blue, repeating every 64
+		// units (two quads), so each quad is one color.
+		const FString Bmp = Temp.File("stripes.bmp");
+		WriteBmp(Bmp, 2, 1, { FColor(255, 0, 0), FColor(0, 0, 255) });
+		const std::shared_ptr<const Landscape> Striped = Covered(Field, "Stripes", FColor(255, 255, 255), std::string(Bmp.View()), 64.0f);
+		FLandscapeBake ImageBake;
+		ImageBake.Update(Striped);
+		const FColor Left = ImageBake.GetTexel(8, 8);    // the middle of quad 0
+		const FColor Right = ImageBake.GetTexel(24, 8);  // of quad 1
+		CHECK(Left.R > 200);
+		CHECK(Left.B < 60);
+		CHECK(Right.B > 200);
+		CHECK(Right.R < 60);
+		CHECK(ImageBake.GetTexel(40, 8) == Left); // and again
+
+		// A missing file draws as the plain color.
+		FLandscapeBake Missing;
+		Missing.Update(Covered(Field, "Gone", FColor(10, 200, 30), std::string(Temp.File("gone.png").View())));
+		CHECK(Missing.GetTexel(5, 5) == FColor(10, 200, 30, 255));
+	}
+
+	TEST_CASE("A stroke bakes only the part of the image under it again")
+	{
+		EnsureMapCore();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		Mode.NewQuadsX = 64;
+		Mode.NewQuadsY = 64;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		REQUIRE(Mode.AddLayer(*Land)); // Grass, textured
+		CHECK(Land->GetLandscape().GetLayers()[0].texture == "builtin:Grass");
+		REQUIRE(Mode.AddLayer(*Land)); // Rock
+		FLandscapeBake Bake;
+		CHECK(Bake.Update(Land->GetLandscapePtr()).Width() == 1024);
+
+		// Sculpting changes no weights: nothing to bake.
+		Mode.Tool = ELandscapeTool::Sculpt;
+		Mode.BeginStroke(*Land, Vector3d(0.0f, 0.0f, 0.0f), false);
+		Mode.ApplyAt(*Land, Vector3d(0.0f, 0.0f, 0.0f), 0.5f, false);
+		Mode.EndStroke();
+		CHECK(Bake.Update(Land->GetLandscapePtr()).IsEmpty());
+
+		// Rock in a corner: only around it.
+		Mode.Tool = ELandscapeTool::Paint;
+		Mode.SelectedLayer = 1;
+		Mode.Brush.Radius = 96.0f;
+		Mode.Brush.Strength = 1.0f;
+		const Vector3d Corner(-800.0f, -800.0f, 0.0f);
+		Mode.BeginStroke(*Land, Corner, false);
+		Mode.ApplyAt(*Land, Corner, 0.5f, false);
+		Mode.EndStroke();
+		const FIntRect Dirty = Bake.Update(Land->GetLandscapePtr());
+		CHECK(!Dirty.IsEmpty());
+		CHECK(Dirty.Right <= 512);
+		CHECK(Dirty.Bottom <= 512);
+		CHECK(Dirty.Width() * Dirty.Height() < 1024 * 1024 / 16);
+		// The same as baking it all.
+		FLandscapeBake Fresh;
+		Fresh.Update(Land->GetLandscapePtr());
+		CHECK(Fresh.GetPixels() == Bake.GetPixels());
+
+		// A layer's look changing bakes all of it, and is undoable.
+		CHECK(Mode.SetLayerTiling(*Land, 1, 128.0f));
+		CHECK(Doc->GetUndoDescription() == "Change Paint Layer Tiling");
+		CHECK(Bake.Update(Land->GetLandscapePtr()).Width() == 1024);
+		CHECK(Mode.SetLayerTexture(*Land, 1, ""));
+		CHECK(Doc->GetUndoDescription() == "Change Paint Layer Texture");
+		CHECK(!Mode.SetLayerTexture(*Land, 1, ""));
+		CHECK(Land->GetLandscape().GetLayers()[1].texture.empty());
+		Doc->Undo();
+		CHECK(Land->GetLandscape().GetLayers()[1].texture == "builtin:Rock");
+	}
+
+	TEST_CASE("Layer textures and tiling are saved in .qle; older files load untextured")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Land = Doc->AddLandscape(4, 4, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		LandscapeLayer Moss = Land->GetLandscape().MakeLayer("Moss", 60, 120, 40);
+		Moss.texture = "C:/Art Work/moss tile.png";
+		Moss.tiling = 300.0f;
+		LandscapeLayer Plain = Land->GetLandscape().MakeLayer("Plain", 1, 2, 3);
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({ Moss, Plain }), "Paint");
+		FString Error;
+		const FString Qle = Temp.File("textures.qle");
+		REQUIRE(Doc->Save(Qle, Error));
+		FString Text;
+		REQUIRE(FFile::ReadAllText(Qle, Text));
+		CHECK(Text.Contains("LandscapeTexture: 300.0 C:/Art Work/moss tile.png"));
+
+		TUniquePtr<FMapDocument> Reopened = FMapDocument::Open(Qle, Error);
+		REQUIRE(Reopened);
+		const Object* Loaded = nullptr;
+		for (Object* Obj : Reopened->GetObjects())
+		{
+			Loaded = Obj->HasLandscape() ? Obj : Loaded;
+		}
+		REQUIRE(Loaded);
+		const std::vector<LandscapeLayer>& Layers = Loaded->GetLandscape().GetLayers();
+		REQUIRE(Layers.size() == 2);
+		CHECK(Layers[0].texture == "C:/Art Work/moss tile.png");
+		CHECK(Layers[0].tiling == 300.0f);
+		CHECK(Layers[1].texture.empty());
+		CHECK(Layers[1].tiling == 512.0f);
+	}
+
+	TEST_CASE("Textured landscapes draw with their baked image (D3D12 and Vulkan)")
+	{
+		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		{
+			CAPTURE(ToString(Backend));
+			FTestLogCapture Log;
+			FViewFixture F;
+			if (!F.Create(Backend, EMapViewType::Perspective))
+			{
+				MESSAGE(ToString(Backend), " device unavailable; skipped");
+				continue;
+			}
+			FMapLandscapeMode Mode;
+			Mode.SetDocument(F.Doc.get());
+			Mode.NewQuadsX = 32;
+			Mode.NewQuadsY = 32;
+			Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+			REQUIRE(Land);
+			F.Doc->ClearSelection();
+			F.Client->ResetCamera();
+			F.Client->SetViewMode(EMapViewMode::Lit);
+			const FVector2 Center = F.At(Vector3d(0.0f, 0.0f, 0.0f));
+			const int32 X = static_cast<int32>(Center.X);
+			const int32 Y = static_cast<int32>(Center.Y);
+			const FColor Flat = PixelAt(F.Render(), X, Y);
+			CHECK(F.Resources->GetNumLandscapeTextures() == 0);
+
+			// Red over the middle, as a plain color (layer textures replace
+			// the per-corner colors, so this is the bake drawing).
+			REQUIRE(Mode.AddLayer(*Land, "Red", FColor(220, 30, 30), "builtin:Dirt"));
+			Mode.Tool = ELandscapeTool::Paint;
+			Mode.Brush.Radius = 300.0f;
+			Mode.Brush.Strength = 1.0f;
+			Mode.BeginStroke(*Land, Vector3d(0.0f, 0.0f, 0.0f), false);
+			Mode.ApplyAt(*Land, Vector3d(0.0f, 0.0f, 0.0f), 1.0f, false);
+			Mode.EndStroke();
+			const TArray<uint8> Pixels = F.Render();
+			CHECK(F.Resources->GetNumLandscapeTextures() == 1);
+			REQUIRE(F.Resources->FindLandscapeBake(*Land));
+			const FColor Painted = PixelAt(Pixels, X, Y);
+			CHECK(Painted != Flat);
+			CHECK(Painted.R > Painted.G + 40);
+			// The texture's detail: neighbouring pixels differ.
+			int32 Differ = 0;
+			for (int32 DX = -8; DX <= 8; ++DX)
+			{
+				Differ += PixelAt(Pixels, X + DX, Y) != Painted ? 1 : 0;
+			}
+			CHECK(Differ >= 4);
+
+			// Painting again brings the image up to date: the middle goes back
+			// to the ground's color.
+			Mode.BeginStroke(*Land, Vector3d(0.0f, 0.0f, 0.0f), true);
+			Mode.ApplyAt(*Land, Vector3d(0.0f, 0.0f, 0.0f), 1.0f, true);
+			Mode.EndStroke();
+			const FColor Erased = PixelAt(F.Render(), X, Y);
+			CHECK(std::abs(static_cast<int32>(Erased.R) - static_cast<int32>(Flat.R)) <= 6);
+			CHECK(std::abs(static_cast<int32>(Erased.G) - static_cast<int32>(Flat.G)) <= 6);
+			CHECK(Log.Problems.empty());
+			for (const FString& Problem : Log.Problems)
+			{
+				MESSAGE(Problem.c_str());
+			}
 		}
 	}
 }

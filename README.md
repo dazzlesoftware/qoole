@@ -58,7 +58,8 @@ Vulkan:
   Geometry; drag into a viewport) and the Brush Editing mode's tools at the
   left, the Outliner and Details at the right, and Content Browser 1 (up to
   four, from the Window menu) and the Output Log at the bottom. The toolbar
-  has Save, the editor mode (Selection Shift+1, Brush Editing Shift+6) and
+  has Save, the editor mode (Selection Shift+1, Landscape Shift+2, Brush
+  Editing Shift+6) and
   Add. Edit > Editor Preferences has the graphics RHI (DirectX 12 or
   Vulkan, from the next start), the debug layer, the interface scale,
   keyboard shortcuts, the map to load at startup, viewport controls, and
@@ -72,6 +73,28 @@ Vulkan:
   rotation and scale (Details > Transform, and the Static Mesh to show),
   draw lit with smooth shading, are picked like brushes, are saved in
   `.qle`, and take no part in CSG, clipping or `.map` export.
+- Landscapes, as in Unreal: the Landscape mode (Shift+2) makes a flat
+  heightfield of up to 512 x 512 quads (New Landscape: quads and quad
+  size) and sculpts it with a left drag in any view, under a brush ring:
+  Sculpt (Shift lowers), Smooth, Flatten and Noise, with a brush size,
+  strength and falloff, and Paint: weight-blended paint layers (Grass,
+  Rock, Dirt, Sand, Snow, or your own names and colors) painted under the
+  brush, Shift erasing. A stroke is one undo step. Landscapes are saved in
+  `.qle` with their heights and layers, and draw and pick like static meshes.
+  Heightmaps and weightmaps import and export as in Unreal: grayscale PNG
+  (16-bit heights, 8-bit weights; BMP, JPEG and TIFF are read too) or
+  headerless RAW (`.r16`, `.r8`, `.raw`), mid-grey being height 0 and a
+  Z Range (512 by default, Unreal's Z scale of 100) from black to white. A
+  heightmap makes a new landscape (a point per pixel, big images resampled
+  to 512 quads) or new heights for an existing one; a weightmap gives the
+  selected paint layer its weights, the other layers giving way.
+  Each paint layer has a texture, repeating every Tiling units: one of the
+  built-in Grass, Rock, Dirt, Sand and Snow patterns (tinted with the
+  layer's color; preset layers start with theirs), an image file (PNG,
+  BMP, JPEG, TIFF, drawn as it is) or none (its plain color). The layers
+  are blended by their weights into one image per landscape, up to
+  2048 x 2048, that the views draw it with; a stroke re-bakes only the part
+  it touched.
 - Prefab brushes and entities from the built-in Genesis game
   (`Engine/Content/Editor`); entity keys are edited with the types the
   entity set gives them. Selections can be saved as prefabs.

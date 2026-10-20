@@ -12,7 +12,9 @@
 // Colors: View draws with palette indices (VRC_* and the grid's 252-254),
 // which SetColor fills. Solid faces get a color per object and, when shaded
 // (the Lit view mode), a shade per facing direction, since the built-in game
-// has no textures.
+// has no textures. Landscapes with textured layers are the exception: their
+// triangles carry where they are on the grid (U, V) and are drawn with the
+// landscape's baked image (FLandscapeBake), in batches of their own.
 //
 // Coordinates are physical pixels of the target.
 
@@ -26,8 +28,17 @@
 struct FMapVertex
 {
 	float X, Y, Q; // window pixels; Q = 1 / view depth
-	float U, V;    // unused until textures are drawn
+	float U, V;    // on a textured landscape's baked image; 0 otherwise
 	uint32 Color;  // RGBA8, R in the low byte
+};
+
+// A run of triangles drawn with one texture: a textured landscape's (the
+// object), or none (white).
+struct FMapTriangleBatch
+{
+	const Object* Landscape = nullptr;
+	uint32 FirstVertex = 0;
+	uint32 NumVertices = 0;
 };
 
 class FMapDraw final : public FDraw
@@ -53,6 +64,8 @@ public:
 	// Moves the lines drawn since the last call into Out as one element.
 	void FlushLines(FSlateWindowElementList& Out, int32 Layer);
 	const TArray<FMapVertex>& GetTriangles() const { return Triangles; }
+	// The triangles in drawing order, by texture.
+	const TArray<FMapTriangleBatch>& GetBatches() const { return Batches; }
 
 	FColor GetPaletteColor(int Index) const;
 
@@ -67,16 +80,21 @@ public:
 	void ZBufClear() override { Triangles.clear(); }
 	void ZBufTriangle(ZPoint Points[3]) override;
 	void ZBufShadedTriangle(ZPoint Points[3], const float Shades[3]) override;
+	void ZBufColoredTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3]) override;
+	void ZBufLandscapeTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3]) override;
 	void ZBufRender() override {}
 
 private:
 	// The color of the object being drawn (FDraw::ZBufSetup set it), shaded.
 	FColor ObjectColor(float Shade) const;
-	void PushTriangle(const ZPoint Points[3], const uint32 Colors[3]);
+	void PushTriangle(const ZPoint Points[3], const uint32 Colors[3], const Object* Textured = nullptr);
+	void AddVertex(const FMapVertex& Vertex, const Object* Textured);
+	float LitShade(float Shade) const { return bShaded ? FMath::Clamp(Shade * 1.1f, 0.0f, 1.0f) : 0.86f; }
 
 	TArray<FSlateVertex2D> LineVertices;
 	TArray<uint32> LineIndices;
 	TArray<FMapVertex> Triangles;
+	TArray<FMapTriangleBatch> Batches;
 	int CurrentColor = 0;
 	float LineThickness = 1.0f;
 	bool bShaded = true;

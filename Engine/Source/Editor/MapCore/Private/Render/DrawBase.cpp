@@ -249,6 +249,8 @@ FDraw::ZBufSetup(Object *obj, FaceTex *faceTex, Vector3d norm) {
 	float z, zMax = 0.0f;
 	int soffsi, toffsi;
 
+	zbufObject = obj;
+
 	if(faceTex) {
 		faceTex->GetTInfo(soffsi, toffsi, rot, sscale, tscale);
 		soffs = (float) soffsi;

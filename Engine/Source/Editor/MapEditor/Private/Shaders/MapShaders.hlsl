@@ -11,9 +11,11 @@
 
 #ifdef __spirv__
 	#define VK_PUSH_CONSTANT [[vk::push_constant]]
+	#define VK_BINDING(Index) [[vk::binding(Index)]]
 	#define VK_LOCATION(Index) [[vk::location(Index)]]
 #else
 	#define VK_PUSH_CONSTANT
+	#define VK_BINDING(Index)
 	#define VK_LOCATION(Index)
 #endif
 
@@ -36,6 +38,8 @@ struct ViewConsts
 	float4 scale; // xy = 2 / viewport size in pixels
 };
 VK_PUSH_CONSTANT ConstantBuffer<ViewConsts> consts : register(b0);
+VK_BINDING(0) Texture2D Texture : register(t0);
+VK_BINDING(1) SamplerState Sampler : register(s0);
 
 VSOut VSMain(VSIn i)
 {
@@ -50,7 +54,9 @@ VSOut VSMain(VSIn i)
 	return o;
 }
 
-float4 PSColor(VSOut i) : SV_Target
+// Faces are their color times the texture: a landscape's baked layers, or
+// white for everything else.
+float4 PSTextured(VSOut i) : SV_Target
 {
-	return i.color;
+	return Texture.Sample(Sampler, i.uv) * i.color;
 }

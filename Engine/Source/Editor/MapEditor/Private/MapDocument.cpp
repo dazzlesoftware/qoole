@@ -62,6 +62,8 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	Entity* EntityB = B.SetEntity(nullptr, false);
 	Geometry* BrushA = A.SetBrush(nullptr);
 	Geometry* BrushB = B.SetBrush(nullptr);
+	std::shared_ptr<const Landscape> LandA = A.SetLandscape(nullptr);
+	std::shared_ptr<const Landscape> LandB = B.SetLandscape(nullptr);
 	std::shared_ptr<const StaticMesh> MeshA = A.SetMesh(nullptr);
 	std::shared_ptr<const StaticMesh> MeshB = B.SetMesh(nullptr);
 
@@ -69,6 +71,8 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	B.SetBrush(BrushA);
 	A.SetMesh(MeshB);
 	B.SetMesh(MeshA);
+	A.SetLandscape(LandB); // with its own mesh
+	B.SetLandscape(LandA);
 	A.SetEntity(EntityB, false);
 	B.SetEntity(EntityA, false);
 	const TransSpace SpaceA = A;

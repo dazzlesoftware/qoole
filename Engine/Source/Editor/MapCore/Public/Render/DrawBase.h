@@ -117,6 +117,16 @@ public:
 	// A triangle lit per corner (static meshes): Shade is the light at
 	// each corner, 0 to 1. Without its own, a renderer draws it flat.
 	virtual void ZBufShadedTriangle(ZPoint zpoint[3], const float shade[3]) { (void)shade; ZBufTriangle(zpoint); }
+	// The same with a color per corner (RGBA, red in the low byte): painted
+	// landscapes.
+	virtual void ZBufColoredTriangle(ZPoint zpoint[3], const float shade[3], const unsigned int color[3]) { (void)color; ZBufShadedTriangle(zpoint, shade); }
+	// A landscape's triangle with where its corners are on the landscape's
+	// grid in the points' s and t (0 to 1 across it), for a renderer that
+	// draws the landscape textured; colored (color is null when the
+	// landscape has no paint) otherwise.
+	virtual void ZBufLandscapeTriangle(ZPoint zpoint[3], const float shade[3], const unsigned int color[3]) {
+		if (color) ZBufColoredTriangle(zpoint, shade, color); else ZBufShadedTriangle(zpoint, shade);
+	}
 	virtual void ZBufRender(void) = 0;
 
 	void ZBufTextured(bool textured) { zbufTextured = textured; }
@@ -153,6 +163,7 @@ protected:
 	Texture *zbufTex;
 	unsigned short zbufColor;
 	int axisAlign;
+	Object *zbufObject = NULL; // what ZBufSetup was last given (Genesis)
 	float soffs, toffs;
 	float rot;
 	float sscale, tscale;

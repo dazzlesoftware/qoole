@@ -9,9 +9,9 @@
 #include "Fonts/FontCache.h"
 #include "Styling/SlateStyle.h"
 
-#include "MapShaders_PSColor_DXIL.h"
+#include "MapShaders_PSTextured_DXIL.h"
 #include "MapShaders_VSMain_DXIL.h"
-#include "Shaders/MapShaders_PSColor_SPIRV.h"
+#include "Shaders/MapShaders_PSTextured_SPIRV.h"
 #include "Shaders/MapShaders_VSMain_SPIRV.h"
 
 #include <algorithm>
@@ -202,8 +202,8 @@ FRHIGraphicsPipeline* FMapRenderResources::GetSolidPipeline(EPixelFormat TargetF
 	const bool bVulkan = Device.GetBackend() == ERHIBackend::Vulkan;
 	Desc.VertexShader = bVulkan ? FRHIShaderBytecode{ g_MapShaders_VSMain_SPIRV, sizeof(g_MapShaders_VSMain_SPIRV) }
 		: FRHIShaderBytecode{ g_MapShaders_VSMain_DXIL, sizeof(g_MapShaders_VSMain_DXIL) };
-	Desc.PixelShader = bVulkan ? FRHIShaderBytecode{ g_MapShaders_PSColor_SPIRV, sizeof(g_MapShaders_PSColor_SPIRV) }
-		: FRHIShaderBytecode{ g_MapShaders_PSColor_DXIL, sizeof(g_MapShaders_PSColor_DXIL) };
+	Desc.PixelShader = bVulkan ? FRHIShaderBytecode{ g_MapShaders_PSTextured_SPIRV, sizeof(g_MapShaders_PSTextured_SPIRV) }
+		: FRHIShaderBytecode{ g_MapShaders_PSTextured_DXIL, sizeof(g_MapShaders_PSTextured_DXIL) };
 	Desc.VertexAttributes = {
 		{ "POSITION", 0, EVertexFormat::Float3, offsetof(FMapVertex, X) },
 		{ "TEXCOORD", 0, EVertexFormat::Float2, offsetof(FMapVertex, U) },
@@ -218,6 +218,82 @@ FRHIGraphicsPipeline* FMapRenderResources::GetSolidPipeline(EPixelFormat TargetF
 	SolidPipeline = Device.CreateGraphicsPipeline(Desc);
 	SolidFormat = TargetFormat;
 	return SolidPipeline.get();
+}
+
+FMapRenderResources::~FMapRenderResources()
+{
+	for (auto& [Land, Entry] : Landscapes)
+	{
+		if (Entry->Texture)
+		{
+			Device.DeferRelease(Entry->Texture);
+		}
+	}
+}
+
+FRHITexture* FMapRenderResources::GetLandscapeTexture(const Object& Land)
+{
+	if (!Land.HasLandscape() || !FLandscapeTextureLibrary::IsTextured(Land.GetLandscape()))
+	{
+		return nullptr;
+	}
+	std::unique_ptr<FLandscapeEntry>& Entry = Landscapes[&Land];
+	if (!Entry)
+	{
+		Entry = std::make_unique<FLandscapeEntry>();
+	}
+	Entry->LastUsed = Frame;
+	const FIntRect Baked = Entry->Bake.Update(Land.GetLandscapePtr());
+	const uint32 Width = static_cast<uint32>(Entry->Bake.GetWidth());
+	const uint32 Height = static_cast<uint32>(Entry->Bake.GetHeight());
+	if (!Entry->Texture || Entry->Texture->GetWidth() != Width || Entry->Texture->GetHeight() != Height)
+	{
+		if (Entry->Texture)
+		{
+			Device.DeferRelease(Entry->Texture);
+		}
+		FRHITextureDesc Desc;
+		Desc.Width = Width;
+		Desc.Height = Height;
+		Desc.InitialData = Entry->Bake.GetPixels().data();
+		Desc.DebugName = "Landscape layers";
+		Entry->Texture = Device.CreateTexture(Desc);
+	}
+	else if (!Baked.IsEmpty())
+	{
+		const uint32 Pitch = Width * 4;
+		const uint8* First = Entry->Bake.GetPixels().data() + static_cast<SIZE_T>(Baked.Top) * Pitch + static_cast<SIZE_T>(Baked.Left) * 4;
+		Device.UpdateTexture(*Entry->Texture, Baked, First, Pitch);
+	}
+	return Entry->Texture.get();
+}
+
+void FMapRenderResources::Trim()
+{
+	// Several views draw each frame; a landscape none drew for a few
+	// seconds (deleted, or its layers cleared) goes.
+	++Frame;
+	for (auto It = Landscapes.begin(); It != Landscapes.end();)
+	{
+		if (Frame - It->second->LastUsed > 300)
+		{
+			if (It->second->Texture)
+			{
+				Device.DeferRelease(It->second->Texture);
+			}
+			It = Landscapes.erase(It);
+		}
+		else
+		{
+			++It;
+		}
+	}
+}
+
+const FLandscapeBake* FMapRenderResources::FindLandscapeBake(const Object& Land) const
+{
+	const auto Found = Landscapes.find(&Land);
+	return Found != Landscapes.end() ? &Found->second->Bake : nullptr;
 }
 
 FRHITexture& FMapRenderResources::GetWhiteTexture()
@@ -433,6 +509,30 @@ Vector3d FMapViewportClient::GetFocusPoint(float* OutDistance) const
 	Vector3d Focus(Forward);
 	Focus.MultVector(Distance);
 	return Focus.AddVector(Position);
+}
+
+bool FMapViewportClient::GetCursorRay(FVector2 LocalPosition, Vector3d& OutOrigin, Vector3d& OutDirection) const
+{
+	if (!MapView)
+	{
+		return false;
+	}
+	if (!IsPerspective())
+	{
+		ScreenToMap(LocalPosition, OutOrigin);
+		// From well in front of the plane, so things behind it are hit too.
+		OutDirection = Normalized(ViewToScope(Vector3d(0.0f, 1.0f, 0.0f)));
+		Vector3d Back(OutDirection);
+		Back.MultVector(-ClipDepth2D);
+		OutOrigin.AddVector(Back);
+		return true;
+	}
+	float X, Y;
+	ToScreen(LocalPosition, X, Y);
+	const float WinWidth = GetWindowWidth();
+	OutDirection = Normalized(ViewToScope(Vector3d(X / WinWidth, 1.0f, Y / WinWidth)));
+	OutOrigin = MapView->GetPosition();
+	return true;
 }
 
 Vector3d FMapViewportClient::GetDropPoint(FVector2 LocalPosition) const
@@ -779,6 +879,13 @@ FReply FMapViewportClient::OnMouseButtonDown(const FGeometry& Geometry, const FP
 	DragStart = DragLast = Local;
 	DragButton = Event.GetEffectingButton();
 	bAltDrag = IsPerspective() && Event.IsAltDown();
+	if (DragButton == EMouseButton::Left && !bAltDrag && Settings.EditorMode && Settings.EditorMode->InputPress(*this, Local, Event))
+	{
+		Drag = EDrag::Mode;
+		LastModeTime = FPlatformTime::Seconds();
+		RequestRedraw();
+		return FReply::Handled().CaptureMouse(Self);
+	}
 	switch (DragButton)
 	{
 	case EMouseButton::Left:
@@ -814,6 +921,12 @@ FReply FMapViewportClient::OnMouseButtonDown(const FGeometry& Geometry, const FP
 	return FReply::Unhandled();
 }
 
+FReply FMapViewportClient::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	// Quick presses in an editor mode are strokes of their own, not a double click.
+	return Settings.EditorMode ? OnMouseButtonDown(Geometry, Event) : FReply::Unhandled();
+}
+
 FReply FMapViewportClient::OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event)
 {
 	if (Drag == EDrag::None || Event.GetEffectingButton() != DragButton)
@@ -836,6 +949,12 @@ FReply FMapViewportClient::OnMouseButtonUp(const FGeometry& Geometry, const FPoi
 	case EDrag::Look:
 		bLooking = false;
 		FlyKeys.clear();
+		break;
+	case EDrag::Mode:
+		if (Settings.EditorMode)
+		{
+			Settings.EditorMode->InputRelease(*this);
+		}
 		break;
 	case EDrag::Rotate:
 	case EDrag::Scale:
@@ -860,6 +979,16 @@ FReply FMapViewportClient::OnMouseMove(const FGeometry& Geometry, const FPointer
 	if (!MapView)
 	{
 		return FReply::Unhandled();
+	}
+	if (Settings.EditorMode && (Drag == EDrag::None || Drag == EDrag::Mode))
+	{
+		Settings.EditorMode->MouseMove(*this, Local, Event);
+		RequestRedraw();
+		if (Drag == EDrag::Mode)
+		{
+			DragLast = Local;
+			return FReply::Handled();
+		}
 	}
 	const FVector2 Delta = Local - DragLast;
 	DragLast = Local;
@@ -1005,6 +1134,11 @@ void FMapViewportClient::Dolly(float Delta)
 void FMapViewportClient::OnMouseLeave(const FPointerEvent&)
 {
 	CursorLocal = FVector2(-1.0f, -1.0f);
+	if (Settings.EditorMode)
+	{
+		Settings.EditorMode->MouseLeave(*this);
+		RequestRedraw();
+	}
 	if (Settings.OnCursorText)
 	{
 		Settings.OnCursorText(FString());
@@ -1024,6 +1158,10 @@ void FMapViewportClient::OnMouseCaptureLost()
 	if (Document && (Drag == EDrag::Rotate || Drag == EDrag::Scale || Drag == EDrag::BrushEdit))
 	{
 		CancelToolDrag();
+	}
+	if (Drag == EDrag::Mode && Settings.EditorMode)
+	{
+		Settings.EditorMode->InputRelease(*this);
 	}
 	GrabbedDot = EDot::None;
 	Drag = EDrag::None;
@@ -1428,6 +1566,10 @@ void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint Pix
 		Out.AddLines(3, Geo(FVector2::Zero(), PixelSize.ToVector2() / Scale), { Min, FVector2(Max.X, Min.Y), Max, FVector2(Min.X, Max.Y) },
 			FColor(120, 170, 255), 1.0f, true);
 	}
+	if (MapView && Settings.EditorMode)
+	{
+		Settings.EditorMode->DrawOverlay(*this, Out, Scale);
+	}
 	if (MapView && ShowFlags.bAxes)
 	{
 		DrawAxes(Out, PixelSize);
@@ -1444,6 +1586,10 @@ void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint Pix
 	}
 	// The view's type and mode are in its toolbar; the label says the rest.
 	TArray<FString> Parts;
+	if (Settings.EditorMode && !Settings.EditorMode->GetHint().IsEmpty())
+	{
+		Parts.push_back(Settings.EditorMode->GetHint());
+	}
 	if (IsPerspective())
 	{
 		if (bLooking)
@@ -1502,6 +1648,12 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 		Fly(static_cast<float>(Now - LastFlyTime));
 		LastFlyTime = Now;
 	}
+	if (Drag == EDrag::Mode && Settings.EditorMode)
+	{
+		const double Now = FPlatformTime::Seconds();
+		Settings.EditorMode->Tick(*this, static_cast<float>(FMath::Min(Now - LastModeTime, 0.1)));
+		LastModeTime = Now;
+	}
 
 	UpdateProjection();
 	MapDraw->SetLineThickness(FMath::Max(1.0f, std::floor(GetDpiScale() + 0.25f)));
@@ -1544,6 +1696,7 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 
 	const TArray<FMapVertex>& Triangles = MapDraw->GetTriangles();
 	FRHIGraphicsPipeline* Pipeline = bSolid && !Triangles.empty() ? Resources.GetSolidPipeline(RenderTarget.GetTexture().GetFormat()) : nullptr;
+	Resources.Trim();
 	if (!Pipeline)
 	{
 		Renderer.Render(CommandList, RenderTarget.GetTexture(), Elements, Clear);
@@ -1588,14 +1741,26 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	std::memcpy(Vertices->GetMappedData(), Triangles.data(), VertexDesc.Size);
 	std::memcpy(Indices->GetMappedData(), IndexData.data(), IndexDesc.Size);
 
+	// Textured landscapes' images, baked and copied before the pass.
+	const TArray<FMapTriangleBatch>& Batches = MapDraw->GetBatches();
+	TArray<FRHITexture*> BatchTextures(Batches.size(), nullptr);
+	for (SIZE_T Index = 0; Index < Batches.size(); ++Index)
+	{
+		BatchTextures[Index] = Batches[Index].Landscape ? Resources.GetLandscapeTexture(*Batches[Index].Landscape) : nullptr;
+	}
+
+	FRHITexture& White = Resources.GetWhiteTexture();
 	CommandList.BeginRenderPass(RenderTarget.GetTexture(), *DepthBuffer, Clear, 1.0f);
 	CommandList.SetPipeline(*Pipeline);
 	const float Constants[4] = { 2.0f / static_cast<float>(PixelSize.X), 2.0f / static_cast<float>(PixelSize.Y), 0.0f, 0.0f };
 	CommandList.SetPushConstants(Constants, sizeof(Constants));
-	CommandList.SetTexture(Resources.GetWhiteTexture());
 	CommandList.SetVertexBuffer(*Vertices, 0, sizeof(FMapVertex));
 	CommandList.SetIndexBuffer(*Indices, 0, EIndexFormat::UInt32);
-	CommandList.DrawIndexed(static_cast<uint32>(IndexData.size()), 0, 0);
+	for (SIZE_T Index = 0; Index < Batches.size(); ++Index)
+	{
+		CommandList.SetTexture(BatchTextures[Index] ? *BatchTextures[Index] : White);
+		CommandList.DrawIndexed(Batches[Index].NumVertices, Batches[Index].FirstVertex, 0);
+	}
 	CommandList.EndRenderPass();
 	Device.DeferRelease(Vertices);
 	Device.DeferRelease(Indices);

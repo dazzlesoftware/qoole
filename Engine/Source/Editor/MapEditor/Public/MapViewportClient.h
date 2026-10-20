@@ -37,12 +37,36 @@
 
 #include "CoreMinimal.h"
 #include "MapDocument.h"
+#include "MapLandscapeTextures.h"
 #include "RenderTargetViewportClient.h"
 
 #include "MapCoreHeaders.h"
 
+#include <map>
+
 class FMapDraw;
+class FMapViewportClient;
 class View;
+
+// What an editor mode does with the viewports (Unreal's FEdMode, for
+// input): the Landscape mode's sculpting. While FMapViewSettings::EditorMode
+// is set, a left press it takes (InputPress) is a drag of its own, ticked
+// every frame while it is held; it sees the cursor move and draws over the
+// views.
+class IMapViewportMode
+{
+public:
+	virtual ~IMapViewportMode() = default;
+	virtual bool InputPress(FMapViewportClient& View, FVector2 Local, const FPointerEvent& Event) = 0;
+	virtual void InputRelease(FMapViewportClient& View) { (void)View; }
+	virtual void MouseMove(FMapViewportClient& View, FVector2 Local, const FPointerEvent& Event) { (void)View; (void)Local; (void)Event; }
+	virtual void MouseLeave(FMapViewportClient& View) { (void)View; }
+	virtual void Tick(FMapViewportClient& View, float DeltaSeconds) { (void)View; (void)DeltaSeconds; }
+	// Logical units over the view (its DPI scale given).
+	virtual void DrawOverlay(const FMapViewportClient& View, FSlateWindowElementList& Out, float DpiScale) const { (void)View; (void)Out; (void)DpiScale; }
+	// For the view's stats label.
+	virtual FString GetHint() const { return FString(); }
+};
 
 // Unreal's ELevelViewportType. The first four are the panes of the default
 // four-pane layout, in order.
@@ -107,6 +131,7 @@ struct FMapViewSettings
 	bool bSnapRotation = true;
 	float RotateSnapDegrees = 15.0f;
 	float MouseSensitivity = 1.0f; // looking around, times the default speed
+	IMapViewportMode* EditorMode = nullptr; // takes left drags (the Landscape mode)
 	bool bInvertMiddleMousePan = false;
 
 	// Called with the map position under the cursor of a 2D view ("x y z").
@@ -129,14 +154,33 @@ class FMapRenderResources
 {
 public:
 	explicit FMapRenderResources(FRHIDevice& InDevice) : Device(InDevice) {}
+	~FMapRenderResources();
 	FRHIGraphicsPipeline* GetSolidPipeline(EPixelFormat TargetFormat);
 	FRHITexture& GetWhiteTexture();
+	// A textured landscape's baked image (FLandscapeBake), brought up to
+	// date: only what a stroke changed is baked and copied again. Null if
+	// the object is no textured landscape. Call outside render passes.
+	FRHITexture* GetLandscapeTexture(const Object& Land);
+	// Once a frame: images no view has drawn for a while are let go.
+	void Trim();
+	int32 GetNumLandscapeTextures() const { return static_cast<int32>(Landscapes.size()); }
+	// The bake of a landscape drawn lately (tests); null if none.
+	const FLandscapeBake* FindLandscapeBake(const Object& Land) const;
 
 private:
+	struct FLandscapeEntry
+	{
+		FLandscapeBake Bake;
+		TSharedPtr<FRHITexture> Texture;
+		uint64 LastUsed = 0;
+	};
+
 	FRHIDevice& Device;
 	TSharedPtr<FRHITexture> WhiteTexture;
 	TSharedPtr<FRHIGraphicsPipeline> SolidPipeline;
 	EPixelFormat SolidFormat = EPixelFormat::Unknown;
+	std::map<const Object*, std::unique_ptr<FLandscapeEntry>> Landscapes;
+	uint64 Frame = 0;
 };
 
 class FMapViewportClient final : public FRenderTargetViewportClient
@@ -194,6 +238,9 @@ public:
 	// the plane through the camera (2D), or where the ray hits the ground
 	// (z = 0) in front of the camera, else a point ahead along it (3D).
 	Vector3d GetDropPoint(FVector2 LocalPosition) const;
+	// The ray under a viewport point in scope space: from the camera (3D) or
+	// from the camera's plane along the view (2D). The direction is a unit vector.
+	bool GetCursorRay(FVector2 LocalPosition, Vector3d& OutOrigin, Vector3d& OutDirection) const;
 	// The scope axis a 2D view looks along (0 X, 1 Y, 2 Z); Z for 3D views.
 	int32 GetDepthAxis() const;
 
@@ -205,8 +252,9 @@ public:
 	bool MapToScreen(const Vector3d& Point, FVector2& OutLocal) const;
 
 	// IViewportClient
-	bool IsRealtime() const override { return bLooking; }
+	bool IsRealtime() const override { return bLooking || Drag == EDrag::Mode; }
 	FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
+	FReply OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	FReply OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	FReply OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	FReply OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event) override;
@@ -230,6 +278,7 @@ private:
 		Move,
 		Pan,
 		Look,
+		Mode,      // the editor mode's (Settings.EditorMode)
 		Orbit,     // Alt + left drag (3D)
 		Dolly,     // Alt + right drag (3D)
 		Rotate,
@@ -340,6 +389,7 @@ private:
 	const GPolygon* GrabbedFace = nullptr;
 
 	bool bLooking = false;
+	double LastModeTime = 0.0;
 	TSet<EKey> FlyKeys;
 	double LastFlyTime = 0.0;
 	FVector2 CursorLocal{ -1.0f, -1.0f };

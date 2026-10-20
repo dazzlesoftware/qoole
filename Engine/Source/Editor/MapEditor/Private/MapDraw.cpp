@@ -3,6 +3,7 @@
 #include "MapDraw.h"
 
 #include "MapEditorPrivate.h"
+#include "MapLandscapeTextures.h"
 
 #include <cmath>
 
@@ -63,6 +64,7 @@ void FMapDraw::Reset()
 	LineVertices.clear();
 	LineIndices.clear();
 	Triangles.clear();
+	Batches.clear();
 }
 
 FColor FMapDraw::GetPaletteColor(int Index) const
@@ -109,6 +111,12 @@ void FMapDraw::FlushLines(FSlateWindowElementList& Out, int32 Layer)
 
 FColor FMapDraw::ObjectColor(float Shade) const
 {
+	// Landscapes in Unreal's neutral grey-green, not a color of their own.
+	if (zbufObject && zbufObject->HasLandscape())
+	{
+		const auto Channel = [Shade](float V) { return static_cast<uint8>(FMath::Clamp(V * Shade * 255.0f + 0.5f, 0.0f, 255.0f)); };
+		return FColor(Channel(0.62f), Channel(0.66f), Channel(0.58f));
+	}
 	// FDraw::ZBufSetup made zbufColor from the object and the side; take the
 	// side out again so every face of an object has the same hue.
 	const int Axis = FMath::Clamp(axisAlign, 0, 5);
@@ -117,7 +125,20 @@ FColor FMapDraw::ObjectColor(float Shade) const
 	return HsvToColor(Hue, 0.28f, 0.82f, Shade);
 }
 
-void FMapDraw::PushTriangle(const ZPoint Points[3], const uint32 Colors[3])
+void FMapDraw::AddVertex(const FMapVertex& Vertex, const Object* Textured)
+{
+	if (Batches.empty() || Batches.back().Landscape != Textured)
+	{
+		FMapTriangleBatch Batch;
+		Batch.Landscape = Textured;
+		Batch.FirstVertex = static_cast<uint32>(Triangles.size());
+		Batches.push_back(Batch);
+	}
+	Triangles.push_back(Vertex);
+	++Batches.back().NumVertices;
+}
+
+void FMapDraw::PushTriangle(const ZPoint Points[3], const uint32 Colors[3], const Object* Textured)
 {
 	for (int Index = 0; Index < 3; ++Index)
 	{
@@ -125,10 +146,10 @@ void FMapDraw::PushTriangle(const ZPoint Points[3], const uint32 Colors[3])
 		Vertex.X = Points[Index].x + static_cast<float>(orgX);
 		Vertex.Y = static_cast<float>(orgY) - Points[Index].y;
 		Vertex.Q = 1.0f / FMath::Max(Points[Index].z, 1e-4f);
-		Vertex.U = 0.0f;
-		Vertex.V = 0.0f;
+		Vertex.U = Textured ? Points[Index].s : 0.0f;
+		Vertex.V = Textured ? Points[Index].t : 0.0f;
 		Vertex.Color = Colors[Index];
-		Triangles.push_back(Vertex);
+		AddVertex(Vertex, Textured);
 	}
 }
 
@@ -167,9 +188,47 @@ void FMapDraw::ZBufShadedTriangle(ZPoint Points[3], const float Shades[3])
 	uint32 Colors[3];
 	for (int Index = 0; Index < 3; ++Index)
 	{
-		Colors[Index] = PackRGBA(ObjectColor(bShaded ? FMath::Clamp(Shades[Index] * 1.1f, 0.0f, 1.0f) : 0.86f));
+		Colors[Index] = PackRGBA(ObjectColor(LitShade(Shades[Index])));
 	}
 	PushTriangle(Points, Colors);
+}
+
+void FMapDraw::ZBufColoredTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3])
+{
+	uint32 Packed[3];
+	for (int Index = 0; Index < 3; ++Index)
+	{
+		const float Shade = LitShade(Shades[Index]);
+		const auto Channel = [Shade](uint32 V) { return static_cast<uint8>(FMath::Clamp(static_cast<float>(V) * Shade + 0.5f, 0.0f, 255.0f)); };
+		const uint32 C = Colors[Index];
+		Packed[Index] = PackRGBA(FColor(Channel(C & 0xFF), Channel((C >> 8) & 0xFF), Channel((C >> 16) & 0xFF)));
+	}
+	PushTriangle(Points, Packed);
+}
+
+void FMapDraw::ZBufLandscapeTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3])
+{
+	// Untextured landscapes keep their layers' colors per corner.
+	if (!zbufObject || !zbufObject->HasLandscape() || !FLandscapeTextureLibrary::IsTextured(zbufObject->GetLandscape()))
+	{
+		if (Colors)
+		{
+			ZBufColoredTriangle(Points, Shades, Colors);
+		}
+		else
+		{
+			ZBufShadedTriangle(Points, Shades);
+		}
+		return;
+	}
+	// The baked image has the colors; the corners just the light.
+	uint32 Packed[3];
+	for (int Index = 0; Index < 3; ++Index)
+	{
+		const uint8 Light = static_cast<uint8>(LitShade(Shades[Index]) * 255.0f + 0.5f);
+		Packed[Index] = PackRGBA(FColor(Light, Light, Light));
+	}
+	PushTriangle(Points, Packed, zbufObject);
 }
 
 void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float Q2)
@@ -200,6 +259,6 @@ void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float
 	const FMapVertex Corners[4] = { Vertex(A + Normal, Q1), Vertex(B + Normal, Q2), Vertex(B - Normal, Q2), Vertex(A - Normal, Q1) };
 	for (const int32 Index : { 0, 1, 2, 0, 2, 3 })
 	{
-		Triangles.push_back(Corners[Index]);
+		AddVertex(Corners[Index], nullptr);
 	}
 }

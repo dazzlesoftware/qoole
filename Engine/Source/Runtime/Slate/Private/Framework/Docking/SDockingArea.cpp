@@ -381,7 +381,8 @@ void SDockTabStack::Construct(const FArguments&, const TSharedRef<FTabManager>& 
 	SAssignNew(Well, SHorizontalBox);
 	const TSharedRef<SWidget> WellWidget = SNew(SBorder).BorderImage(&Style->WellBackground).Padding(0.0f)
 		[
-			SNew(SBox).HeightOverride(TOptional<float>(Style->WellHeight)).HAlign(HAlign_Left)[ToSharedRef(Well)]
+			// Clipped: tabs that do not fit must not draw over the next stack.
+			SNew(SBox).HeightOverride(TOptional<float>(Style->WellHeight)).HAlign(HAlign_Left).Clipping(EWidgetClipping::ClipToBounds)[ToSharedRef(Well)]
 		];
 	WellArea = WellWidget.ToSharedPtr();
 	ChildSlot

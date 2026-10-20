@@ -24,6 +24,7 @@
 #include "CoreMinimal.h"
 #include "MapEditorEnvironment.h"
 
+class Landscape;
 class Matrix44;
 class Object;
 class Plane;
@@ -133,6 +134,13 @@ public:
 	// A static mesh actor (StaticMesh::Find) with its pivot at Position; null
 	// if there is no such mesh.
 	Object* AddMesh(const FString& MeshName, const Vector3d& Position);
+	// A flat landscape of QuadsX x QuadsY quads centered on Position.
+	Object* AddLandscape(int32 QuadsX, int32 QuadsY, float QuadSize, const Vector3d& Position);
+	// This landscape (an imported one) centered on Position.
+	Object* AddLandscape(std::shared_ptr<const Landscape> Land, const Vector3d& Position, const FString& Description = "Add Landscape");
+	// Gives a landscape other heights (sculpting). Inside an open transaction
+	// the object is captured once, so a whole stroke is one undo step.
+	void SetLandscape(Object& Obj, std::shared_ptr<const Landscape> NewLandscape, const FString& Description = "Sculpt Landscape");
 	// Writes copies of objects as a prefab (.qle), centered on the origin.
 	bool SavePrefab(const TArray<Object*>& Objects, const FString& PrefabPath, FString& OutError) const;
 

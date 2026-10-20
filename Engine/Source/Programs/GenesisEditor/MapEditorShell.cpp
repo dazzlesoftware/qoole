@@ -45,6 +45,7 @@ const char* ToString(EMapEditorMode Mode)
 	switch (Mode)
 	{
 	case EMapEditorMode::Selection: return "Selection";
+	case EMapEditorMode::Landscape: return "Landscape";
 	case EMapEditorMode::BrushEditing: return "Brush Editing";
 	}
 	return "?";
@@ -55,6 +56,28 @@ FMapEditorShell::FMapEditorShell(FHost InHost)
 {
 	Commands = std::make_shared<FUICommandList>();
 	TabManager = FTabManager::Create().ToSharedPtr();
+	// The mode follows its panel, as Unreal's mode tabs do: bringing the
+	// Landscape tab up is Landscape mode, Place Actors is Selection.
+	TabManager->OnActiveTabChanged.AddLambda([this](const TSharedPtr<SDockTab>& Tab)
+	{
+		if (!Tab || bShowingModeTab)
+		{
+			return;
+		}
+		const FName Id = Tab->GetTabId();
+		if (Id == FName("Landscape"))
+		{
+			SetMode(EMapEditorMode::Landscape);
+		}
+		else if (Id == FName("PlaceActors"))
+		{
+			SetMode(EMapEditorMode::Selection);
+		}
+		else if (Id == FName("BrushEditing"))
+		{
+			SetMode(EMapEditorMode::BrushEditing);
+		}
+	});
 	RenderResources = MakeUnique<FMapRenderResources>(*Host.Device);
 	ViewSettings.OnCursorText = [this](const FString& Text) { CursorText = Text; };
 	ViewSettings.OnMessage = [this](const FString& Text) { StatusText = Text; };
@@ -80,6 +103,8 @@ FMapEditorShell::FMapEditorShell(FHost InHost)
 
 FMapEditorShell::~FMapEditorShell()
 {
+	ViewSettings.EditorMode = nullptr;
+	LandscapeMode.SetDocument(nullptr);
 	for (const TSharedPtr<FMapViewportClient>& View : Views)
 	{
 		View->SetDocument(nullptr);
@@ -213,7 +238,9 @@ void FMapEditorShell::SetDocument(TUniquePtr<FMapDocument> NewDocument)
 	{
 		Properties->SetObjects({});
 	}
+	LandscapeMode.SetDocument(nullptr);
 	Document = std::move(NewDocument);
+	LandscapeMode.SetDocument(Document.get());
 	if (Document)
 	{
 		DocumentHandle = Document->OnChanged.AddLambda([this](EMapChange Change) { OnDocumentChanged(Change); });
@@ -237,6 +264,7 @@ void FMapEditorShell::OnDocumentChanged(EMapChange Change)
 	{
 		RefreshOutliner();
 		RefreshProperties();
+		RefreshLandscapeLayers();
 	}
 	if (HasAnyChange(Change, EMapChange::File))
 	{
@@ -469,6 +497,8 @@ void FMapEditorShell::SetTool(EMapTool Tool)
 	if (ToolMode != Mode)
 	{
 		Mode = ToolMode;
+		ViewSettings.EditorMode = nullptr;
+		ViewSettings.Changed();
 		ShowModeTab();
 	}
 }
@@ -486,10 +516,12 @@ void FMapEditorShell::SetMode(EMapEditorMode NewMode)
 	{
 		ViewSettings.Tool = EMapTool::Vertex;
 	}
-	else if (Mode == EMapEditorMode::Selection && IsBrushEditingTool(ViewSettings.Tool))
+	else if (Mode != EMapEditorMode::BrushEditing && IsBrushEditingTool(ViewSettings.Tool))
 	{
 		ViewSettings.Tool = EMapTool::Select;
 	}
+	// Landscape takes the views' left drags over landscapes.
+	ViewSettings.EditorMode = Mode == EMapEditorMode::Landscape ? &LandscapeMode : nullptr;
 	ViewSettings.Changed();
 	ShowModeTab();
 	Log(FString::Format("{} mode", ToString(Mode)));
@@ -497,7 +529,9 @@ void FMapEditorShell::SetMode(EMapEditorMode NewMode)
 
 void FMapEditorShell::ShowModeTab()
 {
-	TabManager->TryInvokeTab(Mode == EMapEditorMode::BrushEditing ? FName("BrushEditing") : FName("PlaceActors"));
+	bShowingModeTab = true;
+	TabManager->TryInvokeTab(Mode == EMapEditorMode::BrushEditing ? FName("BrushEditing") : (Mode == EMapEditorMode::Landscape ? FName("Landscape") : FName("PlaceActors")));
+	bShowingModeTab = false;
 }
 
 TArray<FMapPlaceable> FMapEditorShell::GetPlaceables() const
@@ -689,6 +723,7 @@ void FMapEditorShell::RegisterCommands()
 	Cmd.SavePrefab = Add("SavePrefab", "Save as Prefab...", "Save the selection as a prefab for the Prefabs panel");
 
 	Cmd.SelectionMode = Add("SelectionMode", "Selection Mode", "Select, move, turn and scale; place actors", T::RadioButton, FInputChord(EKey::One, M::Shift));
+	Cmd.LandscapeMode = Add("LandscapeMode", "Landscape Mode", "Make landscapes and sculpt them", T::RadioButton, FInputChord(EKey::Two, M::Shift));
 	Cmd.BrushEditingMode = Add("BrushEditingMode", "Brush Editing Mode", "Clip brushes and drag their corners, edges and faces", T::RadioButton, FInputChord(EKey::Six, M::Shift));
 	Cmd.EditorPreferences = Add("EditorPreferences", "Editor Preferences...", "Graphics, appearance, keyboard shortcuts, viewports, grid and snapping");
 	Cmd.ResetLayout = Add("ResetLayout", "Reset Layout", "Go back to the default window layout");
@@ -851,7 +886,11 @@ void FMapEditorShell::RegisterCommands()
 	for (const auto& [Command, Tool] : Tools)
 	{
 		const EMapTool ThisTool = Tool;
-		List.MapAction(ToSharedRef(Command), [this, ThisTool] { SetTool(ThisTool); }, nullptr, [this, ThisTool] { return ViewSettings.Tool == ThisTool; });
+		// Not in Landscape mode, whose left drags sculpt and paint (as Unreal
+		// greys the transform tools there): S, R and the others are also
+		// keys one flies with.
+		List.MapAction(ToSharedRef(Command), [this, ThisTool] { SetTool(ThisTool); }, [this] { return Mode != EMapEditorMode::Landscape; },
+			[this, ThisTool] { return ViewSettings.Tool == ThisTool; });
 	}
 
 	// Object.
@@ -933,6 +972,7 @@ void FMapEditorShell::RegisterCommands()
 
 	// Modes.
 	List.MapAction(ToSharedRef(Cmd.SelectionMode), [this] { SetMode(EMapEditorMode::Selection); }, nullptr, [this] { return Mode == EMapEditorMode::Selection; });
+	List.MapAction(ToSharedRef(Cmd.LandscapeMode), [this] { SetMode(EMapEditorMode::Landscape); }, nullptr, [this] { return Mode == EMapEditorMode::Landscape; });
 	List.MapAction(ToSharedRef(Cmd.BrushEditingMode), [this] { SetMode(EMapEditorMode::BrushEditing); }, nullptr, [this] { return Mode == EMapEditorMode::BrushEditing; });
 
 	// Window, Help.
@@ -1116,6 +1156,7 @@ void FMapEditorShell::RegisterMenus()
 	// The modes and Add, as in Unreal's main toolbar.
 	FMenuSection& ModeList = Registry.RegisterMenu("MapEditor.Modes").AddSection("Modes", "Editor Modes");
 	ModeList.AddCommand(Cmd.SelectionMode);
+	ModeList.AddCommand(Cmd.LandscapeMode);
 	ModeList.AddCommand(Cmd.BrushEditingMode);
 	FMenuDefinition& QuickAdd = Registry.RegisterMenu("MapEditor.QuickAdd");
 	for (const char* Category : { "Basic", "Lights", "Shapes", "Geometry" })
@@ -1146,7 +1187,7 @@ void FMapEditorShell::RegisterMenus()
 		return SNew(SComboButton)
 			.ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FToolBarStyle>("ToolBar").Button)
 			.IsFocusable(false)
-			.ToolTipText("The editor mode: what the tools and the left panel are for (Shift+1, Shift+6)")
+			.ToolTipText("The editor mode: what the tools and the left panel are for (Shift+1, Shift+2, Shift+6)")
 			.OnGetMenuContent([Context] { return FMenuRegistry::Get().GenerateMenuWidget("MapEditor.Modes", Context); })
 			.ButtonContent()[SNew(STextBlock).Text([this] { return FString::Format("{} Mode", ToString(Mode)); })];
 	});
@@ -1261,8 +1302,10 @@ TSharedRef<SWidget> FMapEditorShell::MakeContent(const TSharedRef<SWindow>& Wind
 					{
 						return FString();
 					}
-					return FString::Format("{}  ·  {} brushes  ·  {} meshes  ·  {} entities  ·  {} selected  ·  grid {:.0f}{}", ToString(ViewSettings.Tool),
-						Document->CountBrushes(), Document->CountMeshes(), Document->CountEntities(), Document->GetSelection().size(), ViewSettings.GridSize,
+					const auto Count = [](SIZE_T N, const char* One, const char* Many) { return FString::Format("{} {}", N, N == 1 ? One : Many); };
+					return FString::Format("{}  ·  {}  ·  {}  ·  {}  ·  {} selected  ·  grid {:.0f}{}", ToString(ViewSettings.Tool),
+						Count(static_cast<SIZE_T>(Document->CountBrushes()), "brush", "brushes"), Count(static_cast<SIZE_T>(Document->CountMeshes()), "mesh", "meshes"),
+						Count(static_cast<SIZE_T>(Document->CountEntities()), "entity", "entities"), Document->GetSelection().size(), ViewSettings.GridSize,
 						ViewSettings.bSnapToGrid ? " (snap)" : "");
 				})]
 			]

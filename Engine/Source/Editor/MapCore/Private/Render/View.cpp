@@ -1221,9 +1221,18 @@ View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip) {
   static const Vector3d up(0.0f, 0.0f, 1.0f);
   renderDraw->ZBufSetup(&objNode, NULL, up);
 
+  const bool colored = mesh.HasVertexColors();
+  // A landscape's vertices are its grid points, row by row: where each is
+  // on the grid goes along, for drawing it textured.
+  const Landscape *land = objNode.HasLandscape() ? &objNode.GetLandscape() : NULL;
+  const int landPointsX = land ? land->GetPointsX() : 1;
+  const float landInvX = land ? 1.0f / land->GetQuadsX() : 0.0f;
+  const float landInvY = land ? 1.0f / land->GetQuadsY() : 0.0f;
   Vector3d e1, e2, faceNorm, n;
   ZPoint zpts[3];
   float shades[3];
+  float gridS[3] = { 0.0f, 0.0f, 0.0f }, gridT[3] = { 0.0f, 0.0f, 0.0f };
+  unsigned int colors[3] = { 0, 0, 0 };
   for (const StaticMesh::Triangle &tri : mesh.GetTriangles()) {
     const Point3d &p0 = vBuffer[tri.v[0]];
     const Point3d &p1 = vBuffer[tri.v[1]];
@@ -1245,6 +1254,12 @@ View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip) {
       const float ndl = len > 1e-8f ? n.DotVector(lightDir) / len : 0.0f;
       const float sky = len > 1e-8f ? n.GetZ() / len : 0.0f;
       shades[k] = Min(1.0f, 0.32f + 0.58f * Max(ndl, 0.0f) + 0.12f * (sky * 0.5f + 0.5f));
+      if (colored)
+        colors[k] = mesh.GetVertexColor(tri.v[k]);
+      if (land) {
+        gridS[k] = (tri.v[k] % landPointsX) * landInvX;
+        gridT[k] = (tri.v[k] / landPointsX) * landInvY;
+      }
     }
 
     if (!polyClip) {
@@ -1259,10 +1274,17 @@ View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip) {
         zpts[k].x = corners[k]->GetX() * div;
         zpts[k].y = corners[k]->GetZ() * div;
         zpts[k].z = corners[k]->GetY();
-        zpts[k].s = zpts[k].t = 0.0f;
+        zpts[k].s = gridS[k];
+        zpts[k].t = gridT[k];
       }
-      if (!behind)
-        renderDraw->ZBufShadedTriangle(zpts, shades);
+      if (!behind) {
+        if (land)
+          renderDraw->ZBufLandscapeTriangle(zpts, shades, colored ? colors : NULL);
+        else if (colored)
+          renderDraw->ZBufColoredTriangle(zpts, shades, colors);
+        else
+          renderDraw->ZBufShadedTriangle(zpts, shades);
+      }
       continue;
     }
 
@@ -1276,6 +1298,13 @@ View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip) {
       continue;
     const float mean = (shades[0] + shades[1] + shades[2]) / 3.0f;
     const float flat[3] = { mean, mean, mean };
+    // And their mean color.
+    unsigned int meanColor = 0xFF000000u;
+    for (int c = 0; c < 3; c++) {
+      const unsigned int sum = ((colors[0] >> (8 * c)) & 0xFF) + ((colors[1] >> (8 * c)) & 0xFF) + ((colors[2] >> (8 * c)) & 0xFF);
+      meanColor |= (sum / 3) << (8 * c);
+    }
+    const unsigned int flatColors[3] = { meanColor, meanColor, meanColor };
     const auto project = [](const Point3d &pt, ZPoint &zp) {
       const float div = renderView->winWidth / pt.GetY();
       zp.x = pt.GetX() * div;
@@ -1283,13 +1312,41 @@ View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip) {
       zp.z = pt.GetY();
       zp.s = zp.t = 0.0f;
     };
+    // A landscape's pieces keep their place on the grid, and their light:
+    // both from where each corner is in the triangle.
+    float pieceShades[3];
+    const auto locate = [&](const Point3d &pt, ZPoint &zp, float &shade) {
+      Vector3d d0, d1, d2;
+      d0.SubVector(p1, p0);
+      d1.SubVector(p2, p0);
+      d2.SubVector(pt, p0);
+      const float a00 = d0.DotVector(d0), a01 = d0.DotVector(d1), a11 = d1.DotVector(d1);
+      const float b0 = d2.DotVector(d0), b1 = d2.DotVector(d1);
+      const float den = a00 * a11 - a01 * a01;
+      const float w1 = den != 0.0f ? (a11 * b0 - a01 * b1) / den : 0.0f;
+      const float w2 = den != 0.0f ? (a00 * b1 - a01 * b0) / den : 0.0f;
+      const float w0 = 1.0f - w1 - w2;
+      zp.s = w0 * gridS[0] + w1 * gridS[1] + w2 * gridS[2];
+      zp.t = w0 * gridT[0] + w1 * gridT[1] + w2 * gridT[2];
+      shade = w0 * shades[0] + w1 * shades[1] + w2 * shades[2];
+    };
     project(fvPtr[0], zpts[0]);
+    if (land)
+      locate(fvPtr[0], zpts[0], pieceShades[0]);
     for (int i = 2; i < numPts; i++) {
       if (fvPtr[i - 1].GetY() <= 0.0f || fvPtr[i].GetY() <= 0.0f)
         continue;
       project(fvPtr[i - 1], zpts[1]);
       project(fvPtr[i], zpts[2]);
-      renderDraw->ZBufShadedTriangle(zpts, flat);
+      if (land) {
+        locate(fvPtr[i - 1], zpts[1], pieceShades[1]);
+        locate(fvPtr[i], zpts[2], pieceShades[2]);
+        renderDraw->ZBufLandscapeTriangle(zpts, pieceShades, colored ? flatColors : NULL);
+      }
+      else if (colored)
+        renderDraw->ZBufColoredTriangle(zpts, flat, flatColors);
+      else
+        renderDraw->ZBufShadedTriangle(zpts, flat);
     }
   }
 }

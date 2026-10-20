@@ -196,6 +196,50 @@ Object* FMapDocument::AddMesh(const FString& MeshName, const Vector3d& Position)
 	return Obj;
 }
 
+Object* FMapDocument::AddLandscape(int32 QuadsX, int32 QuadsY, float QuadSize, const Vector3d& Position)
+{
+	return AddLandscape(std::make_shared<Landscape>(QuadsX, QuadsY, QuadSize), Position);
+}
+
+Object* FMapDocument::AddLandscape(std::shared_ptr<const Landscape> Land, const Vector3d& Position, const FString& Description)
+{
+	if (!Land)
+	{
+		return nullptr;
+	}
+	Object* Obj = new Object;
+	Obj->SetLandscape(std::move(Land));
+	Obj->SetObjName("Landscape");
+	Obj->SetPosition(Position);
+	const bool bOwn = BeginOwnTransaction(Description);
+	AddObjects({ Obj });
+	if (bOwn)
+	{
+		EndTransaction();
+	}
+	return Obj;
+}
+
+void FMapDocument::SetLandscape(Object& Obj, std::shared_ptr<const Landscape> NewLandscape, const FString& Description)
+{
+	if (!Obj.HasLandscape() || !NewLandscape)
+	{
+		return;
+	}
+	const bool bOwn = BeginOwnTransaction(Description);
+	CaptureObjects({ &Obj });
+	Obj.SetLandscape(std::move(NewLandscape));
+	if (Obj.GetParentPtr())
+	{
+		Obj.GetParentPtr()->SetBoundRadius();
+	}
+	Changed(EMapChange::Geometry);
+	if (bOwn)
+	{
+		EndTransaction();
+	}
+}
+
 Object* FMapDocument::AddEntity(const FString& ClassName, const Vector3d& Position)
 {
 	Object* Obj = new Object;

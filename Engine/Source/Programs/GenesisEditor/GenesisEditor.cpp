@@ -178,6 +178,7 @@ private:
 	ERHIBackend Backend = ERHIBackend::D3D12;
 	float AppScale = 1.0f;
 	FString SelfTestDir;
+	float LandscapePaintBefore = 0.0f;
 	FString SettingsDir;
 	int32 SelfTestFrame = 0;
 	Object* TestCube = nullptr;
@@ -800,13 +801,185 @@ void FMapEditorApp::TickSelfTest()
 		break;
 	case 305: Capture("imported"); break;
 
+	// Landscape mode: a new landscape, sculpted into a hill and a valley,
+	// with the brush ring under the mouse in the perspective view.
+	case 306:
+	{
+		Shell->NewMap(FMapEditorEnvironment::GetBuiltInGameSet());
+		Shell->SetMode(EMapEditorMode::Landscape);
+		FMapLandscapeMode& Land = Shell->GetLandscapeMode();
+		Land.NewQuadsX = 48;
+		Land.NewQuadsY = 48;
+		Land.NewQuadSize = 32.0f;
+		Object* Terrain = Land.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		if (Terrain)
+		{
+			Land.Brush.Radius = 384.0f;
+			Land.Brush.Strength = 1.0f;
+			Land.Tool = ELandscapeTool::Sculpt;
+			const auto Stroke = [&Land, Terrain](const Vector3d& At, float Seconds, bool bLower)
+			{
+				Land.BeginStroke(*Terrain, At, bLower);
+				for (float T = 0.0f; T < Seconds; T += 1.0f / 30.0f)
+				{
+					Land.ApplyAt(*Terrain, At, 1.0f / 30.0f, bLower);
+				}
+				Land.EndStroke();
+			};
+			Land.Brush.Falloff = 0.8f;
+			Stroke(Vector3d(-160.0f, 128.0f, 0.0f), 0.8f, false);
+			Stroke(Vector3d(256.0f, -224.0f, 0.0f), 0.5f, false);
+			Stroke(Vector3d(160.0f, 256.0f, 0.0f), 0.4f, true);
+			Land.Tool = ELandscapeTool::Smooth;
+			Stroke(Vector3d(0.0f, 0.0f, 0.0f), 0.3f, false);
+			Land.Tool = ELandscapeTool::Noise;
+			Land.Brush.Radius = 768.0f;
+			Land.Brush.Strength = 0.3f;
+			Stroke(Vector3d(0.0f, 0.0f, 0.0f), 0.2f, false);
+
+			// Paint layers: grass all over, rock on the hill, dirt in the valley.
+			Land.AddLayer(*Terrain);
+			Land.AddLayer(*Terrain);
+			Land.AddLayer(*Terrain);
+			Land.Tool = ELandscapeTool::Paint;
+			Land.Brush.Falloff = 0.6f;
+			Land.Brush.Strength = 1.0f;
+			Land.SelectedLayer = 0;
+			Land.Brush.Radius = 1200.0f;
+			Stroke(Vector3d(0.0f, 0.0f, 0.0f), 0.5f, false);
+			Land.SelectedLayer = 1;
+			Land.Brush.Radius = 320.0f;
+			Stroke(Vector3d(-160.0f, 128.0f, 0.0f), 0.3f, false);
+			Land.SelectedLayer = 2;
+			Land.Brush.Radius = 256.0f;
+			Stroke(Vector3d(160.0f, 256.0f, 0.0f), 0.3f, false);
+			Land.SelectedLayer = 1;
+			Land.Brush.Radius = 256.0f;
+		}
+		Doc = Shell->GetDocument();
+		Doc->ClearSelection();
+		Commands.ExecuteAction(*Shell->Cmd.FrameSelection);
+		Report(Terrain && Terrain->GetLandscape().GetNumLayers() == 3 && Doc->GetUndoDescription() == "Landscape Paint" ? "landscape sculpted and painted"
+			: "FAILED: landscape");
+		break;
+	}
+	case 308:
+	{
+		const TSharedRef<IPlatformWindow> Native = ToSharedRef(MainWindow->GetNativeWindow());
+		App->OnMouseMove(Native, ViewPointToWindow(EMapViewType::Perspective, Vector3d(-160.0f, 128.0f, 120.0f)));
+		break;
+	}
+	case 309:
+	{
+		Capture("landscape");
+		// Its heightmap and Rock weightmap out to files and into a second
+		// landscape: the same ground and rock (then undone).
+		FMapLandscapeMode& Land = Shell->GetLandscapeMode();
+		Object* Terrain = Land.GetTargetLandscape();
+		const FString HeightPath = SelfTestDir + "landscape_height.png";
+		const FString RockPath = SelfTestDir + "landscape_rock.png";
+		FString Error;
+		bool bOk = Terrain && Land.ExportHeightmap(*Terrain, HeightPath, Error) && Land.ExportWeightmap(*Terrain, 1, RockPath, Error);
+		Object* Copy = bOk ? Land.ImportLandscape(HeightPath, Vector3d(2000.0f, 0.0f, 0.0f), Error) : nullptr;
+		bOk = Copy && Land.AddLayer(*Copy, "Rock", FColor(122, 118, 112)) && Land.ImportWeightmap(*Copy, 0, RockPath, Error);
+		float HeightError = 0.0f;
+		float WeightError = 0.0f;
+		if (bOk)
+		{
+			const Landscape& A = Terrain->GetLandscape();
+			const Landscape& B = Copy->GetLandscape();
+			bOk = A.GetPointsX() == B.GetPointsX() && A.GetPointsY() == B.GetPointsY();
+			for (int32 Y = 0; bOk && Y < A.GetPointsY(); ++Y)
+			{
+				for (int32 X = 0; X < A.GetPointsX(); ++X)
+				{
+					HeightError = FMath::Max(HeightError, std::fabs(A.GetHeight(X, Y) - B.GetHeight(X, Y)));
+					WeightError = FMath::Max(WeightError, std::fabs(A.GetWeight(1, X, Y) - B.GetWeight(0, X, Y)));
+				}
+			}
+		}
+		const FString Outcome = bOk && HeightError < 0.01f && WeightError <= 0.5f / 255.0f + 1e-4f
+			? FString::Format("landscape heightmap and weightmap round-trip (height error {:.4f}, weight error {:.4f})", HeightError, WeightError)
+			: FString::Format("FAILED: landscape heightmap and weightmap ({})", Error);
+		Report(*Outcome);
+		for (int32 Step = 0; Step < 3 && Copy; ++Step)
+		{
+			Shell->GetDocument()->Undo();
+		}
+		break;
+	}
+
+	// Landscape mode as a user drives it, with real input: S (a tool key,
+	// and a fly key) keeps the mode; the mode follows the Place Actors and
+	// Landscape tabs; a held left button paints, and never box-selects.
+	case 310:
+		App->OnKeyDown(EKey::S, 's', false);
+		App->OnKeyUp(EKey::S, 's', false);
+		break;
+	case 312:
+		Report(Shell->GetMode() == EMapEditorMode::Landscape && Shell->GetViewSettings().Tool == EMapTool::Select ? "landscape mode kept through the S key"
+			: "FAILED: the S key left landscape mode");
+		PointAtText("Place Actors", true);
+		break;
+	case 314:
+		Report(Shell->GetMode() == EMapEditorMode::Selection ? "the Place Actors tab is selection mode" : "FAILED: the Place Actors tab");
+		PointAtText("Landscape", true);
+		break;
+	case 316:
+	{
+		Report(Shell->GetMode() == EMapEditorMode::Landscape ? "the Landscape tab is landscape mode" : "FAILED: the Landscape tab");
+		const Object* Terrain = Shell->GetLandscapeMode().GetTargetLandscape();
+		Shell->GetLandscapeMode().Tool = ELandscapeTool::Paint;
+		Shell->GetLandscapeMode().SelectedLayer = 1; // Rock
+		LandscapePaintBefore = 0.0f;
+		for (const float Weight : Terrain ? Terrain->GetLandscape().GetLayers()[1].weights : std::vector<float>())
+		{
+			LandscapePaintBefore += Weight;
+		}
+		const Vector3d On(-400.0f, 300.0f, Terrain ? Terrain->GetLandscape().SampleHeight(-400.0f, 300.0f) : 0.0f);
+		const TSharedRef<IPlatformWindow> Native = ToSharedRef(MainWindow->GetNativeWindow());
+		const FVector2 At = ViewPointToWindow(EMapViewType::Perspective, On);
+		App->OnMouseMove(Native, At);
+		App->OnMouseDown(Native, EMouseButton::Left, At);
+		break;
+	}
+	case 318:
+	case 320:
+	case 322:
+	{
+		// Moving while held: the stroke follows.
+		const Object* Terrain = Shell->GetLandscapeMode().GetTargetLandscape();
+		const float X = -400.0f + static_cast<float>(Frame - 316) * 24.0f;
+		const Vector3d On(X, 300.0f, Terrain ? Terrain->GetLandscape().SampleHeight(X, 300.0f) : 0.0f);
+		App->OnMouseMove(ToSharedRef(MainWindow->GetNativeWindow()), ViewPointToWindow(EMapViewType::Perspective, On));
+		break;
+	}
+	case 326:
+	{
+		const TSharedRef<IPlatformWindow> Native = ToSharedRef(MainWindow->GetNativeWindow());
+		App->OnMouseUp(Native, EMouseButton::Left, App->GetCursorPosition());
+		const Object* Terrain = Shell->GetLandscapeMode().GetTargetLandscape();
+		float After = 0.0f;
+		for (const float Weight : Terrain ? Terrain->GetLandscape().GetLayers()[1].weights : std::vector<float>())
+		{
+			After += Weight;
+		}
+		Doc = Shell->GetDocument();
+		const bool bOk = After > LandscapePaintBefore + 1.0f && Doc->GetUndoDescription() == "Landscape Paint" && Doc->GetSelection().empty();
+		const FString Outcome = FString::Format("{}landscape painted with the mouse (rock {:.1f} -> {:.1f}, {} selected)", bOk ? "" : "FAILED: ",
+			LandscapePaintBefore, After, Doc->GetSelection().size());
+		Report(*Outcome);
+		Shell->SetMode(EMapEditorMode::Selection);
+		break;
+	}
+
 	// DPI changes, as in milestone 2.
-	case 310: SimulateDpiChange(1.0f); break;
-	case 335: Capture("dpi100"); break;
-	case 340: SimulateDpiChange(2.0f); break;
-	case 365: Capture("dpi200"); break;
-	case 370: SimulateDpiChange(static_cast<float>(GetDpiForWindow(static_cast<HWND>(MainWindow->GetNativeWindow()->GetNativeHandle()))) / 96.0f); break;
-	case 380: App->RequestQuit(); break;
+	case 330: SimulateDpiChange(1.0f); break;
+	case 355: Capture("dpi100"); break;
+	case 360: SimulateDpiChange(2.0f); break;
+	case 385: Capture("dpi200"); break;
+	case 390: SimulateDpiChange(static_cast<float>(GetDpiForWindow(static_cast<HWND>(MainWindow->GetNativeWindow()->GetNativeHandle()))) / 96.0f); break;
+	case 400: App->RequestQuit(); break;
 	default: break;
 	}
 }

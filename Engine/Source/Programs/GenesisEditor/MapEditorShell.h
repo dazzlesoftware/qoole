@@ -20,6 +20,7 @@
 #include "RHI.h"
 #include "MapDocument.h"
 #include "MapViewportClient.h"
+#include "MapLandscapeMode.h"
 #include "SContentBrowser.h"
 #include "SMapViewport.h"
 #include "Widgets/Layout/SBox.h"
@@ -32,11 +33,13 @@ class SWindow;
 
 // Unreal's editor modes, for the ones this editor has. A mode picks the
 // tools (and the panel at the left): Selection has Select, Rotate and Scale
-// with Place Actors; Brush Editing has Clip and the vertex, edge and face
-// tools with the brush operations.
+// with Place Actors; Landscape makes and sculpts landscapes
+// (FMapLandscapeMode takes the views' left drags); Brush Editing has Clip
+// and the vertex, edge and face tools with the brush operations.
 enum class EMapEditorMode : uint8
 {
 	Selection,
+	Landscape,
 	BrushEditing,
 };
 
@@ -117,6 +120,7 @@ public:
 	static constexpr int32 MaxContentBrowsers = 4;
 	TSharedPtr<SContentBrowser> GetContentBrowser(int32 Index) const { return ContentBrowsers[Index].lock(); }
 	TSharedPtr<SPlaceActors> GetPlaceActors() const { return PlaceActors; }
+	FMapLandscapeMode& GetLandscapeMode() { return LandscapeMode; }
 
 	void Log(const FString& Line);
 	const TArray<FString>& GetLogLines() const { return LogLines; }
@@ -131,7 +135,7 @@ public:
 		TSharedPtr<FUICommandInfo> HollowIn, HollowOut, Subtract, Intersect;
 		TSharedPtr<FUICommandInfo> FlipX, FlipY, FlipZ, RotateLeft, RotateRight;
 		TSharedPtr<FUICommandInfo> SavePrefab;
-		TSharedPtr<FUICommandInfo> SelectionMode, BrushEditingMode;
+		TSharedPtr<FUICommandInfo> SelectionMode, LandscapeMode, BrushEditingMode;
 		TSharedPtr<FUICommandInfo> EditorPreferences;
 		TSharedPtr<FUICommandInfo> ResetLayout, About;
 	} Cmd;
@@ -160,6 +164,18 @@ private:
 	TSharedRef<SDockTab> MakeViewportTab();
 	TSharedRef<SDockTab> MakePlaceActorsTab();
 	TSharedRef<SDockTab> MakeBrushEditingTab();
+	TSharedRef<SDockTab> MakeLandscapeTab();
+	// The paint layer list, when the layers (or the landscape) changed.
+	void RefreshLandscapeLayers();
+	// A heightmap or weightmap file to read or write (false if cancelled).
+	bool PickLandscapeFile(bool bSave, const FString& Title, const FString& Name, FString& OutPath);
+	// An image for a paint layer's texture (false if cancelled or unreadable).
+	bool PickLandscapeTexture(FString& OutPath);
+	// The paint layer list rebuilt even if its layers look the same.
+	void RefreshLandscapeLayersNow();
+	// Logs and shows an import or export's outcome.
+	void ReportLandscapeFile(bool bOk, const FString& Done, const FString& Error);
+	TSharedRef<SWidget> MakeLandscapeLayerList();
 	TSharedRef<SDockTab> MakeOutlinerTab();
 	TSharedRef<SDockTab> MakeDetailsTab();
 	TSharedRef<SDockTab> MakeContentBrowserTab(int32 Index);
@@ -170,6 +186,7 @@ private:
 	void RefreshPlaceables();
 	void OnAssetActivated(const FContentBrowserItem& Item);
 	void ShowModeTab();
+	bool bShowingModeTab = false;
 
 	FHost Host;
 	TWeakPtr<SWindow> MainWindow;
@@ -202,6 +219,10 @@ private:
 	TWeakPtr<SContentBrowser> ContentBrowsers[MaxContentBrowsers];
 	FString ContentBrowserPaths[MaxContentBrowsers]; // kept while closed, and saved
 	EMapEditorMode Mode = EMapEditorMode::Selection;
+	FMapLandscapeMode LandscapeMode;
+	TWeakPtr<SBox> LandscapeLayerHost;
+	FString LandscapeLayerSignature;
+	bool bLandscapeLayersQueued = false;
 	TWeakPtr<SWindow> PreferencesWindow;
 
 	TArray<FString> LogLines;

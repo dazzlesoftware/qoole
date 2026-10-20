@@ -47,6 +47,12 @@ class StaticMesh {
   const std::vector<Triangle> &GetTriangles(void) const { return triangles; }
   const LinkList<Edge3d> &GetEdgeList(void) const { return edges; }
 
+  // Optional colors per vertex (RGBA, red in the low byte): a painted
+  // landscape. Without them the renderer picks the object's color.
+  bool HasVertexColors(void) const { return !colors.empty(); }
+  unsigned int GetVertexColor(int index) const { return colors[index]; }
+  void SetVertexColors(std::vector<unsigned int> newColors) { colors = std::move(newColors); }
+
   // Building (before the mesh is shared).
   int AddVertex(const Vector3d &pos);
   void AddTriangle(int a, int b, int c, const Vector3d &na, const Vector3d &nb, const Vector3d &nc);
@@ -75,6 +81,7 @@ class StaticMesh {
   std::string name;
   std::vector<Vector3d> vertices;
   std::vector<Triangle> triangles;
+  std::vector<unsigned int> colors;
   LinkList<Edge3d> edges;
   float boundRadius;
   Vector3d boundMin, boundMax;

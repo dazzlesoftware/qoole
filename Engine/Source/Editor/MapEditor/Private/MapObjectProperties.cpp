@@ -17,6 +17,8 @@ namespace
 	const FName RotationProperty("Rotation");
 	const FName ScaleProperty("Scale");
 	const FName MeshProperty("StaticMesh");
+	const FName LandscapeSizeProperty("LandscapeSize");
+	const FName LandscapeQuadsProperty("LandscapeQuads");
 
 	TArray<FString> MeshOptions()
 	{
@@ -98,6 +100,13 @@ void FMapObjectProperties::GetProperties(TArray<FPropertyDesc>& Out) const
 		Out.push_back(FPropertyDesc(PositionProperty, EPropertyType::Vector3, "Location", "Transform").SetToolTip("In the space of the group being edited"));
 		Out.push_back(FPropertyDesc(RotationProperty, EPropertyType::Vector3, "Rotation", "Transform").SetToolTip("Degrees: roll about X, pitch about Y, yaw about Z"));
 		Out.push_back(FPropertyDesc(ScaleProperty, EPropertyType::Vector3, "Scale", "Transform"));
+		if (Obj.HasLandscape())
+		{
+			// Sculpt it in the Landscape mode (Shift+2).
+			Out.push_back(FPropertyDesc(LandscapeQuadsProperty, EPropertyType::String, "Quads", "Landscape").SetReadOnly());
+			Out.push_back(FPropertyDesc(LandscapeSizeProperty, EPropertyType::String, "Size", "Landscape").SetReadOnly());
+			return;
+		}
 		Out.push_back(FPropertyDesc(MeshProperty, EPropertyType::Enum, "Static Mesh", "Static Mesh").SetOptions(MeshOptions()));
 		return;
 	}
@@ -207,6 +216,16 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 		{
 			const Vector3d& S = Obj.GetScale();
 			return FPropertyVector3{ S.GetX(), S.GetY(), S.GetZ() };
+		}
+		if (Obj.HasLandscape() && Property == LandscapeQuadsProperty)
+		{
+			const Landscape& Land = Obj.GetLandscape();
+			return FString::Format("{} x {} ({} heights)", Land.GetQuadsX(), Land.GetQuadsY(), Land.GetHeights().size());
+		}
+		if (Obj.HasLandscape() && Property == LandscapeSizeProperty)
+		{
+			const Landscape& Land = Obj.GetLandscape();
+			return FString::Format("{:.0f} x {:.0f} units ({:.0f} a quad)", Land.GetSizeX(), Land.GetSizeY(), Land.GetQuadSize());
 		}
 		if (Property == MeshProperty)
 		{

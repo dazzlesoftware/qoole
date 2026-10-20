@@ -84,6 +84,7 @@ Object::operator=(const Object &src) {
 
   brush = (src.brush == NULL ? NULL : new Geometry(*src.brush));
   mesh = src.mesh;
+  landscape = src.landscape;
 
   Entity *ePtr = (src.entityPtr == NULL ? NULL : new Entity(*src.entityPtr));
   if ((ePtr = SetEntity(ePtr)) != NULL)
@@ -125,6 +126,7 @@ Object::DelObj(bool rmFrmPrnt, bool resetBound) {
     delete brush;
   brush = NULL;
   mesh.reset();
+  landscape.reset();
 
   // Delete all children.
   while (GetNumChildren() > 0)
@@ -436,6 +438,21 @@ Object::SetMesh(std::shared_ptr<const StaticMesh> meshPtr) {
 
   std::shared_ptr<const StaticMesh> rtnVal = mesh;
   mesh = std::move(meshPtr);
+  landscape.reset();
+  SetBoundRadius();
+  return rtnVal;
+}
+
+std::shared_ptr<const Landscape>
+Object::SetLandscape(std::shared_ptr<const Landscape> landPtr) {
+  check(landPtr == nullptr || (IsLeaf() && !HasBrush() && !HasEntity()));
+
+  std::shared_ptr<const Landscape> rtnVal = landscape;
+  if (landscape != nullptr)
+    mesh.reset();
+  landscape = std::move(landPtr);
+  if (landscape != nullptr)
+    mesh = landscape->GetMesh();
   SetBoundRadius();
   return rtnVal;
 }
@@ -1705,6 +1722,10 @@ Object::LoadObject(LFile *inFile, int objNum,
   SphrVector inSVec1;
   Object *holdPtr;
   IterLinkList<Object> iter(children);
+  int landQuadsX = -1, landQuadsY = 0;
+  float landQuadSize = 0.0f;
+  std::vector<float> landHeights;
+  std::vector<LandscapeLayer> landLayers;
 
   if (ProgressFunc) {
     pDone += PROGRESS_OBJECT;
@@ -1785,6 +1806,63 @@ Object::LoadObject(LFile *inFile, int objNum,
       if (entityPtr == NULL)
         return 0;
     }
+    else if (strncmp(inFile->GetLine(), "Landscape: ", 11) == 0) {
+      // Genesis: a heightfield, its heights on the lines after.
+      if (!IsLeaf() || HasBrush() || HasEntity() ||
+          sscanf(inFile->GetLine() + 11, "%d %d %f", &landQuadsX, &landQuadsY, &landQuadSize) != 3)
+        goto ERROR_LOAD_OBJECT;
+      landHeights.reserve((size_t) (landQuadsX + 1) * (landQuadsY + 1));
+    }
+    else if (strncmp(inFile->GetLine(), "LandscapeLayer: ", 16) == 0) {
+      // A paint layer: its color and name, its weights on the lines after.
+      LandscapeLayer layer;
+      int r = 255, g = 255, b = 255, used = 0;
+      if (landQuadsX < 0 || sscanf(inFile->GetLine() + 16, "%d %d %d %n", &r, &g, &b, &used) < 3)
+        goto ERROR_LOAD_OBJECT;
+      layer.r = (unsigned char) Max(0, Min(r, 255));
+      layer.g = (unsigned char) Max(0, Min(g, 255));
+      layer.b = (unsigned char) Max(0, Min(b, 255));
+      layer.name = inFile->GetLine() + 16 + used;
+      while (!layer.name.empty() && (layer.name.back() == '\n' || layer.name.back() == '\r' || layer.name.back() == ' '))
+        layer.name.pop_back();
+      landLayers.push_back(std::move(layer));
+    }
+    else if (strncmp(inFile->GetLine(), "LandscapeTexture: ", 18) == 0) {
+      // The last layer's texture: its tiling, then the texture to the end.
+      float tiling = 0.0f;
+      int used = 0;
+      if (landLayers.empty() || sscanf(inFile->GetLine() + 18, "%f %n", &tiling, &used) < 1)
+        goto ERROR_LOAD_OBJECT;
+      LandscapeLayer &layer = landLayers.back();
+      layer.tiling = Max(tiling, 1.0f);
+      layer.texture = inFile->GetLine() + 18 + used;
+      while (!layer.texture.empty() && (layer.texture.back() == '\n' || layer.texture.back() == '\r' || layer.texture.back() == ' '))
+        layer.texture.pop_back();
+    }
+    else if (strncmp(inFile->GetLine(), "LandscapeWeights:", 17) == 0) {
+      if (landLayers.empty())
+        goto ERROR_LOAD_OBJECT;
+      const char *p = inFile->GetLine() + 17;
+      char *end = NULL;
+      while (true) {
+        const float w = strtof(p, &end);
+        if (end == p)
+          break;
+        landLayers.back().weights.push_back(w);
+        p = end;
+      }
+    }
+    else if (strncmp(inFile->GetLine(), "LandscapeHeights:", 17) == 0) {
+      const char *p = inFile->GetLine() + 17;
+      char *end = NULL;
+      while (true) {
+        const float h = strtof(p, &end);
+        if (end == p)
+          break;
+        landHeights.push_back(h);
+        p = end;
+      }
+    }
     else if (strncmp(inFile->GetLine(), "  StaticMesh: ", 14) == 0 || strncmp(inFile->GetLine(), "StaticMesh: ", 12) == 0) {
       // Genesis: a mesh by name. Unknown meshes leave the object empty
       // (dropped below), as older readers drop the whole line.
@@ -1813,6 +1891,14 @@ Object::LoadObject(LFile *inFile, int objNum,
         s++;
       }
     }
+  }
+
+  if (landQuadsX >= 0) {
+    std::shared_ptr<const Landscape> land = Landscape::Create(landQuadsX, landQuadsY, landQuadSize, std::move(landHeights), std::move(landLayers));
+    if (land == nullptr)
+      LError("A landscape's heights or layer weights do not match its size before line %d.", inFile->GetLineNumber());
+    else
+      SetLandscape(land);
   }
 
   // Load in all sub objects.
@@ -1919,7 +2005,30 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
     fprintf(outFile, "  Entity: %d\n", entID);
   }
 
-  if (HasMesh())
+  if (HasLandscape()) {
+    const Landscape &land = GetLandscape();
+    fprintf(outFile, "  Landscape: %d %d %s\n", land.GetQuadsX(), land.GetQuadsY(), FormatFloat(land.GetQuadSize()));
+    // 32 to a line: the reader's lines hold 1024 characters.
+    const std::vector<float> &heights = land.GetHeights();
+    for (size_t i = 0; i < heights.size(); i += 32) {
+      fprintf(outFile, "  LandscapeHeights:");
+      for (size_t j = i; j < Min(heights.size(), i + 32); j++)
+        fprintf(outFile, " %s", FormatFloat(heights[j]));
+      fprintf(outFile, "\n");
+    }
+    for (const LandscapeLayer &layer : land.GetLayers()) {
+      fprintf(outFile, "  LandscapeLayer: %d %d %d %s\n", layer.r, layer.g, layer.b, layer.name.c_str());
+      if (!layer.texture.empty())
+        fprintf(outFile, "  LandscapeTexture: %s %s\n", FormatFloat(layer.tiling), layer.texture.c_str());
+      for (size_t i = 0; i < layer.weights.size(); i += 32) {
+        fprintf(outFile, "  LandscapeWeights:");
+        for (size_t j = i; j < Min(layer.weights.size(), i + 32); j++)
+          fprintf(outFile, " %s", FormatFloat(layer.weights[j]));
+        fprintf(outFile, "\n");
+      }
+    }
+  }
+  else if (HasMesh())
     fprintf(outFile, "  StaticMesh: %s\n", GetMesh().GetName());
 
   fprintf(outFile, "} // Object %d\n", objID);

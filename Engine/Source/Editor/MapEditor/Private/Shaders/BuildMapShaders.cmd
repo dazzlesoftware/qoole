@@ -12,7 +12,11 @@ rem SPIR-V of the removed Vulkan renderer plugin (Interface\DrawShaders_VK_*.h,
 rem compiled from Interface\DrawShaders.hlsl, which flipped Y itself), with
 rem the one instruction that flipped Y (y = p * s - 1) changed back to
 rem y = 1 - p * s by swapping the operands of its OpFSub. That is exactly
-rem MapShaders.hlsl; running this script replaces them with dxc's output.
+rem MapShaders.hlsl's VSMain. MapShaders_PSTextured_SPIRV.h is the UI's
+rem PSDefault (Runtime\SlateRHIRenderer\Private\Shaders), renamed: the same
+rem code as PSTextured (texture times color), reading the uv at location 0
+rem and the color at location 1 as VSMain writes them. Running this script
+rem replaces them with dxc's output.
 rem
 rem Usage: BuildMapShaders.cmd [path\to\dxc.exe]
 rem        (defaults to %VULKAN_SDK%\Bin\dxc.exe)
@@ -29,4 +33,4 @@ cd /d "%~dp0"
 set OPTS=-nologo -O3 -spirv -fspv-target-env=vulkan1.1
 
 "%DXC%" %OPTS% -T vs_6_0 -E VSMain -Vn g_MapShaders_VSMain_SPIRV -Fh MapShaders_VSMain_SPIRV.h MapShaders.hlsl || exit /b 1
-"%DXC%" %OPTS% -T ps_6_0 -E PSColor -Vn g_MapShaders_PSColor_SPIRV -Fh MapShaders_PSColor_SPIRV.h MapShaders.hlsl || exit /b 1
+"%DXC%" %OPTS% -T ps_6_0 -E PSTextured -Vn g_MapShaders_PSTextured_SPIRV -Fh MapShaders_PSTextured_SPIRV.h MapShaders.hlsl || exit /b 1
