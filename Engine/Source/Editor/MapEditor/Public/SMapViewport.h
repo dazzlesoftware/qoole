@@ -30,6 +30,7 @@
 #pragma once
 
 #include "Framework/Commands/UICommands.h"
+#include "MapPlacement.h"
 #include "MapViewportClient.h"
 #include "Widgets/Layout/SBox.h"
 
@@ -99,6 +100,9 @@ public:
 	bool IsActive() const;
 
 	FReply OnPreviewMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
+	// Placeable items (FMapPlaceDragDrop) drop into the view.
+	FReply OnDragOver(const FGeometry& Geometry, const FDragDropEvent& Event) override;
+	FReply OnDrop(const FGeometry& Geometry, const FDragDropEvent& Event) override;
 
 protected:
 	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
@@ -114,6 +118,9 @@ private:
 	TSharedPtr<SViewport> ViewportWidget;
 };
 
+// An item dropped into a pane: the item, the pane's view and the map point.
+using FOnMapPlace = TDelegate<void(const FMapPlaceable&, FMapViewportClient&, const Vector3d&)>;
+
 class SMapViewportLayout final : public SCompoundWidget
 {
 public:
@@ -124,6 +131,9 @@ public:
 		SLATE_ARGUMENT(TArray<TSharedPtr<FUICommandInfo>>, ToolCommands, {})
 		// The list ToolCommands are mapped in.
 		SLATE_ARGUMENT(TSharedPtr<FUICommandList>, ToolCommandList, nullptr)
+		// An item dragged into a pane: the item, the pane's view and the map
+		// point under the cursor (FMapViewportClient::GetDropPoint).
+		SLATE_EVENT(FOnMapPlace, OnPlace)
 	SLATE_END_ARGS()
 
 	static constexpr int32 MaxPanes = 4;
@@ -154,6 +164,8 @@ public:
 	const TArray<TSharedPtr<FUICommandInfo>>& GetToolCommands() const { return ToolCommands; }
 	const TSharedPtr<FUICommandList>& GetToolCommandList() const { return ToolCommandList; }
 
+	void Place(const FMapPlaceable& Item, FMapViewportClient& View, const Vector3d& Point) const { OnPlace.ExecuteIfBound(Item, View, Point); }
+
 	// Fired when the layout, the maximized pane or the active pane changes.
 	TMulticastDelegate<void()> OnLayoutChanged;
 
@@ -172,4 +184,5 @@ private:
 	bool bRebuildQueued = false;
 	TArray<TSharedPtr<FUICommandInfo>> ToolCommands;
 	TSharedPtr<FUICommandList> ToolCommandList;
+	FOnMapPlace OnPlace;
 };

@@ -434,6 +434,37 @@ Vector3d FMapViewportClient::GetFocusPoint(float* OutDistance) const
 	return Focus.AddVector(Position);
 }
 
+Vector3d FMapViewportClient::GetDropPoint(FVector2 LocalPosition) const
+{
+	if (!MapView)
+	{
+		return Vector3d(0.0f, 0.0f, 0.0f);
+	}
+	if (!IsPerspective())
+	{
+		Vector3d Point;
+		ScreenToMap(LocalPosition, Point);
+		return Point;
+	}
+	float X, Y;
+	ToScreen(LocalPosition, X, Y);
+	const float WinWidth = GetWindowWidth();
+	const Vector3d Direction = Normalized(ViewToScope(Vector3d(X / WinWidth, 1.0f, Y / WinWidth)));
+	const Vector3d Origin = MapView->GetPosition();
+	float Distance = FocusDistance * 0.5f;
+	if (Direction.GetZ() < -1e-3f)
+	{
+		const float ToGround = -Origin.GetZ() / Direction.GetZ();
+		if (ToGround > 0.0f && ToGround < ClipDepth3D * 0.5f)
+		{
+			Distance = ToGround;
+		}
+	}
+	Vector3d Point(Direction);
+	Point.MultVector(Distance);
+	return Point.AddVector(Origin);
+}
+
 int32 FMapViewportClient::GetDepthAxis() const
 {
 	if (!MapView || IsPerspective())

@@ -1,0 +1,731 @@
+// Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
+
+#include "SContentBrowser.h"
+
+#include "Framework/Application/SlateApplication.h"
+#include "MapEditorIcons.h"
+#include "MapEditorPrivate.h"
+#include "Services/FileDialogs.h"
+#include "Services/Services.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SMenuAnchor.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SBoxPanel.h"
+#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SWrapBox.h"
+#include "Widgets/Text/SEditableText.h"
+#include "Widgets/Text/STextBlock.h"
+
+#include <algorithm>
+#include <filesystem>
+
+using namespace MapEditorPrivate;
+
+const char* ToString(EContentAssetType Type)
+{
+	switch (Type)
+	{
+	case EContentAssetType::Folder: return "Folder";
+	case EContentAssetType::Prefab: return "Prefab";
+	case EContentAssetType::Map: return "Map";
+	case EContentAssetType::QuakeMap: return "Quake Map";
+	case EContentAssetType::EntityList: return "Entity List";
+	case EContentAssetType::Texture: return "Texture";
+	case EContentAssetType::Font: return "Font";
+	case EContentAssetType::Text: return "Text";
+	case EContentAssetType::File: return "File";
+	}
+	return "?";
+}
+
+namespace
+{
+	namespace fs = std::filesystem;
+
+	fs::path ToPath(const FString& Path) { return fs::path(Path.ToWide()); }
+	FString FromPath(const fs::path& Path) { return FString::FromWide(Path.wstring()); }
+
+	// The same folder, ignoring case and the kind of slash.
+	FString Normalized(const FString& Path)
+	{
+		FString Result = FromPath(ToPath(Path).lexically_normal()).ToLower();
+		while (Result.EndsWith("\\") || Result.EndsWith("/"))
+		{
+			Result = Result.Left(Result.Len() - 1);
+		}
+		return Result;
+	}
+
+	bool IsUnder(const FString& Path, const FString& Folder)
+	{
+		const FString P = Normalized(Path);
+		const FString F = Normalized(Folder);
+		return !F.IsEmpty() && (P == F || (P.StartsWith(F.View()) && (P.View()[static_cast<SIZE_T>(F.Len())] == '\\' || P.View()[static_cast<SIZE_T>(F.Len())] == '/')));
+	}
+
+	EIcon AssetIcon(EContentAssetType Type)
+	{
+		switch (Type)
+		{
+		case EContentAssetType::Folder: return EIcon::Folder;
+		case EContentAssetType::Prefab: return EIcon::Prefab;
+		case EContentAssetType::Map:
+		case EContentAssetType::QuakeMap: return EIcon::Map;
+		case EContentAssetType::EntityList: return EIcon::Entity;
+		default: return EIcon::File;
+		}
+	}
+
+	// The strip along an asset tile's foot (Unreal's asset type colors).
+	FColor TypeColor(EContentAssetType Type)
+	{
+		switch (Type)
+		{
+		case EContentAssetType::Prefab: return FColor(96, 168, 255);
+		case EContentAssetType::Map:
+		case EContentAssetType::QuakeMap: return FColor(232, 150, 60);
+		case EContentAssetType::EntityList: return FColor(120, 200, 110);
+		case EContentAssetType::Texture: return FColor(200, 80, 80);
+		case EContentAssetType::Font: return FColor(180, 120, 220);
+		default: return FColor(120, 126, 138);
+		}
+	}
+
+	// One asset or folder: a picture, its name and, for assets, its type.
+	class SAssetTile final : public SCompoundWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SAssetTile)
+			SLATE_ATTRIBUTE(bool, IsSelected, false)
+			SLATE_EVENT(FSimpleDelegate, OnSelect)
+			SLATE_EVENT(FSimpleDelegate, OnActivate)
+		SLATE_END_ARGS()
+
+		static constexpr float Width = 96.0f;
+
+		void Construct(const FArguments& Args, const FContentBrowserItem& InItem)
+		{
+			Item = InItem;
+			IsSelected.Assign(Args._IsSelected);
+			OnSelect = Args._OnSelect;
+			OnActivate = Args._OnActivate;
+			const bool bFolder = Item.Type == EContentAssetType::Folder;
+			const TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(0.0f, 6.0f, 0.0f, 4.0f))
+				[
+					SNew(SMapViewportIcon).Icon(AssetIcon(Item.Type)).Size(64.0f)
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(4.0f, 0.0f))
+				[
+					SNew(SBox).MaxDesiredWidth(Width - 8.0f)
+					[
+						SNew(STextBlock).Text(Item.Name).AutoWrapText(true).Clipping(EWidgetClipping::ClipToBounds)
+						.TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText")).ColorAndOpacity(FSlateColor(EStyleColor::Foreground))
+					]
+				];
+			if (!bFolder)
+			{
+				Box->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(0.0f, 2.0f, 0.0f, 4.0f))
+				[
+					SNew(STextBlock).Text(ToString(Item.Type)).TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"))
+				];
+			}
+			ChildSlot[SNew(SBox).WidthOverride(Width).MinDesiredHeight(118.0f)[Box]];
+			SetToolTipText(FString::Format("{}\n{}\n{}", Item.Name, ToString(Item.Type), Item.Path));
+		}
+
+		FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent& Event) override
+		{
+			if (Event.GetEffectingButton() != EMouseButton::Left)
+			{
+				return FReply::Unhandled();
+			}
+			OnSelect.ExecuteIfBound();
+			return FReply::Handled().DetectDrag(SharedThis(this), EMouseButton::Left);
+		}
+
+		FReply OnMouseButtonDoubleClick(const FGeometry&, const FPointerEvent& Event) override
+		{
+			if (Event.GetEffectingButton() != EMouseButton::Left)
+			{
+				return FReply::Unhandled();
+			}
+			OnActivate.ExecuteIfBound();
+			return FReply::Handled();
+		}
+
+		FReply OnDragDetected(const FGeometry&, const FPointerEvent&) override
+		{
+			// Prefabs drag into the viewports.
+			if (Item.Type != EContentAssetType::Prefab)
+			{
+				return FReply::Unhandled();
+			}
+			FMapPlaceable Placeable;
+			Placeable.Kind = EMapPlaceableKind::Prefab;
+			Placeable.Id = Item.Path;
+			Placeable.Label = Item.Name;
+			Placeable.Category = "Geometry";
+			return FReply::Handled().BeginDragDrop(FMapPlaceDragDrop::New(Placeable));
+		}
+
+	protected:
+		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& Out, int32 LayerId,
+			const FWidgetStyle& Style) const override
+		{
+			const bool bSelected = IsSelected.Get();
+			if (Item.Type != EContentAssetType::Folder)
+			{
+				// Assets sit on a card with their type's color at the foot.
+				Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), FSlateColor(EStyleColor::Recessed).Resolve(), 4.0f);
+				Out.AddSolidBox(LayerId, Geometry.ToPaintGeometry(FRect(0.0f, Geometry.Size.Y - 3.0f, Geometry.Size.X, Geometry.Size.Y)), TypeColor(Item.Type));
+			}
+			if (bSelected || IsHovered())
+			{
+				Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), FColor(0, 0, 0, 0), 4.0f,
+					FSlateColor(bSelected ? EStyleColor::Primary : EStyleColor::Border).Resolve(), bSelected ? 2.0f : 1.0f);
+			}
+			return SCompoundWidget::OnPaint(Args, Geometry, CullingRect, Out, LayerId + 1, Style);
+		}
+
+	private:
+		FContentBrowserItem Item;
+		TWidgetAttribute<bool, EInvalidateWidgetReason::Paint> IsSelected{ *this, false };
+		FSimpleDelegate OnSelect;
+		FSimpleDelegate OnActivate;
+	};
+
+	const FButtonStyle& ToolButton()
+	{
+		static const FButtonStyle Style = []
+		{
+			FButtonStyle S = FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button");
+			S.NormalPadding = FMargin(8.0f, 3.0f);
+			S.PressedPadding = FMargin(8.0f, 4.0f, 8.0f, 2.0f);
+			return S;
+		}();
+		return Style;
+	}
+
+	TSharedRef<SWidget> IconLabel(EIcon Icon, const FString& Label)
+	{
+		const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SMapViewportIcon).Icon(Icon)];
+		if (!Label.IsEmpty())
+		{
+			Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(5.0f, 0.0f, 0.0f, 0.0f))[SNew(STextBlock).Text(Label)];
+		}
+		return Row;
+	}
+}
+
+// ---------------------------------------------------------------------------
+
+void SContentBrowser::Construct(const FArguments& Args)
+{
+	Roots = Args._Roots;
+	PrefabFolders = Args._PrefabFolders;
+	OnAssetActivated = Args._OnAssetActivated;
+	OnSaveAll = Args._OnSaveAll;
+	TreeRoot.Name = "All";
+	TreeRoot.bScanned = true;
+	for (const FContentBrowserRoot& Root : Roots)
+	{
+		auto Node = MakeUnique<FFolderNode>();
+		Node->Name = Root.Name;
+		Node->Path = Root.Path;
+		Node->Parent = &TreeRoot;
+		TreeRoot.Children.push_back(std::move(Node));
+	}
+	TreeRoots = { &TreeRoot };
+
+	const FTextBlockStyle* Small = &FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText");
+	ChildSlot
+	[
+		SNew(SVerticalBox)
+		// Toolbar.
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 4.0f))
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 4.0f, 0.0f))
+			[
+				SNew(SComboButton).ButtonStyle(&ToolButton()).IsFocusable(false).ToolTipText("Add a folder")
+				.OnGetMenuContent([this] { return MakeAddMenu(); })
+				.ButtonContent()[IconLabel(EIcon::Add, "Add")]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 4.0f, 0.0f))
+			[
+				SNew(SButton).ButtonStyle(&ToolButton()).IsFocusable(false).ToolTipText("Copy a file into this folder")
+				.IsEnabled([this] { return !Path.IsEmpty(); })
+				.OnClicked([this]
+				{
+					FFileDialogOptions Options;
+					Options.Title = "Import into this folder";
+					Options.InitialPath = Path;
+					Options.Filters = { { "Maps and prefabs (*.qle, *.map)", "*.qle;*.map" }, { "All files (*.*)", "*.*" } };
+					FString Source;
+					if (FServices::GetFileDialogs().OpenFile(Options, Source))
+					{
+						ImportFile(Source);
+					}
+					return FReply::Handled();
+				})
+				[IconLabel(EIcon::Import, "Import")]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))
+			[
+				SNew(SButton).ButtonStyle(&ToolButton()).IsFocusable(false).ToolTipText("Save the map")
+				.IsEnabled([this] { return OnSaveAll.IsBound(); })
+				.OnClicked([this] { OnSaveAll.ExecuteIfBound(); return FReply::Handled(); })
+				[IconLabel(EIcon::Save, "Save All")]
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton).ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton")).IsFocusable(false).ToolTipText("Back")
+				.IsEnabled([this] { return !BackStack.empty(); }).OnClicked([this] { GoBack(); return FReply::Handled(); })
+				[SNew(SMapViewportIcon).Icon(EIcon::Back)]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))
+			[
+				SNew(SButton).ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton")).IsFocusable(false).ToolTipText("Forward")
+				.IsEnabled([this] { return !ForwardStack.empty(); }).OnClicked([this] { GoForward(); return FReply::Handled(); })
+				[SNew(SMapViewportIcon).Icon(EIcon::Forward)]
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+			[
+				SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Recessed")).Padding(FMargin(6.0f, 2.0f)).Clipping(EWidgetClipping::ClipToBounds)
+				[
+					SAssignNew(BreadcrumbHost, SBox)
+				]
+			]
+		]
+		+ SVerticalBox::Slot().FillHeight(1.0f)
+		[
+			SNew(SSplitter).Orientation(EOrientation::Horizontal)
+			+ SSplitter::Slot().Value(0.22f).MinSize(80.0f)
+			[
+				SAssignNew(Tree, STreeView<FFolderNode*>)
+				.TreeItemsSource(&TreeRoots)
+				.SelectionMode(ESelectionMode::Single)
+				.OnGetChildren([this](FFolderNode* Node, TArray<FFolderNode*>& Out)
+				{
+					ScanChildren(*Node);
+					for (const TUniquePtr<FFolderNode>& Child : Node->Children)
+					{
+						Out.push_back(Child.get());
+					}
+				})
+				.OnGenerateRow([](FFolderNode* Node, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
+				{
+					return SNew(STableRow<FFolderNode*>, Owner).Padding(FMargin(2.0f, 1.0f))
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 5.0f, 0.0f))[SNew(SMapViewportIcon).Icon(EIcon::Folder)]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(Node->Name).Clipping(EWidgetClipping::ClipToBounds)]
+					];
+				})
+				.OnSelectionChanged([this](FFolderNode* Node, ESelectInfo)
+				{
+					if (Node && !bSyncingTree)
+					{
+						Navigate(Node->Path, true);
+					}
+				})
+			]
+			+ SSplitter::Slot().Value(0.78f).MinSize(160.0f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 4.0f))
+				[
+					SNew(SEditableTextBox)
+					.HintText([this] { return FString::Format("Search {}", GetDisplayPath(Path)); })
+					.OnTextChanged([this](const FString& Text) { SetSearchText(Text); })
+				]
+				+ SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(6.0f, 2.0f))
+				[
+					SNew(SScrollBox)
+					+ SScrollBox::Slot()
+					[
+						SAssignNew(Tiles, SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2(8.0f, 8.0f))
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(8.0f, 3.0f))
+				[
+					SNew(STextBlock).TextStyle(Small).Text([this]
+					{
+						return FString::Format("{} item{}{}", Items.size(), Items.size() == 1 ? "" : "s", SelectedPath.IsEmpty() ? "" : " (1 selected)");
+					})
+				]
+			]
+		]
+	];
+	Tree->SetItemExpansion(&TreeRoot, true);
+	Navigate(Args._InitialPath.IsEmpty() && !Roots.empty() ? Roots.front().Path : Args._InitialPath, false);
+}
+
+SContentBrowser::~SContentBrowser()
+{
+	bAlive = false;
+}
+
+EContentAssetType SContentBrowser::GetAssetType(const FString& FilePath) const
+{
+	const FString Extension = FromPath(ToPath(FilePath).extension()).ToLower();
+	if (Extension == ".qle")
+	{
+		for (const FString& Folder : PrefabFolders)
+		{
+			if (IsUnder(FilePath, Folder))
+			{
+				return EContentAssetType::Prefab;
+			}
+		}
+		return EContentAssetType::Map;
+	}
+	if (Extension == ".map") return EContentAssetType::QuakeMap;
+	if (Extension == ".ent" || Extension == ".def" || Extension == ".fgd") return EContentAssetType::EntityList;
+	if (Extension == ".png" || Extension == ".tga" || Extension == ".bmp" || Extension == ".jpg" || Extension == ".dds" || Extension == ".wal") return EContentAssetType::Texture;
+	if (Extension == ".ttf" || Extension == ".otf") return EContentAssetType::Font;
+	if (Extension == ".txt" || Extension == ".md" || Extension == ".json" || Extension == ".ini") return EContentAssetType::Text;
+	return EContentAssetType::File;
+}
+
+void SContentBrowser::ScanChildren(FFolderNode& Node)
+{
+	if (Node.bScanned)
+	{
+		return;
+	}
+	Node.bScanned = true;
+	std::error_code Error;
+	TArray<fs::path> Folders;
+	for (fs::directory_iterator It(ToPath(Node.Path), Error), End; !Error && It != End; It.increment(Error))
+	{
+		if (It->is_directory(Error))
+		{
+			Folders.push_back(It->path());
+		}
+	}
+	std::sort(Folders.begin(), Folders.end());
+	for (const fs::path& Folder : Folders)
+	{
+		auto Child = MakeUnique<FFolderNode>();
+		Child->Name = FromPath(Folder.filename());
+		Child->Path = FromPath(Folder);
+		Child->Parent = &Node;
+		Node.Children.push_back(std::move(Child));
+	}
+}
+
+SContentBrowser::FFolderNode* SContentBrowser::FindNode(const FString& FolderPath)
+{
+	if (FolderPath.IsEmpty())
+	{
+		return &TreeRoot;
+	}
+	// Down from the root that holds it, one folder at a time.
+	for (const TUniquePtr<FFolderNode>& Root : TreeRoot.Children)
+	{
+		if (!IsUnder(FolderPath, Root->Path))
+		{
+			continue;
+		}
+		FFolderNode* Node = Root.get();
+		while (Node && Normalized(Node->Path) != Normalized(FolderPath))
+		{
+			ScanChildren(*Node);
+			FFolderNode* Next = nullptr;
+			for (const TUniquePtr<FFolderNode>& Child : Node->Children)
+			{
+				if (IsUnder(FolderPath, Child->Path))
+				{
+					Next = Child.get();
+					break;
+				}
+			}
+			Node = Next;
+		}
+		return Node;
+	}
+	return nullptr;
+}
+
+FString SContentBrowser::GetDisplayPath(const FString& FolderPath, TArray<TPair<FString, FString>>* OutParts) const
+{
+	TArray<TPair<FString, FString>> Parts = { { "All", FString() } };
+	for (const FContentBrowserRoot& Root : Roots)
+	{
+		if (!FolderPath.IsEmpty() && IsUnder(FolderPath, Root.Path))
+		{
+			Parts.push_back({ Root.Name, Root.Path });
+			const fs::path Relative = ToPath(FolderPath).lexically_normal().lexically_relative(ToPath(Root.Path).lexically_normal());
+			fs::path Walk = ToPath(Root.Path);
+			for (const fs::path& Part : Relative)
+			{
+				if (Part == "." || Part.empty())
+				{
+					continue;
+				}
+				Walk /= Part;
+				Parts.push_back({ FromPath(Part), FromPath(Walk) });
+			}
+			break;
+		}
+	}
+	// The folder's own name ("All" for the roots).
+	const FString Name = Parts.back().first;
+	if (OutParts)
+	{
+		*OutParts = std::move(Parts);
+	}
+	return Name;
+}
+
+void SContentBrowser::ScanItems()
+{
+	Items.clear();
+	if (Path.IsEmpty())
+	{
+		for (const FContentBrowserRoot& Root : Roots)
+		{
+			Items.push_back({ Root.Name, Root.Path, EContentAssetType::Folder });
+		}
+		return;
+	}
+	std::error_code Error;
+	const FString Needle = SearchText.ToLower();
+	const auto Consider = [&](const fs::directory_entry& Entry)
+	{
+		const bool bFolder = Entry.is_directory(Error);
+		FContentBrowserItem Item;
+		Item.Path = FromPath(Entry.path());
+		Item.Type = bFolder ? EContentAssetType::Folder : GetAssetType(Item.Path);
+		Item.Name = FromPath(bFolder ? Entry.path().filename() : Entry.path().stem());
+		if (!Needle.IsEmpty() && !Item.Name.ToLower().Contains(Needle.View()))
+		{
+			return;
+		}
+		Items.push_back(std::move(Item));
+	};
+	if (Needle.IsEmpty())
+	{
+		for (fs::directory_iterator It(ToPath(Path), Error), End; !Error && It != End; It.increment(Error))
+		{
+			Consider(*It);
+		}
+	}
+	else
+	{
+		// A search looks below the folder too, up to a limit.
+		for (fs::recursive_directory_iterator It(ToPath(Path), Error), End; !Error && It != End && Items.size() < 2000; It.increment(Error))
+		{
+			Consider(*It);
+		}
+	}
+	// Folders first, then by name.
+	std::sort(Items.begin(), Items.end(), [](const FContentBrowserItem& A, const FContentBrowserItem& B)
+	{
+		const bool AFolder = A.Type == EContentAssetType::Folder;
+		const bool BFolder = B.Type == EContentAssetType::Folder;
+		return AFolder != BFolder ? AFolder : A.Name.ToLower().View() < B.Name.ToLower().View();
+	});
+}
+
+void SContentBrowser::Navigate(const FString& NewPath, bool bRecord)
+{
+	if (bRecord && Normalized(NewPath) != Normalized(Path))
+	{
+		BackStack.push_back(Path);
+		ForwardStack.clear();
+	}
+	Path = NewPath;
+	SelectedPath.Empty();
+	ScanItems();
+	QueueRebuild();
+}
+
+void SContentBrowser::SetPath(const FString& NewPath)
+{
+	Navigate(NewPath, true);
+}
+
+void SContentBrowser::GoBack()
+{
+	if (BackStack.empty())
+	{
+		return;
+	}
+	ForwardStack.push_back(Path);
+	const FString Previous = BackStack.back();
+	BackStack.pop_back();
+	Navigate(Previous, false);
+}
+
+void SContentBrowser::GoForward()
+{
+	if (ForwardStack.empty())
+	{
+		return;
+	}
+	BackStack.push_back(Path);
+	const FString Next = ForwardStack.back();
+	ForwardStack.pop_back();
+	Navigate(Next, false);
+}
+
+void SContentBrowser::SetSearchText(const FString& Text)
+{
+	SearchText = Text.TrimStartAndEnd();
+	ScanItems();
+	QueueRebuild();
+}
+
+void SContentBrowser::Refresh()
+{
+	if (FFolderNode* Node = FindNode(Path))
+	{
+		Node->Children.clear();
+		Node->bScanned = false;
+	}
+	ScanItems();
+	QueueRebuild();
+}
+
+void SContentBrowser::Activate(const FContentBrowserItem& Item)
+{
+	if (Item.Type == EContentAssetType::Folder)
+	{
+		SearchText.Empty();
+		SetPath(Item.Path);
+		return;
+	}
+	OnAssetActivated.ExecuteIfBound(Item);
+}
+
+FString SContentBrowser::CreateFolder()
+{
+	if (Path.IsEmpty())
+	{
+		return FString();
+	}
+	std::error_code Error;
+	for (int32 Number = 1; Number < 1000; ++Number)
+	{
+		const fs::path Folder = ToPath(Path) / (Number == 1 ? fs::path(L"NewFolder") : fs::path(L"NewFolder" + std::to_wstring(Number)));
+		if (!fs::exists(Folder, Error) && fs::create_directory(Folder, Error))
+		{
+			Refresh();
+			SelectedPath = FromPath(Folder);
+			UE_LOG(LogMapEditor, Display, "Created the folder {}", SelectedPath);
+			return SelectedPath;
+		}
+	}
+	return FString();
+}
+
+bool SContentBrowser::ImportFile(const FString& Source)
+{
+	if (Path.IsEmpty())
+	{
+		return false;
+	}
+	std::error_code Error;
+	const fs::path From = ToPath(Source);
+	fs::path To = ToPath(Path) / From.filename();
+	for (int32 Number = 2; fs::exists(To, Error) && Number < 1000; ++Number)
+	{
+		To = ToPath(Path) / (From.stem().wstring() + std::to_wstring(Number) + From.extension().wstring());
+	}
+	if (!fs::copy_file(From, To, Error))
+	{
+		UE_LOG(LogMapEditor, Warning, "Could not import {}: {}", Source, Error.message());
+		return false;
+	}
+	UE_LOG(LogMapEditor, Display, "Imported {} as {}", Source, FromPath(To));
+	Refresh();
+	SelectedPath = FromPath(To);
+	return true;
+}
+
+TSharedRef<SWidget> SContentBrowser::MakeAddMenu()
+{
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SMenuEntry).Text("New Folder").ToolTipText("Make a folder here").IsEnabled([this] { return !Path.IsEmpty(); })
+			.OnSelected([this] { CreateFolder(); })
+		];
+}
+
+void SContentBrowser::QueueRebuild()
+{
+	// Next frame: tiles and path buttons navigate when clicked, and the
+	// rebuild replaces them.
+	if (bRebuildQueued)
+	{
+		return;
+	}
+	bRebuildQueued = true;
+	RegisterActiveTimer(0.0f, [this](double, float)
+	{
+		bRebuildQueued = false;
+		RebuildWidgets();
+		return EActiveTimerReturn::Stop;
+	});
+}
+
+TSharedRef<SWidget> SContentBrowser::MakeBreadcrumbs()
+{
+	TArray<TPair<FString, FString>> Parts;
+	GetDisplayPath(Path, &Parts);
+	const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+	for (SIZE_T Index = 0; Index < Parts.size(); ++Index)
+	{
+		const FString PartPath = Parts[Index].second;
+		if (Index > 0)
+		{
+			Row->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SMapViewportIcon).Icon(EIcon::Forward).Size(12.0f)];
+		}
+		Row->AddSlot().AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SButton).ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton")).IsFocusable(false)
+			.ContentPadding(FMargin(5.0f, 1.0f)).Text(Parts[Index].first)
+			.OnClicked([this, PartPath] { SearchText.Empty(); SetPath(PartPath); return FReply::Handled(); })
+		];
+	}
+	return Row;
+}
+
+TSharedRef<SWidget> SContentBrowser::MakeTile(const FContentBrowserItem& Item)
+{
+	return SNew(SAssetTile, Item)
+		.IsSelected([this, ItemPath = Item.Path] { return SelectedPath == ItemPath; })
+		.OnSelect([this, ItemPath = Item.Path] { SelectedPath = ItemPath; })
+		.OnActivate([this, Item] { Activate(Item); });
+}
+
+void SContentBrowser::RebuildWidgets()
+{
+	BreadcrumbHost->SetContent(MakeBreadcrumbs());
+	Tiles->ClearChildren();
+	for (const FContentBrowserItem& Item : Items)
+	{
+		Tiles->AddSlot()[MakeTile(Item)];
+	}
+	// The tree shows where we are.
+	bSyncingTree = true;
+	if (FFolderNode* Node = FindNode(Path))
+	{
+		for (FFolderNode* Up = Node->Parent; Up; Up = Up->Parent)
+		{
+			Tree->SetItemExpansion(Up, true);
+		}
+		Tree->RequestTreeRefresh();
+		Tree->SetSelection(Node);
+	}
+	else
+	{
+		Tree->ClearSelection();
+	}
+	bSyncingTree = false;
+}

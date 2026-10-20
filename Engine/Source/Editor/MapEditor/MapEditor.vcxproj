@@ -57,9 +57,13 @@
     <ClCompile Include="Private\MapObjectProperties.cpp" />
     <ClCompile Include="Private\MapViewportClient.cpp" />
     <ClCompile Include="Private\MapViewportTools.cpp" />
+    <ClCompile Include="Private\SContentBrowser.cpp" />
     <ClCompile Include="Private\SMapViewport.cpp" />
+    <ClCompile Include="Private\SOutputLog.cpp" />
+    <ClCompile Include="Private\SPlaceActors.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Private\MapEditorIcons.h" />
     <ClInclude Include="Private\MapEditorPrivate.h" />
     <ClInclude Include="Private\MapEdits.h" />
     <ClInclude Include="Private\Shaders\MapShaders_PSColor_SPIRV.h" />
@@ -69,7 +73,11 @@
     <ClInclude Include="Public\MapEditorEnvironment.h" />
     <ClInclude Include="Public\MapObjectProperties.h" />
     <ClInclude Include="Public\MapViewportClient.h" />
+    <ClInclude Include="Public\MapPlacement.h" />
+    <ClInclude Include="Public\SContentBrowser.h" />
     <ClInclude Include="Public\SMapViewport.h" />
+    <ClInclude Include="Public\SOutputLog.h" />
+    <ClInclude Include="Public\SPlaceActors.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Private\Shaders\BuildMapShaders.cmd" />

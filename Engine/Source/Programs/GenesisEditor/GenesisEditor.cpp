@@ -2,15 +2,17 @@
 //
 // GenesisEditor: the map editor of Genesis Engine, on Genesis UI
 // (Engine/Documentation/Source/GenesisUI.md, milestones 5 and 6). It replaced the MFC editor of
-// the same name: four docked views, the editing tools, an outliner,
-// properties, prefabs and settings panels, menus, a toolbar and shortcuts
-// from commands.
+// the same name. Laid out like Unreal's level editor: the viewports, Place
+// Actors, the Outliner and Details, content browsers and the Output Log,
+// editor modes, the Editor Preferences window, menus, a toolbar and
+// shortcuts from commands.
 //
 // Command line:
 //   GenesisEditor.exe [map.qle | map.map]
-//   -d3d12 | -vulkan       backend (default D3D12)
+//   -d3d12 | -vulkan       backend (default: Editor Preferences > Graphics, else D3D12)
 //   -appscale=1.25         application scale on top of the monitor DPI
-//   -nodebug / -debug      D3D12 debug layer / Vulkan validation (default: on in Debug builds)
+//   -nodebug / -debug      D3D12 debug layer / Vulkan validation (default: the
+//                          preferences, else on in Debug builds)
 //   -resetlayout           start from the default window layout and key bindings
 //   -selftest=<dir>        scripted run: builds maps from prefabs and
 //                          entities, selects, moves, rotates and clips with
@@ -20,8 +22,8 @@
 //                          the DPI; PNG screenshots and a log go to <dir>;
 //                          exits when done
 //
-// Settings (grid, tools, the last folder, layout, key bindings) and the
-// prefabs you save are kept in %LOCALAPPDATA%\Genesis\Editor.
+// Settings (preferences, grid, tools, the last map, layout, key bindings)
+// and the prefabs you save are kept in %LOCALAPPDATA%\Genesis\Editor.
 
 #include "Framework/Application/SlateApplication.h"
 #include "CoreMinimal.h"
@@ -33,6 +35,7 @@
 #include "Misc/App.h"
 #include "Services/ConfigStore.h"
 #include "Services/Services.h"
+#include "SOutputLog.h"
 #include "Styling/StarshipCoreStyle.h"
 #include "SlateRHIRenderingPolicy.h"
 #include "SlateRHIRenderer.h"
@@ -150,7 +153,8 @@ private:
 
 	// Self-test.
 	void TickSelfTest();
-	void Capture(const char* Name);
+	// The main window, or another one (the preferences).
+	void Capture(const char* Name, const TSharedPtr<SWindow>& Window = nullptr);
 	FVector2 ViewPointToWindow(EMapViewType Type, const Vector3d& Point) const;
 	void Drag(const FVector2& From, const FVector2& To, EMouseButton Button = EMouseButton::Left);
 	bool PointAtText(std::string_view Text, bool bClick);
@@ -196,11 +200,15 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 		}
 		CreateDirectoryW(SelfTestDir.ToWide().c_str(), nullptr);
 	}
+	// The Output Log shows everything from here on.
+	FOutputLogHistory::Get().Start();
+	bool bBackendFromCommandLine = false;
 	for (const FString& Arg : Args)
 	{
-		if (Arg.Equals("-vulkan", ESearchCase::IgnoreCase))
+		if (Arg.Equals("-vulkan", ESearchCase::IgnoreCase) || Arg.Equals("-d3d12", ESearchCase::IgnoreCase))
 		{
-			Backend = ERHIBackend::Vulkan;
+			Backend = Arg.Equals("-vulkan", ESearchCase::IgnoreCase) ? ERHIBackend::Vulkan : ERHIBackend::D3D12;
+			bBackendFromCommandLine = true;
 		}
 	}
 	if (!SelfTestDir.IsEmpty())
@@ -256,7 +264,15 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 
 	Platform = CreatePlatformApplication().ToSharedPtr();
 	FRHIDeviceDesc DeviceDesc;
+	// Editor Preferences > Graphics, unless the command line says otherwise
+	// (scripted runs keep the defaults).
+	const FMapEditorShell::FStartupGraphics Graphics = SelfTestDir.IsEmpty() ? FMapEditorShell::GetStartupGraphics() : FMapEditorShell::FStartupGraphics();
+	if (!bBackendFromCommandLine && Graphics.Backend)
+	{
+		Backend = *Graphics.Backend;
+	}
 	DeviceDesc.Backend = Backend;
+	if (Graphics.DebugLayer) DeviceDesc.bDebugLayer = *Graphics.DebugLayer;
 	if (HasFlag(Args, "-debug")) DeviceDesc.bDebugLayer = true;
 	if (HasFlag(Args, "-nodebug")) DeviceDesc.bDebugLayer = false;
 	Device = FRHIDevice::Create(DeviceDesc);
@@ -315,15 +331,28 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 	MainWindow->SetContent(Shell->MakeContent(ToSharedRef(MainWindow)));
 	Shell->NewMap(FMapEditorEnvironment::GetBuiltInGameSet());
 
-	// A map named on the command line (the first argument after the program).
+	// A map named on the command line (the first argument after the program),
+	// else the last one if the preferences say so.
+	bool bOpened = false;
 	for (SIZE_T Index = 1; Index < Args.size(); ++Index)
 	{
 		if (!Args[Index].StartsWith("-"))
 		{
 			Shell->OpenMap(Args[Index]);
+			bOpened = true;
 			break;
 		}
 	}
+	if (!bOpened && SelfTestDir.IsEmpty() && FMapEditorShell::GetStartupMapPreference() == FMapEditorShell::EStartupMap::LastOpened)
+	{
+		const FString Last = FMapEditorShell::GetLastMap();
+		std::error_code Error;
+		if (!Last.IsEmpty() && std::filesystem::exists(std::filesystem::path(Last.ToWide()), Error))
+		{
+			Shell->OpenMap(Last);
+		}
+	}
+	UE_LOG(LogGenesisEditor, Display, "Drawing with {} on {}", ToString(Backend), Device->GetAdapterName());
 	return true;
 }
 
@@ -400,18 +429,20 @@ void FMapEditorApp::Shutdown()
 	{
 		FLog::RemoveDevice(FileLog.get());
 	}
+	FOutputLogHistory::Get().Stop();
 }
 
 // ---------------------------------------------------------------------------
 // Self-test
 
-void FMapEditorApp::Capture(const char* Name)
+void FMapEditorApp::Capture(const char* Name, const TSharedPtr<SWindow>& Window)
 {
-	const HWND Hwnd = static_cast<HWND>(MainWindow->GetNativeWindow()->GetNativeHandle());
+	const TSharedPtr<SWindow> Target = Window ? Window : MainWindow;
+	const HWND Hwnd = static_cast<HWND>(Target->GetNativeWindow()->GetNativeHandle());
 	SetWindowPos(Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 	for (int32 I = 0; I < 3; ++I)
 	{
-		MainWindow->Invalidate(EInvalidateWidgetReason::Paint);
+		Target->Invalidate(EInvalidateWidgetReason::Paint);
 		App->Tick();
 	}
 	// The capture copies the screen, and the compositor can be a few frames
@@ -425,7 +456,7 @@ void FMapEditorApp::Capture(const char* Name)
 	const bool bOk = CaptureWindowClientToPng(Hwnd, Path);
 	SetWindowPos(Hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 	UE_LOG(LogGenesisEditor, Display, "Screenshot {} -> {} ({}x{} px, DPI scale {:.2f})", bOk ? "saved" : "FAILED", Path,
-		MainWindow->GetPixelSize().X, MainWindow->GetPixelSize().Y, MainWindow->GetNativeWindow()->GetDpiScale());
+		Target->GetPixelSize().X, Target->GetPixelSize().Y, Target->GetNativeWindow()->GetDpiScale());
 }
 
 FVector2 FMapEditorApp::ViewPointToWindow(EMapViewType Type, const Vector3d& Point) const
@@ -701,15 +732,31 @@ void FMapEditorApp::TickSelfTest()
 		break;
 	}
 	case 245: Capture("scope"); break;
+	// The editor shell: Brush Editing mode, a second content browser, the
+	// Output Log and the preferences window.
 	case 250:
 		Doc->ScopeUp();
-		Shell->GetTabManager().TryInvokeTab("Settings");
-		Shell->GetTabManager().TryInvokeTab("Prefabs");
+		Shell->SetMode(EMapEditorMode::BrushEditing);
+		Shell->GetTabManager().TryInvokeTab("ContentBrowserTab2");
 		break;
-	case 265: Capture("settings_prefabs"); break;
-	case 270:
-		Shell->GetTabManager().TryInvokeTab("Log");
-		Shell->GetTabManager().TryInvokeTab("Outliner");
+	case 265:
+		Capture("brush_editing");
+		Report(Shell->GetContentBrowser(1) && Shell->GetViewSettings().Tool == EMapTool::Vertex ? "brush editing mode, content browser 2 open" : "FAILED: brush editing mode or content browser 2");
+		break;
+	case 268:
+		Shell->SetMode(EMapEditorMode::Selection);
+		Shell->GetTabManager().TryInvokeTab("OutputLog");
+		Shell->OpenPreferences();
+		break;
+	case 272:
+		Report(Shell->GetPreferencesWindow() && Shell->GetViewSettings().Tool == EMapTool::Select ? "preferences open, selection mode" : "FAILED: preferences or selection mode");
+		Capture("output_log");
+		if (const TSharedPtr<SWindow> Preferences = Shell->GetPreferencesWindow())
+		{
+			Capture("preferences", Preferences);
+			App->RequestDestroyWindow(ToSharedRef(Preferences));
+		}
+		Shell->GetTabManager().TryInvokeTab("ContentBrowserTab1");
 		break;
 
 	// Save, export and read both back.

@@ -1,12 +1,14 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// The map editor's main window content: a menu bar and toolbar built from
-// commands, the viewport tab (SMapViewportLayout: up to four map views laid
-// out as in Unreal, each with its own toolbar; top, perspective, front and
-// right by default), and the panels (MapEditorPanels.cpp): an outliner of
-// the map's objects and groups, the properties of the selection, the prefab
-// library, settings with the key bindings, and a log; plus a status bar.
-// One map (FMapDocument) is open at a time.
+// The map editor's main window content, laid out like Unreal's level
+// editor: a menu bar, and a toolbar with Save, the editor mode (Selection,
+// Brush Editing) and Add; the viewport tab (SMapViewportLayout: up to four
+// map views, each with its own toolbar; top, perspective, front and right by
+// default); and the panels (MapEditorPanels.cpp): Place Actors and the
+// Brush Editing mode's tools at the left, the Outliner and Details at the
+// right, and up to four Content Browsers and the Output Log at the bottom;
+// plus a status bar. Edit > Editor Preferences opens the preferences window
+// (MapEditorPreferences.cpp). One map (FMapDocument) is open at a time.
 //
 // Files: .qle maps (the editor's own format, with the game set in their
 // header) are opened and saved; .map files are imported and exported.
@@ -15,15 +17,30 @@
 
 #include "Framework/Commands/UICommands.h"
 #include "Framework/Docking/TabManager.h"
+#include "RHI.h"
 #include "MapDocument.h"
 #include "MapViewportClient.h"
+#include "SContentBrowser.h"
 #include "SMapViewport.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Views/SListView.h"
 
 class FSlateRHIRenderer;
+class SPlaceActors;
 class SPropertyGrid;
 class SWindow;
+
+// Unreal's editor modes, for the ones this editor has. A mode picks the
+// tools (and the panel at the left): Selection has Select, Rotate and Scale
+// with Place Actors; Brush Editing has Clip and the vertex, edge and face
+// tools with the brush operations.
+enum class EMapEditorMode : uint8
+{
+	Selection,
+	BrushEditing,
+};
+
+const char* ToString(EMapEditorMode Mode);
 
 class FMapEditorShell : public TSharedFromThis<FMapEditorShell>
 {
@@ -68,7 +85,35 @@ public:
 	// Adds a prefab or an entity where the active view looks.
 	Object* AddPrefab(const FString& Path);
 	Object* AddEntity(const FString& ClassName);
+	// Adds a placeable item (Place Actors, Add, a content browser) at a map
+	// point (snapped to the grid when snapping), or where the active view looks.
+	Object* Place(const FMapPlaceable& Item, const Vector3d& Point);
+	Object* Place(const FMapPlaceable& Item);
+	// What can be placed: entities by category, then the prefabs (Geometry).
+	TArray<FMapPlaceable> GetPlaceables() const;
+	// Sets the tool; the mode follows (brush tools are Brush Editing's).
 	void SetTool(EMapTool Tool);
+	EMapEditorMode GetMode() const { return Mode; }
+	void SetMode(EMapEditorMode NewMode);
+
+	// The Editor Preferences window (opens it, or brings it to the front).
+	void OpenPreferences();
+	// Preferences the editor reads before the shell exists (from the config).
+	struct FStartupGraphics
+	{
+		TOptional<ERHIBackend> Backend; // unset: the default (D3D12)
+		TOptional<bool> DebugLayer;     // unset: the build's default
+	};
+	static FStartupGraphics GetStartupGraphics();
+	enum class EStartupMap : uint8 { Empty, LastOpened };
+	static EStartupMap GetStartupMapPreference();
+	// The map opened or saved last (empty if none).
+	static FString GetLastMap();
+	TSharedPtr<SWindow> GetPreferencesWindow() const { return PreferencesWindow.lock(); }
+	// Content browsers 1 to 4 (null while closed).
+	static constexpr int32 MaxContentBrowsers = 4;
+	TSharedPtr<SContentBrowser> GetContentBrowser(int32 Index) const { return ContentBrowsers[Index].lock(); }
+	TSharedPtr<SPlaceActors> GetPlaceActors() const { return PlaceActors; }
 
 	void Log(const FString& Line);
 	const TArray<FString>& GetLogLines() const { return LogLines; }
@@ -83,6 +128,8 @@ public:
 		TSharedPtr<FUICommandInfo> HollowIn, HollowOut, Subtract, Intersect;
 		TSharedPtr<FUICommandInfo> FlipX, FlipY, FlipZ, RotateLeft, RotateRight;
 		TSharedPtr<FUICommandInfo> SavePrefab;
+		TSharedPtr<FUICommandInfo> SelectionMode, BrushEditingMode;
+		TSharedPtr<FUICommandInfo> EditorPreferences;
 		TSharedPtr<FUICommandInfo> ResetLayout, About;
 	} Cmd;
 
@@ -108,14 +155,18 @@ private:
 
 	// Panels (MapEditorPanels.cpp).
 	TSharedRef<SDockTab> MakeViewportTab();
+	TSharedRef<SDockTab> MakePlaceActorsTab();
+	TSharedRef<SDockTab> MakeBrushEditingTab();
 	TSharedRef<SDockTab> MakeOutlinerTab();
-	TSharedRef<SDockTab> MakePropertiesTab();
-	TSharedRef<SDockTab> MakePrefabsTab();
-	TSharedRef<SDockTab> MakeSettingsTab();
-	TSharedRef<SDockTab> MakeLogTab();
+	TSharedRef<SDockTab> MakeDetailsTab();
+	TSharedRef<SDockTab> MakeContentBrowserTab(int32 Index);
+	TSharedRef<SDockTab> MakeOutputLogTab();
 	void RefreshOutliner();
 	void RefreshProperties();
-	void RefreshPrefabList();
+	// After prefabs were saved: Place Actors and the content browsers.
+	void RefreshPlaceables();
+	void OnAssetActivated(const FContentBrowserItem& Item);
+	void ShowModeTab();
 
 	FHost Host;
 	TWeakPtr<SWindow> MainWindow;
@@ -144,8 +195,11 @@ private:
 	TSharedPtr<SPropertyGrid> Properties;
 	bool bPropertiesRefreshQueued = false;
 
-	TArray<int32> PrefabItems; // indices into FMapEditorEnvironment::GetPrefabs()
-	TSharedPtr<SListView<int32>> PrefabList;
+	TSharedPtr<SPlaceActors> PlaceActors;
+	TWeakPtr<SContentBrowser> ContentBrowsers[MaxContentBrowsers];
+	FString ContentBrowserPaths[MaxContentBrowsers]; // kept while closed, and saved
+	EMapEditorMode Mode = EMapEditorMode::Selection;
+	TWeakPtr<SWindow> PreferencesWindow;
 
 	TArray<FString> LogLines;
 	FString StatusText = "Ready";

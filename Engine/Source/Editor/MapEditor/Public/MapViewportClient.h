@@ -190,6 +190,10 @@ public:
 	// Where new objects go: the view's center (2D, at the camera depth) or a
 	// point in front of the camera (3D), in scope space.
 	Vector3d GetPlacementPoint() const;
+	// Where something dropped at a viewport point goes, in scope space: on
+	// the plane through the camera (2D), or where the ray hits the ground
+	// (z = 0) in front of the camera, else a point ahead along it (3D).
+	Vector3d GetDropPoint(FVector2 LocalPosition) const;
 	// The scope axis a 2D view looks along (0 X, 1 Y, 2 Z); Z for 3D views.
 	int32 GetDepthAxis() const;
 

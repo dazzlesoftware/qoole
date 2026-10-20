@@ -53,6 +53,7 @@
     <ClCompile Include="..\TestApps\TestAppHarness\Screenshot.cpp" />
     <ClCompile Include="GenesisEditor.cpp" />
     <ClCompile Include="MapEditorPanels.cpp" />
+    <ClCompile Include="MapEditorPreferences.cpp" />
     <ClCompile Include="MapEditorShell.cpp" />
   </ItemGroup>
   <ItemGroup>

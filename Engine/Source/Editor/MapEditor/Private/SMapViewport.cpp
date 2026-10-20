@@ -2,6 +2,8 @@
 
 #include "SMapViewport.h"
 
+#include "MapEditorIcons.h"
+
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/MultiBox/MenuRegistry.h"
 #include "Widgets/Input/SButton.h"
@@ -13,7 +15,8 @@
 #include "Widgets/Text/STextBlock.h"
 
 #include <cmath>
-#include <numbers>
+
+using namespace MapEditorPrivate;
 
 // ---------------------------------------------------------------------------
 // Layouts
@@ -95,35 +98,10 @@ TArray<FRect> GetPaneRects(EMapViewportLayout Layout)
 }
 
 // ---------------------------------------------------------------------------
-// Icons, drawn with lines (the style has no images)
+// Icons for the toolbar (the drawings are in MapEditorIcons.h)
 
 namespace
 {
-	enum class EIcon : uint8
-	{
-		None,
-		Select,
-		Rotate,
-		Scale,
-		Clip,
-		Vertex,
-		Edge,
-		Face,
-		GridSnap,
-		RotationSnap,
-		Perspective,
-		Ortho,
-		CameraSpeed,
-		Lit,
-		Unlit,
-		Wireframe,
-		Show,
-		Settings,
-		Options, // ⋮
-		Maximize,
-		Restore,
-	};
-
 	EIcon ToolIcon(EMapTool Tool)
 	{
 		switch (Tool)
@@ -149,189 +127,6 @@ namespace
 		}
 		return EIcon::None;
 	}
-
-	TArray<FVector2> Arc(FVector2 Center, float Radius, float FromDegrees, float ToDegrees, int32 Segments)
-	{
-		TArray<FVector2> Points;
-		for (int32 Index = 0; Index <= Segments; ++Index)
-		{
-			const float Angle = (FromDegrees + (ToDegrees - FromDegrees) * static_cast<float>(Index) / static_cast<float>(Segments)) * std::numbers::pi_v<float> / 180.0f;
-			Points.push_back(Center + FVector2(std::cos(Angle), -std::sin(Angle)) * Radius);
-		}
-		return Points;
-	}
-
-	// A 16 x 16 line drawing in the foreground color (scaled to the widget).
-	class SMapViewportIcon final : public SLeafWidget
-	{
-	public:
-		SLATE_BEGIN_ARGS(SMapViewportIcon)
-			SLATE_ATTRIBUTE(EIcon, Icon, EIcon::None)
-			SLATE_ARGUMENT(float, Size, 16.0f)
-		SLATE_END_ARGS()
-
-		void Construct(const FArguments& Args)
-		{
-			Icon.Assign(Args._Icon);
-			Size = Args._Size;
-		}
-
-	protected:
-		FVector2 ComputeDesiredSize(float) const override { return FVector2(Size, Size); }
-
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
-		{
-			const FColor Color = Style.GetForegroundColor();
-			const float K = FMath::Min(Geometry.Size.X, Geometry.Size.Y) / 16.0f;
-			const FVector2 Offset = (Geometry.Size - FVector2(16.0f * K, 16.0f * K)) * 0.5f;
-			const FPaintGeometry Paint = Geometry.ToPaintGeometry();
-			const auto P = [&](float X, float Y) { return Offset + FVector2(X, Y) * K; };
-			const auto Lines = [&](TArray<FVector2> Points, bool bClosed = false, float Thickness = 1.25f)
-			{
-				for (FVector2& Point : Points)
-				{
-					Point = Offset + Point * K;
-				}
-				Out.AddLines(LayerId, Paint, std::move(Points), Color, Thickness * K, bClosed);
-			};
-			const auto Box = [&](float L, float T, float R, float B, FColor Fill)
-			{
-				Out.AddSolidBox(LayerId, Geometry.ToPaintGeometry(FRect(P(L, T), P(R, B))), Fill);
-			};
-			const auto Disc = [&](float X, float Y, float Radius, FColor Fill)
-			{
-				Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(FRect(P(X - Radius, Y - Radius), P(X + Radius, Y + Radius))), Fill, Radius * K);
-			};
-			const auto Faded = [&](uint8 Alpha) { return FColor(Color.R, Color.G, Color.B, static_cast<uint8>(Color.A * Alpha / 255)); };
-
-			switch (Icon.Get())
-			{
-			case EIcon::Select:
-				Lines({ { 4.0f, 2.0f }, { 4.0f, 13.0f }, { 6.8f, 10.4f }, { 8.9f, 14.2f }, { 10.6f, 13.3f }, { 8.6f, 9.6f }, { 12.2f, 9.6f } }, true);
-				break;
-			case EIcon::Rotate:
-			{
-				Lines(Arc({ 8.0f, 8.0f }, 5.5f, 60.0f, 350.0f, 20));
-				const FVector2 Tip(8.0f + 5.5f * 0.5f, 8.0f - 5.5f * 0.866f);
-				Lines({ Tip + FVector2(-3.0f, -1.2f), Tip, Tip + FVector2(-0.6f, 3.0f) });
-				break;
-			}
-			case EIcon::Scale:
-				Lines({ { 2.5f, 6.5f }, { 9.5f, 6.5f }, { 9.5f, 13.5f }, { 2.5f, 13.5f } }, true);
-				Lines({ { 6.5f, 9.5f }, { 13.5f, 2.5f } });
-				Lines({ { 9.5f, 2.5f }, { 13.5f, 2.5f }, { 13.5f, 6.5f } });
-				break;
-			case EIcon::Clip:
-				Lines({ { 3.0f, 3.0f }, { 13.0f, 3.0f }, { 13.0f, 13.0f }, { 3.0f, 13.0f } }, true, 1.0f);
-				Lines({ { 1.0f, 12.0f }, { 15.0f, 4.0f } }, false, 1.75f);
-				Box(3.0f, 8.5f, 13.0f, 13.0f, Faded(70));
-				break;
-			case EIcon::Vertex:
-				Lines({ { 4.0f, 4.0f }, { 12.0f, 4.0f }, { 12.0f, 12.0f }, { 4.0f, 12.0f } }, true, 1.0f);
-				for (const FVector2 Corner : { FVector2(4.0f, 4.0f), FVector2(12.0f, 4.0f), FVector2(12.0f, 12.0f), FVector2(4.0f, 12.0f) })
-				{
-					Box(Corner.X - 1.8f, Corner.Y - 1.8f, Corner.X + 1.8f, Corner.Y + 1.8f, Color);
-				}
-				break;
-			case EIcon::Edge:
-				Lines({ { 4.0f, 4.0f }, { 12.0f, 4.0f }, { 12.0f, 12.0f }, { 4.0f, 12.0f } }, true, 1.0f);
-				Lines({ { 2.5f, 4.0f }, { 13.5f, 4.0f } }, false, 3.0f);
-				break;
-			case EIcon::Face:
-				Lines({ { 4.0f, 4.0f }, { 12.0f, 4.0f }, { 12.0f, 12.0f }, { 4.0f, 12.0f } }, true, 1.0f);
-				Box(4.0f, 4.0f, 12.0f, 12.0f, Faded(150));
-				break;
-			case EIcon::GridSnap:
-				Lines({ { 2.5f, 2.5f }, { 13.5f, 2.5f }, { 13.5f, 13.5f }, { 2.5f, 13.5f } }, true, 1.0f);
-				Lines({ { 6.2f, 2.5f }, { 6.2f, 13.5f } }, false, 1.0f);
-				Lines({ { 9.8f, 2.5f }, { 9.8f, 13.5f } }, false, 1.0f);
-				Lines({ { 2.5f, 6.2f }, { 13.5f, 6.2f } }, false, 1.0f);
-				Lines({ { 2.5f, 9.8f }, { 13.5f, 9.8f } }, false, 1.0f);
-				break;
-			case EIcon::RotationSnap:
-				Lines({ { 13.5f, 13.0f }, { 2.5f, 13.0f }, { 11.0f, 4.5f } });
-				Lines(Arc({ 2.5f, 13.0f }, 6.5f, 0.0f, 45.0f, 8), false, 1.0f);
-				break;
-			case EIcon::Perspective:
-				Lines({ { 1.5f, 5.0f }, { 10.5f, 5.0f }, { 10.5f, 12.0f }, { 1.5f, 12.0f } }, true);
-				Lines({ { 10.5f, 8.5f }, { 14.5f, 5.5f }, { 14.5f, 11.5f } }, true);
-				break;
-			case EIcon::Ortho:
-				Lines({ { 2.5f, 2.5f }, { 13.5f, 2.5f }, { 13.5f, 13.5f }, { 2.5f, 13.5f } }, true);
-				Box(5.5f, 5.5f, 10.5f, 10.5f, Faded(170));
-				break;
-			case EIcon::CameraSpeed:
-				Lines({ { 3.0f, 4.0f }, { 7.0f, 8.0f }, { 3.0f, 12.0f } }, false, 1.5f);
-				Lines({ { 8.0f, 4.0f }, { 12.0f, 8.0f }, { 8.0f, 12.0f } }, false, 1.5f);
-				break;
-			case EIcon::Lit:
-				Disc(8.0f, 8.0f, 5.75f, Faded(110));
-				Disc(6.5f, 6.5f, 2.5f, Color);
-				break;
-			case EIcon::Unlit:
-				Disc(8.0f, 8.0f, 5.75f, Color);
-				break;
-			case EIcon::Wireframe:
-			{
-				TArray<FVector2> Circle = Arc({ 8.0f, 8.0f }, 5.75f, 0.0f, 360.0f, 24);
-				Lines(Circle, false, 1.0f);
-				TArray<FVector2> Meridian;
-				TArray<FVector2> Parallel;
-				for (int32 Index = 0; Index <= 24; ++Index)
-				{
-					const float Angle = static_cast<float>(Index) / 24.0f * 2.0f * std::numbers::pi_v<float>;
-					Meridian.push_back(FVector2(8.0f + std::cos(Angle) * 2.4f, 8.0f + std::sin(Angle) * 5.75f));
-					Parallel.push_back(FVector2(8.0f + std::cos(Angle) * 5.75f, 8.0f + std::sin(Angle) * 2.4f));
-				}
-				Lines(Meridian, false, 1.0f);
-				Lines(Parallel, false, 1.0f);
-				break;
-			}
-			case EIcon::Show:
-			{
-				// Arcs of radius R about points K above and below the middle
-				// meet at the eye's corners when K = R sin(35 degrees).
-				TArray<FVector2> Eye = Arc({ 8.0f, 12.9f }, 8.5f, 35.0f, 145.0f, 12);
-				TArray<FVector2> Lower = Arc({ 8.0f, 3.1f }, 8.5f, 215.0f, 325.0f, 12);
-				Eye.insert(Eye.end(), Lower.begin(), Lower.end());
-				Lines(Eye, true);
-				Disc(8.0f, 8.0f, 2.2f, Color);
-				break;
-			}
-			case EIcon::Settings:
-				Lines(Arc({ 8.0f, 8.0f }, 3.4f, 0.0f, 360.0f, 16));
-				for (int32 Tooth = 0; Tooth < 8; ++Tooth)
-				{
-					const float Angle = static_cast<float>(Tooth) * std::numbers::pi_v<float> / 4.0f;
-					const FVector2 Dir(std::cos(Angle), std::sin(Angle));
-					Lines({ FVector2(8.0f, 8.0f) + Dir * 4.6f, FVector2(8.0f, 8.0f) + Dir * 6.6f }, false, 2.0f);
-				}
-				break;
-			case EIcon::Options:
-				for (const float Y : { 3.5f, 8.0f, 12.5f })
-				{
-					Disc(8.0f, Y, 1.4f, Color);
-				}
-				break;
-			case EIcon::Maximize:
-				Lines({ { 2.5f, 2.5f }, { 13.5f, 2.5f }, { 13.5f, 13.5f }, { 2.5f, 13.5f } }, true);
-				break;
-			case EIcon::Restore:
-				Lines({ { 2.5f, 2.5f }, { 13.5f, 2.5f }, { 13.5f, 13.5f }, { 2.5f, 13.5f } }, true);
-				Lines({ { 8.0f, 2.5f }, { 8.0f, 13.5f } });
-				Lines({ { 2.5f, 8.0f }, { 13.5f, 8.0f } });
-				break;
-			case EIcon::None:
-				break;
-			}
-			return LayerId;
-		}
-
-	private:
-		TWidgetAttribute<EIcon, EInvalidateWidgetReason::Paint> Icon{ *this, EIcon::None };
-		float Size = 16.0f;
-	};
-
 	// A picture of a layout: its panes as outlined boxes.
 	class SLayoutPicture final : public SLeafWidget
 	{
@@ -861,14 +656,16 @@ namespace
 			Left->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 4.0f, 0.0f))[ToolMenu];
 			for (const EMapTool Tool : { EMapTool::Select, EMapTool::Rotate, EMapTool::Scale, EMapTool::Clip })
 			{
-				Left->AddSlot().AutoWidth().VAlign(VAlign_Center)
-				[
-					SNew(SToolBarIconButton)
+				const TSharedRef<SWidget> Button = SNew(SToolBarIconButton)
 					.Icon(ToolIcon(Tool))
 					.IsChecked([Settings, Tool] { return Settings->Tool == Tool; })
 					.OnClicked([this, Settings, Tool] { SetTool(*Settings, Tool); })
-					.ToolTipText([this, Tool] { return ToolToolTip(Tool); })
-				];
+					.ToolTipText([this, Tool] { return ToolToolTip(Tool); });
+				if (Tool == EMapTool::Clip)
+				{
+					AddHiding(Button, 5, [] { return true; }); // also in the tool menu
+				}
+				Left->AddSlot().AutoWidth().VAlign(VAlign_Center)[Button];
 			}
 			Left->AddSlot().AutoWidth().Padding(FMargin(6.0f, 0.0f));
 			Left->AddSlot().AutoWidth().VAlign(VAlign_Center)
@@ -879,22 +676,20 @@ namespace
 				.OnClicked([Settings] { Settings->bSnapToGrid = !Settings->bSnapToGrid; Settings->Changed(); })
 				.ToolTipText("Snap moves and tools to the grid (hold Alt while dragging to move freely)")
 			];
-			Left->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(1.0f, 0.0f, 6.0f, 0.0f))
-			[
-				MakeCombo("MapViewport.GridSize", nullptr, [Settings] { return FString::Format("{:.0f}", Settings->GridSize); }, "Grid size, in map units")
-			];
-			Left->AddSlot().AutoWidth().VAlign(VAlign_Center)
-			[
-				SNew(SToolBarIconButton)
+			const TSharedRef<SWidget> GridSize = MakeCombo("MapViewport.GridSize", nullptr, [Settings] { return FString::Format("{:.0f}", Settings->GridSize); }, "Grid size, in map units");
+			AddHiding(GridSize, 5, [] { return true; });
+			Left->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(1.0f, 0.0f, 6.0f, 0.0f))[GridSize];
+			// Rotation snapping goes before the grid's: it only matters to the Rotate tool.
+			const TSharedRef<SWidget> RotationToggle = SNew(SToolBarIconButton)
 				.Icon(EIcon::RotationSnap)
 				.IsChecked([Settings] { return Settings->bSnapRotation; })
 				.OnClicked([Settings] { Settings->bSnapRotation = !Settings->bSnapRotation; Settings->Changed(); })
-				.ToolTipText("Turn the Rotate tool in steps")
-			];
-			Left->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(1.0f, 0.0f, 0.0f, 0.0f))
-			[
-				MakeCombo("MapViewport.RotationSnap", nullptr, [Settings] { return FString::Format("{}°", Settings->RotateSnapDegrees); }, "Rotation increment")
-			];
+				.ToolTipText("Turn the Rotate tool in steps");
+			const TSharedRef<SWidget> RotationStep = MakeCombo("MapViewport.RotationSnap", nullptr, [Settings] { return FString::Format("{}°", Settings->RotateSnapDegrees); }, "Rotation increment");
+			AddHiding(RotationToggle, 4, [] { return true; });
+			AddHiding(RotationStep, 4, [] { return true; });
+			Left->AddSlot().AutoWidth().VAlign(VAlign_Center)[RotationToggle];
+			Left->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(1.0f, 0.0f, 0.0f, 0.0f))[RotationStep];
 
 			const TSharedRef<SHorizontalBox> Right = SNew(SHorizontalBox);
 			const auto AddRight = [&Right](const TSharedRef<SWidget>& Widget, float Gap = 3.0f)
@@ -938,7 +733,8 @@ namespace
 
 		// Labels go when the pane is too narrow for everything, as in
 		// Unreal: the view mode's and the camera speed's first, then the
-		// viewport type's.
+		// viewport type's; then the tool menu and the camera speed, the
+		// rotation snapping, and last the grid size and the Clip button.
 		void Tick(const FGeometry& Geometry, double, float) override
 		{
 			float Width = LeftBox->GetDesiredSize().X + RightBox->GetDesiredSize().X;
@@ -977,7 +773,7 @@ namespace
 		static constexpr float ToolBarPadding = 4.0f;
 		static constexpr float ToolBarGap = 8.0f;
 		static constexpr float LabelGap = 5.0f;
-		static constexpr int32 MaxCompactLevel = 3;
+		static constexpr int32 MaxCompactLevel = 5;
 
 		struct FHidingLabel
 		{
@@ -1137,6 +933,24 @@ FReply SMapViewport::OnPreviewMouseButtonDown(const FGeometry&, const FPointerEv
 	return FReply::Unhandled();
 }
 
+FReply SMapViewport::OnDragOver(const FGeometry&, const FDragDropEvent& Event)
+{
+	return Event.GetOperationAs<FMapPlaceDragDrop>() && Client->GetDocument() ? FReply::Handled() : FReply::Unhandled();
+}
+
+FReply SMapViewport::OnDrop(const FGeometry&, const FDragDropEvent& Event)
+{
+	const TSharedPtr<FMapPlaceDragDrop> Operation = Event.GetOperationAs<FMapPlaceDragDrop>();
+	if (!Operation || !Client->GetDocument() || !ViewportWidget)
+	{
+		return FReply::Unhandled();
+	}
+	Layout->SetActivePane(PaneIndex);
+	const FVector2 Local = ViewportWidget->GetCachedGeometry().AbsoluteToLocal(Event.GetAbsolutePosition());
+	Layout->Place(Operation->Item, *Client, Client->GetDropPoint(Local));
+	return FReply::Handled();
+}
+
 int32 SMapViewport::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
 	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
@@ -1165,6 +979,7 @@ void SMapViewportLayout::Construct(const FArguments& Args, const TArray<TSharedP
 	Layout = Args._Layout;
 	ToolCommands = Args._ToolCommands;
 	ToolCommandList = Args._ToolCommandList;
+	OnPlace = Args._OnPlace;
 	Panes.resize(MaxPanes);
 	ChildSlot[SAssignNew(Host, SBox)];
 	Rebuild();

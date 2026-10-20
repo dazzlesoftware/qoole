@@ -12,7 +12,9 @@
 #include "Services/MessageDialog.h"
 #include "Services/Services.h"
 #include "SlateRHIRenderer.h"
+#include "SPlaceActors.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SMenuAnchor.h"
 #include "Widgets/Layout/SBoxPanel.h"
 #include "Widgets/SWindow.h"
 #include "Widgets/Text/STextBlock.h"
@@ -36,6 +38,16 @@ namespace
 		};
 		return Filters;
 	}
+}
+
+const char* ToString(EMapEditorMode Mode)
+{
+	switch (Mode)
+	{
+	case EMapEditorMode::Selection: return "Selection";
+	case EMapEditorMode::BrushEditing: return "Brush Editing";
+	}
+	return "?";
 }
 
 FMapEditorShell::FMapEditorShell(FHost InHost)
@@ -112,6 +124,11 @@ void FMapEditorShell::LoadEditorSettings()
 		ViewSettings.MouseSensitivity = FMath::Clamp(static_cast<float>(std::atof(Text.ToAnsi().c_str())), 0.1f, 4.0f);
 	}
 
+	for (int32 Index = 0; Index < MaxContentBrowsers; ++Index)
+	{
+		Config.GetString("MapEditor.ContentBrowser", FString::Format("Path{}", Index + 1), ContentBrowserPaths[Index]);
+	}
+
 	// The viewports: the layout, then each pane's type, view mode, camera and show flags.
 	if (Config.GetString("MapEditor", "ViewportLayout", Text))
 	{
@@ -153,6 +170,12 @@ void FMapEditorShell::SaveEditorSettings() const
 	Config.SetInt("MapEditor", "SnapRotation", ViewSettings.bSnapRotation ? 1 : 0);
 	Config.SetInt("MapEditor", "InvertMiddleMousePan", ViewSettings.bInvertMiddleMousePan ? 1 : 0);
 	Config.SetString("MapEditor", "MouseSensitivity", FString::Format("{}", ViewSettings.MouseSensitivity));
+
+	for (int32 Index = 0; Index < MaxContentBrowsers; ++Index)
+	{
+		const TSharedPtr<SContentBrowser> Browser = ContentBrowsers[Index].lock();
+		Config.SetString("MapEditor.ContentBrowser", FString::Format("Path{}", Index + 1), Browser ? Browser->GetPath() : ContentBrowserPaths[Index]);
+	}
 
 	// In the layout's pane order (switching layouts can swap panes).
 	const TArray<TSharedPtr<FMapViewportClient>>& Panes = ViewportLayout ? ViewportLayout->GetClients() : Views;
@@ -293,6 +316,7 @@ bool FMapEditorShell::OpenMap(const FString& Path)
 	SetDocument(std::move(Opened));
 	Log(FString::Format("Opened {}: {} brushes, {} entities", Path, Document->CountBrushes(), Document->CountEntities()));
 	FServices::GetConfig().SetString("MapEditor", "LastFolder", FString::FromWide(std::filesystem::path(Path.ToWide()).parent_path().wstring()));
+	FServices::GetConfig().SetString("MapEditor", "LastMap", Path);
 	return true;
 }
 
@@ -306,6 +330,7 @@ bool FMapEditorShell::SaveMap(const FString& Path)
 	}
 	Log(FString::Format("Saved {}", Path));
 	FServices::GetConfig().SetString("MapEditor", "LastFolder", FString::FromWide(std::filesystem::path(Path.ToWide()).parent_path().wstring()));
+	FServices::GetConfig().SetString("MapEditor", "LastMap", Path);
 	return true;
 }
 
@@ -319,6 +344,13 @@ bool FMapEditorShell::ExportMap(const FString& Path)
 	}
 	Log(FString::Format("Exported {}", Path));
 	return true;
+}
+
+FString FMapEditorShell::GetLastMap()
+{
+	FString Path;
+	FServices::GetConfig().GetString("MapEditor", "LastMap", Path);
+	return Path;
 }
 
 FString FMapEditorShell::DefaultFolder() const
@@ -415,11 +447,133 @@ void FMapEditorShell::SetGridSize(float Size)
 	Log(FString::Format("Grid size {:.0f}", ViewSettings.GridSize));
 }
 
+namespace
+{
+	bool IsBrushEditingTool(EMapTool Tool)
+	{
+		return Tool == EMapTool::Clip || Tool == EMapTool::Vertex || Tool == EMapTool::Edge || Tool == EMapTool::Face;
+	}
+}
+
 void FMapEditorShell::SetTool(EMapTool Tool)
 {
 	ViewSettings.Tool = Tool;
 	ViewSettings.Changed();
 	StatusText = FString::Format("Tool: {}", ToString(Tool));
+	// The mode follows the tool, as Unreal's do.
+	const EMapEditorMode ToolMode = IsBrushEditingTool(Tool) ? EMapEditorMode::BrushEditing : EMapEditorMode::Selection;
+	if (ToolMode != Mode)
+	{
+		Mode = ToolMode;
+		ShowModeTab();
+	}
+}
+
+void FMapEditorShell::SetMode(EMapEditorMode NewMode)
+{
+	if (NewMode == Mode)
+	{
+		ShowModeTab();
+		return;
+	}
+	Mode = NewMode;
+	// A mode's own tools: leaving Brush Editing goes back to Select.
+	if (Mode == EMapEditorMode::BrushEditing && !IsBrushEditingTool(ViewSettings.Tool))
+	{
+		ViewSettings.Tool = EMapTool::Vertex;
+	}
+	else if (Mode == EMapEditorMode::Selection && IsBrushEditingTool(ViewSettings.Tool))
+	{
+		ViewSettings.Tool = EMapTool::Select;
+	}
+	ViewSettings.Changed();
+	ShowModeTab();
+	Log(FString::Format("{} mode", ToString(Mode)));
+}
+
+void FMapEditorShell::ShowModeTab()
+{
+	TabManager->TryInvokeTab(Mode == EMapEditorMode::BrushEditing ? FName("BrushEditing") : FName("PlaceActors"));
+}
+
+TArray<FMapPlaceable> FMapEditorShell::GetPlaceables() const
+{
+	TArray<FMapPlaceable> Items;
+	// Entities: lights under Lights, the rest under Basic (as Unreal's
+	// Player Start and Point Light are).
+	for (const FMapEditorEnvironment::FEntityClass& Class : FMapEditorEnvironment::GetPlaceableEntities())
+	{
+		FMapPlaceable Item;
+		Item.Kind = EMapPlaceableKind::Entity;
+		Item.Id = Class.ClassName;
+		const bool bLight = Class.Category.Equals("Light", ESearchCase::IgnoreCase);
+		Item.Category = bLight ? "Lights" : "Basic";
+		Item.Label = bLight || Class.Label.Contains(Class.Category.View()) ? Class.Label : FString::Format("{} {}", Class.Category, Class.Label);
+		Item.ToolTip = FString::Format("Entity {}", Class.ClassName);
+		Items.push_back(std::move(Item));
+		if (bLight)
+		{
+			// Unreal lists Point Light under Basic too.
+			FMapPlaceable Basic = Items.back();
+			Basic.Category = "Basic";
+			Items.push_back(std::move(Basic));
+		}
+	}
+	// Prefabs: brushes, Unreal's BSP Geometry.
+	for (const FMapEditorEnvironment::FPrefab& Prefab : FMapEditorEnvironment::GetPrefabs())
+	{
+		FMapPlaceable Item;
+		Item.Kind = EMapPlaceableKind::Prefab;
+		Item.Id = Prefab.Path;
+		Item.Category = "Geometry";
+		Item.Label = Prefab.bUser ? FString::Format("{} (yours)", Prefab.Name) : Prefab.Name;
+		Item.ToolTip = FString::Format("Brush prefab {}", Prefab.Path);
+		Items.push_back(std::move(Item));
+	}
+	return Items;
+}
+
+Object* FMapEditorShell::Place(const FMapPlaceable& Item, const Vector3d& Point)
+{
+	if (!Document)
+	{
+		return nullptr;
+	}
+	Vector3d At = Point;
+	if (ViewSettings.bSnapToGrid)
+	{
+		const float Grid = ViewSettings.GridSize;
+		At.NewVector(std::round(At.GetX() / Grid) * Grid, std::round(At.GetY() / Grid) * Grid, std::round(At.GetZ() / Grid) * Grid);
+	}
+	Object* Added = nullptr;
+	if (Item.Kind == EMapPlaceableKind::Entity)
+	{
+		Added = Document->AddEntity(Item.Id, At);
+	}
+	else
+	{
+		FString Error;
+		Added = Document->AddPrefab(Item.Id, At, &Error);
+		if (!Added)
+		{
+			Log(Error);
+		}
+	}
+	if (Added)
+	{
+		Log(FString::Format("Placed {} at {:.0f} {:.0f} {:.0f}", Item.Label, At.GetX(), At.GetY(), At.GetZ()));
+	}
+	return Added;
+}
+
+Object* FMapEditorShell::Place(const FMapPlaceable& Item)
+{
+	Object* Added = Place(Item, GetActiveView()->GetPlacementPoint());
+	if (Added && PlaceActors)
+	{
+		PlaceActors->NoteRecent(Item);
+	}
+	return Added;
 }
 
 void FMapEditorShell::SaveSelectionAsPrefab()
@@ -445,7 +599,7 @@ void FMapEditorShell::SaveSelectionAsPrefab()
 		return;
 	}
 	FMapEditorEnvironment::RefreshPrefabs();
-	RefreshPrefabList();
+	RefreshPlaceables();
 	Log(FString::Format("Saved prefab {}", Path));
 }
 
@@ -509,6 +663,9 @@ void FMapEditorShell::RegisterCommands()
 	Cmd.RotateRight = Add("RotateRight", "Rotate 90° Right", "Turn the selection a quarter clockwise, as seen in the last 2D view used", T::Button, FInputChord(EKey::Right, M::Control));
 	Cmd.SavePrefab = Add("SavePrefab", "Save as Prefab...", "Save the selection as a prefab for the Prefabs panel");
 
+	Cmd.SelectionMode = Add("SelectionMode", "Selection Mode", "Select, move, turn and scale; place actors", T::RadioButton, FInputChord(EKey::One, M::Shift));
+	Cmd.BrushEditingMode = Add("BrushEditingMode", "Brush Editing Mode", "Clip brushes and drag their corners, edges and faces", T::RadioButton, FInputChord(EKey::Six, M::Shift));
+	Cmd.EditorPreferences = Add("EditorPreferences", "Editor Preferences...", "Graphics, appearance, keyboard shortcuts, viewports, grid and snapping");
 	Cmd.ResetLayout = Add("ResetLayout", "Reset Layout", "Go back to the default window layout");
 	Cmd.About = Add("About", "About Genesis Editor", "Version and license");
 	FInputBindingManager::Get().RegisterContext(Context);
@@ -749,7 +906,12 @@ void FMapEditorShell::RegisterCommands()
 	List.MapAction(ToSharedRef(Cmd.RotateRight), [RotateQuarter] { RotateQuarter(-90.0f); }, HasSelection);
 	List.MapAction(ToSharedRef(Cmd.SavePrefab), [this] { SaveSelectionAsPrefab(); }, HasSelection);
 
+	// Modes.
+	List.MapAction(ToSharedRef(Cmd.SelectionMode), [this] { SetMode(EMapEditorMode::Selection); }, nullptr, [this] { return Mode == EMapEditorMode::Selection; });
+	List.MapAction(ToSharedRef(Cmd.BrushEditingMode), [this] { SetMode(EMapEditorMode::BrushEditing); }, nullptr, [this] { return Mode == EMapEditorMode::BrushEditing; });
+
 	// Window, Help.
+	List.MapAction(ToSharedRef(Cmd.EditorPreferences), [this] { OpenPreferences(); });
 	List.MapAction(ToSharedRef(Cmd.ResetLayout), [this] { ResetLayout(); });
 	List.MapAction(ToSharedRef(Cmd.About), [this] { ShowAbout(); });
 
@@ -806,6 +968,7 @@ void FMapEditorShell::RegisterMenus()
 	FMenuSection& Selection = Edit.AddSection("Selection");
 	Selection.AddCommand(Cmd.SelectAll);
 	Selection.AddCommand(Cmd.SelectNone);
+	Edit.AddSection("Configuration", "Configuration").AddCommand(Cmd.EditorPreferences);
 
 	FMenuDefinition& View = Registry.RegisterMenu("MapEditor.MainMenu.View");
 	FMenuSection& Camera = View.AddSection("Camera");
@@ -925,27 +1088,47 @@ void FMapEditorShell::RegisterMenus()
 
 	Registry.RegisterMenu("MapEditor.MainMenu.Help").AddSection("About").AddCommand(Cmd.About);
 
+	// The modes and Add, as in Unreal's main toolbar.
+	FMenuSection& ModeList = Registry.RegisterMenu("MapEditor.Modes").AddSection("Modes", "Editor Modes");
+	ModeList.AddCommand(Cmd.SelectionMode);
+	ModeList.AddCommand(Cmd.BrushEditingMode);
+	FMenuDefinition& QuickAdd = Registry.RegisterMenu("MapEditor.QuickAdd");
+	for (const char* Category : { "Basic", "Lights", "Geometry" })
+	{
+		const FString Name = Category;
+		QuickAdd.AddDynamicSection(FName(Name), [this, Name](FMenuSection& Section, const FMenuContext&)
+		{
+			Section.Label = Name;
+			for (const FMapPlaceable& Item : GetPlaceables())
+			{
+				if (Item.Category != Name)
+				{
+					continue;
+				}
+				FUIAction Action;
+				Action.Execute = FSimpleDelegate::CreateLambda([this, Item] { Place(Item); });
+				Action.CanExecute = TDelegate<bool()>::CreateLambda([this] { return Document != nullptr; });
+				Section.AddEntry(FName(Item.Id), Item.Label, Item.ToolTip, Action);
+			}
+		});
+	}
+
 	FMenuDefinition& Bars = Registry.RegisterMenu("MapEditor.ToolBar");
-	FMenuSection& FileTools = Bars.AddSection("File");
-	FileTools.AddCommand(Cmd.NewMap, "New");
-	FileTools.AddCommand(Cmd.OpenMap, "Open");
-	FileTools.AddCommand(Cmd.SaveMap);
+	Bars.AddSection("File").AddCommand(Cmd.SaveMap);
+	FMenuSection& Modes = Bars.AddSection("Modes");
+	Modes.AddWidget("Mode", [this](const FMenuContext& Context) -> TSharedRef<SWidget>
+	{
+		return SNew(SComboButton)
+			.ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FToolBarStyle>("ToolBar").Button)
+			.IsFocusable(false)
+			.ToolTipText("The editor mode: what the tools and the left panel are for (Shift+1, Shift+6)")
+			.OnGetMenuContent([Context] { return FMenuRegistry::Get().GenerateMenuWidget("MapEditor.Modes", Context); })
+			.ButtonContent()[SNew(STextBlock).Text([this] { return FString::Format("{} Mode", ToString(Mode)); })];
+	});
+	Modes.AddSubMenu("QuickAdd", "Add", "Add an entity or a brush where the active view looks", FName("MapEditor.QuickAdd"));
 	FMenuSection& History = Bars.AddSection("History");
 	History.AddCommand(Cmd.Undo);
 	History.AddCommand(Cmd.Redo);
-	FMenuSection& ToolButtons = Bars.AddSection("Tools");
-	for (const TSharedPtr<FUICommandInfo>& Command : { Cmd.ToolSelect, Cmd.ToolRotate, Cmd.ToolScale, Cmd.ToolClip, Cmd.ToolVertex, Cmd.ToolEdge, Cmd.ToolFace })
-	{
-		ToolButtons.AddCommand(Command);
-	}
-	FMenuSection& ObjectTools = Bars.AddSection("Objects");
-	ObjectTools.AddCommand(Cmd.AddCube);
-	ObjectTools.AddCommand(Cmd.Group);
-	ObjectTools.AddCommand(Cmd.Subtract);
-	ObjectTools.AddCommand(Cmd.HollowIn);
-	FMenuSection& ViewTools = Bars.AddSection("View");
-	ViewTools.AddCommand(Cmd.SnapToGrid);
-	ViewTools.AddCommand(Cmd.SolidView);
 }
 
 // ----- About -----
@@ -1072,7 +1255,7 @@ void FMapEditorShell::ResetLayout()
 	TabManager->CloseAllAreas();
 	Outliner.reset();
 	Properties.reset();
-	PrefabList.reset();
+	PlaceActors.reset();
 	ViewportLayout.reset();
 	DockArea = TabManager->RestoreFrom(MakeDefaultLayout(), Window).ToSharedPtr();
 	DockHost->SetContent(ToSharedRef(DockArea));

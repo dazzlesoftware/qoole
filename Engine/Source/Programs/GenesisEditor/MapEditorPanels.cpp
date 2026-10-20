@@ -1,19 +1,24 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// The map editor's dockable tabs: the viewports, the outliner, the
-// properties of the selection, the prefab library, the settings (with the
-// key bindings) and the log.
+// The map editor's dockable tabs, laid out as in Unreal: Place Actors and
+// Brush Editing at the left, the viewports in the middle, the Outliner and
+// Details at the right, and Content Browser 1 (2 to 4 from the Window menu)
+// and the Output Log at the bottom.
 
 #include "MapEditorShell.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 #include "MapCoreHeaders.h"
+#include "MapEditorEnvironment.h"
 #include "MapObjectProperties.h"
+#include "SOutputLog.h"
+#include "SPlaceActors.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBoxPanel.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SViewport.h"
 #include "Widgets/Text/STextBlock.h"
 
@@ -22,6 +27,14 @@ namespace
 	const FTextBlockStyle& SmallText() { return FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"); }
 
 	const FName ViewportTabId("Viewport");
+	const FName PlaceActorsTabId("PlaceActors");
+	const FName BrushEditingTabId("BrushEditing");
+	const FName OutlinerTabId("Outliner");
+	const FName DetailsTabId("Details");
+	const FName OutputLogTabId("OutputLog");
+
+	// Unreal's names for the content browser tabs.
+	FName ContentBrowserTabId(int32 Index) { return FName(FString::Format("ContentBrowserTab{}", Index + 1)); }
 
 	FString ObjectLabel(Object* Obj)
 	{
@@ -46,163 +59,29 @@ namespace
 		return Obj->HasEntity() ? FString("Entity") : (Obj->HasBrush() ? FString("Brush") : FString("Object"));
 	}
 
-	// Rebinds a command by pressing keys (Esc cancels, Backspace clears).
-	class SChordEditor final : public SCompoundWidget
-	{
-	public:
-		SLATE_BEGIN_ARGS(SChordEditor)
-		SLATE_END_ARGS()
-
-		void Construct(const FArguments&, const TSharedRef<FUICommandInfo>& InCommand, TFunction<void(const FString&)> InLog)
-		{
-			Command = InCommand.ToSharedPtr();
-			Log = std::move(InLog);
-			ChildSlot
-			[
-				SNew(SButton).HAlign(HAlign_Left).IsFocusable(false)
-				.Text([this] { return bCapturing ? FString("Press keys (Esc cancels, Backspace clears)") : (Command->GetInputText().IsEmpty() ? FString("(none)") : Command->GetInputText()); })
-				.OnClicked([this]
-				{
-					bCapturing = true;
-					return FReply::Handled().SetUserFocus(SharedThis(this), EFocusCause::Mouse);
-				})
-			];
-		}
-
-		bool SupportsKeyboardFocus() const override { return true; }
-
-		FReply OnPreviewKeyDown(const FGeometry&, const FKeyEvent& Event) override
-		{
-			if (!bCapturing)
-			{
-				return FReply::Unhandled();
-			}
-			const EKey Key = Event.GetKey();
-			if (Key == EKey::LeftShift || Key == EKey::RightShift || Key == EKey::LeftControl || Key == EKey::RightControl || Key == EKey::LeftAlt || Key == EKey::RightAlt)
-			{
-				return FReply::Handled(); // wait for the real key
-			}
-			bCapturing = false;
-			if (Key == EKey::Escape)
-			{
-				return FReply::Handled().ClearUserFocus();
-			}
-			FInputChord Chord;
-			if (Key != EKey::BackSpace)
-			{
-				Chord.Key = Key;
-				Chord.Modifiers = (Event.IsControlDown() ? EModifierKey::Control : EModifierKey::None) | (Event.IsShiftDown() ? EModifierKey::Shift : EModifierKey::None)
-					| (Event.IsAltDown() ? EModifierKey::Alt : EModifierKey::None);
-			}
-			const TSharedPtr<FUICommandInfo> Displaced = FInputBindingManager::Get().SetUserChord(ToSharedRef(Command), Chord);
-			Log(FString::Format("Bound \"{}\" to {}{}", Command->GetLabel(), Chord.IsValid() ? Chord.ToString() : FString("nothing"),
-				Displaced ? FString::Format(" (taken from \"{}\")", Displaced->GetLabel()) : FString()));
-			return FReply::Handled().ClearUserFocus();
-		}
-
-		void OnFocusLost(const FFocusEvent&) override { bCapturing = false; }
-
-	private:
-		TSharedPtr<FUICommandInfo> Command;
-		TFunction<void(const FString&)> Log;
-		bool bCapturing = false;
-	};
-
-	// The editor's settings, for a property grid. Each viewport's own
-	// settings (view mode, camera, show flags) are in its toolbar.
-	class FEditorSettingsSource final : public IPropertySource
-	{
-	public:
-		FEditorSettingsSource(FMapViewSettings& InSettings, TFunction<void(float)> InSetAppScale)
-			: Settings(InSettings), SetAppScale(std::move(InSetAppScale))
-		{
-		}
-
-		FString GetDisplayName() const override { return "Settings"; }
-
-		void GetProperties(TArray<FPropertyDesc>& Out) const override
-		{
-			Out.push_back(FPropertyDesc("GridSize", EPropertyType::Enum, "Grid size", "Grid").SetOptions(GridOptions()).SetToolTip("Map units between grid lines"));
-			Out.push_back(FPropertyDesc("Snap", EPropertyType::Bool, "Snap to the grid", "Grid"));
-			Out.push_back(FPropertyDesc("ShowGrid", EPropertyType::Bool, "Show the grid", "Grid"));
-			Out.push_back(FPropertyDesc("SnapRotation", EPropertyType::Bool, "Snap rotation", "Tools"));
-			Out.push_back(FPropertyDesc("RotateSnap", EPropertyType::Float, "Rotation steps", "Tools").SetRange(0.0f, 90.0f).SetToolTip("Degrees; 0 turns freely"));
-			Out.push_back(FPropertyDesc("MouseSensitivity", EPropertyType::Float, "Mouse sensitivity", "Views").SetRange(0.1f, 4.0f)
-				.SetToolTip("How fast the perspective views turn with the mouse"));
-			Out.push_back(FPropertyDesc("InvertMiddleMousePan", EPropertyType::Bool, "Invert middle mouse pan", "Views"));
-			Out.push_back(FPropertyDesc("AppScale", EPropertyType::Enum, "Interface scale", "Views").SetOptions({ "100%", "125%", "150%", "200%" }));
-		}
-
-		FPropertyValue GetValue(FName Property) const override
-		{
-			if (Property == FName("GridSize"))
-			{
-				int32 Index = 0;
-				for (float Size = 1.0f; Size < Settings.GridSize && Index < 8; Size *= 2.0f)
-				{
-					++Index;
-				}
-				return Index;
-			}
-			if (Property == FName("Snap")) return Settings.bSnapToGrid;
-			if (Property == FName("ShowGrid")) return Settings.bShowGrid;
-			if (Property == FName("SnapRotation")) return Settings.bSnapRotation;
-			if (Property == FName("RotateSnap")) return Settings.RotateSnapDegrees;
-			if (Property == FName("MouseSensitivity")) return Settings.MouseSensitivity;
-			if (Property == FName("InvertMiddleMousePan")) return Settings.bInvertMiddleMousePan;
-			if (Property == FName("AppScale"))
-			{
-				const float Scale = FSlateApplication::Get().GetApplicationScale();
-				return static_cast<int32>(Scale >= 1.9f ? 3 : (Scale >= 1.4f ? 2 : (Scale >= 1.2f ? 1 : 0)));
-			}
-			return false;
-		}
-
-		void SetValue(FName Property, const FPropertyValue& Value) override
-		{
-			if (Property == FName("GridSize")) Settings.GridSize = static_cast<float>(1 << FMath::Clamp(std::get<int32>(Value), 0, 8));
-			else if (Property == FName("Snap")) Settings.bSnapToGrid = std::get<bool>(Value);
-			else if (Property == FName("ShowGrid")) Settings.bShowGrid = std::get<bool>(Value);
-			else if (Property == FName("SnapRotation")) Settings.bSnapRotation = std::get<bool>(Value);
-			else if (Property == FName("RotateSnap")) Settings.RotateSnapDegrees = std::get<float>(Value);
-			else if (Property == FName("MouseSensitivity")) Settings.MouseSensitivity = std::get<float>(Value);
-			else if (Property == FName("InvertMiddleMousePan")) Settings.bInvertMiddleMousePan = std::get<bool>(Value);
-			else if (Property == FName("AppScale"))
-			{
-				static const float Scales[] = { 1.0f, 1.25f, 1.5f, 2.0f };
-				SetAppScale(Scales[FMath::Clamp(std::get<int32>(Value), 0, 3)]);
-			}
-			Settings.Changed();
-		}
-
-	private:
-		static TArray<FString> GridOptions()
-		{
-			TArray<FString> Options;
-			for (int32 Size = 1; Size <= 256; Size *= 2)
-			{
-				Options.push_back(FString::Format("{}", Size));
-			}
-			return Options;
-		}
-
-		FMapViewSettings& Settings;
-		TFunction<void(float)> SetAppScale;
-	};
 }
 
 TSharedRef<FDockLayout> FMapEditorShell::MakeDefaultLayout()
 {
-	// The viewports (one tab holding up to four panes, as in Unreal); the
-	// outliner and prefabs, the properties, and the log and settings at the
-	// right. Version 3: the four view tabs became one viewport tab.
-	return FDockLayout::New("MapEditor", 3)->AddArea(
+	// Unreal's level editor: the left panel and the viewports above the
+	// content browser and the log, the outliner and details at the right.
+	// Version 4: Place Actors, content browsers and the output log.
+	TSharedRef<FDockStackLayout> Bottom = FDockLayout::NewStack()->SetSizeCoefficient(0.3f)->AddTab(ContentBrowserTabId(0));
+	for (int32 Index = 1; Index < MaxContentBrowsers; ++Index)
+	{
+		Bottom = Bottom->AddTab(ContentBrowserTabId(Index), ETabState::Closed); // opened from the Window menu, here
+	}
+	Bottom = Bottom->AddTab(OutputLogTabId)->SetForegroundTab(ContentBrowserTabId(0));
+	return FDockLayout::New("MapEditor", 4)->AddArea(
 		FDockLayout::NewPrimaryArea()->SetOrientation(EOrientation::Horizontal)
-			->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.77f)->AddTab(ViewportTabId))
-			->Split(FDockLayout::NewSplitter()->SetOrientation(EOrientation::Vertical)->SetSizeCoefficient(0.23f)
-				->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.4f)->AddTab("Outliner")->AddTab("Prefabs")->SetForegroundTab("Outliner"))
-				->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.4f)->AddTab("Properties"))
-				->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.2f)->AddTab("Log")->AddTab("Settings")->SetForegroundTab("Log"))));
+			->Split(FDockLayout::NewSplitter()->SetOrientation(EOrientation::Vertical)->SetSizeCoefficient(0.79f)
+				->Split(FDockLayout::NewSplitter()->SetOrientation(EOrientation::Horizontal)->SetSizeCoefficient(0.7f)
+					->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.21f)->AddTab(PlaceActorsTabId)->AddTab(BrushEditingTabId)->SetForegroundTab(PlaceActorsTabId))
+					->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.79f)->AddTab(ViewportTabId)))
+				->Split(Bottom))
+			->Split(FDockLayout::NewSplitter()->SetOrientation(EOrientation::Vertical)->SetSizeCoefficient(0.21f)
+				->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.45f)->AddTab(OutlinerTabId))
+				->Split(FDockLayout::NewStack()->SetSizeCoefficient(0.55f)->AddTab(DetailsTabId))));
 }
 
 void FMapEditorShell::RegisterTabs()
@@ -210,17 +89,22 @@ void FMapEditorShell::RegisterTabs()
 	FTabManager& Tabs = *TabManager;
 	Tabs.RegisterTabSpawner(ViewportTabId, [this](const FSpawnTabArgs&) { return MakeViewportTab(); })
 		.SetDisplayName("Viewport").SetToolTip("The map views: the layout and each view's type, mode and camera are in their toolbars");
-
-	Tabs.RegisterTabSpawner("Outliner", [this](const FSpawnTabArgs&) { return MakeOutlinerTab(); })
+	Tabs.RegisterTabSpawner(PlaceActorsTabId, [this](const FSpawnTabArgs&) { return MakePlaceActorsTab(); })
+		.SetDisplayName("Place Actors").SetToolTip("Entities and geometry to drag into the viewports");
+	Tabs.RegisterTabSpawner(BrushEditingTabId, [this](const FSpawnTabArgs&) { return MakeBrushEditingTab(); })
+		.SetDisplayName("Brush Editing").SetToolTip("The Brush Editing mode's tools and brush operations");
+	Tabs.RegisterTabSpawner(OutlinerTabId, [this](const FSpawnTabArgs&) { return MakeOutlinerTab(); })
 		.SetDisplayName("Outliner").SetToolTip("The map's objects and groups (double-click a group to edit it)");
-	Tabs.RegisterTabSpawner("Properties", [this](const FSpawnTabArgs&) { return MakePropertiesTab(); })
-		.SetDisplayName("Properties").SetToolTip("Name, position, texture and entity keys of the selection");
-	Tabs.RegisterTabSpawner("Prefabs", [this](const FSpawnTabArgs&) { return MakePrefabsTab(); })
-		.SetDisplayName("Prefabs").SetToolTip("Ready-made brushes and the ones you saved");
-	Tabs.RegisterTabSpawner("Settings", [this](const FSpawnTabArgs&) { return MakeSettingsTab(); })
-		.SetDisplayName("Settings").SetToolTip("Grid, tools, views and key bindings");
-	Tabs.RegisterTabSpawner("Log", [this](const FSpawnTabArgs&) { return MakeLogTab(); })
-		.SetDisplayName("Log").SetToolTip("What the editor did");
+	Tabs.RegisterTabSpawner(DetailsTabId, [this](const FSpawnTabArgs&) { return MakeDetailsTab(); })
+		.SetDisplayName("Details").SetToolTip("Name, position, texture and entity keys of the selection");
+	for (int32 Index = 0; Index < MaxContentBrowsers; ++Index)
+	{
+		Tabs.RegisterTabSpawner(ContentBrowserTabId(Index), [this, Index](const FSpawnTabArgs&) { return MakeContentBrowserTab(Index); })
+			.SetDisplayName(FString::Format("Content Browser {}", Index + 1)).SetGroup("Content Browser")
+			.SetToolTip("The content folders: prefabs, maps and the editor's data");
+	}
+	Tabs.RegisterTabSpawner(OutputLogTabId, [this](const FSpawnTabArgs&) { return MakeOutputLogTab(); })
+		.SetDisplayName("Output Log").SetToolTip("Everything the editor logs");
 }
 
 // ----- Viewports -----
@@ -236,6 +120,13 @@ TSharedRef<SDockTab> FMapEditorShell::MakeViewportTab()
 		.Layout(ViewportLayoutType)
 		.ToolCommands(ToolCommands)
 		.ToolCommandList(Commands)
+		.OnPlace([this](const FMapPlaceable& Item, FMapViewportClient&, const Vector3d& Point)
+		{
+			if (Place(Item, Point) && PlaceActors)
+			{
+				PlaceActors->NoteRecent(Item);
+			}
+		})
 	];
 	Tab->SetOnTabClosed(FOnTabClosed::CreateLambda([this](const TSharedRef<SDockTab>&)
 	{
@@ -363,11 +254,11 @@ void FMapEditorShell::RefreshOutliner()
 	bSyncingOutliner = false;
 }
 
-// ----- Properties -----
+// ----- Details -----
 
-TSharedRef<SDockTab> FMapEditorShell::MakePropertiesTab()
+TSharedRef<SDockTab> FMapEditorShell::MakeDetailsTab()
 {
-	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label("Properties")
+	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label("Details")
 	[
 		SAssignNew(Properties, SPropertyGrid)
 		.OnBeginTransaction([this](const FString& Description) { if (Document) Document->BeginTransaction(Description); })
@@ -414,186 +305,171 @@ void FMapEditorShell::RefreshProperties()
 	});
 }
 
-// ----- Prefabs -----
 
-TSharedRef<SDockTab> FMapEditorShell::MakePrefabsTab()
+// ----- Place Actors -----
+
+TSharedRef<SDockTab> FMapEditorShell::MakePlaceActorsTab()
 {
-	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label("Prefabs")
+	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label("Place Actors")
 	[
-		SNew(SVerticalBox)
-		+ SVerticalBox::Slot().FillHeight(1.0f)
-		[
-			SAssignNew(PrefabList, SListView<int32>)
-			.ListItemsSource(&PrefabItems)
-			.SelectionMode(ESelectionMode::Single)
-			.OnGenerateRow([](int32 Index, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
-			{
-				const TArray<FMapEditorEnvironment::FPrefab>& Prefabs = FMapEditorEnvironment::GetPrefabs();
-				const bool bValid = Index >= 0 && Index < static_cast<int32>(Prefabs.size());
-				return SNew(STableRow<int32>, Owner)
-				[
-					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(STextBlock).Text(bValid ? Prefabs[static_cast<SIZE_T>(Index)].Name : FString())]
-					+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).TextStyle(&SmallText()).Text(bValid && Prefabs[static_cast<SIZE_T>(Index)].bUser ? FString("yours") : FString())]
-				];
-			})
-			.OnMouseButtonDoubleClick([this](int32 Index)
-			{
-				const TArray<FMapEditorEnvironment::FPrefab>& Prefabs = FMapEditorEnvironment::GetPrefabs();
-				if (Index >= 0 && Index < static_cast<int32>(Prefabs.size()))
-				{
-					AddPrefab(Prefabs[static_cast<SIZE_T>(Index)].Path);
-				}
-			})
-		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 4.0f))
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 6.0f, 0.0f))
-			[
-				SNew(SButton).Text("Add").IsEnabled([this] { return Document && PrefabList && !PrefabList->GetSelectedItems().empty(); }).OnClicked([this]
-				{
-					const TArray<FMapEditorEnvironment::FPrefab>& Prefabs = FMapEditorEnvironment::GetPrefabs();
-					for (const int32 Index : PrefabList->GetSelectedItems())
-					{
-						if (Index >= 0 && Index < static_cast<int32>(Prefabs.size()))
-						{
-							AddPrefab(Prefabs[static_cast<SIZE_T>(Index)].Path);
-						}
-					}
-					return FReply::Handled();
-				})
-			]
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton).Text("Save Selection...").IsEnabled([this] { return Document && !Document->GetSelection().empty(); }).OnClicked([this]
-				{
-					SaveSelectionAsPrefab();
-					return FReply::Handled();
-				})
-			]
-		]
+		SAssignNew(PlaceActors, SPlaceActors).OnPlace([this](const FMapPlaceable& Item) { Place(Item); })
 	];
-	RefreshPrefabList();
-	Tab->SetOnTabClosed(FOnTabClosed::CreateLambda([this](const TSharedRef<SDockTab>&) { PrefabList.reset(); }));
+	PlaceActors->SetItems(GetPlaceables());
+	Tab->SetOnTabClosed(FOnTabClosed::CreateLambda([this](const TSharedRef<SDockTab>&) { PlaceActors.reset(); }));
 	return Tab;
 }
 
-void FMapEditorShell::RefreshPrefabList()
+void FMapEditorShell::RefreshPlaceables()
 {
-	PrefabItems.clear();
-	for (SIZE_T Index = 0; Index < FMapEditorEnvironment::GetPrefabs().size(); ++Index)
+	if (PlaceActors)
 	{
-		PrefabItems.push_back(static_cast<int32>(Index));
+		PlaceActors->SetItems(GetPlaceables());
 	}
-	if (PrefabList)
+	for (const TWeakPtr<SContentBrowser>& Weak : ContentBrowsers)
 	{
-		PrefabList->RequestListRefresh();
-	}
-}
-
-// ----- Settings -----
-
-TSharedRef<SDockTab> FMapEditorShell::MakeSettingsTab()
-{
-	auto Items = std::make_shared<TArray<TSharedPtr<FUICommandInfo>>>();
-	for (const char* ContextName : { "MapEditor", "MapViewport" })
-	{
-		if (const TSharedPtr<FBindingContext> Context = FInputBindingManager::Get().FindContext(ContextName))
+		if (const TSharedPtr<SContentBrowser> Browser = Weak.lock())
 		{
-			for (const TSharedRef<FUICommandInfo>& Command : Context->GetCommands())
-			{
-				Items->push_back(Command.ToSharedPtr());
-			}
+			Browser->Refresh();
 		}
 	}
-	TSharedPtr<SPropertyGrid> Grid;
-	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label("Settings")
-	[
-		// Settings above, key bindings below; each half clips, so a short
-		// panel never draws one over the other.
-		SNew(SSplitter).Orientation(EOrientation::Vertical)
-		+ SSplitter::Slot().Value(0.45f).MinSize(60.0f)
-		[
-			SNew(SBox).Clipping(EWidgetClipping::ClipToBounds)[SAssignNew(Grid, SPropertyGrid)]
-		]
-		+ SSplitter::Slot().Value(0.55f).MinSize(60.0f)
-		[
-		SNew(SBox).Clipping(EWidgetClipping::ClipToBounds)
-		[
-		SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(8.0f, 6.0f))
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-			[
-				SNew(STextBlock).TextStyle(&SmallText()).AutoWrapText(true).Text("Key bindings: click a shortcut, then press the new keys.")
-			]
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton).Text("Reset All").OnClicked([this]
-				{
-					FInputBindingManager::Get().ResetToDefaults();
-					Log("Key bindings reset");
-					return FReply::Handled();
-				})
-			]
-		]
-		+ SVerticalBox::Slot().FillHeight(1.0f)
-		[
-			SNew(SListView<TSharedPtr<FUICommandInfo>>)
-			.ListItemsSource(Items.get())
-			.SelectionMode(ESelectionMode::None)
-			.OnGenerateRow([this, Items](TSharedPtr<FUICommandInfo> Command, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
-			{
-				return SNew(STableRow<TSharedPtr<FUICommandInfo>>, Owner).Padding(FMargin(8.0f, 2.0f))
-				[
-					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().FillWidth(0.5f).VAlign(VAlign_Center)[SNew(STextBlock).Text(Command->GetLabel()).ToolTipText(Command->GetDescription())]
-					+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SChordEditor, ToSharedRef(Command), [this](const FString& Line) { Log(Line); })]
-				];
-			})
-		]
-		]
-		]
-	];
-	Grid->SetObjects({ TSharedRef<IPropertySource>(std::make_shared<FEditorSettingsSource>(ViewSettings, [this](float Scale) { Host.SetAppScale(Scale); })) });
-	return Tab;
 }
 
-// ----- Log -----
+// ----- Brush Editing -----
 
-TSharedRef<SDockTab> FMapEditorShell::MakeLogTab()
+namespace
 {
-	auto Items = std::make_shared<TArray<int32>>();
-	TSharedPtr<SListView<int32>> List;
-	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label("Log")
-	[
-		SAssignNew(List, SListView<int32>)
-		.ListItemsSource(Items.get())
-		.SelectionMode(ESelectionMode::None)
-		.OnGenerateRow([this](int32 Index, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
+	// A command as a button in a mode panel: its label, its shortcut in the
+	// tooltip, highlighted while it is on.
+	class SModeCommandButton final : public SCompoundWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SModeCommandButton)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments&, const TSharedPtr<FUICommandInfo>& InCommand, const TSharedPtr<FUICommandList>& InList)
 		{
-			return SNew(STableRow<int32>, Owner).Padding(FMargin(8.0f, 1.0f))
+			Command = InCommand;
+			List = InList;
+			ChildSlot
 			[
-				SNew(STextBlock).TextStyle(&SmallText()).Text(Index < static_cast<int32>(LogLines.size()) ? LogLines[static_cast<SIZE_T>(Index)] : FString())
+				SNew(SButton)
+				.IsFocusable(false)
+				.Text(Command->GetLabel())
+				.ToolTipText([this]
+				{
+					const FString Keys = Command->GetInputText();
+					return FString::Format("{}{}\n{}", Command->GetLabel(), Keys.IsEmpty() ? FString() : FString::Format(" ({})", Keys), Command->GetDescription());
+				})
+				.IsEnabled([this] { return List->CanExecuteAction(*Command); })
+				.OnClicked([this] { List->ExecuteAction(*Command); return FReply::Handled(); })
 			];
-		})
-	];
-	const TWeakPtr<SListView<int32>> WeakList = List;
-	List->RegisterActiveTimer(0.1f, [this, Items, WeakList](double, float)
-	{
-		const TSharedPtr<SListView<int32>> Pinned = WeakList.lock();
-		if (Pinned && Items->size() != LogLines.size())
-		{
-			while (Items->size() < LogLines.size())
-			{
-				Items->push_back(static_cast<int32>(Items->size()));
-			}
-			Pinned->RequestListRefresh();
-			Pinned->ScrollToBottom();
 		}
-		return EActiveTimerReturn::Continue;
-	});
+
+	protected:
+		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& Out, int32 LayerId,
+			const FWidgetStyle& Style) const override
+		{
+			const int32 Top = SCompoundWidget::OnPaint(Args, Geometry, CullingRect, Out, LayerId, Style);
+			if (Command->GetActionType() != EUserInterfaceActionType::Button && List->GetCheckState(*Command) == ECheckBoxState::Checked)
+			{
+				Out.AddRoundedBox(Top + 1, Geometry.ToPaintGeometry(), FColor(0, 0, 0, 0), 4.0f, FSlateColor(EStyleColor::Primary).Resolve(), 2.0f);
+			}
+			return Top + 1;
+		}
+
+	private:
+		TSharedPtr<FUICommandInfo> Command;
+		TSharedPtr<FUICommandList> List;
+	};
+}
+
+TSharedRef<SDockTab> FMapEditorShell::MakeBrushEditingTab()
+{
+	const TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
+	const auto Group = [this, &Box](const char* Title, const char* Note, std::initializer_list<TSharedPtr<FUICommandInfo>> Buttons)
+	{
+		Box->AddSlot().AutoHeight()
+		[
+			SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Header")).Padding(FMargin(8.0f, 4.0f))
+			[
+				SNew(STextBlock).Text(Title).TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("BoldText"))
+			]
+		];
+		if (Note[0])
+		{
+			Box->AddSlot().AutoHeight().Padding(FMargin(8.0f, 4.0f, 8.0f, 0.0f))[SNew(STextBlock).TextStyle(&SmallText()).AutoWrapText(true).Text(Note)];
+		}
+		const TSharedRef<SWrapBox> Row = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2(4.0f, 4.0f));
+		for (const TSharedPtr<FUICommandInfo>& Command : Buttons)
+		{
+			Row->AddSlot()[SNew(SModeCommandButton, Command, Commands)];
+		}
+		Box->AddSlot().AutoHeight().Padding(FMargin(8.0f, 6.0f, 8.0f, 10.0f))[Row];
+	};
+	Group("Tools", "A left drag in the 2D views: Clip draws the cutting line; the others drag the selected brush's corners, edges or faces.",
+		{ Cmd.ToolClip, Cmd.ToolVertex, Cmd.ToolEdge, Cmd.ToolFace });
+	Group("Brush Operations", "", { Cmd.HollowIn, Cmd.HollowOut, Cmd.Subtract, Cmd.Intersect });
+	Group("Transform", "", { Cmd.RotateLeft, Cmd.RotateRight, Cmd.FlipX, Cmd.FlipY, Cmd.FlipZ });
+	Group("Groups", "", { Cmd.Group, Cmd.Ungroup, Cmd.EnterGroup, Cmd.ScopeUp });
+	return SNew(SDockTab).Label("Brush Editing")[SNew(SScrollBox) + SScrollBox::Slot()[Box]];
+}
+
+// ----- Content Browsers -----
+
+TSharedRef<SDockTab> FMapEditorShell::MakeContentBrowserTab(int32 Index)
+{
+	TArray<FContentBrowserRoot> Roots = { { "Content", FPaths::FindContentDir() } };
+	TArray<FString> PrefabFolders = { FPaths::Combine(FPaths::Combine(FPaths::FindContentDir(), "Editor"), "brushes") };
+	const FString& UserPrefabs = FMapEditorEnvironment::GetUserPrefabFolder();
+	if (!UserPrefabs.IsEmpty())
+	{
+		Roots.push_back({ "Prefabs", UserPrefabs });
+		PrefabFolders.push_back(UserPrefabs);
+	}
+	TSharedPtr<SContentBrowser> Browser;
+	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label(FString::Format("Content Browser {}", Index + 1))
+	[
+		SAssignNew(Browser, SContentBrowser)
+		.Roots(Roots)
+		.PrefabFolders(PrefabFolders)
+		.InitialPath(ContentBrowserPaths[Index])
+		.OnAssetActivated([this](const FContentBrowserItem& Item) { OnAssetActivated(Item); })
+		.OnSaveAll([this] { Commands->ExecuteAction(*Cmd.SaveMap); })
+	];
+	ContentBrowsers[Index] = Browser;
+	Tab->SetOnTabClosed(FOnTabClosed::CreateLambda([this, Index](const TSharedRef<SDockTab>&)
+	{
+		if (const TSharedPtr<SContentBrowser> Closing = ContentBrowsers[Index].lock())
+		{
+			ContentBrowserPaths[Index] = Closing->GetPath();
+		}
+	}));
 	return Tab;
+}
+
+void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
+{
+	switch (Item.Type)
+	{
+	case EContentAssetType::Prefab:
+		AddPrefab(Item.Path);
+		break;
+	case EContentAssetType::Map:
+	case EContentAssetType::QuakeMap:
+		if (ConfirmDiscard())
+		{
+			OpenMap(Item.Path);
+		}
+		break;
+	default:
+		Log(FString::Format("Nothing in the editor opens {} files ({})", ToString(Item.Type), Item.Name));
+		break;
+	}
+}
+
+// ----- Output Log -----
+
+TSharedRef<SDockTab> FMapEditorShell::MakeOutputLogTab()
+{
+	return SNew(SDockTab).Label("Output Log")[SNew(SOutputLog)];
 }

@@ -53,8 +53,16 @@ Vulkan:
   camera speed, view mode (Lit, Unlit, Wireframe; Alt+4/3/2), show flags
   and settings. Perspective panes have a ground grid, fly with right drag
   and W/A/S/D (the wheel sets the speed), and orbit, dolly and pan with
-  Alt + left, right and middle drag. Plus an outliner, properties, prefabs,
-  settings and a log, with menus, a toolbar and rebindable shortcuts.
+  Alt + left, right and middle drag.
+- The rest of Unreal's level editor layout: Place Actors (Basic, Lights,
+  Geometry; drag into a viewport) and the Brush Editing mode's tools at the
+  left, the Outliner and Details at the right, and Content Browser 1 (up to
+  four, from the Window menu) and the Output Log at the bottom. The toolbar
+  has Save, the editor mode (Selection Shift+1, Brush Editing Shift+6) and
+  Add. Edit > Editor Preferences has the graphics RHI (DirectX 12 or
+  Vulkan, from the next start), the debug layer, the interface scale,
+  keyboard shortcuts, the map to load at startup, viewport controls, and
+  grid and snapping. Menus and shortcuts come from commands.
 - Tools: select and move (snapped to the grid), rotate, scale, clip, and
   vertex, edge and face editing. Cut, copy, paste, duplicate and delete;
   groups, and editing inside a group; hollow, subtract and intersect;
@@ -65,8 +73,8 @@ Vulkan:
 - Maps are saved as `.qle`, and `.map` files are imported and exported.
   Maps made for the Qoole-era games open as Genesis maps.
 
-Pass a map on the command line to open it. `-vulkan` switches from D3D12 to
-Vulkan, `-appscale=1.25` adds an application scale, `-resetlayout` starts
+Pass a map on the command line to open it. `-vulkan` and `-d3d12` choose the
+backend over the preference, `-appscale=1.25` adds an application scale, `-resetlayout` starts
 from the default layout and key bindings, `-nodebug` / `-debug` turn the
 D3D12 debug layer or Vulkan validation off or on (on by default in Debug
 builds), and `-selftest=<dir>` runs a scripted check that saves screenshots
