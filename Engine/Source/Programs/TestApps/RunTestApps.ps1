@@ -50,8 +50,13 @@ foreach ($App in $Apps)
 	$Dir = Join-Path $OutDir $App
 	$Arguments = @("-selftest=`"$Dir`"")
 	if ($Vulkan) { $Arguments += "-vulkan" }
+	# Each backend writes its own log (<App>_<Backend>_log.txt); read this run's,
+	# not one left by a run on the other backend.
+	$LogPath = Join-Path $Dir ("{0}_{1}_log.txt" -f $App, $(if ($Vulkan) { "Vulkan" } else { "D3D12" }))
+	Remove-Item -Path $LogPath -ErrorAction SilentlyContinue
 	$Start = Get-Date
 	$Process = Start-Process -FilePath $Exe -ArgumentList $Arguments -PassThru
+	$null = $Process.Handle # keeps the handle, or ExitCode can be empty after WaitForExit
 	if (-not $Process.WaitForExit($TimeoutSeconds * 1000))
 	{
 		$Process.Kill()
@@ -60,10 +65,12 @@ foreach ($App in $Apps)
 		continue
 	}
 	$Seconds = ((Get-Date) - $Start).TotalSeconds
-	$Log = Get-ChildItem -Path $Dir -Filter "*_log.txt" -ErrorAction SilentlyContinue | Select-Object -First 1
-	$Summary = if ($Log) { (Select-String -Path $Log.FullName -Pattern "checks, \d+ failed" | Select-Object -Last 1).Line } else { "" }
+	$Log = Get-Item -Path $LogPath -ErrorAction SilentlyContinue
+	$Summary = if ($Log) { (Select-String -Path $Log.FullName -Pattern "\d+ checks, \d+ failed" | Select-Object -Last 1).Line } else { "" }
+	$FailedChecks = if ($Summary -match "(\d+) checks, (\d+) failed") { [int]$Matches[2] } else { -1 }
 	$Summary = if ($Summary) { $Summary -replace "^.*: (\d+ checks, \d+ failed)$", '$1' } else { "no summary" }
-	if ($Process.ExitCode -eq 0)
+	# A pass needs a clean exit and a summary reporting no failed checks.
+	if ($Process.ExitCode -eq 0 -and $FailedChecks -eq 0)
 	{
 		Write-Host ("{0,-22} passed  ({1}, {2:N1}s)" -f $App, $Summary, $Seconds) -ForegroundColor Green
 	}
