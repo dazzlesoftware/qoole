@@ -81,6 +81,7 @@
     <ClCompile Include="Private\Objects\Game.cpp" />
     <ClCompile Include="Private\Objects\Geometry.cpp" />
     <ClCompile Include="Private\Objects\Objects.cpp" />
+    <ClCompile Include="Private\Objects\StaticMesh.cpp" />
     <ClCompile Include="Private\Objects\Texture.cpp" />
     <ClCompile Include="Private\Render\Clip.cpp" />
     <ClCompile Include="Private\Render\DrawBase.cpp" />
@@ -99,6 +100,7 @@
     <ClInclude Include="Public\Objects\Game.h" />
     <ClInclude Include="Public\Objects\Geometry.h" />
     <ClInclude Include="Public\Objects\Objects.h" />
+    <ClInclude Include="Public\Objects\StaticMesh.h" />
     <ClInclude Include="Public\Objects\Texture.h" />
     <ClInclude Include="Public\Render\Clip.h" />
     <ClInclude Include="Public\Render\DrawBase.h" />

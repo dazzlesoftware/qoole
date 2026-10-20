@@ -13,6 +13,7 @@ enum class EMapPlaceableKind : uint8
 {
 	Entity, // Id: the entity class ("light")
 	Prefab, // Id: the prefab's .qle file
+	Mesh,   // Id: the static mesh (StaticMesh::Find): a static mesh actor
 };
 
 struct FMapPlaceable

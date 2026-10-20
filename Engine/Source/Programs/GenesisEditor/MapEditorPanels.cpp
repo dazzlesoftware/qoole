@@ -47,6 +47,10 @@ namespace
 		{
 			return FString::FromAnsi(Obj->GetEntityPtr()->GetClassname());
 		}
+		if (Obj->HasMesh())
+		{
+			return FString::FromAnsi(Obj->GetMesh().GetName());
+		}
 		return FMapDocument::IsGroup(*Obj) ? FString("Group") : FString("Brush");
 	}
 
@@ -55,6 +59,10 @@ namespace
 		if (FMapDocument::IsGroup(*Obj))
 		{
 			return FString::Format("Group of {}", Obj->GetNumChildren());
+		}
+		if (Obj->HasMesh())
+		{
+			return FString("Static Mesh");
 		}
 		return Obj->HasEntity() ? FString("Entity") : (Obj->HasBrush() ? FString("Brush") : FString("Object"));
 	}
@@ -120,9 +128,9 @@ TSharedRef<SDockTab> FMapEditorShell::MakeViewportTab()
 		.Layout(ViewportLayoutType)
 		.ToolCommands(ToolCommands)
 		.ToolCommandList(Commands)
-		.OnPlace([this](const FMapPlaceable& Item, FMapViewportClient&, const Vector3d& Point)
+		.OnPlace([this](const FMapPlaceable& Item, FMapViewportClient& View, const Vector3d& Point)
 		{
-			if (Place(Item, Point) && PlaceActors)
+			if (Place(Item, Point, View.IsPerspective()) && PlaceActors)
 			{
 				PlaceActors->NoteRecent(Item);
 			}

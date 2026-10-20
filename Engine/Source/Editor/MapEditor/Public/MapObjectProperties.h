@@ -4,6 +4,8 @@
 // grid (the Properties panel). It replaces the MFC editor's property pages.
 //
 //   Object    Name, Position (scope space)
+//   Transform Location, Rotation (roll, pitch, yaw in degrees) and Scale,
+//             and Static Mesh, for static mesh actors (Unreal's details)
 //   Surface   Texture (brushes and groups of brushes: every face)
 //   Entity    Class, and the keys the entity set defines for the class,
 //             typed from its definition: numbers, choices (typedef and

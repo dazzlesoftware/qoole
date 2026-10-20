@@ -107,6 +107,31 @@ void FMapDraw::FlushLines(FSlateWindowElementList& Out, int32 Layer)
 	LineIndices.clear();
 }
 
+FColor FMapDraw::ObjectColor(float Shade) const
+{
+	// FDraw::ZBufSetup made zbufColor from the object and the side; take the
+	// side out again so every face of an object has the same hue.
+	const int Axis = FMath::Clamp(axisAlign, 0, 5);
+	const uint32 ObjectKey = static_cast<uint32>((zbufColor - Axis * 10 + 255 * 4) % 255);
+	const float Hue = static_cast<float>((ObjectKey * 37u) % 360u);
+	return HsvToColor(Hue, 0.28f, 0.82f, Shade);
+}
+
+void FMapDraw::PushTriangle(const ZPoint Points[3], const uint32 Colors[3])
+{
+	for (int Index = 0; Index < 3; ++Index)
+	{
+		FMapVertex Vertex;
+		Vertex.X = Points[Index].x + static_cast<float>(orgX);
+		Vertex.Y = static_cast<float>(orgY) - Points[Index].y;
+		Vertex.Q = 1.0f / FMath::Max(Points[Index].z, 1e-4f);
+		Vertex.U = 0.0f;
+		Vertex.V = 0.0f;
+		Vertex.Color = Colors[Index];
+		Triangles.push_back(Vertex);
+	}
+}
+
 void FMapDraw::ZBufTriangle(ZPoint Points[3])
 {
 	FColor Color;
@@ -129,26 +154,22 @@ void FMapDraw::ZBufTriangle(ZPoint Points[3])
 	}
 	else
 	{
-		// FDraw::ZBufSetup made zbufColor from the object and the side; take
-		// the side out again so every face of a brush has the same hue, then
-		// shade it per side.
-		const uint32 ObjectKey = static_cast<uint32>((zbufColor - Axis * 10 + 255 * 4) % 255);
-		const float Hue = static_cast<float>((ObjectKey * 37u) % 360u);
-		Color = HsvToColor(Hue, 0.28f, 0.82f, bShaded ? FaceShade[Axis] : 0.86f);
+		// A shade per side, so the faces of a brush read as a solid.
+		Color = ObjectColor(bShaded ? FaceShade[Axis] : 0.86f);
 	}
-
 	const uint32 Packed = PackRGBA(Color);
+	const uint32 Colors[3] = { Packed, Packed, Packed };
+	PushTriangle(Points, Colors);
+}
+
+void FMapDraw::ZBufShadedTriangle(ZPoint Points[3], const float Shades[3])
+{
+	uint32 Colors[3];
 	for (int Index = 0; Index < 3; ++Index)
 	{
-		FMapVertex Vertex;
-		Vertex.X = Points[Index].x + static_cast<float>(orgX);
-		Vertex.Y = static_cast<float>(orgY) - Points[Index].y;
-		Vertex.Q = 1.0f / FMath::Max(Points[Index].z, 1e-4f);
-		Vertex.U = 0.0f;
-		Vertex.V = 0.0f;
-		Vertex.Color = Packed;
-		Triangles.push_back(Vertex);
+		Colors[Index] = PackRGBA(ObjectColor(bShaded ? FMath::Clamp(Shades[Index] * 1.1f, 0.0f, 1.0f) : 0.86f));
 	}
+	PushTriangle(Points, Colors);
 }
 
 void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float Q2)

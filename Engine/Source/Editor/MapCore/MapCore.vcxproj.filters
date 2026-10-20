@@ -34,6 +34,9 @@
     <ClCompile Include="Private\Objects\Geometry.cpp">
       <Filter>Objects</Filter>
     </ClCompile>
+    <ClCompile Include="Private\Objects\StaticMesh.cpp">
+      <Filter>Objects</Filter>
+    </ClCompile>
     <ClCompile Include="Private\Objects\Objects.cpp">
       <Filter>Objects</Filter>
     </ClCompile>
@@ -75,6 +78,9 @@
       <Filter>Objects</Filter>
     </ClInclude>
     <ClInclude Include="Public\Objects\Geometry.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\Objects\StaticMesh.h">
       <Filter>Objects</Filter>
     </ClInclude>
     <ClInclude Include="Public\Objects\Objects.h">

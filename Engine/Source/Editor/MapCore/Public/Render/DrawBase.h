@@ -114,6 +114,9 @@ public:
 	virtual void ZBufInit(void) = 0;
 	virtual void ZBufClear(void) = 0;
 	virtual void ZBufTriangle(ZPoint zpoint[3]) = 0;
+	// A triangle lit per corner (static meshes): Shade is the light at
+	// each corner, 0 to 1. Without its own, a renderer draws it flat.
+	virtual void ZBufShadedTriangle(ZPoint zpoint[3], const float shade[3]) { (void)shade; ZBufTriangle(zpoint); }
 	virtual void ZBufRender(void) = 0;
 
 	void ZBufTextured(bool textured) { zbufTextured = textured; }

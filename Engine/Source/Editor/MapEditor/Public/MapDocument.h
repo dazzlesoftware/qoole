@@ -87,6 +87,7 @@ public:
 	TArray<Object*> GetObjects() const;
 	int32 CountBrushes() const;
 	int32 CountEntities() const;
+	int32 CountMeshes() const;
 
 	// ----- Scope -----
 	// The root or a group in the map. Clears the selection.
@@ -129,6 +130,9 @@ public:
 	Object* AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError = nullptr);
 	// A point entity of the given class at Position.
 	Object* AddEntity(const FString& ClassName, const Vector3d& Position);
+	// A static mesh actor (StaticMesh::Find) with its pivot at Position; null
+	// if there is no such mesh.
+	Object* AddMesh(const FString& MeshName, const Vector3d& Position);
 	// Writes copies of objects as a prefab (.qle), centered on the origin.
 	bool SavePrefab(const TArray<Object*>& Objects, const FString& PrefabPath, FString& OutError) const;
 
@@ -163,6 +167,13 @@ public:
 	void SetEntityKey(const TArray<Object*>& Objects, const FString& Key, const FString& Value);
 	// Applies a texture to every face of the objects' brushes (and groups').
 	void SetTexture(const TArray<Object*>& Objects, const FString& TextureName);
+	// A static mesh actor's rotation (degrees about X, Y and Z: roll, pitch,
+	// yaw, as Unreal shows them), scale, and mesh.
+	void SetMeshRotation(Object& Obj, const Vector3d& Degrees);
+	void SetMeshScale(Object& Obj, const Vector3d& Scale);
+	void SetMesh(Object& Obj, const FString& MeshName);
+	// A mesh actor's rotation as SetMeshRotation takes it.
+	static Vector3d GetMeshRotation(const Object& Obj);
 
 	// Brush editing: moves a vertex, an edge or a face of one brush by Delta
 	// (scope space) inside a transaction begun with BeginBrushEdit. The edit

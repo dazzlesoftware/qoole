@@ -642,6 +642,31 @@ void FMapEditorApp::TickSelfTest()
 		Commands.ExecuteAction(*Shell->Cmd.SolidView);
 		break;
 
+	// Static mesh actors: the five shapes in a row behind the scene, one
+	// turned and stretched.
+	case 121:
+	{
+		float X = -320.0f;
+		Object* Last = nullptr;
+		for (const FMapPlaceable& Item : Shell->GetPlaceables())
+		{
+			if (Item.Kind == EMapPlaceableKind::Mesh)
+			{
+				Last = Shell->Place(Item, Vector3d(X, 352.0f, 64.0f));
+				X += 160.0f;
+			}
+		}
+		if (Last)
+		{
+			Doc->SetMeshRotation(*Last, Vector3d(0.0f, 0.0f, 30.0f));
+		}
+		Doc->ClearSelection();
+		Commands.ExecuteAction(*Shell->Cmd.FrameSelection);
+		Report(Doc->CountMeshes() == 5 ? "five static mesh actors" : "FAILED: static mesh actors");
+		break;
+	}
+	case 123: Capture("meshes"); break;
+
 	// Milestone 6: a room hollowed from a big brush, with a doorway
 	// subtracted from a wall, furnished, then edited with the tools.
 	case 125:

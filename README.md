@@ -67,10 +67,16 @@ Vulkan:
   vertex, edge and face editing. Cut, copy, paste, duplicate and delete;
   groups, and editing inside a group; hollow, subtract and intersect;
   quarter turns and flips. Every change can be undone.
+- Static mesh actors, as in Unreal: Cube, Sphere, Cylinder, Cone and Plane
+  (Place Actors > Shapes, 128 units across). They keep their location,
+  rotation and scale (Details > Transform, and the Static Mesh to show),
+  draw lit with smooth shading, are picked like brushes, are saved in
+  `.qle`, and take no part in CSG, clipping or `.map` export.
 - Prefab brushes and entities from the built-in Genesis game
   (`Engine/Content/Editor`); entity keys are edited with the types the
   entity set gives them. Selections can be saved as prefabs.
-- Maps are saved as `.qle`, and `.map` files are imported and exported.
+- Maps are saved as `.qle`, and `.map` files are imported and exported
+  (brushes and entities only).
   Maps made for the Qoole-era games open as Genesis maps.
 
 Pass a map on the command line to open it. `-vulkan` and `-d3d12` choose the

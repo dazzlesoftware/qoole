@@ -176,6 +176,26 @@ Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Posit
 	return Prefab;
 }
 
+Object* FMapDocument::AddMesh(const FString& MeshName, const Vector3d& Position)
+{
+	std::shared_ptr<const StaticMesh> Mesh = StaticMesh::Find(MeshName.ToAnsi().c_str());
+	if (!Mesh)
+	{
+		return nullptr;
+	}
+	Object* Obj = new Object;
+	Obj->SetMesh(Mesh);
+	Obj->SetObjName(Mesh->GetName());
+	Obj->SetPosition(Position);
+	const bool bOwn = BeginOwnTransaction(FString::Format("Add {}", Mesh->GetName()));
+	AddObjects({ Obj });
+	if (bOwn)
+	{
+		EndTransaction();
+	}
+	return Obj;
+}
+
 Object* FMapDocument::AddEntity(const FString& ClassName, const Vector3d& Position)
 {
 	Object* Obj = new Object;
@@ -777,4 +797,111 @@ bool FMapDocument::EndBrushEdit()
 	Target->SetBoundRadius(true);
 	EndTransaction();
 	return true;
+}
+
+// ----- Static mesh actors -----
+
+namespace
+{
+	// Unreal's rotator about the map's axes: roll about X, pitch about Y,
+	// yaw about Z, applied in that order (R = Rz Ry Rx). The map core keeps
+	// an orientation as the rotated +Y (front) and +Z (top); the rotated +X
+	// is front x top.
+	void AxesFromDegrees(const Vector3d& Degrees, Vector3d& OutFront, Vector3d& OutTop)
+	{
+		const float Roll = DEG2RAD(Degrees.GetX());
+		const float Pitch = DEG2RAD(Degrees.GetY());
+		const float Yaw = DEG2RAD(Degrees.GetZ());
+		const float cr = std::cos(Roll), sr = std::sin(Roll);
+		const float cp = std::cos(Pitch), sp = std::sin(Pitch);
+		const float cy = std::cos(Yaw), sy = std::sin(Yaw);
+		OutFront.NewVector(cy * sp * sr - sy * cr, sy * sp * sr + cy * cr, cp * sr);
+		OutTop.NewVector(cy * sp * cr + sy * sr, sy * sp * cr - cy * sr, cp * cr);
+	}
+}
+
+Vector3d FMapDocument::GetMeshRotation(const Object& Obj)
+{
+	Vector3d Y, Z, X;
+	Obj.GetOrientation(Y, Z);
+	X.CrossVector(Y, Z);
+	// X = (cy cp, sy cp, -sp), Y.z = cp sr, Z.z = cp cr.
+	const float PitchRad = std::asin(FMath::Clamp(-X.GetZ(), -1.0f, 1.0f));
+	float YawRad, RollRad;
+	if (std::fabs(X.GetZ()) < 0.9999f)
+	{
+		YawRad = std::atan2(X.GetY(), X.GetX());
+		RollRad = std::atan2(Y.GetZ(), Z.GetZ());
+	}
+	else
+	{
+		YawRad = std::atan2(-Y.GetX(), Y.GetY());
+		RollRad = 0.0f;
+	}
+	const auto Clean = [](float Radians)
+	{
+		const float Degrees = RAD2DEG(Radians);
+		return std::fabs(Degrees) < 0.0005f ? 0.0f : Degrees;
+	};
+	return Vector3d(Clean(RollRad), Clean(PitchRad), Clean(YawRad));
+}
+
+void FMapDocument::SetMeshRotation(Object& Obj, const Vector3d& Degrees)
+{
+	if (!Obj.HasMesh())
+	{
+		return;
+	}
+	Vector3d Front, Top;
+	AxesFromDegrees(Degrees, Front, Top);
+	const bool bOwn = BeginOwnTransaction("Rotate");
+	CaptureObjects({ &Obj });
+	Obj.TransSpace::SetOrientation(Front, Top);
+	if (Obj.GetParentPtr())
+	{
+		Obj.GetParentPtr()->SetBoundRadius();
+	}
+	Changed(EMapChange::Geometry);
+	if (bOwn)
+	{
+		EndTransaction();
+	}
+}
+
+void FMapDocument::SetMeshScale(Object& Obj, const Vector3d& Scale)
+{
+	if (!Obj.HasMesh())
+	{
+		return;
+	}
+	const auto Safe = [](float V) { return std::fabs(V) < 1e-3f ? (V < 0.0f ? -1e-3f : 1e-3f) : V; };
+	const bool bOwn = BeginOwnTransaction("Scale");
+	CaptureObjects({ &Obj });
+	Obj.SetScale(Vector3d(Safe(Scale.GetX()), Safe(Scale.GetY()), Safe(Scale.GetZ())));
+	Changed(EMapChange::Geometry);
+	if (bOwn)
+	{
+		EndTransaction();
+	}
+}
+
+void FMapDocument::SetMesh(Object& Obj, const FString& MeshName)
+{
+	std::shared_ptr<const StaticMesh> Mesh = StaticMesh::Find(MeshName.ToAnsi().c_str());
+	if (!Obj.HasMesh() || !Mesh || Mesh == Obj.GetMeshPtr())
+	{
+		return;
+	}
+	const bool bOwn = BeginOwnTransaction("Change Static Mesh");
+	CaptureObjects({ &Obj });
+	Obj.SetMesh(Mesh);
+	if (Obj.GetParentPtr())
+	{
+		Obj.GetParentPtr()->SetBoundRadius();
+	}
+	Changed(EMapChange::Geometry);
+	if (bOwn)
+	{
+		EndTransaction();
+	}
 }

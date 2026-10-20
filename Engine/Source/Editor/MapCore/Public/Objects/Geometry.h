@@ -61,6 +61,7 @@ class Point3d : public Vector3d {
 class Points3d {
   friend class Geometry;
   friend class WireFrameGeom;
+  friend class StaticMesh;
 
  public:
   Points3d(int initSize = 10);

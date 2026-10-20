@@ -935,3 +935,239 @@ TEST_SUITE("MapEditor")
 		CHECK(Doc->GetUndoDescription() != "Move Vertex");
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Static mesh actors: Unreal's basic shapes placed with a transform.
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("The basic shapes are static meshes centered on their pivot, and rays hit them")
+	{
+		EnsureMapCore();
+		const std::vector<std::string>& Names = StaticMesh::GetBasicShapeNames();
+		CHECK(Names == std::vector<std::string>{ "Cube", "Sphere", "Cylinder", "Cone", "Plane" });
+		for (const std::string& Name : Names)
+		{
+			const std::shared_ptr<const StaticMesh> Mesh = StaticMesh::Find(Name.c_str());
+			REQUIRE(Mesh);
+			Vector3d Min, Max;
+			Mesh->GetBounds(Min, Max);
+			CAPTURE(Name);
+			CHECK(FMath::Abs(Max.GetX() - Min.GetX() - StaticMesh::BasicShapeSize) < 0.01f);
+			CHECK(FMath::Abs(Max.GetY() - Min.GetY() - StaticMesh::BasicShapeSize) < 0.01f);
+			CHECK(FMath::Abs(Max.GetX() + Min.GetX()) < 0.01f); // centered
+			CHECK(FMath::Abs(Max.GetZ() - Min.GetZ() - (Name == "Plane" ? 0.0f : StaticMesh::BasicShapeSize)) < 0.01f);
+			CHECK(!Mesh->GetTriangles().empty());
+			CHECK(Mesh->GetEdgeList().NumOfElm() > 0);
+			CHECK(Mesh->GetBoundRadius() >= StaticMesh::BasicShapeSize * 0.5f - 0.01f);
+		}
+		CHECK(StaticMesh::Find("sphere") == StaticMesh::Find("Sphere"));
+		CHECK(!StaticMesh::Find("Teapot"));
+
+		// A ray down onto the cube hits its top, 64 units below the start at z = 128.
+		const std::shared_ptr<const StaticMesh> Cube = StaticMesh::Find("Cube");
+		const Line Down(Vector3d(10.0f, -5.0f, 128.0f), Vector3d(0.0f, 0.0f, -1.0f));
+		float Depth = 0.0f;
+		REQUIRE(Cube->HitMesh(Down, 0.0f, 1000.0f, Depth));
+		CHECK(FMath::Abs(Depth - 64.0f) < 0.01f);
+		const Line Beside(Vector3d(100.0f, 0.0f, 128.0f), Vector3d(0.0f, 0.0f, -1.0f));
+		CHECK(!Cube->HitMesh(Beside, 0.0f, 1000.0f, Depth));
+	}
+
+	TEST_CASE("Static mesh actors keep their transform when rotated, scaled and flipped, and undo exactly")
+	{
+		EnsureMapCore();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Cube = Doc->AddMesh("Cube", Vector3d(64.0f, 0.0f, 0.0f));
+		REQUIRE(Cube);
+		CHECK(!Doc->AddMesh("Teapot", Vector3d(0.0f, 0.0f, 0.0f)));
+		CHECK(Cube->HasMesh());
+		CHECK(Doc->CountMeshes() == 1);
+		CHECK(Doc->CountBrushes() == 0);
+		CHECK(Doc->GetUndoDescription() == "Add Cube");
+		CHECK(Same(BoundsOf(*Doc, { Cube }).Size(), Vector3d(128.0f, 128.0f, 128.0f)));
+
+		const Vector3d Center(64.0f, 0.0f, 0.0f);
+		Doc->RotateObjects({ Cube }, 2, 30.0f, Center);
+		CHECK(Cube->HasMesh()); // not baked into a brush
+		CHECK(Same(PositionOf(Cube), Center));
+		const Vector3d Turned = FMapDocument::GetMeshRotation(*Cube);
+		CHECK(FMath::Abs(FMath::Abs(Turned.GetZ()) - 30.0f) < 0.05f);
+		CHECK(FMath::Abs(Turned.GetX()) < 0.05f);
+		CHECK(FMath::Abs(Turned.GetY()) < 0.05f);
+
+		Doc->ScaleObjects({ Cube }, Vector3d(2.0f, 2.0f, 2.0f), Center);
+		CHECK(Same(Cube->GetScale(), Vector3d(2.0f, 2.0f, 2.0f)));
+		CHECK(FMath::Abs(BoundsOf(*Doc, { Cube }).Size().GetZ() - 256.0f) < 0.05f);
+
+		Doc->FlipObjects({ Cube }, 2, Center);
+		CHECK(Cube->HasMesh());
+		CHECK(FMath::Abs(BoundsOf(*Doc, { Cube }).Size().GetZ() - 256.0f) < 0.05f);
+
+		Doc->Undo(); // flip
+		Doc->Undo(); // scale
+		CHECK(Same(Cube->GetScale(), Vector3d(1.0f, 1.0f, 1.0f)));
+		Doc->Undo(); // rotate
+		CHECK(Same(FMapDocument::GetMeshRotation(*Cube), Vector3d(0.0f, 0.0f, 0.0f)));
+		CHECK(Same(PositionOf(Cube), Center));
+		Doc->Redo();
+		CHECK(FMath::Abs(FMath::Abs(FMapDocument::GetMeshRotation(*Cube).GetZ()) - 30.0f) < 0.05f);
+	}
+
+	TEST_CASE("Static mesh actors show the Transform and the Static Mesh in the details, and edit them")
+	{
+		EnsureMapCore();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Mesh = Doc->AddMesh("Cube", Vector3d(0.0f, 0.0f, 64.0f));
+		REQUIRE(Mesh);
+		FMapObjectProperties Props(*Doc, *Mesh);
+		CHECK(Props.GetDisplayName() == "Cube");
+		TArray<FPropertyDesc> Descs;
+		Props.GetProperties(Descs);
+		TArray<FString> Names;
+		for (const FPropertyDesc& Desc : Descs)
+		{
+			Names.push_back(Desc.DisplayName);
+		}
+		CHECK(Names == TArray<FString>{ "Name", "Location", "Rotation", "Scale", "Static Mesh" });
+
+		// A rotation set in degrees reads back the same (roll, pitch, yaw).
+		Props.SetValue("Rotation", FPropertyVector3{ 10.0f, 20.0f, 30.0f });
+		const FPropertyVector3 Rotation = std::get<FPropertyVector3>(Props.GetValue("Rotation"));
+		CHECK(FMath::Abs(Rotation.X - 10.0f) < 0.05f);
+		CHECK(FMath::Abs(Rotation.Y - 20.0f) < 0.05f);
+		CHECK(FMath::Abs(Rotation.Z - 30.0f) < 0.05f);
+		CHECK(Doc->GetUndoDescription() == "Rotate");
+
+		Props.SetValue("Scale", FPropertyVector3{ 1.0f, 2.0f, 3.0f });
+		CHECK(Same(Mesh->GetScale(), Vector3d(1.0f, 2.0f, 3.0f)));
+		Props.SetValue("Position", FPropertyVector3{ 16.0f, 32.0f, 48.0f });
+		CHECK(Same(PositionOf(Mesh), Vector3d(16.0f, 32.0f, 48.0f)));
+
+		Props.SetValue("StaticMesh", static_cast<int32>(1));
+		CHECK(std::string(Mesh->GetMesh().GetName()) == "Sphere");
+		CHECK(std::get<int32>(Props.GetValue("StaticMesh")) == 1);
+		Doc->Undo();
+		CHECK(std::string(Mesh->GetMesh().GetName()) == "Cube");
+	}
+
+	TEST_CASE("Static mesh actors are saved in .qle with their transform and left out of .map")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Doc->AddPrefab(PrefabPath("Cube"), Vector3d(-128.0f, 0.0f, 0.0f));
+		Object* Sphere = Doc->AddMesh("Sphere", Vector3d(64.0f, 32.0f, 16.0f));
+		REQUIRE(Sphere);
+		Doc->SetMeshRotation(*Sphere, Vector3d(0.0f, 0.0f, 45.0f));
+		Doc->SetMeshScale(*Sphere, Vector3d(1.5f, 1.5f, 0.5f));
+		Doc->AddEntity("light", Vector3d(0.0f, 0.0f, 128.0f));
+		FString Error;
+		const FString Qle = Temp.File("meshes.qle");
+		REQUIRE(Doc->Save(Qle, Error));
+		FString Text;
+		REQUIRE(FFileHelper::LoadFileToString(Text, Qle));
+		CHECK(Text.View().find("StaticMesh: Sphere") != std::string_view::npos);
+
+		TUniquePtr<FMapDocument> Reopened = FMapDocument::Open(Qle, Error);
+		REQUIRE(Reopened);
+		CHECK(Reopened->CountMeshes() == 1);
+		CHECK(Reopened->CountBrushes() == 1);
+		CHECK(Reopened->CountEntities() == 1);
+		Object* Loaded = nullptr;
+		for (Object* Obj : Reopened->GetObjects())
+		{
+			Loaded = Obj->HasMesh() ? Obj : Loaded;
+		}
+		REQUIRE(Loaded);
+		CHECK(std::string(Loaded->GetMesh().GetName()) == "Sphere");
+		CHECK(Same(PositionOf(Loaded), Vector3d(64.0f, 32.0f, 16.0f)));
+		CHECK(Same(Loaded->GetScale(), Vector3d(1.5f, 1.5f, 0.5f)));
+		CHECK(FMath::Abs(FMapDocument::GetMeshRotation(*Loaded).GetZ() - 45.0f) < 0.05f);
+
+		const FString Map = Temp.File("meshes.map");
+		REQUIRE(Doc->Save(Map, Error));
+		TUniquePtr<FMapDocument> Imported = FMapDocument::Open(Map, Error);
+		REQUIRE(Imported);
+		CHECK(Imported->CountMeshes() == 0);
+		CHECK(Imported->CountBrushes() == 1);
+		CHECK(Imported->CountEntities() == 1);
+	}
+
+	TEST_CASE("CSG, clipping and hollowing leave static mesh actors alone")
+	{
+		EnsureMapCore();
+		FTestLogCapture Log;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Brush = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 0.0f));
+		Object* Mesh = Doc->AddMesh("Cube", Vector3d(16.0f, 0.0f, 0.0f));
+		REQUIRE(Mesh);
+
+		// A mesh is no cutter, and is not cut.
+		Doc->SetSelection({ Mesh });
+		CHECK(!Doc->SubtractSelection());
+		CHECK(Doc->CountBrushes() == 1);
+		Doc->SetSelection({ Brush });
+		Doc->SubtractSelection();
+		CHECK(Mesh->HasMesh());
+		CHECK(Doc->CountMeshes() == 1);
+
+		const Plane AtX0(Vector3d(1.0f, 0.0f, 0.0f), Vector3d(0.0f, 0.0f, 0.0f));
+		CHECK(!Doc->ClipObjects({ Mesh }, AtX0, EMapClip::KeepBack));
+		CHECK(!Doc->HollowObjects({ Mesh }, 8.0f, true));
+		CHECK(Doc->CountMeshes() == 1);
+
+		// In a group with a brush, the clip cuts the brush and keeps the mesh.
+		Object* Other = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(200.0f, 0.0f, 0.0f));
+		Object* Group = Doc->GroupObjects({ Other, Mesh });
+		REQUIRE(Group);
+		const Plane AtX200(Vector3d(1.0f, 0.0f, 0.0f), Vector3d(200.0f, 0.0f, 0.0f));
+		CHECK(Doc->ClipObjects({ Group }, AtX200, EMapClip::KeepBack));
+		CHECK(Doc->CountMeshes() == 1);
+		CHECK(Mesh->HasMesh());
+		CHECK(Log.Problems.empty());
+		for (const FString& Problem : Log.Problems)
+		{
+			MESSAGE(Problem.c_str());
+		}
+	}
+
+	TEST_CASE("The perspective view draws static mesh actors lit and as wireframes")
+	{
+		FTestLogCapture Log;
+		FViewFixture F;
+		if (!F.Create(ERHIBackend::D3D12, EMapViewType::Perspective))
+		{
+			MESSAGE("D3D12 device unavailable; skipped");
+			return;
+		}
+		Object* Sphere = F.Doc->AddMesh("Sphere", Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Sphere);
+		F.Client->FrameSelection();
+		F.Doc->ClearSelection();
+		const FVector2 Center = F.At(Vector3d(0.0f, 0.0f, 0.0f));
+		const int32 X = static_cast<int32>(Center.X);
+		const int32 Y = static_cast<int32>(Center.Y);
+
+		F.Client->SetViewMode(EMapViewMode::Lit);
+		const TArray<uint8> Lit = F.Render();
+		const FColor Background = PixelAt(Lit, 1, 255);
+		CHECK(PixelAt(Lit, X, Y) != Background);
+		// Lit from one side: the sphere is not one flat color.
+		CHECK(PixelAt(Lit, X - 20, Y) != PixelAt(Lit, X + 20, Y));
+
+		F.Client->SetViewMode(EMapViewMode::Wireframe);
+		const TArray<uint8> Wire = F.Render();
+		int32 Lines = 0;
+		for (int32 Dx = -40; Dx <= 40; ++Dx)
+		{
+			Lines += PixelAt(Wire, X + Dx, Y) != PixelAt(Wire, 1, 255) ? 1 : 0;
+		}
+		CHECK(Lines > 0);
+		CHECK(Log.Problems.empty());
+		for (const FString& Problem : Log.Problems)
+		{
+			MESSAGE(Problem.c_str());
+		}
+	}
+}

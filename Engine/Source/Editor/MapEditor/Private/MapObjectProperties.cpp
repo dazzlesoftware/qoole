@@ -14,6 +14,19 @@ namespace
 	const FName PositionProperty("Position");
 	const FName TextureProperty("Texture");
 	const FName ClassProperty("Class");
+	const FName RotationProperty("Rotation");
+	const FName ScaleProperty("Scale");
+	const FName MeshProperty("StaticMesh");
+
+	TArray<FString> MeshOptions()
+	{
+		TArray<FString> Options;
+		for (const std::string& Name : StaticMesh::GetBasicShapeNames())
+		{
+			Options.push_back(FString(Name));
+		}
+		return Options;
+	}
 
 	FString KeyProperty(const char* Key) { return FString::Format("Key:{}", Key); }
 
@@ -69,12 +82,25 @@ FString FMapObjectProperties::GetDisplayName() const
 	{
 		return FString::FromAnsi(Obj.GetEntityPtr()->GetClassname());
 	}
+	if (Obj.HasMesh())
+	{
+		return FString::FromAnsi(Obj.GetMesh().GetName());
+	}
 	return FMapDocument::IsGroup(Obj) ? FString("Group") : FString("Brush");
 }
 
 void FMapObjectProperties::GetProperties(TArray<FPropertyDesc>& Out) const
 {
 	Out.push_back(FPropertyDesc(NameProperty, EPropertyType::String, "Name", "Object"));
+	if (Obj.HasMesh())
+	{
+		// Unreal's Transform section, then the mesh.
+		Out.push_back(FPropertyDesc(PositionProperty, EPropertyType::Vector3, "Location", "Transform").SetToolTip("In the space of the group being edited"));
+		Out.push_back(FPropertyDesc(RotationProperty, EPropertyType::Vector3, "Rotation", "Transform").SetToolTip("Degrees: roll about X, pitch about Y, yaw about Z"));
+		Out.push_back(FPropertyDesc(ScaleProperty, EPropertyType::Vector3, "Scale", "Transform"));
+		Out.push_back(FPropertyDesc(MeshProperty, EPropertyType::Enum, "Static Mesh", "Static Mesh").SetOptions(MeshOptions()));
+		return;
+	}
 	Out.push_back(FPropertyDesc(PositionProperty, EPropertyType::Vector3, "Position", "Object").SetToolTip("In the space of the group being edited"));
 	if (Obj.HasBrush() || Obj.CountBrushes() > 0)
 	{
@@ -170,6 +196,31 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 	{
 		return FString::FromAnsi(FirstTexture(Obj));
 	}
+	if (Obj.HasMesh())
+	{
+		if (Property == RotationProperty)
+		{
+			const Vector3d R = FMapDocument::GetMeshRotation(Obj);
+			return FPropertyVector3{ R.GetX(), R.GetY(), R.GetZ() };
+		}
+		if (Property == ScaleProperty)
+		{
+			const Vector3d& S = Obj.GetScale();
+			return FPropertyVector3{ S.GetX(), S.GetY(), S.GetZ() };
+		}
+		if (Property == MeshProperty)
+		{
+			const TArray<FString> Options = MeshOptions();
+			for (SIZE_T Index = 0; Index < Options.size(); ++Index)
+			{
+				if (Options[Index].Equals(Obj.GetMesh().GetName(), ESearchCase::IgnoreCase))
+				{
+					return static_cast<int32>(Index);
+				}
+			}
+			return static_cast<int32>(0);
+		}
+	}
 	if (!Obj.HasEntity())
 	{
 		return FString();
@@ -247,6 +298,31 @@ void FMapObjectProperties::SetValue(FName Property, const FPropertyValue& Value)
 	if (Property == TextureProperty)
 	{
 		Document.SetTexture({ &Obj }, ValueText(Value));
+		return;
+	}
+	if (Property == RotationProperty)
+	{
+		if (const FPropertyVector3* V = std::get_if<FPropertyVector3>(&Value))
+		{
+			Document.SetMeshRotation(Obj, Vector3d(V->X, V->Y, V->Z));
+		}
+		return;
+	}
+	if (Property == ScaleProperty)
+	{
+		if (const FPropertyVector3* V = std::get_if<FPropertyVector3>(&Value))
+		{
+			Document.SetMeshScale(Obj, Vector3d(V->X, V->Y, V->Z));
+		}
+		return;
+	}
+	if (Property == MeshProperty)
+	{
+		const TArray<FString> Options = MeshOptions();
+		if (const int32* Index = std::get_if<int32>(&Value); Index && *Index >= 0 && *Index < static_cast<int32>(Options.size()))
+		{
+			Document.SetMesh(Obj, Options[static_cast<SIZE_T>(*Index)]);
+		}
 		return;
 	}
 	if (!Obj.HasEntity())

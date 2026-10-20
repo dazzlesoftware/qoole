@@ -93,6 +93,7 @@ namespace
 		Draw.SetColor(VRC_CROSSHAIRNORTH, 4, 208, 24);
 		Draw.SetColor(VRC_OPCENTER, 32, 192, 255);
 		Draw.SetColor(VRC_LEAKGEOM, 255, 128, 0);
+		Draw.SetColor(VRC_MESH, 120, 214, 196);
 		Draw.SetColor(ColorGridMinor, 36, 40, 48);
 		Draw.SetColor(ColorGridMajor, 54, 60, 72);
 		Draw.SetColor(ColorGridAxis, 84, 94, 116);

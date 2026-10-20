@@ -343,6 +343,10 @@ bool FMapEditorShell::ExportMap(const FString& Path)
 		return false;
 	}
 	Log(FString::Format("Exported {}", Path));
+	if (const int32 Meshes = Document->CountMeshes(); Meshes > 0)
+	{
+		Log(FString::Format("{} static mesh actor{} left out: .map files have brushes and entities only", Meshes, Meshes == 1 ? " was" : "s were"));
+	}
 	return true;
 }
 
@@ -519,6 +523,17 @@ TArray<FMapPlaceable> FMapEditorShell::GetPlaceables() const
 			Items.push_back(std::move(Basic));
 		}
 	}
+	// Shapes: static mesh actors.
+	for (const std::string& Name : StaticMesh::GetBasicShapeNames())
+	{
+		FMapPlaceable Item;
+		Item.Kind = EMapPlaceableKind::Mesh;
+		Item.Id = FString(Name);
+		Item.Category = "Shapes";
+		Item.Label = FString(Name);
+		Item.ToolTip = FString::Format("A static mesh actor: {}, {:.0f} units across", Name, StaticMesh::BasicShapeSize);
+		Items.push_back(std::move(Item));
+	}
 	// Prefabs: brushes, Unreal's BSP Geometry.
 	for (const FMapEditorEnvironment::FPrefab& Prefab : FMapEditorEnvironment::GetPrefabs())
 	{
@@ -533,7 +548,7 @@ TArray<FMapPlaceable> FMapEditorShell::GetPlaceables() const
 	return Items;
 }
 
-Object* FMapEditorShell::Place(const FMapPlaceable& Item, const Vector3d& Point)
+Object* FMapEditorShell::Place(const FMapPlaceable& Item, const Vector3d& Point, bool bOnGround)
 {
 	if (!Document)
 	{
@@ -549,6 +564,16 @@ Object* FMapEditorShell::Place(const FMapPlaceable& Item, const Vector3d& Point)
 	if (Item.Kind == EMapPlaceableKind::Entity)
 	{
 		Added = Document->AddEntity(Item.Id, At);
+	}
+	else if (Item.Kind == EMapPlaceableKind::Mesh)
+	{
+		if (const std::shared_ptr<const StaticMesh> Mesh = StaticMesh::Find(Item.Id.ToAnsi().c_str()); Mesh && bOnGround)
+		{
+			Vector3d Min, Max;
+			Mesh->GetBounds(Min, Max);
+			At.SetZ(At.GetZ() - Min.GetZ());
+		}
+		Added = Document->AddMesh(Item.Id, At);
 	}
 	else
 	{
@@ -1093,7 +1118,7 @@ void FMapEditorShell::RegisterMenus()
 	ModeList.AddCommand(Cmd.SelectionMode);
 	ModeList.AddCommand(Cmd.BrushEditingMode);
 	FMenuDefinition& QuickAdd = Registry.RegisterMenu("MapEditor.QuickAdd");
-	for (const char* Category : { "Basic", "Lights", "Geometry" })
+	for (const char* Category : { "Basic", "Lights", "Shapes", "Geometry" })
 	{
 		const FString Name = Category;
 		QuickAdd.AddDynamicSection(FName(Name), [this, Name](FMenuSection& Section, const FMenuContext&)
@@ -1236,8 +1261,8 @@ TSharedRef<SWidget> FMapEditorShell::MakeContent(const TSharedRef<SWindow>& Wind
 					{
 						return FString();
 					}
-					return FString::Format("{}  ·  {} brushes  ·  {} entities  ·  {} selected  ·  grid {:.0f}{}", ToString(ViewSettings.Tool),
-						Document->CountBrushes(), Document->CountEntities(), Document->GetSelection().size(), ViewSettings.GridSize,
+					return FString::Format("{}  ·  {} brushes  ·  {} meshes  ·  {} entities  ·  {} selected  ·  grid {:.0f}{}", ToString(ViewSettings.Tool),
+						Document->CountBrushes(), Document->CountMeshes(), Document->CountEntities(), Document->GetSelection().size(), ViewSettings.GridSize,
 						ViewSettings.bSnapToGrid ? " (snap)" : "");
 				})]
 			]

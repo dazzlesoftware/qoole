@@ -87,9 +87,12 @@ public:
 	Object* AddEntity(const FString& ClassName);
 	// Adds a placeable item (Place Actors, Add, a content browser) at a map
 	// point (snapped to the grid when snapping), or where the active view looks.
-	Object* Place(const FMapPlaceable& Item, const Vector3d& Point);
+	// bOnGround (a drop in a perspective view): a mesh's bottom goes on the
+	// point instead of its pivot, as Unreal sets actors on the surface.
+	Object* Place(const FMapPlaceable& Item, const Vector3d& Point, bool bOnGround = false);
 	Object* Place(const FMapPlaceable& Item);
-	// What can be placed: entities by category, then the prefabs (Geometry).
+	// What can be placed: entities by category, Unreal's basic shapes as
+	// static mesh actors (Shapes), then the prefabs (Geometry).
 	TArray<FMapPlaceable> GetPlaceables() const;
 	// Sets the tool; the mode follows (brush tools are Brush Editing's).
 	void SetTool(EMapTool Tool);

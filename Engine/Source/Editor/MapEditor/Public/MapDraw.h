@@ -66,9 +66,14 @@ public:
 	void ZBufInit() override {}
 	void ZBufClear() override { Triangles.clear(); }
 	void ZBufTriangle(ZPoint Points[3]) override;
+	void ZBufShadedTriangle(ZPoint Points[3], const float Shades[3]) override;
 	void ZBufRender() override {}
 
 private:
+	// The color of the object being drawn (FDraw::ZBufSetup set it), shaded.
+	FColor ObjectColor(float Shade) const;
+	void PushTriangle(const ZPoint Points[3], const uint32 Colors[3]);
+
 	TArray<FSlateVertex2D> LineVertices;
 	TArray<uint32> LineIndices;
 	TArray<FMapVertex> Triangles;

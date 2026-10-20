@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "geometry.h"
 #include "entity.h"
 #include "LCommon.h"
+#include "StaticMesh.h"
 
 //==================== Object ====================
 
@@ -72,6 +73,7 @@ class Object : public ElmNode, public TransSpace {
   int CountItems(void) const { return CountNodes(1); };
   int CountBrushes(void) const { return CountNodes(2); };
   int CountEntities(void) const { return CountNodes(3); };
+  int CountMeshes(void) const { return CountNodes(4); };
 
   int PreOrderApply(bool (*func)(Object &obj));
   int PreOrderCondApply(bool (*func)(Object &obj));
@@ -89,6 +91,15 @@ class Object : public ElmNode, public TransSpace {
   Geometry *SetBrush(Geometry *brushPtr);
   bool HollowInBrush(float delta = 8.0f);
   bool HollowOutBrush(float delta = 8.0f);
+
+  //===== Static Mesh (Genesis) =====
+  // A leaf can hold a mesh instead of a brush or an entity. The object's
+  // transform places it and is kept as it is (location, rotation, scale).
+  bool HasMesh(void) const { return mesh != nullptr; };
+  const StaticMesh &GetMesh(void) const { check(mesh != nullptr); return *mesh; };
+  const std::shared_ptr<const StaticMesh> &GetMeshPtr(void) const { return mesh; };
+  // Returns the mesh it held.
+  std::shared_ptr<const StaticMesh> SetMesh(std::shared_ptr<const StaticMesh> meshPtr);
 
   //===== Entity Info =====
   bool HasEntity(void) const;
@@ -194,6 +205,7 @@ class Object : public ElmNode, public TransSpace {
   char objName[32];
   Geometry *brush;
   Entity *entityPtr;
+  std::shared_ptr<const StaticMesh> mesh;
   bool viewTag;
   bool itemApprx;
   bool treeAttrib;

@@ -47,8 +47,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define VRC_CROSSHAIRNORTH  8
 #define VRC_OPCENTER		9
 #define VRC_LEAKGEOM        10
+#define VRC_MESH            11  // static meshes (Genesis)
 
-#define VRC_NUMRENDERCOLORS	11
+#define VRC_NUMRENDERCOLORS	12
 
 class View : public ElmNode, public TransSpace {
  public:
@@ -146,6 +147,7 @@ class View : public ElmNode, public TransSpace {
   //===== Object Rendering =====
   static bool RenderObjWireFrame(Object &objNode);
   static bool RenderObjSolid(Object &objNode);
+  static void RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip);
 
   void RenderSlctFaceOutline(Object &objNode) const;
   void DisplayManipPts(void) const;

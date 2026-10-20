@@ -60,7 +60,7 @@ namespace MapEditorPrivate
 	// subtracted away).
 	inline bool IsEmptyObject(const Object& Obj)
 	{
-		return !Obj.HasBrush() && !Obj.HasEntity() && Obj.GetNumChildren() == 0;
+		return !Obj.HasBrush() && !Obj.HasEntity() && !Obj.HasMesh() && Obj.GetNumChildren() == 0;
 	}
 }
 

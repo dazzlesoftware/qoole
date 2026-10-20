@@ -603,6 +603,28 @@ Clip::IsObjectInVolume(Object &obj) const {
     }
     return true;
   }
+  else if (obj.HasMesh()) {
+    Point3d *pPt;
+    Points3d vBuf;
+    obj.GetMesh().Transform(trans, vBuf);
+    for (int i = 0; i < obj.GetMesh().GetNumVertices(); i++) {
+      if (!prspctv) {
+        if (ClipPoint(vBuf[i]))
+          return false;
+      }
+      else {
+        pPt = &(vBuf[i]);
+        if (pPt->GetY() < clipMin.GetY() ||
+            pPt->GetY() > clipMax.GetY() ||
+            pPt->GetX() < pPt->GetY() * clipMin.GetX() ||
+            pPt->GetX() > pPt->GetY() * clipMax.GetX() ||
+            pPt->GetZ() < pPt->GetY() * clipMin.GetZ() ||
+            pPt->GetZ() > pPt->GetY() * clipMax.GetZ())
+          return false;
+      }
+    }
+    return true;
+  }
   else if (obj.IsItemNode()) {
     return false;
   }

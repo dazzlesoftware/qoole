@@ -656,6 +656,7 @@ View::RenderWireFrame(bool renderWorld, bool renderSelected,
     if (numSlctObjs > 0) {
       oldNormColor = SetColor(VRC_NORMAL, GetColor(VRC_SELECT));
       oldEntColor = SetColor(VRC_ENTITY, GetColor(VRC_SELECT));
+      const int oldMeshColor = SetColor(VRC_MESH, GetColor(VRC_SELECT));
 
       IterLinkList<ObjectPtr> iter(selectorPtr->GetMSelectedObjects());
       iter.Reset();
@@ -665,6 +666,7 @@ View::RenderWireFrame(bool renderWorld, bool renderSelected,
 	  }
       SetColor(VRC_NORMAL, oldNormColor);
       SetColor(VRC_ENTITY, oldEntColor);
+      SetColor(VRC_MESH, oldMeshColor);
     }
 
 	// Draw any manipulation dots and outline faces.
@@ -679,9 +681,11 @@ View::RenderWireFrame(bool renderWorld, bool renderSelected,
     if ((rObjPtr = selectorPtr->GetSSelectedObject()) != NULL) {
       oldNormColor = SetColor(VRC_NORMAL, GetColor(VRC_HOTSELECT));
       oldEntColor = SetColor(VRC_ENTITY, GetColor(VRC_HOTSELECT));
+      const int oldMeshColor = SetColor(VRC_MESH, GetColor(VRC_HOTSELECT));
       rObjPtr->PreOrderCondApply(RenderObjWireFrame);
       SetColor(VRC_NORMAL, oldNormColor);
       SetColor(VRC_ENTITY, oldEntColor);
+      SetColor(VRC_MESH, oldMeshColor);
     }
   }
 
@@ -784,6 +788,13 @@ View::RenderObjWireFrame(Object &objNode) {
     }
 
 	renderView->qdraw->Color(GetColor(VRC_ENTITY));
+  }
+  else if (objNode.HasMesh()) {
+    const StaticMesh &mesh = objNode.GetMesh();
+    mesh.Transform(objNode.GetTransformation(), vBuffer);
+    listPtr = &(mesh.GetEdgeList());
+
+    renderView->qdraw->Color(GetColor(VRC_MESH));
   }
   else {
     return true;
@@ -1040,6 +1051,10 @@ View::RenderObjSolid(Object &objNode) {
     planeIter = new IterLinkList<PlaneNode>(wfg->GetPlaneList());
     wfg->TransformApproxBox(trans, vBuffer);
   }
+  else if (objNode.HasMesh()) {
+    RenderMeshSolid(objNode, trans, polyClip);
+    return true;
+  }
   else {
     return true;
   }
@@ -1165,4 +1180,116 @@ View::RenderObjSolid(Object &objNode) {
   delete planeIter;
 
   return true;
+}
+
+//===== Static meshes (Genesis) =====
+
+void
+View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip) {
+  const StaticMesh &mesh = objNode.GetMesh();
+  mesh.Transform(trans, vBuffer);
+
+  // Light from one direction in map space, over a soft fill, so curved
+  // meshes shade smoothly whichever way they are turned.
+  static Vector3d lightDir(0.0f, 0.0f, 0.0f);
+  if (lightDir.GetMag() == 0.0f) {
+    lightDir.NewVector(0.35f, -0.5f, 0.79f);
+    lightDir.MultVector(1.0f / lightDir.GetMag());
+  }
+
+  // Object to map space; normals go through it divided by the scale
+  // squared (the inverse transpose of a scale and a rotation).
+  Matrix44 absTrans;
+  absTrans.Multiply(svTrans, trans);
+  Vector3d origin, scale, viewX, viewY, viewZ, cross;
+  absTrans.Transform(origin, Vector3d::origVec);
+  objNode.GetScale(scale);
+  const float isx = 1.0f / Max(scale.GetX() * scale.GetX(), 1e-8f);
+  const float isy = 1.0f / Max(scale.GetY() * scale.GetY(), 1e-8f);
+  const float isz = 1.0f / Max(scale.GetZ() * scale.GetZ(), 1e-8f);
+
+  // A mirrored transform turns the triangles' winding around.
+  Vector3d viewOrigin;
+  trans.Transform(viewOrigin, Vector3d::origVec);
+  (trans.Transform(viewX, Vector3d::xAxisVec)).SubVector(viewOrigin);
+  (trans.Transform(viewY, Vector3d::yAxisVec)).SubVector(viewOrigin);
+  (trans.Transform(viewZ, Vector3d::zAxisVec)).SubVector(viewOrigin);
+  cross.CrossVector(viewY, viewZ);
+  const bool mirrored = cross.DotVector(viewX) < 0.0f;
+
+  // One color per object, as brushes have.
+  static const Vector3d up(0.0f, 0.0f, 1.0f);
+  renderDraw->ZBufSetup(&objNode, NULL, up);
+
+  Vector3d e1, e2, faceNorm, n;
+  ZPoint zpts[3];
+  float shades[3];
+  for (const StaticMesh::Triangle &tri : mesh.GetTriangles()) {
+    const Point3d &p0 = vBuffer[tri.v[0]];
+    const Point3d &p1 = vBuffer[tri.v[1]];
+    const Point3d &p2 = vBuffer[tri.v[2]];
+
+    // Back faces: the camera is at the view space origin.
+    e1.SubVector(p1, p0);
+    e2.SubVector(p2, p0);
+    faceNorm.CrossVector(e1, e2);
+    const float facing = faceNorm.DotVector(p0);
+    if (mirrored ? facing <= 0.0f : facing >= 0.0f)
+      continue;
+
+    for (int k = 0; k < 3; k++) {
+      const Vector3d &local = tri.norm[k];
+      absTrans.Transform(n, local.GetX() * isx, local.GetY() * isy, local.GetZ() * isz);
+      n.SubVector(origin);
+      const float len = n.GetMag();
+      const float ndl = len > 1e-8f ? n.DotVector(lightDir) / len : 0.0f;
+      const float sky = len > 1e-8f ? n.GetZ() / len : 0.0f;
+      shades[k] = Min(1.0f, 0.32f + 0.58f * Max(ndl, 0.0f) + 0.12f * (sky * 0.5f + 0.5f));
+    }
+
+    if (!polyClip) {
+      const Point3d *corners[3] = { &p0, &p1, &p2 };
+      bool behind = false;
+      for (int k = 0; k < 3; k++) {
+        if (corners[k]->GetY() <= 0.0f) {
+          behind = true;
+          break;
+        }
+        const float div = renderView->winWidth / corners[k]->GetY();
+        zpts[k].x = corners[k]->GetX() * div;
+        zpts[k].y = corners[k]->GetZ() * div;
+        zpts[k].z = corners[k]->GetY();
+        zpts[k].s = zpts[k].t = 0.0f;
+      }
+      if (!behind)
+        renderDraw->ZBufShadedTriangle(zpts, shades);
+      continue;
+    }
+
+    // Clipped: the pieces take the triangle's mean light.
+    ptsBuf1[0] = p0;
+    ptsBuf1[1] = p1;
+    ptsBuf1[2] = p2;
+    Point3d *fvPtr = ptsBuf1;
+    int numPts = 3;
+    if (renderView->clipView.ClipPolygon(numPts, ptsBuf1, ptsBuf2, &fvPtr) < 3)
+      continue;
+    const float mean = (shades[0] + shades[1] + shades[2]) / 3.0f;
+    const float flat[3] = { mean, mean, mean };
+    const auto project = [](const Point3d &pt, ZPoint &zp) {
+      const float div = renderView->winWidth / pt.GetY();
+      zp.x = pt.GetX() * div;
+      zp.y = pt.GetZ() * div;
+      zp.z = pt.GetY();
+      zp.s = zp.t = 0.0f;
+    };
+    project(fvPtr[0], zpts[0]);
+    for (int i = 2; i < numPts; i++) {
+      if (fvPtr[i - 1].GetY() <= 0.0f || fvPtr[i].GetY() <= 0.0f)
+        continue;
+      project(fvPtr[i - 1], zpts[1]);
+      project(fvPtr[i], zpts[2]);
+      renderDraw->ZBufShadedTriangle(zpts, flat);
+    }
+  }
 }

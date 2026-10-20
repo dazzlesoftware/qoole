@@ -70,6 +70,10 @@ namespace
 		{
 			return EIcon::Geometry;
 		}
+		if (Item.Kind == EMapPlaceableKind::Mesh)
+		{
+			return EIcon::Lit;
+		}
 		return Item.Category == "Lights" ? EIcon::Light : EIcon::Basic;
 	}
 

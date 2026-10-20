@@ -83,6 +83,7 @@ Object::operator=(const Object &src) {
   check(parent == NULL);
 
   brush = (src.brush == NULL ? NULL : new Geometry(*src.brush));
+  mesh = src.mesh;
 
   Entity *ePtr = (src.entityPtr == NULL ? NULL : new Entity(*src.entityPtr));
   if ((ePtr = SetEntity(ePtr)) != NULL)
@@ -123,6 +124,7 @@ Object::DelObj(bool rmFrmPrnt, bool resetBound) {
   if (brush != NULL)
     delete brush;
   brush = NULL;
+  mesh.reset();
 
   // Delete all children.
   while (GetNumChildren() > 0)
@@ -311,7 +313,7 @@ Object::FindCommonAncestor(Object &node) {
 int
 Object::CountNodes(int cType) const {
   // PreCondition
-  check(cType >= 0 && cType < 4);
+  check(cType >= 0 && cType < 5);
   // Sanity Check.
   check(IsLeaf() || (!HasBrush() && !IsItemNode()));
 
@@ -329,6 +331,9 @@ Object::CountNodes(int cType) const {
   else if (cType == 2) {
     rtnVal += (HasBrush() ? 1 : 0);
   }
+  else if (cType == 4) {
+    rtnVal += (HasMesh() ? 1 : 0);
+  }
   else {
     rtnVal += (HasEntity() ? 1 : 0);
   }
@@ -342,6 +347,8 @@ Object::CountNodes(int cType) const {
       rtnVal += chld->CountItems();
     else if (cType == 2)
       rtnVal += chld->CountBrushes();
+    else if (cType == 4)
+      rtnVal += chld->CountMeshes();
     else
       rtnVal += chld->CountEntities();
   }
@@ -418,6 +425,19 @@ Object::SetObjName(const char *name) {
     objName[i] = name[i];
   }
   objName[i] = '\0';
+}
+
+//===== Static Mesh =====
+
+std::shared_ptr<const StaticMesh>
+Object::SetMesh(std::shared_ptr<const StaticMesh> meshPtr) {
+  // PreCondition: a leaf with neither a brush nor an entity.
+  check(meshPtr == nullptr || (IsLeaf() && !HasBrush() && !HasEntity()));
+
+  std::shared_ptr<const StaticMesh> rtnVal = mesh;
+  mesh = std::move(meshPtr);
+  SetBoundRadius();
+  return rtnVal;
 }
 
 //===== Brush Manipulation =====
@@ -681,6 +701,11 @@ Object::GetBoundBox(Vector3d &minVec, Vector3d &maxVec) {
     return;
   }
 
+  if (HasMesh()) {
+    GetMesh().FindTransBoundBox(GetTransformation(), minVec, maxVec);
+    return;
+  }
+
   Object *objPtr;
   Vector3d bMinVec, bMaxVec;
   IterLinkList<Object> iter(children);
@@ -743,6 +768,30 @@ Object::Transform(const Matrix44 &transMatrix,
     (m1.Transform(tVec, 0.0f, 0.0f, 1.0f)).SubVector(pVec);
 	TransSpace::SetPosition(pVec);
 	TransSpace::SetOrientation(fVec, tVec);
+  }
+  else if (HasMesh()) {
+    // Sanity
+    check(GetNumChildren() == 0);
+
+    // Unlike a brush, a mesh keeps its transform: the new one is taken
+    // apart into a position, an orientation and a scale per axis (a
+    // mirror makes the X scale negative).
+    Vector3d xVec, yVec, zVec, cross;
+    m1.Transform(pVec, 0.0f, 0.0f, 0.0f);
+    (m1.Transform(xVec, 1.0f, 0.0f, 0.0f)).SubVector(pVec);
+    (m1.Transform(yVec, 0.0f, 1.0f, 0.0f)).SubVector(pVec);
+    (m1.Transform(zVec, 0.0f, 0.0f, 1.0f)).SubVector(pVec);
+    float sx = Max(xVec.GetMag(), 1e-4f);
+    const float sy = Max(yVec.GetMag(), 1e-4f);
+    const float sz = Max(zVec.GetMag(), 1e-4f);
+    cross.CrossVector(yVec, zVec);
+    if (cross.DotVector(xVec) < 0.0f)
+      sx = -sx;
+    yVec.MultVector(1.0f / sy);
+    zVec.MultVector(1.0f / sz);
+    TransSpace::SetPosition(pVec);
+    TransSpace::SetOrientation(yVec, zVec);
+    TransSpace::SetScale(sVec.NewVector(sx, sy, sz));
   }
   else if (HasBrush()) {
 	// Sanity
@@ -943,6 +992,13 @@ Object::SetBoundRadius(bool bubble) {
     return boundRadius;
   }
 
+  if (HasMesh()) {
+    boundRadius = GetMesh().GetBoundRadius();
+    if (bubble && !(IsRoot()))
+      (GetParent()).SetBoundRadius();
+    return boundRadius;
+  }
+
   Object *child;
   Vector3d bound;
   float m1, m2, tmp;
@@ -989,6 +1045,9 @@ Object::HitObject(const Line &ray, float rangeBegin,
   if (IsItemNode())
     return (GetItemWireFrame().HitGeometry(ray, rangeBegin, rangeEnd, depth));
 
+  if (HasMesh())
+    return GetMesh().HitMesh(ray, rangeBegin, rangeEnd, depth);
+
   // Check children.
   Object *chld;
   Line newRay;
@@ -1026,6 +1085,10 @@ Object::HitObject(const Line &ray, float rangeBegin,
 //===== CSG Subtraction =====
 bool
 Object::CSGSubtract(const LinkList<ObjectPtr> &cutters) {
+  // Meshes take no part in CSG.
+  if (HasMesh())
+    return false;
+
 #ifndef NDEBUG
   // Sanity.
   check(!IsRoot());
@@ -1054,7 +1117,7 @@ Object::CSGSubtract(const LinkList<ObjectPtr> &cutters) {
   while (!iterCutters.IsDone()) {
     cutterPtr = (iterCutters.GetNext())->GetPtr();
 
-	if (cutterPtr->IsItemNode())
+	if (cutterPtr->IsItemNode() || cutterPtr->HasMesh())
 		continue;
 
     if (CSGObjNodeSubtract(*cutterPtr, true))
@@ -1102,8 +1165,8 @@ Object::CSGObjNodeSubtract(Object &cutter, bool resetBound) {
     while (!iter.IsDone()) {
       objPtr = iter.GetNext();
 
-      // Skip entities.
-      if (objPtr->IsItemNode())
+      // Skip entities and meshes.
+      if (objPtr->IsItemNode() || objPtr->HasMesh())
         continue;
 
       if (objPtr->CSGObjNodeSubtract(cutter))
@@ -1183,7 +1246,7 @@ Object::CSGTraverseCutter(Object &cuttee) {
   iter.Reset();
   while (!iter.IsDone()) {
     objPtr = iter.GetNext();
-    if (objPtr->IsItemNode())
+    if (objPtr->IsItemNode() || objPtr->HasMesh())
       continue;
     t = GetTransformation();
     objPtr->CalTransSpaceMatrix(t);
@@ -1345,7 +1408,7 @@ Object::CSGSelfIntersect(const LinkList<ObjectPtr> *pObjsPtrs) const {
 bool
 Object::PlaneClip(const Plane &clipPlane, bool bubble) {
 
-  if (IsItemNode())
+  if (IsItemNode() || HasMesh())
     return false;
 
   Matrix44 m;
@@ -1722,8 +1785,23 @@ Object::LoadObject(LFile *inFile, int objNum,
       if (entityPtr == NULL)
         return 0;
     }
+    else if (strncmp(inFile->GetLine(), "  StaticMesh: ", 14) == 0 || strncmp(inFile->GetLine(), "StaticMesh: ", 12) == 0) {
+      // Genesis: a mesh by name. Unknown meshes leave the object empty
+      // (dropped below), as older readers drop the whole line.
+      const char *meshName = strchr(inFile->GetLine(), ':') + 1;
+      while (*meshName == ' ')
+        meshName++;
+      std::string trimmed(meshName);
+      while (!trimmed.empty() && (trimmed.back() == '\n' || trimmed.back() == '\r' || trimmed.back() == ' '))
+        trimmed.pop_back();
+      if (!IsLeaf() || HasBrush() || HasEntity())
+        goto ERROR_LOAD_OBJECT;
+      mesh = StaticMesh::Find(trimmed.c_str());
+      if (mesh == nullptr)
+        LError("Unknown static mesh \"%s\" before line %d.", trimmed.c_str(), inFile->GetLineNumber());
+    }
     else if (strncmp(inFile->GetLine(), "Objects:", 8) == 0) {
-      if (HasBrush() || IsItemNode())
+      if (HasBrush() || IsItemNode() || HasMesh())
         goto ERROR_LOAD_OBJECT;
       s = inFile->GetLine() + 8;
       while (sscanf(s, "%d", &i1) == 1) {
@@ -1753,7 +1831,7 @@ Object::LoadObject(LFile *inFile, int objNum,
   }
 
   // Check for empty nodes.
-  if (IsLeaf() && !(HasBrush() || IsItemNode()))
+  if (IsLeaf() && !(HasBrush() || IsItemNode() || HasMesh()))
     rtnVal = 0;
   else
     rtnVal = 1;
@@ -1840,6 +1918,9 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
     check(entID >= 0);
     fprintf(outFile, "  Entity: %d\n", entID);
   }
+
+  if (HasMesh())
+    fprintf(outFile, "  StaticMesh: %s\n", GetMesh().GetName());
 
   fprintf(outFile, "} // Object %d\n", objID);
   fprintf(outFile, "\n");

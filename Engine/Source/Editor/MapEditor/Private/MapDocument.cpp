@@ -62,9 +62,13 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	Entity* EntityB = B.SetEntity(nullptr, false);
 	Geometry* BrushA = A.SetBrush(nullptr);
 	Geometry* BrushB = B.SetBrush(nullptr);
+	std::shared_ptr<const StaticMesh> MeshA = A.SetMesh(nullptr);
+	std::shared_ptr<const StaticMesh> MeshB = B.SetMesh(nullptr);
 
 	A.SetBrush(BrushB);
 	B.SetBrush(BrushA);
+	A.SetMesh(MeshB);
+	B.SetMesh(MeshA);
 	A.SetEntity(EntityB, false);
 	B.SetEntity(EntityA, false);
 	const TransSpace SpaceA = A;
@@ -294,6 +298,11 @@ TArray<Object*> FMapDocument::GetObjects() const
 int32 FMapDocument::CountBrushes() const
 {
 	return Root->CountBrushes();
+}
+
+int32 FMapDocument::CountMeshes() const
+{
+	return Root->CountMeshes();
 }
 
 int32 FMapDocument::CountEntities() const
