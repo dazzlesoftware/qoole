@@ -65,6 +65,7 @@ void FMapDraw::Reset()
 	LineIndices.clear();
 	Triangles.clear();
 	Batches.clear();
+	InstanceBatches.clear();
 }
 
 FColor FMapDraw::GetPaletteColor(int Index) const
@@ -229,6 +230,39 @@ void FMapDraw::ZBufLandscapeTriangle(ZPoint Points[3], const float Shades[3], co
 		Packed[Index] = PackRGBA(FColor(Light, Light, Light));
 	}
 	PushTriangle(Points, Packed, zbufObject);
+}
+
+void FMapDraw::ZBufInstanceLight(const Vector3d& Light, const Vector3d& Up, float WinWidth)
+{
+	InstanceLight = Light;
+	InstanceUp = Up;
+	InstanceWinWidth = WinWidth;
+}
+
+bool FMapDraw::ZBufMeshInstance(const StaticMesh& Mesh, const Matrix44& ToView)
+{
+	if (!bInstancing || !Mesh.HasVertexColors())
+	{
+		return false;
+	}
+	FMapInstanceBatch* Batch = nullptr;
+	for (FMapInstanceBatch& Existing : InstanceBatches)
+	{
+		Batch = Existing.Mesh == &Mesh ? &Existing : Batch;
+	}
+	if (!Batch)
+	{
+		InstanceBatches.push_back(FMapInstanceBatch{ &Mesh, {} });
+		Batch = &InstanceBatches.back();
+	}
+	for (int Row = 0; Row < 3; ++Row)
+	{
+		for (int Col = 0; Col < 4; ++Col)
+		{
+			Batch->Rows.push_back(ToView.GetMatrix(Row, Col));
+		}
+	}
+	return true;
 }
 
 void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float Q2)

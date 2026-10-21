@@ -130,10 +130,13 @@ public:
 	void SetScissor(const FIntRect& Rect) override;
 	void SetPipeline(FRHIGraphicsPipeline& Pipeline) override;
 	void SetPushConstants(const void* Data, uint32 Size) override;
-	void SetTexture(FRHITexture& Texture) override;
-	void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride) override;
+	using FRHICommandList::SetTexture;
+	void SetTexture(FRHITexture& Texture, uint32 Slot) override;
+	using FRHICommandList::SetVertexBuffer;
+	void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride, uint32 Slot) override;
 	void SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndexFormat Format) override;
 	void DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex) override;
+	void DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance) override;
 
 private:
 	void BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOptional<FLinearColor>& ClearColor, FIntPoint Size,
@@ -159,7 +162,7 @@ public:
 	TSharedPtr<FRHIBuffer> CreateBuffer(const FRHIBufferDesc& Desc) override;
 	TSharedPtr<FRHITexture> CreateTexture(const FRHITextureDesc& Desc) override;
 	TSharedPtr<FRHIGraphicsPipeline> CreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc) override;
-	void UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch) override;
+	void UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, uint32 Slice) override;
 	bool ReadbackTexture(FRHITexture& Texture, TArray<uint8>& OutPixels) override;
 	FRHICommandList& BeginFrame() override;
 	void EndFrame() override;
@@ -210,11 +213,12 @@ private:
 	};
 
 	FUploadAllocation AllocateUpload(FUploadRing& Ring, uint64 Size, uint64 Alignment);
-	void RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Texture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, FUploadRing& Ring);
+	void RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Texture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, FUploadRing& Ring,
+		uint32 Subresource = 0);
 	template <typename F> void ExecuteImmediate(F&& Record);
 	void WaitForFence(uint64 Value);
 	void CollectGarbage();
-	ComPtr<ID3D12RootSignature> GetRootSignature(uint32 PushConstantSize, ESamplerFilter Filter);
+	ComPtr<ID3D12RootSignature> GetRootSignature(const FRHIGraphicsPipelineDesc& PipelineDesc);
 	TSharedPtr<FRHITexture> CreateDepthTexture(const FRHITextureDesc& Desc);
 
 	FRHIDeviceDesc Desc;

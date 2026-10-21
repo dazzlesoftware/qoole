@@ -22,11 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * math3d.cpp
  */
 
-#include "MapCorePCH.h"
-
 #include <math.h>
-#include "LCommon.h"
-#include "math3d.h"
+#include "Geometry/Math3D.h"
 
 //==================== Functions ====================
 
@@ -499,7 +496,7 @@ Plane::Intersect(const Line &l, Vector3d &intrsctPt) const {
 
 bool
 Plane::Intersect(const Plane &plane2, Line &l) const {
-  Vector3d m, pt0;
+  Vector3d m, intersectionPoint;
   float demn;
 
   if ((plane2.GetNorm()).IsParallel(GetNorm()))
@@ -518,18 +515,18 @@ Plane::Intersect(const Plane &plane2, Line &l) const {
     demn = n.GetY() * plane2.n.GetZ() - n.GetZ() * plane2.n.GetY();
     check(demn != 0.0f);  // Sanity Check.
 
-    pt0.SetX(0.0f);
-    pt0.SetY((d * plane2.n.GetZ() - n.GetZ() * plane2.d) / demn);
-    pt0.SetZ((n.GetY() * plane2.d - plane2.n.GetY() * d) / demn);
+    intersectionPoint.SetX(0.0f);
+    intersectionPoint.SetY((d * plane2.n.GetZ() - n.GetZ() * plane2.d) / demn);
+    intersectionPoint.SetZ((n.GetY() * plane2.d - plane2.n.GetY() * d) / demn);
   }
   else if (dy >= dx && dy >= dz) {
     check(!EQUAL4(m.GetY(), 0.0f));
     demn = n.GetZ() * plane2.n.GetX() - n.GetX() * plane2.n.GetZ();
     check(demn != 0.0f);
 
-    pt0.SetX((n.GetZ() * plane2.d - plane2.n.GetZ() * d) / demn);
-    pt0.SetY(0.0f);
-    pt0.SetZ((plane2.n.GetX() * d - n.GetX() * plane2.d) / demn);
+    intersectionPoint.SetX((n.GetZ() * plane2.d - plane2.n.GetZ() * d) / demn);
+    intersectionPoint.SetY(0.0f);
+    intersectionPoint.SetZ((plane2.n.GetX() * d - n.GetX() * plane2.d) / demn);
   }
   else { // m.GetZ() != 0.0f
     // Sanity.
@@ -539,12 +536,12 @@ Plane::Intersect(const Plane &plane2, Line &l) const {
     demn = n.GetY() * plane2.n.GetX() - n.GetX() * plane2.n.GetY();
     check(demn != 0.0f);  // Sanity Check.
 
-    pt0.SetX((n.GetY() * plane2.d - plane2.n.GetY() * d) / demn);
-    pt0.SetY((plane2.n.GetX() * d - n.GetX() * plane2.d) / demn);
-    pt0.SetZ(0.0f);
+    intersectionPoint.SetX((n.GetY() * plane2.d - plane2.n.GetY() * d) / demn);
+    intersectionPoint.SetY((plane2.n.GetX() * d - n.GetX() * plane2.d) / demn);
+    intersectionPoint.SetZ(0.0f);
   }
 
-  l.NewLine(pt0, m);
+  l.NewLine(intersectionPoint, m);
   return true;
 }
 
@@ -591,17 +588,17 @@ Plane::Intersect(const Plane &plane2, const Plane &plane3,
 
 float
 Plane::IntersectAngle(const Plane &plane2) const {
-  float d = plane2.GetNorm().CosTheta(GetNorm());
+  float cosine = plane2.GetNorm().CosTheta(GetNorm());
   // Sanity Check.
-  check(d >= -1.0f && d <= 1.0f);
-  return (float) acos(d);
+  check(cosine >= -1.0f && cosine <= 1.0f);
+  return (float) acos(cosine);
 }
 
 bool
 Plane::IsSame(const Plane &plane2) const {
-  float d = (plane2.GetNorm()).CosTheta(GetNorm()); 
+  float cosine = (plane2.GetNorm()).CosTheta(GetNorm()); 
 
-  if (EQUAL6(d, 1.0f) && plane2.PointInPlane(GetPoint(), 0.01f) == 0)
+  if (EQUAL6(cosine, 1.0f) && plane2.PointInPlane(GetPoint(), 0.01f) == 0)
     return true;
   else
     return false;

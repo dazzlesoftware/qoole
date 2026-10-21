@@ -29,6 +29,26 @@ uint32 GetBytesPerPixel(EPixelFormat Format)
 	return 0;
 }
 
+uint32 GetFullMipLevels(uint32 Width, uint32 Height)
+{
+	uint32 Levels = 1;
+	while ((Width >> Levels) > 0 || (Height >> Levels) > 0)
+	{
+		++Levels;
+	}
+	return Levels;
+}
+
+SIZE_T GetMipChainBytes(EPixelFormat Format, uint32 Width, uint32 Height, uint32 Levels)
+{
+	SIZE_T Bytes = 0;
+	for (uint32 Level = 0; Level < Levels; ++Level)
+	{
+		Bytes += SIZE_T(GetMipSize(Width, Level)) * GetMipSize(Height, Level) * GetBytesPerPixel(Format);
+	}
+	return Bytes;
+}
+
 TUniquePtr<FRHIDevice> FRHIDevice::Create(const FRHIDeviceDesc& Desc)
 {
 	TUniquePtr<FRHIDevice> Device;

@@ -97,3 +97,53 @@ private:
 	std::shared_ptr<const Landscape> Baked;
 	FLandscapeImage Image;
 };
+
+// A landscape's layers for the GPU to blend per pixel (the map views'
+// landscape shader, PSLandscape), sharper than a bake: their weights at the
+// grid points, in two RGBA slices (layers 0-3, then 4-7), and their
+// textures, all one size, a slice each with their mip levels (built-in
+// patterns tinted with the layer's color, plain layers their color).
+class FLandscapeLayerImages
+{
+public:
+	static constexpr int32 MaxLayers = 8;
+	static constexpr int32 MaxTextureSize = 1024;
+	// Up to MaxLayers layers, one textured at least (else it is drawn with
+	// colors at its grid points).
+	static bool CanBlend(const Landscape& Land);
+
+	// The weights brought up to this landscape: all of them the first time
+	// or when its size or layer count changed, else the grid points whose
+	// weights changed. Returns those points (empty if none).
+	FIntRect UpdateWeights(const std::shared_ptr<const Landscape>& Land);
+	int32 GetPointsX() const { return PointsX; }
+	int32 GetPointsY() const { return PointsY; }
+	// Slice 0 then slice 1, each PointsX x PointsY RGBA8.
+	const TArray<uint8>& GetWeights() const { return Weights; }
+
+	// The textures remade if a layer's look (texture, color) changed since;
+	// true if they were.
+	bool UpdateTextures(const Landscape& Land);
+	int32 GetTextureSize() const { return TextureSize; }
+	int32 GetMipLevels() const { return MipLevels; }
+	int32 GetNumSlices() const { return Slices; }
+	// Each slice's mip levels in turn, tightly packed (RHI's layout).
+	const TArray<uint8>& GetTextures() const { return Textures; }
+
+	// The landscape shader's constants after the view's scale: the size in
+	// units, the layer count, and each layer's repeats a unit (1 / tiling).
+	static void GetConstants(const Landscape& Land, float Out[12]);
+
+private:
+	std::shared_ptr<const Landscape> WeightsOf;
+	int32 PointsX = 0;
+	int32 PointsY = 0;
+	int32 Layers = 0;
+	TArray<uint8> Weights;
+
+	std::string Look; // what the textures were made from
+	int32 TextureSize = 0;
+	int32 MipLevels = 0;
+	int32 Slices = 0;
+	TArray<uint8> Textures;
+};

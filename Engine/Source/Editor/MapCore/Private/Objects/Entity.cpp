@@ -86,6 +86,7 @@ Entity::Entity(const char *cName) {
 	}
 
 	notuser[EA_ORIGIN] = true;
+	angle = 0;
 
 	Check();
 }
@@ -416,6 +417,20 @@ Entity::DelKey(const char *skey) {
 		ea_flag[EA_ANGLE] = false;
 	if(!strcmpi(skey, "mangle"))
 		ea_flag[EA_MANGLE] = false;
+}
+
+void Entity::ClearKeys() {
+	for (int i = 0; i < keys; ++i) {
+		delete [] key[i]; delete [] arg[i];
+		key[i] = nullptr; arg[i] = nullptr;
+	}
+	keys = 0;
+}
+
+void Entity::SetAttribState(int index, bool enabled, bool hidden) {
+	check(index >= 0 && index < ENTITY_FLAGS);
+	ea_flag[index] = enabled;
+	notuser[index] = hidden;
 }
 
 //===== Entity Info =====

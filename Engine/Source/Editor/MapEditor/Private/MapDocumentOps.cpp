@@ -4,6 +4,7 @@
 // unless a transaction is open; they record FMapEdits (MapEdits.h).
 
 #include "MapDocument.h"
+#include "MapPackage.h"
 
 #include "MapEdits.h"
 
@@ -153,13 +154,23 @@ TArray<Object*> FMapDocument::DuplicateObjects(const TArray<Object*>& Objects, c
 
 Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError)
 {
-	Object* Prefab = new Object;
-	if (!Prefab->LoadObjFile(PrefabPath.ToAnsi().c_str()))
+	Object* Prefab = nullptr;
+	FString Error;
+	if (PrefabPath.EndsWith(".asset", ESearchCase::IgnoreCase))
 	{
-		delete Prefab;
+		FString Id;
+		Prefab = FMapPackage::Load(PrefabPath, Id, Error, true).release();
+	}
+	else
+	{
+		Prefab = new Object;
+		if (!Prefab->LoadObjFile(PrefabPath.ToAnsi().c_str())) { delete Prefab; Prefab = nullptr; }
+	}
+	if (!Prefab)
+	{
 		if (OutError)
 		{
-			*OutError = FString::Format("{} could not be loaded.", PrefabPath);
+			*OutError = Error.IsEmpty() ? FString::Format("{} could not be loaded.", PrefabPath) : Error;
 		}
 		return nullptr;
 	}
@@ -218,6 +229,47 @@ Object* FMapDocument::AddLandscape(std::shared_ptr<const Landscape> Land, const 
 		EndTransaction();
 	}
 	return Obj;
+}
+
+Object* FMapDocument::AddFoliage(std::shared_ptr<const Foliage> NewFoliage, const FString& Description)
+{
+	if (!NewFoliage)
+	{
+		return nullptr;
+	}
+	Object* Obj = new Object;
+	Obj->SetFoliage(std::move(NewFoliage));
+	Obj->SetObjName("Foliage");
+	const bool bOwn = BeginOwnTransaction(Description);
+	// Made by painting: what was selected stays so.
+	const TArray<Object*> Selected = GetSelection();
+	AddObjects({ Obj });
+	SetSelection(Selected);
+	if (bOwn)
+	{
+		EndTransaction();
+	}
+	return Obj;
+}
+
+void FMapDocument::SetFoliage(Object& Obj, std::shared_ptr<const Foliage> NewFoliage, const FString& Description)
+{
+	if (!Obj.HasFoliage() || !NewFoliage)
+	{
+		return;
+	}
+	const bool bOwn = BeginOwnTransaction(Description);
+	CaptureObjects({ &Obj });
+	Obj.SetFoliage(std::move(NewFoliage));
+	if (Obj.GetParentPtr())
+	{
+		Obj.GetParentPtr()->SetBoundRadius();
+	}
+	Changed(EMapChange::Geometry);
+	if (bOwn)
+	{
+		EndTransaction();
+	}
 }
 
 void FMapDocument::SetLandscape(Object& Obj, std::shared_ptr<const Landscape> NewLandscape, const FString& Description)
@@ -293,6 +345,11 @@ bool FMapDocument::SavePrefab(const TArray<Object*>& Objects, const FString& Pre
 	}
 	MoveBy(Copies, Center);
 	Prefab.SetBoundRadius();
+	if (PrefabPath.EndsWith(".asset", ESearchCase::IgnoreCase))
+	{
+		FString Id;
+		return FMapPackage::Save(PrefabPath, Prefab, Id, OutError, true);
+	}
 	if (!Prefab.SaveObjFile(PrefabPath.ToAnsi().c_str()))
 	{
 		OutError = FString::Format("{} could not be written.", PrefabPath);

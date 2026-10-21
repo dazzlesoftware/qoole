@@ -147,7 +147,17 @@ class View : public ElmNode, public TransSpace {
   //===== Object Rendering =====
   static bool RenderObjWireFrame(Object &objNode);
   static bool RenderObjSolid(Object &objNode);
-  static void RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip);
+  // A mesh actor's mesh, or (foliage) the given mesh at the given scale.
+  static void RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip,
+                              const StaticMesh *meshOverride = NULL, const Vector3d *scaleOverride = NULL);
+  // Foliage: each instance's mesh, unless out of view or past its type's
+  // cull distance.
+  static void RenderFoliageSolid(Object &objNode, const Matrix44 &trans);
+  static void RenderFoliageWireFrame(Object &objNode, bool lineClip);
+  // Landscapes, by component: culled, and each at the detail its distance
+  // (or the zoom) needs.
+  static void RenderLandscapeSolid(Object &objNode, const Matrix44 &trans);
+  static void RenderLandscapeWireFrame(Object &objNode, bool lineClip);
 
   void RenderSlctFaceOutline(Object &objNode) const;
   void DisplayManipPts(void) const;
@@ -168,6 +178,17 @@ class View : public ElmNode, public TransSpace {
   static Object *pLeakObj;
 
   static bool aprxWFRender;
+ public:
+  // How big, in pixels, a landscape's quad may look before the component
+  // it is in is drawn finer (each level halves the quads; the default, 12,
+  // keeps far ground to a few thousand triangles). And how many components
+  // and triangles have been drawn solid since they were last set to 0
+  // (tests, stats).
+  static float landscapeDetailPixels;
+  static int landscapeComponentsDrawn, landscapeTrianglesDrawn;
+  // Foliage instances drawn solid since set to 0 (tests, stats).
+  static int foliageInstancesDrawn;
+ private:
 
   static int manipVertex;
   static const Edge3d *manipEdge;

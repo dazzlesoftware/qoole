@@ -27,7 +27,10 @@ void FVulkanCommandList::End()
 void FVulkanCommandList::ResetState()
 {
 	Pipeline = nullptr;
-	Texture = nullptr;
+	for (FVulkanTexture*& Bound : Textures)
+	{
+		Bound = nullptr;
+	}
 	bDescriptorDirty = true;
 	bPushConstantsDirty = true; // a new command buffer starts with undefined push constants
 }
@@ -175,9 +178,10 @@ void FVulkanCommandList::SetPipeline(FRHIGraphicsPipeline& InPipeline)
 	{
 		return;
 	}
-	// The two pipeline layouts (linear / point sampler) are not compatible for
-	// set 0, so switching rebinds the texture; push constants are re-pushed too.
-	if (!Pipeline || Pipeline->GetDesc().SamplerFilter != NewPipeline->GetDesc().SamplerFilter)
+	// Layouts with other samplers or texture counts are not compatible, so
+	// switching rebinds the textures; push constants are re-pushed too.
+	const auto LayoutKey = [](const FRHIGraphicsPipelineDesc& Desc) { return GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress) | (Desc.NumTextures << 8); };
+	if (!Pipeline || LayoutKey(Pipeline->GetDesc()) != LayoutKey(NewPipeline->GetDesc()))
 	{
 		bDescriptorDirty = true;
 		bPushConstantsDirty = true;
@@ -196,22 +200,26 @@ void FVulkanCommandList::SetPushConstants(const void* Data, uint32 Size)
 	bPushConstantsDirty = true;
 }
 
-void FVulkanCommandList::SetTexture(FRHITexture& InTexture)
+void FVulkanCommandList::SetTexture(FRHITexture& InTexture, uint32 Slot)
 {
-	FVulkanTexture* NewTexture = &static_cast<FVulkanTexture&>(InTexture);
-	if (NewTexture != Texture)
+	if (!ensuref(Slot < MaxTextures, "Vulkan: texture slot {} is past the last ({})", Slot, MaxTextures - 1))
 	{
-		Texture = NewTexture;
+		return;
+	}
+	FVulkanTexture* NewTexture = &static_cast<FVulkanTexture&>(InTexture);
+	if (NewTexture != Textures[Slot])
+	{
+		Textures[Slot] = NewTexture;
 		bDescriptorDirty = true;
 	}
 }
 
-void FVulkanCommandList::SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride)
+void FVulkanCommandList::SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride, uint32 Slot)
 {
 	(void)Stride; // part of the pipeline in Vulkan 1.1
 	const VkBuffer Handle = static_cast<FVulkanBuffer&>(Buffer).GetHandle();
 	const VkDeviceSize VkOffset = Offset;
-	vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &Handle, &VkOffset);
+	vkCmdBindVertexBuffers(CommandBuffer, Slot, 1, &Handle, &VkOffset);
 }
 
 void FVulkanCommandList::SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndexFormat Format)
@@ -222,7 +230,12 @@ void FVulkanCommandList::SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EInde
 
 void FVulkanCommandList::DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex)
 {
-	if (bSkipPass || IndexCount == 0)
+	DrawIndexedInstanced(IndexCount, 1, FirstIndex, BaseVertex, 0);
+}
+
+void FVulkanCommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance)
+{
+	if (bSkipPass || IndexCount == 0 || InstanceCount == 0)
 	{
 		return;
 	}
@@ -231,17 +244,24 @@ void FVulkanCommandList::DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32
 		return;
 	}
 
-	const ESamplerFilter Filter = Pipeline->GetDesc().SamplerFilter;
-	const VkPipelineLayout Layout = Device.GetPipelineLayout(Filter);
+	const FRHIGraphicsPipelineDesc& Desc = Pipeline->GetDesc();
+	const uint32 SamplerIndex = GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress);
+	const uint32 NumTextures = FMath::Clamp(Desc.NumTextures, 1u, MaxTextures);
+	const VkPipelineLayout Layout = Device.GetPipelineLayout(SamplerIndex, NumTextures);
 	if (bDescriptorDirty)
 	{
-		FVulkanTexture& Bound = Texture ? *Texture : Device.GetWhiteTexture();
-		const VkDescriptorSet Set = Bound.GetDescriptorSet(Filter);
-		if (!Set)
+		// A set per slot; slots left empty read the white texture.
+		VkDescriptorSet Sets[MaxTextures];
+		for (uint32 Slot = 0; Slot < NumTextures; ++Slot)
 		{
-			return;
+			FVulkanTexture& Bound = Textures[Slot] ? *Textures[Slot] : Device.GetWhiteTexture();
+			Sets[Slot] = Bound.GetDescriptorSet(SamplerIndex);
+			if (!Sets[Slot])
+			{
+				return;
+			}
 		}
-		vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Layout, 0, 1, &Set, 0, nullptr);
+		vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Layout, 0, NumTextures, Sets, 0, nullptr);
 		bDescriptorDirty = false;
 	}
 	if (bPushConstantsDirty)
@@ -251,5 +271,5 @@ void FVulkanCommandList::DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32
 		vkCmdPushConstants(CommandBuffer, Layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, FVulkanDevice::MaxPushConstantSize, PushConstantData);
 		bPushConstantsDirty = false;
 	}
-	vkCmdDrawIndexed(CommandBuffer, IndexCount, 1, FirstIndex, BaseVertex, 0);
+	vkCmdDrawIndexed(CommandBuffer, IndexCount, InstanceCount, FirstIndex, BaseVertex, FirstInstance);
 }

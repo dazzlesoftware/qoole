@@ -33,7 +33,7 @@ namespace
 		const SIZE_T First = Out.size();
 		for (const auto& Entry : std::filesystem::directory_iterator(Dir, Error))
 		{
-			if (!Entry.is_regular_file() || Entry.path().extension() != L".qle")
+			if (!Entry.is_regular_file() || (Entry.path().extension() != L".qle" && Entry.path().extension() != L".asset"))
 			{
 				continue;
 			}

@@ -27,6 +27,7 @@
 
 #include "Framework/Application/SlateApplication.h"
 #include "CoreMinimal.h"
+#include "ProjectDescriptor.h"
 #include "GenericPlatform/PlatformDialogs.h"
 #include "MapCoreHeaders.h"
 #include "MapEditorShell.h"
@@ -179,6 +180,8 @@ private:
 	float AppScale = 1.0f;
 	FString SelfTestDir;
 	float LandscapePaintBefore = 0.0f;
+	float LandscapeBrushBefore = 0.0f;
+	float LandscapeGridBefore = 0.0f;
 	FString SettingsDir;
 	int32 SelfTestFrame = 0;
 	Object* TestCube = nullptr;
@@ -192,6 +195,31 @@ private:
 bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 {
 	FApp::SetName("Genesis Editor");
+	// Resolve a project before settings, windows or content browsers are built.
+	TOptional<FString> ProjectPath = GetOption(Args, "-project=");
+	const auto NewProject = GetOption(Args, "-newproject=");
+	for (SIZE_T Index = 1; Index < Args.size(); ++Index)
+		if (!Args[Index].StartsWith("-") && Args[Index].EndsWith(".gproject", ESearchCase::IgnoreCase))
+			ProjectPath = Args[Index];
+	if (NewProject && ProjectPath)
+	{
+		MessageBoxW(nullptr, L"Use either -project or -newproject.", L"Genesis Project", MB_OK | MB_ICONERROR);
+		return false;
+	}
+	if (ProjectPath || NewProject)
+	{
+		FString Error;
+		const FString Path = NewProject ? *NewProject : *ProjectPath;
+		auto Project = NewProject
+			? FProjectContext::Create(Path, FString::FromWide(std::filesystem::path(Path.ToWide()).stem().wstring()), Error)
+			: FProjectContext::Open(Path, Error);
+		if (!Project)
+		{
+			MessageBoxW(nullptr, Error.ToWide().c_str(), L"Genesis Project", MB_OK | MB_ICONERROR);
+			return false;
+		}
+		FProjectContext::SetActive(std::move(Project));
+	}
 	if (const TOptional<FString> Dir = GetOption(Args, "-selftest="))
 	{
 		SelfTestDir = *Dir;
@@ -226,7 +254,20 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 	// Settings. Scripted runs start from the defaults and keep nothing.
 	if (SelfTestDir.IsEmpty())
 	{
-		if (const wchar_t* LocalAppData = _wgetenv(L"LOCALAPPDATA"))
+		if (const FProjectContext* Project = FProjectContext::GetActive())
+		{
+			const auto Dir = std::filesystem::path(Project->GetSavedDir().ToWide()) / "Editor";
+			std::error_code Error;
+			std::filesystem::create_directories(Dir, Error);
+			if (Error) return false;
+			SettingsDir = FString::FromWide(Dir.wstring()) + "\\";
+			if (HasFlag(Args, "-resetlayout"))
+			{
+				std::filesystem::remove(Dir / "Layout.json", Error);
+				std::filesystem::remove(Dir / "Bindings.json", Error);
+			}
+		}
+		else if (const wchar_t* LocalAppData = _wgetenv(L"LOCALAPPDATA"))
 		{
 			const std::filesystem::path Dir = std::filesystem::path(LocalAppData) / L"Genesis" / L"Editor";
 			std::error_code Error;
@@ -325,7 +366,8 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 	Shell = std::make_shared<FMapEditorShell>(std::move(Host));
 
 	MainWindow = SNew(SWindow)
-		.Title("Genesis Editor")
+		.Title(FProjectContext::GetActive()
+			? FProjectContext::GetActive()->GetDescriptor().Name + " - Genesis Editor" : FString("Genesis Editor"))
 		.ClientSize(FVector2(1440.0f, 900.0f))
 		.OnWindowClosed([this](const TSharedRef<SWindow>&) { App->RequestQuit(); });
 	App->AddWindow(ToSharedRef(MainWindow));
@@ -337,11 +379,23 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 	bool bOpened = false;
 	for (SIZE_T Index = 1; Index < Args.size(); ++Index)
 	{
-		if (!Args[Index].StartsWith("-"))
+		if (!Args[Index].StartsWith("-") && !Args[Index].EndsWith(".gproject", ESearchCase::IgnoreCase))
 		{
 			Shell->OpenMap(Args[Index]);
 			bOpened = true;
 			break;
+		}
+	}
+	if (!bOpened)
+	{
+		if (const auto* Project = FProjectContext::GetActive(); Project && !Project->GetDescriptor().DefaultMap.IsEmpty())
+		{
+			FString File, Error;
+			if (Project->ResolvePackage(Project->GetDescriptor().DefaultMap, true, File, Error))
+			{
+				Shell->OpenMap(File);
+				bOpened = true;
+			}
 		}
 	}
 	if (!bOpened && SelfTestDir.IsEmpty() && FMapEditorShell::GetStartupMapPreference() == FMapEditorShell::EStartupMap::LastOpened)
@@ -915,10 +969,18 @@ void FMapEditorApp::TickSelfTest()
 	case 310:
 		App->OnKeyDown(EKey::S, 's', false);
 		App->OnKeyUp(EKey::S, 's', false);
+		// ] grows the brush in Landscape mode, not the grid.
+		LandscapeBrushBefore = Shell->GetLandscapeMode().Brush.Radius;
+		LandscapeGridBefore = Shell->GetViewSettings().GridSize;
+		App->OnKeyDown(EKey::RightBracket, ']', false);
+		App->OnKeyUp(EKey::RightBracket, ']', false);
 		break;
 	case 312:
 		Report(Shell->GetMode() == EMapEditorMode::Landscape && Shell->GetViewSettings().Tool == EMapTool::Select ? "landscape mode kept through the S key"
 			: "FAILED: the S key left landscape mode");
+		Report(std::fabs(Shell->GetLandscapeMode().Brush.Radius - LandscapeBrushBefore * 1.25f) < 0.01f && Shell->GetViewSettings().GridSize == LandscapeGridBefore
+			? "] grew the landscape brush" : "FAILED: ] in landscape mode");
+		Shell->GetLandscapeMode().Brush.Radius = LandscapeBrushBefore;
 		PointAtText("Place Actors", true);
 		break;
 	case 314:
@@ -969,9 +1031,27 @@ void FMapEditorApp::TickSelfTest()
 		const FString Outcome = FString::Format("{}landscape painted with the mouse (rock {:.1f} -> {:.1f}, {} selected)", bOk ? "" : "FAILED: ",
 			LandscapePaintBefore, After, Doc->GetSelection().size());
 		Report(*Outcome);
-		Shell->SetMode(EMapEditorMode::Selection);
 		break;
 	}
+	case 327:
+	{
+		// A ramp dragged out with the mouse, laid on release.
+		FMapLandscapeMode& Land = Shell->GetLandscapeMode();
+		const Object* Terrain = Land.GetTargetLandscape();
+		Land.Tool = ELandscapeTool::Ramp;
+		Land.Brush.Radius = 96.0f;
+		const auto OnGround = [Terrain](float X, float Y) { return Vector3d(X, Y, Terrain ? Terrain->GetLandscape().SampleHeight(X, Y) : 0.0f); };
+		Drag(ViewPointToWindow(EMapViewType::Perspective, OnGround(-500.0f, -400.0f)), ViewPointToWindow(EMapViewType::Perspective, OnGround(-160.0f, 128.0f)));
+		Report(Shell->GetDocument()->GetUndoDescription() == "Landscape Ramp" && Shell->GetDocument()->GetSelection().empty()
+			? "landscape ramp dragged out with the mouse" : "FAILED: landscape ramp");
+		Land.Tool = ELandscapeTool::Flatten;
+		Land.bFlattenToTarget = true;
+		break;
+	}
+	case 329:
+		Capture("landscape_tools");
+		Shell->SetMode(EMapEditorMode::Selection);
+		break;
 
 	// DPI changes, as in milestone 2.
 	case 330: SimulateDpiChange(1.0f); break;
@@ -979,7 +1059,216 @@ void FMapEditorApp::TickSelfTest()
 	case 360: SimulateDpiChange(2.0f); break;
 	case 385: Capture("dpi200"); break;
 	case 390: SimulateDpiChange(static_cast<float>(GetDpiForWindow(static_cast<HWND>(MainWindow->GetNativeWindow()->GetNativeHandle()))) / 96.0f); break;
-	case 400: App->RequestQuit(); break;
+	// A big landscape (256 x 256 quads, 8192 units) framed whole: far
+	// components are drawn coarser.
+	case 392:
+	{
+		Shell->NewMap(FMapEditorEnvironment::GetBuiltInGameSet());
+		Shell->SetMode(EMapEditorMode::Landscape);
+		constexpr int32 Quads = 256;
+		std::vector<float> Heights;
+		for (int32 Y = 0; Y <= Quads; ++Y)
+		{
+			for (int32 X = 0; X <= Quads; ++X)
+			{
+				const float U = static_cast<float>(X) / Quads, V = static_cast<float>(Y) / Quads;
+				Heights.push_back(420.0f * std::sin(U * 6.0f) * std::cos(V * 5.0f) + 160.0f * std::sin(U * 23.0f + V * 17.0f) + 40.0f * std::sin(U * 71.0f) * std::cos(V * 63.0f));
+			}
+		}
+		Doc = Shell->GetDocument();
+		Object* Big = Doc->AddLandscape(Landscape::Create(Quads, Quads, 32.0f, Heights), Vector3d(0.0f, 0.0f, 0.0f));
+		FMapLandscapeMode& Land = Shell->GetLandscapeMode();
+		if (Big)
+		{
+			Land.AddLayer(*Big);
+			Land.AddLayer(*Big);
+			Land.ApplyAutoPaint(*Big, 0);
+			Land.AutoPaint.MinSlope = 28.0f;
+			Land.ApplyAutoPaint(*Big, 1);
+			Land.AutoPaint.MinSlope = 0.0f;
+			// A dirt road over the hills: a spline, applied.
+			Land.AddLayer(*Big); // Dirt
+			Land.SplineLand = nullptr;
+			Land.SelectedSpline = Land.SelectedPoint = -1;
+			for (const Vector3d& At : { Vector3d(-3600.0f, -2400.0f, 0.0f), Vector3d(-1500.0f, -1200.0f, 0.0f), Vector3d(200.0f, -1500.0f, 0.0f),
+				Vector3d(1800.0f, -300.0f, 0.0f), Vector3d(3600.0f, 600.0f, 0.0f) })
+			{
+				Land.AddSplinePoint(*Big, Vector3d(At.GetX(), At.GetY(), Big->GetLandscape().SampleHeight(At.GetX(), At.GetY()) + 10.0f));
+			}
+			if (!Big->GetLandscape().GetSplines().empty())
+			{
+				LandscapeSpline Road = Big->GetLandscape().GetSplines()[0];
+				Road.layer = "Dirt";
+				Road.mesh = "Road";
+				for (LandscapeSplinePoint& Point : Road.points)
+				{
+					Point.width = 160.0f;
+					Point.falloff = 220.0f;
+				}
+				Land.SetSpline(*Big, 0, Road);
+				Land.ApplySplines(*Big);
+				// A fence over the hills beside it (shaping nothing): a point
+				// every 150 units on the ground.
+				LandscapeSpline Fence;
+				Fence.mesh = "Fence";
+				Fence.meshFitWidth = false;
+				Fence.raiseTerrain = Fence.lowerTerrain = false;
+				for (float X = 600.0f; X <= 1800.0f; X += 150.0f)
+				{
+					const float Y = -620.0f + (X - 600.0f) * 0.35f;
+					LandscapeSplinePoint Post;
+					Post.position.NewVector(X, Y, Big->GetLandscape().SampleHeight(X, Y));
+					Fence.points.push_back(Post);
+				}
+				std::vector<LandscapeSpline> Splines = Big->GetLandscape().GetSplines();
+				Splines.push_back(Fence);
+				Doc->SetLandscape(*Big, Big->GetLandscape().WithSplines(std::move(Splines)), "Add Fence");
+			}
+			// Foliage: trees, pines, bushes and rocks over much of it, grass
+			// where the close-up looks (as the Foliage mode paints them).
+			FMapFoliageMode& Leaves = Shell->GetFoliageMode();
+			for (const char* Name : { "Tree", "Pine", "Bush", "Rock", "Grass" })
+			{
+				Leaves.AddType(Name);
+			}
+			const auto Paint = [&Leaves](const Vector3d& At, float Radius, std::initializer_list<int32> Types)
+			{
+				for (int32 Type = 0; Type < 5; ++Type)
+				{
+					Leaves.SetActive(Type, std::find(Types.begin(), Types.end(), Type) != Types.end());
+				}
+				Leaves.Brush.Radius = Radius;
+				Leaves.Brush.Strength = 1.0f;
+				Leaves.BeginStroke(At, false);
+				for (int32 Step = 0; Step < 30; ++Step)
+				{
+					Leaves.ApplyAt(At, 1.0f / 15.0f, false);
+				}
+				Leaves.EndStroke();
+			};
+			Paint(Vector3d(-1500.0f, 1500.0f, 0.0f), 2200.0f, { 0, 2, 3 });
+			Paint(Vector3d(1800.0f, -1600.0f, 0.0f), 2000.0f, { 1, 2, 3 });
+			Paint(Vector3d(1200.0f, -900.0f, 0.0f), 700.0f, { 4 });
+			// The road kept clear (erased along its curve).
+			for (int32 Type = 0; Type < 5; ++Type)
+			{
+				Leaves.SetActive(Type, true);
+			}
+			if (!Big->GetLandscape().GetSplines().empty())
+			{
+				std::vector<LandscapeSpline::Sample> Samples;
+				Big->GetLandscape().GetSplines()[0].SampleCurve(150.0f, Samples);
+				Leaves.Brush.Radius = 260.0f;
+				Leaves.BeginStroke(Samples[0].position, true);
+				for (const LandscapeSpline::Sample& Sample : Samples)
+				{
+					for (int32 Step = 0; Step < 8; ++Step)
+					{
+						Leaves.ApplyAt(Sample.position, 1.0f / 15.0f, true);
+					}
+				}
+				Leaves.EndStroke();
+			}
+			Leaves.Brush.Radius = 512.0f;
+			Doc->SetSelection({ Big });
+			Commands.ExecuteAction(*Shell->Cmd.FrameSelection);
+			Doc->ClearSelection();
+		}
+		View::landscapeTrianglesDrawn = 0;
+		View::landscapeComponentsDrawn = 0;
+		break;
+	}
+	case 396:
+	{
+		Capture("landscape_big");
+		const FString Outcome = FString::Format("big landscape drawn by levels ({} components, {} triangles over the frames since)",
+			View::landscapeComponentsDrawn, View::landscapeTrianglesDrawn);
+		Report(*Outcome);
+		// Close to the ground: the layers' textures blended per pixel.
+		if (Object* Big = Shell->GetLandscapeMode().GetTargetLandscape())
+		{
+			const Vector3d At(1200.0f, -900.0f, Big->GetLandscape().SampleHeight(1200.0f, -900.0f) + 40.0f);
+			if (Object* Marker = Doc->AddMesh("Cube", At))
+			{
+				Doc->SetSelection({ Marker });
+				Commands.ExecuteAction(*Shell->Cmd.FrameSelection);
+				Doc->Undo();
+			}
+		}
+		break;
+	}
+	case 397:
+		Shell->SetMode(EMapEditorMode::Foliage);
+		break;
+	case 399:
+	{
+		Capture("landscape_close");
+		const Object* Leaves = Shell->GetFoliageMode().GetFoliageObject();
+		const FString Outcome = Leaves && Leaves->GetFoliage().GetNumInstances() > 100
+			? FString::Format("foliage painted: {} instances of {} types", Leaves->GetFoliage().GetNumInstances(), Leaves->GetFoliage().GetNumTypes())
+			: FString("FAILED: foliage");
+		Report(*Outcome);
+		// The Splines tool: a side road branching off the road's fourth
+		// point (a junction), which is then picked, its tangent set by hand
+		// so its handles show.
+		Shell->SetMode(EMapEditorMode::Landscape);
+		FMapLandscapeMode& Land = Shell->GetLandscapeMode();
+		Land.Tool = ELandscapeTool::Splines;
+		if (Object* Big = Land.SplineLand)
+		{
+			Land.SelectedSpline = Land.SelectedPoint = -1;
+			Land.ConnectSplinePoint(*Big, 0, 3);
+			for (const Vector3d& At : { Vector3d(2300.0f, -900.0f, 0.0f), Vector3d(2900.0f, -1100.0f, 0.0f) })
+			{
+				Land.AddSplinePoint(*Big, Vector3d(At.GetX(), At.GetY(), Big->GetLandscape().SampleHeight(At.GetX(), At.GetY()) + 10.0f));
+			}
+			LandscapeSpline Side = Big->GetLandscape().GetSplines().back();
+			Side.layer = "Dirt";
+			Side.mesh = "Road";
+			for (LandscapeSplinePoint& Point : Side.points)
+			{
+				Point.width = 140.0f;
+				Point.falloff = 200.0f;
+			}
+			Land.SetSpline(*Big, static_cast<int32>(Big->GetLandscape().GetSplines().size()) - 1, Side);
+			Land.ApplySplines(*Big);
+			const Vector3d JointAt = Big->GetLandscape().GetSplines()[0].points[3].position;
+			Land.SetSplineTangent(*Big, 0, 3, Vector3d(1500.0f, 500.0f, 0.0f));
+			Land.SelectedSpline = 0;
+			Land.SelectedPoint = 3;
+			// Looking at it: framed on a cube there, which then goes.
+			const float X = JointAt.GetX(), Y = JointAt.GetY();
+			if (Object* Marker = Shell->GetDocument()->AddMesh("Cube", Vector3d(X, Y, Big->GetLandscape().SampleHeight(X, Y) + 60.0f)))
+			{
+				Shell->GetDocument()->SetSelection({ Marker });
+				Commands.ExecuteAction(*Shell->Cmd.FrameSelection);
+				Shell->GetDocument()->Undo();
+			}
+		}
+		break;
+	}
+	case 402:
+	{
+		const Object* Road = Shell->GetLandscapeMode().SplineLand;
+		Capture("landscape_splines");
+		Report(Road && !Road->GetLandscape().GetSplines().empty() ? "landscape spline road applied" : "FAILED: landscape spline");
+		const bool bJunction = Road && Road->GetLandscape().GetSplines().size() == 3
+			&& Road->GetLandscape().GetSplines()[0].points[3].joint >= 0
+			&& Road->GetLandscape().GetSplines()[2].points[0].joint == Road->GetLandscape().GetSplines()[0].points[3].joint
+			&& !Road->GetLandscape().GetSplines()[0].points[3].autoTangent;
+		Report(bJunction ? "landscape spline junction and tangent" : "FAILED: landscape spline junction");
+		Shell->SetMode(EMapEditorMode::Selection);
+		break;
+	}
+	case 403:
+	{
+		const FString Native = SelfTestDir + "landscape_native.gmap";
+		const bool Saved = Shell->SaveMap(Native);
+		const bool Opened = Saved && Shell->OpenMap(Native);
+		Report(Opened ? "native world package saved and reopened" : "FAILED: native world package");
+		break;
+	}
+	case 404: App->RequestQuit(); break;
 	default: break;
 	}
 }

@@ -39,7 +39,7 @@
     <ClCompile>
       <ConformanceMode>false</ConformanceMode>
       <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir);$(ProjectDir)..\TestApps\TestAppHarness;$(GenesisThirdPartyDir)FreeType2\include;$(GenesisThirdPartyDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Projects\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir);$(ProjectDir)..\TestApps\TestAppHarness;$(GenesisThirdPartyDir)FreeType2\include;$(GenesisThirdPartyDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -65,6 +65,8 @@
   <ItemGroup>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="$(GenesisRuntimeDir)Projects\Projects.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C01}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)AssetCore\AssetCore.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C02}</Project></ProjectReference>
     <ProjectReference Include="$(GenesisRuntimeDir)Core\Core.vcxproj">
       <Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project>
     </ProjectReference>

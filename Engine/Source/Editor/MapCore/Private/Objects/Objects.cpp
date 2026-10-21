@@ -85,6 +85,7 @@ Object::operator=(const Object &src) {
   brush = (src.brush == NULL ? NULL : new Geometry(*src.brush));
   mesh = src.mesh;
   landscape = src.landscape;
+  foliage = src.foliage;
 
   Entity *ePtr = (src.entityPtr == NULL ? NULL : new Entity(*src.entityPtr));
   if ((ePtr = SetEntity(ePtr)) != NULL)
@@ -127,6 +128,7 @@ Object::DelObj(bool rmFrmPrnt, bool resetBound) {
   brush = NULL;
   mesh.reset();
   landscape.reset();
+  foliage.reset();
 
   // Delete all children.
   while (GetNumChildren() > 0)
@@ -443,16 +445,25 @@ Object::SetMesh(std::shared_ptr<const StaticMesh> meshPtr) {
   return rtnVal;
 }
 
+std::shared_ptr<const Foliage>
+Object::SetFoliage(std::shared_ptr<const Foliage> foliagePtr) {
+  check(foliagePtr == nullptr || (IsLeaf() && !HasBrush() && !HasEntity() && !HasMesh()));
+  std::shared_ptr<const Foliage> rtnVal = foliage;
+  foliage = std::move(foliagePtr);
+  SetBoundRadius();
+  return rtnVal;
+}
+
 std::shared_ptr<const Landscape>
 Object::SetLandscape(std::shared_ptr<const Landscape> landPtr) {
   check(landPtr == nullptr || (IsLeaf() && !HasBrush() && !HasEntity()));
 
   std::shared_ptr<const Landscape> rtnVal = landscape;
-  if (landscape != nullptr)
+  // A landscape's mesh is its own (GetMesh), made only when asked for; a
+  // static mesh stays when there was and is no landscape.
+  if (landscape != nullptr || landPtr != nullptr)
     mesh.reset();
   landscape = std::move(landPtr);
-  if (landscape != nullptr)
-    mesh = landscape->GetMesh();
   SetBoundRadius();
   return rtnVal;
 }
@@ -718,6 +729,26 @@ Object::GetBoundBox(Vector3d &minVec, Vector3d &maxVec) {
     return;
   }
 
+  if (HasLandscape() || HasFoliage()) {
+    // The box it fills, its corners placed.
+    Vector3d low(0.0f, 0.0f, 0.0f), high(0.0f, 0.0f, 0.0f), corner, placed;
+    if (HasLandscape())
+      GetLandscape().GetBounds(low, high);
+    else
+      GetFoliage().GetBounds(low, high);
+    for (int i = 0; i < 8; i++) {
+      corner.NewVector((i & 1) ? high.GetX() : low.GetX(), (i & 2) ? high.GetY() : low.GetY(), (i & 4) ? high.GetZ() : low.GetZ());
+      GetTransformation().Transform(placed, corner);
+      if (i == 0) {
+        minVec = maxVec = placed;
+        continue;
+      }
+      minVec.NewVector(Min(minVec.GetX(), placed.GetX()), Min(minVec.GetY(), placed.GetY()), Min(minVec.GetZ(), placed.GetZ()));
+      maxVec.NewVector(Max(maxVec.GetX(), placed.GetX()), Max(maxVec.GetY(), placed.GetY()), Max(maxVec.GetZ(), placed.GetZ()));
+    }
+    return;
+  }
+
   if (HasMesh()) {
     GetMesh().FindTransBoundBox(GetTransformation(), minVec, maxVec);
     return;
@@ -786,7 +817,7 @@ Object::Transform(const Matrix44 &transMatrix,
 	TransSpace::SetPosition(pVec);
 	TransSpace::SetOrientation(fVec, tVec);
   }
-  else if (HasMesh()) {
+  else if (HasMesh() || HasFoliage()) {
     // Sanity
     check(GetNumChildren() == 0);
 
@@ -1009,8 +1040,8 @@ Object::SetBoundRadius(bool bubble) {
     return boundRadius;
   }
 
-  if (HasMesh()) {
-    boundRadius = GetMesh().GetBoundRadius();
+  if (HasMesh() || HasFoliage()) {
+    boundRadius = HasLandscape() ? GetLandscape().GetBoundRadius() : HasFoliage() ? GetFoliage().GetBoundRadius() : GetMesh().GetBoundRadius();
     if (bubble && !(IsRoot()))
       (GetParent()).SetBoundRadius();
     return boundRadius;
@@ -1062,6 +1093,14 @@ Object::HitObject(const Line &ray, float rangeBegin,
   if (IsItemNode())
     return (GetItemWireFrame().HitGeometry(ray, rangeBegin, rangeEnd, depth));
 
+  if (HasLandscape())
+    return GetLandscape().Raycast(ray, rangeBegin, rangeEnd, depth);
+
+  // Foliage is not picked (as in Unreal: its object is chosen in the
+  // Outliner), nor in the way of rays to the ground under it.
+  if (HasFoliage())
+    return false;
+
   if (HasMesh())
     return GetMesh().HitMesh(ray, rangeBegin, rangeEnd, depth);
 
@@ -1102,8 +1141,8 @@ Object::HitObject(const Line &ray, float rangeBegin,
 //===== CSG Subtraction =====
 bool
 Object::CSGSubtract(const LinkList<ObjectPtr> &cutters) {
-  // Meshes take no part in CSG.
-  if (HasMesh())
+  // Meshes and foliage take no part in CSG.
+  if (HasMesh() || HasFoliage())
     return false;
 
 #ifndef NDEBUG
@@ -1134,7 +1173,7 @@ Object::CSGSubtract(const LinkList<ObjectPtr> &cutters) {
   while (!iterCutters.IsDone()) {
     cutterPtr = (iterCutters.GetNext())->GetPtr();
 
-	if (cutterPtr->IsItemNode() || cutterPtr->HasMesh())
+	if (cutterPtr->IsItemNode() || cutterPtr->HasMesh() || cutterPtr->HasFoliage())
 		continue;
 
     if (CSGObjNodeSubtract(*cutterPtr, true))
@@ -1183,7 +1222,7 @@ Object::CSGObjNodeSubtract(Object &cutter, bool resetBound) {
       objPtr = iter.GetNext();
 
       // Skip entities and meshes.
-      if (objPtr->IsItemNode() || objPtr->HasMesh())
+      if (objPtr->IsItemNode() || objPtr->HasMesh() || objPtr->HasFoliage())
         continue;
 
       if (objPtr->CSGObjNodeSubtract(cutter))
@@ -1263,7 +1302,7 @@ Object::CSGTraverseCutter(Object &cuttee) {
   iter.Reset();
   while (!iter.IsDone()) {
     objPtr = iter.GetNext();
-    if (objPtr->IsItemNode() || objPtr->HasMesh())
+    if (objPtr->IsItemNode() || objPtr->HasMesh() || objPtr->HasFoliage())
       continue;
     t = GetTransformation();
     objPtr->CalTransSpaceMatrix(t);
@@ -1425,7 +1464,7 @@ Object::CSGSelfIntersect(const LinkList<ObjectPtr> *pObjsPtrs) const {
 bool
 Object::PlaneClip(const Plane &clipPlane, bool bubble) {
 
-  if (IsItemNode() || HasMesh())
+  if (IsItemNode() || HasMesh() || HasFoliage())
     return false;
 
   Matrix44 m;
@@ -1726,6 +1765,11 @@ Object::LoadObject(LFile *inFile, int objNum,
   float landQuadSize = 0.0f;
   std::vector<float> landHeights;
   std::vector<LandscapeLayer> landLayers;
+  std::vector<LandscapeSpline> landSplines;
+  size_t landTangentsRead = 0; // of the last spline's points
+  bool foliageLoaded = false;
+  std::vector<FoliageType> foliageTypes;
+  std::vector<FoliageInstance> foliageInstances;
 
   if (ProgressFunc) {
     pDone += PROGRESS_OBJECT;
@@ -1827,6 +1871,133 @@ Object::LoadObject(LFile *inFile, int objNum,
         layer.name.pop_back();
       landLayers.push_back(std::move(layer));
     }
+    else if (strncmp(inFile->GetLine(), "Foliage:", 8) == 0) {
+      if (!IsLeaf() || HasBrush() || HasEntity() || HasMesh())
+        goto ERROR_LOAD_OBJECT;
+      foliageLoaded = true;
+    }
+    else if (strncmp(inFile->GetLine(), "FoliageType: ", 13) == 0) {
+      // Its numbers, its mesh, then its name to the end of the line.
+      FoliageType type;
+      int align = 0, randomYaw = 1, used = 0;
+      char meshName[128] = { 0 };
+      if (!foliageLoaded ||
+          sscanf(inFile->GetLine() + 13, "%f %f %f %f %d %f %d %f %f %f %f %f %f %127s %n", &type.density, &type.radius,
+                 &type.scaleMin, &type.scaleMax, &align, &type.alignMaxAngle, &randomYaw, &type.slopeMin, &type.slopeMax,
+                 &type.heightMin, &type.heightMax, &type.zOffset, &type.cullDistance, meshName, &used) < 14)
+        goto ERROR_LOAD_OBJECT;
+      type.alignToNormal = align != 0;
+      type.randomYaw = randomYaw != 0;
+      type.mesh = strcmp(meshName, "-") == 0 ? "" : meshName;
+      type.name = used > 0 ? inFile->GetLine() + 13 + used : "";
+      while (!type.name.empty() && (type.name.back() == '\n' || type.name.back() == '\r' || type.name.back() == ' '))
+        type.name.pop_back();
+      foliageTypes.push_back(std::move(type));
+    }
+    else if (strncmp(inFile->GetLine(), "FoliageInstances:", 17) == 0) {
+      // Groups of nine: type, x y z, up x y z, yaw, scale.
+      if (!foliageLoaded)
+        goto ERROR_LOAD_OBJECT;
+      const char *p = inFile->GetLine() + 17;
+      char *end = NULL;
+      float v[9];
+      while (true) {
+        int got = 0;
+        for (; got < 9; got++) {
+          v[got] = strtof(p, &end);
+          if (end == p)
+            break;
+          p = end;
+        }
+        if (got < 9)
+          break;
+        FoliageInstance instance;
+        instance.type = (int) v[0];
+        instance.position.NewVector(v[1], v[2], v[3]);
+        instance.up.NewVector(v[4], v[5], v[6]);
+        instance.yaw = v[7];
+        instance.scale = v[8];
+        foliageInstances.push_back(instance);
+      }
+    }
+    else if (strncmp(inFile->GetLine(), "LandscapeSpline: ", 17) == 0) {
+      // Closed, raises, lowers, then the layer it paints to the end.
+      LandscapeSpline spline;
+      int closed = 0, raise = 1, lower = 1, used = 0;
+      if (landQuadsX < 0 || sscanf(inFile->GetLine() + 17, "%d %d %d %n", &closed, &raise, &lower, &used) < 3)
+        goto ERROR_LOAD_OBJECT;
+      spline.closed = closed != 0;
+      spline.raiseTerrain = raise != 0;
+      spline.lowerTerrain = lower != 0;
+      spline.layer = inFile->GetLine() + 17 + used;
+      while (!spline.layer.empty() && (spline.layer.back() == '\n' || spline.layer.back() == '\r' || spline.layer.back() == ' '))
+        spline.layer.pop_back();
+      landSplines.push_back(std::move(spline));
+      landTangentsRead = 0;
+    }
+    else if (strncmp(inFile->GetLine(), "LandscapeSplineMesh: ", 21) == 0) {
+      // The last spline's mesh: scale, fit to width, z offset, its name.
+      float scale = 1.0f, zOffset = 0.0f;
+      int fit = 1;
+      char meshName[128] = { 0 };
+      if (landSplines.empty() || sscanf(inFile->GetLine() + 21, "%f %d %f %127s", &scale, &fit, &zOffset, meshName) < 4)
+        goto ERROR_LOAD_OBJECT;
+      LandscapeSpline &spline = landSplines.back();
+      spline.meshScale = scale;
+      spline.meshFitWidth = fit != 0;
+      spline.meshZOffset = zOffset;
+      spline.mesh = meshName;
+    }
+    else if (strncmp(inFile->GetLine(), "LandscapeSplineTangents:", 24) == 0) {
+      // For the last spline's points in turn, groups of five: automatic (1)
+      // or not, the tangent's x y z, the joint.
+      if (landSplines.empty())
+        goto ERROR_LOAD_OBJECT;
+      LandscapeSpline &spline = landSplines.back();
+      const char *p = inFile->GetLine() + 24;
+      char *end = NULL;
+      size_t &index = landTangentsRead;
+      while (index < spline.points.size()) {
+        float v[5];
+        int got = 0;
+        for (; got < 5; got++) {
+          v[got] = strtof(p, &end);
+          if (end == p)
+            break;
+          p = end;
+        }
+        if (got < 5)
+          break;
+        LandscapeSplinePoint &point = spline.points[index++];
+        point.autoTangent = v[0] != 0.0f;
+        point.tangent.NewVector(v[1], v[2], v[3]);
+        point.joint = (int) v[4];
+      }
+    }
+    else if (strncmp(inFile->GetLine(), "LandscapeSplinePoints:", 22) == 0) {
+      // Groups of five: x y z, width, falloff.
+      if (landSplines.empty())
+        goto ERROR_LOAD_OBJECT;
+      const char *p = inFile->GetLine() + 22;
+      char *end = NULL;
+      while (true) {
+        float v[5];
+        int got = 0;
+        for (; got < 5; got++) {
+          v[got] = strtof(p, &end);
+          if (end == p)
+            break;
+          p = end;
+        }
+        if (got < 5)
+          break;
+        LandscapeSplinePoint point;
+        point.position.NewVector(v[0], v[1], v[2]);
+        point.width = v[3];
+        point.falloff = v[4];
+        landSplines.back().points.push_back(point);
+      }
+    }
     else if (strncmp(inFile->GetLine(), "LandscapeTexture: ", 18) == 0) {
       // The last layer's texture: its tiling, then the texture to the end.
       float tiling = 0.0f;
@@ -1879,7 +2050,7 @@ Object::LoadObject(LFile *inFile, int objNum,
         LError("Unknown static mesh \"%s\" before line %d.", trimmed.c_str(), inFile->GetLineNumber());
     }
     else if (strncmp(inFile->GetLine(), "Objects:", 8) == 0) {
-      if (HasBrush() || IsItemNode() || HasMesh())
+      if (HasBrush() || IsItemNode() || HasMesh() || foliageLoaded)
         goto ERROR_LOAD_OBJECT;
       s = inFile->GetLine() + 8;
       while (sscanf(s, "%d", &i1) == 1) {
@@ -1893,8 +2064,11 @@ Object::LoadObject(LFile *inFile, int objNum,
     }
   }
 
+  if (foliageLoaded)
+    SetFoliage(std::make_shared<Foliage>(std::move(foliageTypes), std::move(foliageInstances)));
+
   if (landQuadsX >= 0) {
-    std::shared_ptr<const Landscape> land = Landscape::Create(landQuadsX, landQuadsY, landQuadSize, std::move(landHeights), std::move(landLayers));
+    std::shared_ptr<const Landscape> land = Landscape::Create(landQuadsX, landQuadsY, landQuadSize, std::move(landHeights), std::move(landLayers), std::move(landSplines));
     if (land == nullptr)
       LError("A landscape's heights or layer weights do not match its size before line %d.", inFile->GetLineNumber());
     else
@@ -1917,7 +2091,7 @@ Object::LoadObject(LFile *inFile, int objNum,
   }
 
   // Check for empty nodes.
-  if (IsLeaf() && !(HasBrush() || IsItemNode() || HasMesh()))
+  if (IsLeaf() && !(HasBrush() || IsItemNode() || HasMesh() || HasFoliage()))
     rtnVal = 0;
   else
     rtnVal = 1;
@@ -2027,9 +2201,70 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
         fprintf(outFile, "\n");
       }
     }
+    for (const LandscapeSpline &spline : land.GetSplines()) {
+      fprintf(outFile, "  LandscapeSpline: %d %d %d %s\n", spline.closed ? 1 : 0, spline.raiseTerrain ? 1 : 0, spline.lowerTerrain ? 1 : 0,
+              spline.layer.c_str());
+      if (!spline.mesh.empty()) {
+        // FormatFloat's buffer is shared: a copy of each.
+        const std::string scale = FormatFloat(spline.meshScale), zOffset = FormatFloat(spline.meshZOffset);
+        fprintf(outFile, "  LandscapeSplineMesh: %s %d %s %s\n", scale.c_str(), spline.meshFitWidth ? 1 : 0, zOffset.c_str(), spline.mesh.c_str());
+      }
+      // 12 to a line: the reader's lines hold 1024 characters.
+      for (size_t i = 0; i < spline.points.size(); i += 12) {
+        fprintf(outFile, "  LandscapeSplinePoints:");
+        for (size_t j = i; j < Min(spline.points.size(), i + 12); j++) {
+          const LandscapeSplinePoint &point = spline.points[j];
+          for (const float v : { point.position.GetX(), point.position.GetY(), point.position.GetZ(), point.width, point.falloff })
+            fprintf(outFile, " %s", FormatFloat(v));
+        }
+        fprintf(outFile, "\n");
+      }
+      // Tangents set by hand and junctions, when there are any (older
+      // readers skip the line).
+      bool special = false;
+      for (const LandscapeSplinePoint &point : spline.points)
+        special |= !point.autoTangent || point.joint >= 0;
+      for (size_t i = 0; special && i < spline.points.size(); i += 12) {
+        fprintf(outFile, "  LandscapeSplineTangents:");
+        for (size_t j = i; j < Min(spline.points.size(), i + 12); j++) {
+          const LandscapeSplinePoint &point = spline.points[j];
+          fprintf(outFile, " %d", point.autoTangent ? 1 : 0);
+          for (const float v : { point.tangent.GetX(), point.tangent.GetY(), point.tangent.GetZ() })
+            fprintf(outFile, " %s", FormatFloat(v));
+          fprintf(outFile, " %d", point.joint);
+        }
+        fprintf(outFile, "\n");
+      }
+    }
   }
   else if (HasMesh())
-    fprintf(outFile, "  StaticMesh: %s\n", GetMesh().GetName());
+    fprintf(outFile, "  StaticMesh: %s\n", GetMeshName());
+  else if (HasFoliage()) {
+    const Foliage &foliage = GetFoliage();
+    fprintf(outFile, "  Foliage: %d\n", foliage.GetNumTypes());
+    for (const FoliageType &type : foliage.GetTypes()) {
+      // FormatFloat's buffer is shared: a call for each.
+      fprintf(outFile, "  FoliageType: %s", FormatFloat(type.density));
+      for (const float v : { type.radius, type.scaleMin, type.scaleMax })
+        fprintf(outFile, " %s", FormatFloat(v));
+      fprintf(outFile, " %d %s %d", type.alignToNormal ? 1 : 0, FormatFloat(type.alignMaxAngle), type.randomYaw ? 1 : 0);
+      for (const float v : { type.slopeMin, type.slopeMax, type.heightMin, type.heightMax, type.zOffset, type.cullDistance })
+        fprintf(outFile, " %s", FormatFloat(v));
+      fprintf(outFile, " %s %s\n", type.mesh.empty() ? "-" : type.mesh.c_str(), type.name.c_str());
+    }
+    // 6 to a line: the reader's lines hold 1024 characters.
+    const std::vector<FoliageInstance> &instances = foliage.GetInstances();
+    for (size_t i = 0; i < instances.size(); i += 6) {
+      fprintf(outFile, "  FoliageInstances:");
+      for (size_t j = i; j < Min(instances.size(), i + 6); j++) {
+        const FoliageInstance &f = instances[j];
+        fprintf(outFile, " %d", f.type);
+        for (const float v : { f.position.GetX(), f.position.GetY(), f.position.GetZ(), f.up.GetX(), f.up.GetY(), f.up.GetZ(), f.yaw, f.scale })
+          fprintf(outFile, " %s", FormatFloat(v));
+      }
+      fprintf(outFile, "\n");
+    }
+  }
 
   fprintf(outFile, "} // Object %d\n", objID);
   fprintf(outFile, "\n");

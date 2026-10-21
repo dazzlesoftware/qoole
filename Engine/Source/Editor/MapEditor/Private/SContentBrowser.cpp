@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "SContentBrowser.h"
+#include "AssetPackage.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "MapEditorIcons.h"
@@ -371,6 +372,8 @@ SContentBrowser::~SContentBrowser()
 EContentAssetType SContentBrowser::GetAssetType(const FString& FilePath) const
 {
 	const FString Extension = FromPath(ToPath(FilePath).extension()).ToLower();
+	if (Extension == ".gmap") return EContentAssetType::Map;
+	if (Extension == ".asset") return EContentAssetType::Prefab;
 	if (Extension == ".qle")
 	{
 		for (const FString& Folder : PrefabFolders)
@@ -497,6 +500,8 @@ void SContentBrowser::ScanItems()
 	const auto Consider = [&](const fs::directory_entry& Entry)
 	{
 		const bool bFolder = Entry.is_directory(Error);
+		const auto Ext = Entry.path().extension();
+		if (!bFolder && (Ext == L".gexp" || Ext == L".gbulk" || Ext == L".tmp")) return;
 		FContentBrowserItem Item;
 		Item.Path = FromPath(Entry.path());
 		Item.Type = bFolder ? EContentAssetType::Folder : GetAssetType(Item.Path);
@@ -636,7 +641,21 @@ bool SContentBrowser::ImportFile(const FString& Source)
 	{
 		To = ToPath(Path) / (From.stem().wstring() + std::to_wstring(Number) + From.extension().wstring());
 	}
-	if (!fs::copy_file(From, To, Error))
+	bool bCopied = false;
+	const FString Extension = FromPath(From.extension()).ToLower();
+	if (Extension == ".gmap" || Extension == ".asset")
+	{
+		FAssetPackage Package;
+		FString PackageError;
+		if (FAssetPackageStore::Load(Source, Package, PackageError))
+		{
+			Package.Id.Empty(); // imported copy is a new asset
+			bCopied = FAssetPackageStore::Save(FromPath(To), Package, PackageError);
+		}
+		if (!bCopied) UE_LOG(LogMapEditor, Warning, "{}", PackageError);
+	}
+	else bCopied = fs::copy_file(From, To, Error);
+	if (!bCopied)
 	{
 		UE_LOG(LogMapEditor, Warning, "Could not import {}: {}", Source, Error.message());
 		return false;

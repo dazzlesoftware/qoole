@@ -24,6 +24,7 @@
 #include "CoreMinimal.h"
 #include "MapEditorEnvironment.h"
 
+class Foliage;
 class Landscape;
 class Matrix44;
 class Object;
@@ -141,6 +142,10 @@ public:
 	// Gives a landscape other heights (sculpting). Inside an open transaction
 	// the object is captured once, so a whole stroke is one undo step.
 	void SetLandscape(Object& Obj, std::shared_ptr<const Landscape> NewLandscape, const FString& Description = "Sculpt Landscape");
+	// Foliage (Foliage.h): an object for it, and other types or instances
+	// for it (captured once inside an open transaction, as SetLandscape).
+	Object* AddFoliage(std::shared_ptr<const Foliage> NewFoliage, const FString& Description = "Add Foliage");
+	void SetFoliage(Object& Obj, std::shared_ptr<const Foliage> NewFoliage, const FString& Description = "Paint Foliage");
 	// Writes copies of objects as a prefab (.qle), centered on the origin.
 	bool SavePrefab(const TArray<Object*>& Objects, const FString& PrefabPath, FString& OutError) const;
 
@@ -229,6 +234,7 @@ private:
 	Selector* SelectorPtr = nullptr;
 	FMapGameSet GameSet;
 	FString Path;
+	FString PackageId;
 
 	TArray<TUniquePtr<FTransaction>> UndoStack;
 	TArray<TUniquePtr<FTransaction>> RedoStack;

@@ -156,7 +156,31 @@ public:
 	explicit FMapRenderResources(FRHIDevice& InDevice) : Device(InDevice) {}
 	~FMapRenderResources();
 	FRHIGraphicsPipeline* GetSolidPipeline(EPixelFormat TargetFormat);
+	// Textured landscapes, their layers blended per pixel (PSLandscape).
+	FRHIGraphicsPipeline* GetLandscapePipeline(EPixelFormat TargetFormat);
+	// Meshes drawn instanced (foliage: VSFoliage), and a mesh's triangles
+	// for it (made once a mesh: positions, normals and colors a corner).
+	FRHIGraphicsPipeline* GetInstancedPipeline(EPixelFormat TargetFormat);
+	struct FMeshBuffers
+	{
+		TSharedPtr<FRHIBuffer> Vertices;
+		TSharedPtr<FRHIBuffer> Indices;
+		uint32 IndexCount = 0;
+	};
+	const FMeshBuffers* GetMeshBuffers(const StaticMesh& Mesh);
 	FRHITexture& GetWhiteTexture();
+	// A landscape's layers for the GPU to blend (FLandscapeLayerImages):
+	// its weights and its layers' textures, brought up to date (a stroke
+	// copies only the weights it changed). False if it has more layers than
+	// the GPU blends, or none textured: then it is drawn baked
+	// (GetLandscapeTexture). Call outside render passes.
+	bool GetLandscapeLayers(const Object& Land, FRHITexture*& OutWeights, FRHITexture*& OutLayers);
+	// Whether landscapes blend their layers on the GPU (true) or are drawn
+	// with a baked image (tests compare the two).
+	bool bBlendLandscapeLayers = true;
+	// Whether foliage is drawn instanced on the GPU (true) or as triangles
+	// View makes (tests compare the two).
+	bool bInstanceMeshes = true;
 	// A textured landscape's baked image (FLandscapeBake), brought up to
 	// date: only what a stroke changed is baked and copied again. Null if
 	// the object is no textured landscape. Call outside render passes.
@@ -172,13 +196,23 @@ private:
 	{
 		FLandscapeBake Bake;
 		TSharedPtr<FRHITexture> Texture;
+		FLandscapeLayerImages Layers;
+		TSharedPtr<FRHITexture> WeightTexture;
+		TSharedPtr<FRHITexture> LayerTexture;
 		uint64 LastUsed = 0;
 	};
+	FLandscapeEntry& FindEntry(const Object& Land);
+	void Release(FLandscapeEntry& Entry);
 
 	FRHIDevice& Device;
 	TSharedPtr<FRHITexture> WhiteTexture;
 	TSharedPtr<FRHIGraphicsPipeline> SolidPipeline;
 	EPixelFormat SolidFormat = EPixelFormat::Unknown;
+	TSharedPtr<FRHIGraphicsPipeline> LandscapePipeline;
+	EPixelFormat LandscapeFormat = EPixelFormat::Unknown;
+	TSharedPtr<FRHIGraphicsPipeline> InstancedPipeline;
+	EPixelFormat InstancedFormat = EPixelFormat::Unknown;
+	std::map<const StaticMesh*, FMeshBuffers> MeshBuffers;
 	std::map<const Object*, std::unique_ptr<FLandscapeEntry>> Landscapes;
 	uint64 Frame = 0;
 };

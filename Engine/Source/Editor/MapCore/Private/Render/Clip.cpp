@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  */
 
 #include "MapCorePCH.h"
+#include "MeshVertexBuffer.h"
 
 #include "math.h"
 #include "clip.h"
@@ -560,6 +561,17 @@ Clip::BoundObject(const Object &obj) const {
 //  view volume.  In the case of perspective view,
 //  always manually test each of vertices.
 
+int
+Clip::BoundBox(const Point3d corners[8]) const {
+  unsigned char all = 0xFF, any = 0x00;
+  for (int i = 0; i < 8; i++) {
+    const unsigned char code = RegionCheck(corners[i]);
+    all &= code;
+    any |= code;
+  }
+  return all ? -1 : (any ? 0 : 1);
+}
+
 bool
 Clip::IsObjectInVolume(Object &obj) const {
   // Sanity.
@@ -606,8 +618,24 @@ Clip::IsObjectInVolume(Object &obj) const {
   else if (obj.HasMesh()) {
     Point3d *pPt;
     Points3d vBuf;
-    obj.GetMesh().Transform(trans, vBuf);
-    for (int i = 0; i < obj.GetMesh().GetNumVertices(); i++) {
+    int numPoints;
+    if (obj.HasLandscape()) {
+      // All of a landscape is inside when the box it fills is.
+      Vector3d low, high;
+      obj.GetLandscape().GetBounds(low, high);
+      for (int i = 0; i < 8; i++) {
+        const Vector3d corner((i & 1) ? high.GetX() : low.GetX(), (i & 2) ? high.GetY() : low.GetY(), (i & 4) ? high.GetZ() : low.GetZ());
+        Point3d placed;
+        trans.Transform(placed, corner);
+        vBuf.AddPoint(placed);
+      }
+      numPoints = 8;
+    }
+    else {
+      FMeshVertexBufferAdapter::Transform(obj.GetMesh(), trans, vBuf);
+      numPoints = obj.GetMesh().GetNumVertices();
+    }
+    for (int i = 0; i < numPoints; i++) {
       if (!prspctv) {
         if (ClipPoint(vBuf[i]))
           return false;
@@ -627,6 +655,23 @@ Clip::IsObjectInVolume(Object &obj) const {
   }
   else if (obj.IsItemNode()) {
     return false;
+  }
+  else if (obj.HasFoliage()) {
+    // All of it is inside when the box its instances fill is.
+    Vector3d low, high;
+    if (!obj.GetFoliage().GetBounds(low, high))
+      return false;
+    for (int i = 0; i < 8; i++) {
+      const Vector3d corner((i & 1) ? high.GetX() : low.GetX(), (i & 2) ? high.GetY() : low.GetY(), (i & 4) ? high.GetZ() : low.GetZ());
+      Point3d placed;
+      trans.Transform(placed, corner);
+      if (!prspctv ? ClipPoint(placed)
+                   : (placed.GetY() < clipMin.GetY() || placed.GetY() > clipMax.GetY() ||
+                      placed.GetX() < placed.GetY() * clipMin.GetX() || placed.GetX() > placed.GetY() * clipMax.GetX() ||
+                      placed.GetZ() < placed.GetY() * clipMin.GetZ() || placed.GetZ() > placed.GetY() * clipMax.GetZ()))
+        return false;
+    }
+    return true;
   }
   else {
     check(obj.GetNumChildren() > 0);

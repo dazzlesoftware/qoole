@@ -2,6 +2,7 @@
 
 #include "Vulkan/VulkanRHI.h"
 
+#include <array>
 #include <cstring>
 #include <string>
 
@@ -97,10 +98,12 @@ FVulkanTexture::~FVulkanTexture()
 {
 	Device.DeferDestroy([DeviceHandle = Device.GetHandle(), ImageHandle = Image, MemoryHandle = Memory,
 		Sampled = SampledView, Attachment = AttachmentView, FramebufferHandle = Framebuffer, DepthFramebufferHandle = DepthFramebuffer,
-		Set0 = DescriptorSets[0], Set1 = DescriptorSets[1], Pool0 = DescriptorPools[0], Pool1 = DescriptorPools[1]]()
+		Sets = std::to_array(DescriptorSets), Pools = std::to_array(DescriptorPools)]()
 	{
-		if (Set0) vkFreeDescriptorSets(DeviceHandle, Pool0, 1, &Set0);
-		if (Set1) vkFreeDescriptorSets(DeviceHandle, Pool1, 1, &Set1);
+		for (uint32 Index = 0; Index < NumSamplers; ++Index)
+		{
+			if (Sets[Index]) vkFreeDescriptorSets(DeviceHandle, Pools[Index], 1, &Sets[Index]);
+		}
 		if (FramebufferHandle) vkDestroyFramebuffer(DeviceHandle, FramebufferHandle, nullptr);
 		if (DepthFramebufferHandle) vkDestroyFramebuffer(DeviceHandle, DepthFramebufferHandle, nullptr);
 		if (Attachment) vkDestroyImageView(DeviceHandle, Attachment, nullptr);
@@ -123,8 +126,10 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 	ImageInfo.imageType = VK_IMAGE_TYPE_2D;
 	ImageInfo.format = Format;
 	ImageInfo.extent = { Desc.Width, Desc.Height, 1 };
-	ImageInfo.mipLevels = 1;
-	ImageInfo.arrayLayers = 1;
+	const uint32 MipLevels = IsDepthFormat(Desc.Format) ? 1u : FMath::Clamp(Desc.MipLevels, 1u, GetFullMipLevels(Desc.Width, Desc.Height));
+	ImageInfo.mipLevels = MipLevels;
+	const uint32 ArraySize = IsDepthFormat(Desc.Format) ? 1u : FMath::Max(Desc.ArraySize, 1u);
+	ImageInfo.arrayLayers = ArraySize;
 	ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	const bool bDepth = IsDepthFormat(Desc.Format);
@@ -155,9 +160,9 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 	// swizzle, hence a second view for R8 render targets.
 	VkImageViewCreateInfo ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 	ViewInfo.image = Image;
-	ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	ViewInfo.viewType = ArraySize > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
 	ViewInfo.format = Format;
-	ViewInfo.subresourceRange = { static_cast<VkImageAspectFlags>(bDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT), 0, 1, 0, 1 };
+	ViewInfo.subresourceRange = { static_cast<VkImageAspectFlags>(bDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT), 0, MipLevels, 0, ArraySize };
 	const bool bSwizzled = Desc.Format == EPixelFormat::R8_UNORM;
 	if (bSwizzled)
 	{
@@ -209,15 +214,20 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 
 	// Initial contents: the data, or the clear color (render targets) / zero,
 	// then SHADER_READ_ONLY_OPTIMAL, the layout textures live in.
+	// Every mip level's texels, tightly packed one after another.
 	const uint32 BytesPerPixel = GetBytesPerPixel(Desc.Format);
 	const uint32 RowBytes = Desc.Width * BytesPerPixel;
-	const VkDeviceSize StagingSize = InitialData ? static_cast<VkDeviceSize>(RowBytes) * Desc.Height : 0;
+	const VkDeviceSize StagingSize = InitialData ? static_cast<VkDeviceSize>(GetMipChainBytes(Desc.Format, Desc.Width, Desc.Height, MipLevels)) * ArraySize : 0;
 	FVulkanUploadContext Upload;
 	if (!Device.BeginUpload(StagingSize, Upload))
 	{
 		return false;
 	}
-	if (InitialData)
+	if (InitialData && (MipLevels > 1 || ArraySize > 1))
+	{
+		std::memcpy(Upload.StagingData, InitialData, static_cast<SIZE_T>(StagingSize));
+	}
+	else if (InitialData)
 	{
 		const uint32 SourcePitch = InitialRowPitch ? InitialRowPitch : RowBytes;
 		const uint8* Source = static_cast<const uint8*>(InitialData);
@@ -235,17 +245,30 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 	Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	Barrier.image = Image;
-	Barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+	Barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, MipLevels, 0, ArraySize };
 	vkCmdPipelineBarrier(Upload.CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		0, 0, nullptr, 0, nullptr, 1, &Barrier);
 
 	if (InitialData)
 	{
-		VkBufferImageCopy Copy{};
-		Copy.bufferOffset = Upload.StagingOffset;
-		Copy.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-		Copy.imageExtent = { Desc.Width, Desc.Height, 1 };
-		vkCmdCopyBufferToImage(Upload.CommandBuffer, Upload.StagingBuffer, Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Copy);
+		// Each slice's levels in turn.
+		TArray<VkBufferImageCopy> Copies;
+		VkDeviceSize Offset = Upload.StagingOffset;
+		for (uint32 Slice = 0; Slice < ArraySize; ++Slice)
+		{
+			for (uint32 Mip = 0; Mip < MipLevels; ++Mip)
+			{
+				const uint32 W = GetMipSize(Desc.Width, Mip), H = GetMipSize(Desc.Height, Mip);
+				VkBufferImageCopy Copy{};
+				Copy.bufferOffset = Offset;
+				Copy.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, Mip, Slice, 1 };
+				Copy.imageExtent = { W, H, 1 };
+				Copies.push_back(Copy);
+				Offset += static_cast<VkDeviceSize>(W) * H * BytesPerPixel;
+			}
+		}
+		vkCmdCopyBufferToImage(Upload.CommandBuffer, Upload.StagingBuffer, Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			static_cast<uint32>(Copies.size()), Copies.data());
 	}
 	else
 	{
@@ -257,7 +280,7 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 			Clear.float32[2] = Desc.ClearColor.B;
 			Clear.float32[3] = Desc.ClearColor.A;
 		}
-		const VkImageSubresourceRange Range{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+		const VkImageSubresourceRange Range{ VK_IMAGE_ASPECT_COLOR_BIT, 0, MipLevels, 0, ArraySize };
 		vkCmdClearColorImage(Upload.CommandBuffer, Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &Clear, 1, &Range);
 	}
 
@@ -272,12 +295,12 @@ bool FVulkanTexture::Initialize(const void* InitialData, uint32 InitialRowPitch)
 	return true;
 }
 
-VkDescriptorSet FVulkanTexture::GetDescriptorSet(ESamplerFilter Filter)
+VkDescriptorSet FVulkanTexture::GetDescriptorSet(uint32 SamplerIndex)
 {
-	const uint32 Index = static_cast<uint32>(Filter);
+	const uint32 Index = SamplerIndex;
 	if (!DescriptorSets[Index])
 	{
-		DescriptorSets[Index] = Device.AllocateDescriptorSet(Filter, DescriptorPools[Index]);
+		DescriptorSets[Index] = Device.AllocateDescriptorSet(SamplerIndex, DescriptorPools[Index]);
 		if (!DescriptorSets[Index])
 		{
 			return VK_NULL_HANDLE;
@@ -455,21 +478,26 @@ bool FVulkanGraphicsPipeline::Initialize()
 	Stages[1].module = Modules[1];
 	Stages[1].pName = PixelEntry.c_str();
 
-	VkVertexInputBindingDescription Binding{};
-	Binding.binding = 0;
-	Binding.stride = Desc.VertexStride;
-	Binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	// Binding 0 the vertices; binding 1, when there is an instance stride,
+	// the instances.
+	VkVertexInputBindingDescription Bindings[2] = {};
+	Bindings[0].binding = 0;
+	Bindings[0].stride = Desc.VertexStride;
+	Bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	Bindings[1].binding = 1;
+	Bindings[1].stride = Desc.InstanceStride;
+	Bindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 	TArray<VkVertexInputAttributeDescription> Attributes;
 	for (SIZE_T Index = 0; Index < Desc.VertexAttributes.size(); ++Index)
 	{
 		const FVertexAttribute& Attribute = Desc.VertexAttributes[Index];
-		Attributes.push_back({ static_cast<uint32>(Index), 0, ToVkVertexFormat(Attribute.Format), Attribute.Offset });
+		Attributes.push_back({ static_cast<uint32>(Index), Attribute.BufferSlot, ToVkVertexFormat(Attribute.Format), Attribute.Offset });
 	}
 	VkPipelineVertexInputStateCreateInfo VertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 	if (!Attributes.empty())
 	{
-		VertexInput.vertexBindingDescriptionCount = 1;
-		VertexInput.pVertexBindingDescriptions = &Binding;
+		VertexInput.vertexBindingDescriptionCount = Desc.InstanceStride > 0 ? 2u : 1u;
+		VertexInput.pVertexBindingDescriptions = Bindings;
 		VertexInput.vertexAttributeDescriptionCount = static_cast<uint32>(Attributes.size());
 		VertexInput.pVertexAttributeDescriptions = Attributes.data();
 	}
@@ -483,7 +511,8 @@ bool FVulkanGraphicsPipeline::Initialize()
 
 	VkPipelineRasterizationStateCreateInfo Rasterization{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
 	Rasterization.polygonMode = VK_POLYGON_MODE_FILL;
-	Rasterization.cullMode = VK_CULL_MODE_NONE;
+	Rasterization.cullMode = Desc.CullMode == ECullMode::Back ? VK_CULL_MODE_BACK_BIT
+		: Desc.CullMode == ECullMode::Front ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_NONE;
 	Rasterization.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	Rasterization.lineWidth = 1.0f;
 
@@ -542,7 +571,7 @@ bool FVulkanGraphicsPipeline::Initialize()
 	PipelineInfo.pDepthStencilState = &DepthStencil;
 	PipelineInfo.pColorBlendState = &ColorBlend;
 	PipelineInfo.pDynamicState = &DynamicState;
-	PipelineInfo.layout = Device.GetPipelineLayout(Desc.SamplerFilter);
+	PipelineInfo.layout = Device.GetPipelineLayout(GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress), Desc.NumTextures);
 	PipelineInfo.renderPass = RenderPass;
 	PipelineInfo.subpass = 0;
 

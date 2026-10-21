@@ -31,6 +31,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <string.h>
 #include "geometry.h"
 #include "game.h"
+#include <algorithm>
+#include <cmath>
+#include <memory>
 
 //==================== Point3d ====================
 Point3d::Point3d(float xPos, float yPos, float zPos) :
@@ -2300,6 +2303,32 @@ Geometry::ConstructPlaneList(void) {
   while (!(iter.IsDone())) {
     planeList.AppendNode(*(new PlaneNode(*(iter.GetNext()), vertices)));
   }
+}
+
+Geometry *Geometry::FromPolygons(const std::vector<std::vector<Vector3d>> &polygons) {
+  if (polygons.size() < 4 || polygons.size() > MAX_FACES) return nullptr;
+  std::unique_ptr<Geometry> geom(new Geometry);
+  for (const auto &polygon : polygons) {
+    if (polygon.size() < 3 || polygon.size() > 256) return nullptr;
+    std::vector<int> indices;
+    for (const auto &v : polygon) {
+      if (!std::isfinite(v.GetX()) || !std::isfinite(v.GetY()) || !std::isfinite(v.GetZ()) ||
+          std::abs(v.GetX()) > 1.0e7f || std::abs(v.GetY()) > 1.0e7f || std::abs(v.GetZ()) > 1.0e7f) return nullptr;
+      int index = geom->vertices.FindPoint(v.GetX(), v.GetY(), v.GetZ(), 0.00001f);
+      if (index < 0) index = geom->vertices.AddPoint(Point3d(v.GetX(), v.GetY(), v.GetZ()));
+      if (std::find(indices.begin(), indices.end(), index) != indices.end()) return nullptr;
+      indices.push_back(index);
+    }
+    auto *face = new GPolygon(indices[0], indices[1], indices[2]);
+    for (size_t i = 3; i < indices.size(); ++i) face->AddVertex(indices[i], face->GetSide((int)i - 1));
+    geom->faces.AppendNode(*face);
+    std::unique_ptr<Plane> plane(geom->MakePlane(*face));
+    if (!plane) return nullptr;
+  }
+  geom->ConstructEdgeList();
+  geom->ConstructPlaneList();
+  geom->boundRadius = geom->CalBoundRadius();
+  return geom.release();
 }
 
 Geometry *

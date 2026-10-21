@@ -11,7 +11,11 @@
 
 #include "MapCoreHeaders.h"
 #include "MapDocument.h"
+#include "MapPackage.h"
+#include "AssetPackage.h"
+#include "SContentBrowser.h"
 #include "MapEditorEnvironment.h"
+#include "MapFoliageMode.h"
 #include "MapHeightmap.h"
 #include "MapLandscapeTextures.h"
 #include "HAL/File.h"
@@ -202,7 +206,7 @@ TEST_SUITE("MapEditor")
 		CHECK(Reopened->CountBrushes() == 2);
 		CHECK(Reopened->CountEntities() == 1);
 		CHECK(Reopened->GetGameSet().IsBuiltIn());
-		CHECK(!Reopened->IsModified());
+		CHECK(Reopened->IsModified()); // legacy import needs a native save
 
 		// Export: the document keeps its path; the .map imports.
 		const FString Map = Temp.File("test.map");
@@ -212,7 +216,7 @@ TEST_SUITE("MapEditor")
 		REQUIRE(Imported);
 		CHECK(Imported->CountBrushes() == 2);
 		CHECK(Imported->CountEntities() == 1);
-		CHECK(Imported->GetPath() == Temp.File("test.qle")); // saves as .qle next to it
+		CHECK(Imported->GetPath() == Temp.File("test.gmap")); // native destination beside the import
 		CHECK(Imported->IsModified());
 
 		CHECK(!FMapDocument::Open(Temp.File("missing.qle"), Error));
@@ -272,12 +276,12 @@ namespace
 		TSharedPtr<FMapViewportClient> Client;
 		TSharedPtr<SWindow> Window;
 
-		bool Create(ERHIBackend Backend, EMapViewType Type)
+		bool Create(ERHIBackend Backend, EMapViewType Type, bool bSoftware = true)
 		{
 			EnsureMapCore();
 			FRHIDeviceDesc Desc;
 			Desc.Backend = Backend;
-			Desc.bSoftwareAdapter = true;
+			Desc.bSoftwareAdapter = bSoftware;
 			Device = FRHIDevice::Create(Desc);
 			if (!Device)
 			{
@@ -962,7 +966,7 @@ TEST_SUITE("MapEditor")
 			CHECK(FMath::Abs(Max.GetX() + Min.GetX()) < 0.01f); // centered
 			CHECK(FMath::Abs(Max.GetZ() - Min.GetZ() - (Name == "Plane" ? 0.0f : StaticMesh::BasicShapeSize)) < 0.01f);
 			CHECK(!Mesh->GetTriangles().empty());
-			CHECK(Mesh->GetEdgeList().NumOfElm() > 0);
+			CHECK(Mesh->GetEdgeList().size() > 0);
 			CHECK(Mesh->GetBoundRadius() >= StaticMesh::BasicShapeSize * 0.5f - 0.01f);
 		}
 		CHECK(StaticMesh::Find("sphere") == StaticMesh::Find("Sphere"));
@@ -1212,7 +1216,7 @@ TEST_SUITE("MapEditor")
 		CHECK(Same(Field.GetPoint(0, 0), Vector3d(-64.0f, -32.0f, 0.0f)));
 		CHECK(Same(Field.GetPoint(4, 2), Vector3d(64.0f, 32.0f, 0.0f)));
 		CHECK(Field.GetMesh()->GetTriangles().size() == 16);
-		CHECK(Field.GetMesh()->GetEdgeList().NumOfElm() == 4 * 3 + 5 * 2);
+		CHECK(Field.GetMesh()->GetEdgeList().size() == 4 * 3 + 5 * 2);
 
 		std::vector<float> Heights(15, 0.0f);
 		Heights[7] = 10.0f; // (2, 1), the middle
@@ -2132,4 +2136,1846 @@ TEST_SUITE("MapEditor")
 			}
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Landscape tools: brush keys, Flatten and Paint settings, Ramp, Erosion,
+// Auto Paint.
+
+namespace
+{
+	struct FLandFixture
+	{
+		TUniquePtr<FMapDocument> Doc;
+		FMapLandscapeMode Mode;
+		Object* Land = nullptr;
+
+		explicit FLandFixture(int32 Quads = 32)
+		{
+			EnsureMapCore();
+			Doc = FMapDocument::CreateNew();
+			Mode.SetDocument(Doc.get());
+			Mode.NewQuadsX = Quads;
+			Mode.NewQuadsY = Quads;
+			Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+			REQUIRE(Land);
+			Doc->ClearSelection();
+		}
+
+		void SetHeights(const TFunction<float(int32, int32)>& At)
+		{
+			const Landscape& Field = Land->GetLandscape();
+			std::vector<float> Heights;
+			for (int32 Y = 0; Y < Field.GetPointsY(); ++Y)
+			{
+				for (int32 X = 0; X < Field.GetPointsX(); ++X)
+				{
+					Heights.push_back(At(X, Y));
+				}
+			}
+			Doc->SetLandscape(*Land, Field.WithHeights(Heights), "Set");
+		}
+
+		float H(int32 X, int32 Y) const { return Land->GetLandscape().GetHeight(X, Y); }
+		// The grid point's place in scope space.
+		Vector3d At(int32 X, int32 Y) const { return Land->GetLandscape().GetPoint(X, Y); }
+
+		void Stroke(const Vector3d& Point, float Seconds, bool bInvert = false)
+		{
+			Mode.BeginStroke(*Land, Point, bInvert);
+			for (float T = 0.0f; T < Seconds; T += 1.0f / 30.0f)
+			{
+				Mode.ApplyAt(*Land, Point, 1.0f / 30.0f, bInvert);
+			}
+			Mode.EndStroke();
+		}
+	};
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("[ and ] size the landscape brush and Ctrl with them its strength, within limits")
+	{
+		FLandscapeBrush Brush;
+		Brush.Radius = 100.0f;
+		Brush.Grow(1);
+		CHECK(Brush.Radius == doctest::Approx(125.0f));
+		Brush.Grow(-2);
+		CHECK(Brush.Radius == doctest::Approx(80.0f));
+		Brush.Grow(-100);
+		CHECK(Brush.Radius == FLandscapeBrush::MinRadius);
+		Brush.Grow(100);
+		CHECK(Brush.Radius == FLandscapeBrush::MaxRadius);
+		Brush.Strength = 0.4f;
+		Brush.Strengthen(1);
+		CHECK(Brush.Strength == doctest::Approx(0.45f));
+		Brush.Strengthen(-100);
+		CHECK(Brush.Strength == doctest::Approx(0.01f));
+		Brush.Strengthen(100);
+		CHECK(Brush.Strength == 1.0f);
+	}
+
+	TEST_CASE("Flatten pulls to a target height, and can only raise or only lower")
+	{
+		FLandFixture F;
+		// A slope from -100 to 100 along X.
+		F.SetHeights([](int32 X, int32) { return static_cast<float>(X - 16) * 6.25f; });
+		F.Mode.Tool = ELandscapeTool::Flatten;
+		F.Mode.Brush.Radius = 4096.0f;
+		F.Mode.Brush.Strength = 1.0f;
+		F.Mode.Brush.Falloff = 0.0f;
+
+		F.Mode.FlattenMode = ELandscapeFlattenMode::Raise;
+		F.Mode.bFlattenToTarget = true;
+		F.Mode.FlattenTarget = 20.0f;
+		F.Stroke(F.At(16, 16), 1.0f);
+		CHECK(F.H(0, 5) == doctest::Approx(20.0f).epsilon(0.01));  // was -100: raised
+		CHECK(F.H(32, 5) == doctest::Approx(100.0f));               // above: left alone
+		CHECK(F.Doc->GetUndoDescription() == "Landscape Flatten");
+		F.Doc->Undo();
+		CHECK(F.H(0, 5) == doctest::Approx(-100.0f));
+
+		F.Mode.FlattenMode = ELandscapeFlattenMode::Lower;
+		F.Stroke(F.At(16, 16), 1.0f);
+		CHECK(F.H(0, 5) == doctest::Approx(-100.0f));
+		CHECK(F.H(32, 5) == doctest::Approx(20.0f).epsilon(0.01));
+		F.Doc->Undo();
+
+		// Without a target, to where the stroke began (the middle, 0).
+		F.Mode.FlattenMode = ELandscapeFlattenMode::Both;
+		F.Mode.bFlattenToTarget = false;
+		F.Stroke(F.At(16, 16), 1.0f);
+		CHECK(std::fabs(F.H(0, 5)) < 1.0f);
+		CHECK(std::fabs(F.H(32, 5)) < 1.0f);
+	}
+
+	TEST_CASE("Paint moves a layer toward the target value, never past it")
+	{
+		FLandFixture F;
+		REQUIRE(F.Mode.AddLayer(*F.Land));
+		F.Mode.Tool = ELandscapeTool::Paint;
+		F.Mode.SelectedLayer = 0;
+		F.Mode.Brush.Radius = 4096.0f;
+		F.Mode.Brush.Strength = 1.0f;
+		F.Mode.Brush.Falloff = 0.0f;
+		F.Mode.PaintTarget = 0.5f;
+		F.Stroke(F.At(16, 16), 2.0f);
+		CHECK(F.Land->GetLandscape().GetWeight(0, 16, 16) == doctest::Approx(0.5f));
+		// From above, down to it.
+		F.Mode.PaintTarget = 1.0f;
+		F.Stroke(F.At(16, 16), 2.0f);
+		CHECK(F.Land->GetLandscape().GetWeight(0, 16, 16) == 1.0f);
+		F.Mode.PaintTarget = 0.25f;
+		F.Stroke(F.At(16, 16), 2.0f);
+		CHECK(F.Land->GetLandscape().GetWeight(0, 16, 16) == doctest::Approx(0.25f));
+		// Shift still erases all of it.
+		F.Stroke(F.At(16, 16), 2.0f, true);
+		CHECK(F.Land->GetLandscape().GetWeight(0, 16, 16) == 0.0f);
+	}
+
+	TEST_CASE("Ramp lays a slope between two points, the brush's size wide")
+	{
+		FLandFixture F;
+		// A step: 0 below Y = 16, 128 from it on.
+		F.SetHeights([](int32, int32 Y) { return Y >= 24 ? 128.0f : 0.0f; });
+		F.Mode.Tool = ELandscapeTool::Ramp;
+		F.Mode.Brush.Radius = 96.0f;
+		F.Mode.Brush.Falloff = 0.0f;
+		CHECK(!F.Mode.ApplyAt(*F.Land, F.At(16, 16), 0.5f, false)); // a ramp is no stroke
+		REQUIRE(F.Mode.AddRamp(*F.Land, F.At(16, 8), F.At(16, 28)));
+		CHECK(F.Doc->GetUndoDescription() == "Landscape Ramp");
+		// Up the middle, evenly from 0 to 128.
+		CHECK(F.H(16, 8) == doctest::Approx(0.0f));
+		CHECK(F.H(16, 18) == doctest::Approx(64.0f).epsilon(0.01));
+		CHECK(F.H(16, 28) == doctest::Approx(128.0f));
+		CHECK(F.H(18, 13) == doctest::Approx(32.0f).epsilon(0.01)); // within its width
+		// Outside its width and past its ends, as it was.
+		CHECK(F.H(24, 18) == 0.0f);
+		CHECK(F.H(16, 4) == 0.0f);
+		CHECK(F.H(16, 31) == 128.0f);
+		F.Doc->Undo();
+		CHECK(F.H(16, 18) == 0.0f);
+		CHECK(!F.Mode.AddRamp(*F.Land, F.At(16, 8), F.At(16, 8)));
+	}
+
+	TEST_CASE("Erosion wears a cliff down toward the talus angle, keeping the ground's volume")
+	{
+		FLandFixture F;
+		// A cliff 300 high across X = 16.
+		F.SetHeights([](int32 X, int32) { return X >= 16 ? 300.0f : 0.0f; });
+		float Before = 0.0f;
+		for (const float H : F.Land->GetLandscape().GetHeights())
+		{
+			Before += H;
+		}
+		F.Mode.Tool = ELandscapeTool::Erosion;
+		F.Mode.ErosionTalus = 30.0f;
+		F.Mode.Brush.Radius = 4096.0f;
+		F.Mode.Brush.Strength = 1.0f;
+		F.Stroke(F.At(16, 16), 3.0f);
+		CHECK(F.Doc->GetUndoDescription() == "Landscape Erosion");
+		// Lower at the top of the cliff, higher at its foot.
+		CHECK(F.H(16, 16) < 300.0f);
+		CHECK(F.H(15, 16) > 0.0f);
+		// No drop is much steeper than before.
+		float Steepest = 0.0f;
+		for (int32 X = 0; X < 32; ++X)
+		{
+			Steepest = FMath::Max(Steepest, std::fabs(F.H(X + 1, 16) - F.H(X, 16)));
+		}
+		CHECK(Steepest < 250.0f);
+		float After = 0.0f;
+		for (const float H : F.Land->GetLandscape().GetHeights())
+		{
+			After += H;
+		}
+		CHECK(After == doctest::Approx(Before).epsilon(0.001));
+		// Flat ground doesn't move.
+		FLandFixture Flat;
+		Flat.Mode.Tool = ELandscapeTool::Erosion;
+		CHECK(!Flat.Mode.ApplyAt(*Flat.Land, Flat.At(16, 16), 0.5f, false));
+	}
+
+	TEST_CASE("Auto Paint lays a layer by slope and height, the others giving way")
+	{
+		FLandFixture F;
+		// Flat for X < 16, then a 45 degree slope up.
+		F.SetHeights([](int32 X, int32) { return X > 16 ? static_cast<float>(X - 16) * 32.0f : 0.0f; });
+		REQUIRE(F.Mode.AddLayer(*F.Land)); // Grass
+		REQUIRE(F.Mode.AddLayer(*F.Land)); // Rock
+		// Grass everywhere first.
+		REQUIRE(F.Mode.ApplyAutoPaint(*F.Land, 0));
+		CHECK(F.Land->GetLandscape().GetWeight(0, 5, 5) == 1.0f);
+		CHECK(F.Land->GetLandscape().GetWeight(0, 28, 5) == 1.0f);
+
+		// Rock on slopes over 30 degrees.
+		F.Mode.AutoPaint.MinSlope = 30.0f;
+		REQUIRE(F.Mode.ApplyAutoPaint(*F.Land, 1));
+		CHECK(F.Doc->GetUndoDescription() == "Auto Paint Rock");
+		CHECK(F.Land->GetLandscape().GetWeight(1, 28, 5) == 1.0f);
+		CHECK(F.Land->GetLandscape().GetWeight(0, 28, 5) == 0.0f); // the grass gave way
+		CHECK(F.Land->GetLandscape().GetWeight(1, 5, 5) == 0.0f);
+		CHECK(F.Land->GetLandscape().GetWeight(0, 5, 5) == 1.0f);
+
+		// And by height: rock only above 200.
+		F.Doc->Undo();
+		F.Mode.AutoPaint.MinSlope = 0.0f;
+		F.Mode.AutoPaint.MinHeight = 200.0f;
+		F.Mode.AutoPaint.HeightFade = 0.0f;
+		REQUIRE(F.Mode.ApplyAutoPaint(*F.Land, 1));
+		CHECK(F.Land->GetLandscape().GetWeight(1, 30, 5) == 1.0f); // 448 high
+		CHECK(F.Land->GetLandscape().GetWeight(1, 20, 5) == 0.0f); // 128 high
+		CHECK(!F.Mode.ApplyAutoPaint(*F.Land, 7));
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Landscape level of detail: components, culling, the grid trace.
+
+namespace
+{
+	// Rolling hills, so coarser levels really differ from the full grid.
+	std::shared_ptr<const Landscape> Hills(int32 QuadsX, int32 QuadsY, float Amplitude = 40.0f)
+	{
+		std::vector<float> Heights;
+		for (int32 Y = 0; Y <= QuadsY; ++Y)
+		{
+			for (int32 X = 0; X <= QuadsX; ++X)
+			{
+				Heights.push_back(Amplitude * std::sin(X * 0.7f) * std::cos(Y * 0.5f) + Amplitude * 0.5f * std::sin(X * 2.3f + Y * 1.7f));
+			}
+		}
+		return Landscape::Create(QuadsX, QuadsY, 32.0f, Heights);
+	}
+
+	struct FLodView
+	{
+		FViewFixture F;
+		Object* Land = nullptr;
+
+		bool Create(ERHIBackend Backend, int32 Quads)
+		{
+			if (!F.Create(Backend, EMapViewType::Perspective))
+			{
+				return false;
+			}
+			Land = F.Doc->AddLandscape(Hills(Quads, Quads), Vector3d(0.0f, 0.0f, 0.0f));
+			REQUIRE(Land);
+			F.Doc->SetSelection({ Land });
+			F.Client->FrameSelection();
+			F.Doc->ClearSelection();
+			F.Client->SetViewMode(EMapViewMode::Lit);
+			return true;
+		}
+
+		// The triangles and components one frame draws.
+		TArray<uint8> Draw(int32& Triangles, int32& Components)
+		{
+			View::landscapeTrianglesDrawn = 0;
+			View::landscapeComponentsDrawn = 0;
+			TArray<uint8> Pixels = F.Render();
+			Triangles = View::landscapeTrianglesDrawn;
+			Components = View::landscapeComponentsDrawn;
+			return Pixels;
+		}
+	};
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("A landscape's grid trace hits where its full mesh does")
+	{
+		EnsureMapCore();
+		const std::shared_ptr<const Landscape> Land = Hills(40, 24);
+		REQUIRE(Land);
+		CHECK(Land->GetComponentsX() == 2);
+		CHECK(Land->GetComponentsY() == 1);
+		float Low, High;
+		Land->GetComponentHeights(1, 0, Low, High);
+		CHECK(Low >= Land->GetMinHeight());
+		CHECK(High <= Land->GetMaxHeight());
+		CHECK(Land->GetMaxHeight() > 30.0f);
+
+		const StaticMesh& Mesh = *Land->GetMesh();
+		uint32 Seed = 7;
+		const auto Random = [&Seed](float Lo, float Hi)
+		{
+			Seed = Seed * 1664525u + 1013904223u;
+			return Lo + (Hi - Lo) * static_cast<float>(Seed >> 8) / 16777216.0f;
+		};
+		int32 Hits = 0;
+		for (int32 Ray = 0; Ray < 400; ++Ray)
+		{
+			// From above, from below and from the side, at all angles.
+			const Vector3d Origin(Random(-800.0f, 800.0f), Random(-500.0f, 500.0f), Ray % 3 == 0 ? -300.0f : Random(100.0f, 600.0f));
+			const Vector3d Toward(Random(-640.0f, 640.0f), Random(-384.0f, 384.0f), Random(-60.0f, 60.0f));
+			Vector3d Direction(Toward);
+			Direction.SubVector(Origin);
+			const Line Probe(Origin, Direction);
+			float MeshDepth = 0.0f, GridDepth = 0.0f;
+			const bool bMesh = Mesh.HitMesh(Probe, 0.0f, 1.0e7f, MeshDepth);
+			const bool bGrid = Land->Raycast(Probe, 0.0f, 1.0e7f, GridDepth);
+			CAPTURE(Ray);
+			REQUIRE(bMesh == bGrid);
+			if (bMesh)
+			{
+				++Hits;
+				CHECK(GridDepth == doctest::Approx(MeshDepth).epsilon(1e-3));
+			}
+		}
+		CHECK(Hits > 250);
+		// Range limits count.
+		const Line Down(Vector3d(0.0f, 0.0f, 500.0f), Vector3d(0.0f, 0.0f, -1.0f));
+		float Depth = 0.0f;
+		CHECK(Land->Raycast(Down, 0.0f, 1.0e7f, Depth));
+		CHECK(!Land->Raycast(Down, 0.0f, 300.0f, Depth));
+	}
+
+	TEST_CASE("A big landscape is drawn coarser far away, never with cracks between levels")
+	{
+		FTestLogCapture Log;
+		FLodView V;
+		if (!V.Create(ERHIBackend::D3D12, 256))
+		{
+			MESSAGE("D3D12 device unavailable; skipped");
+			return;
+		}
+		int32 Triangles = 0, Components = 0;
+		const float Detail = View::landscapeDetailPixels;
+		View::landscapeDetailPixels = 0.0f; // every quad, as before levels
+		V.Draw(Triangles, Components);
+		const int32 Full = Triangles;
+		View::landscapeDetailPixels = Detail;
+		const TArray<uint8> Pixels = V.Draw(Triangles, Components);
+		CHECK(Components == 64);           // framed: all of it in view
+		CHECK(Full > 60000);
+		CHECK(Triangles < Full / 8);       // far ground at a fraction
+		CHECK(Triangles > 500);
+		MESSAGE("full ", Full, " triangles, with levels ", Triangles);
+
+		// Inside the landscape's outline every pixel is ground: no crack
+		// shows the background through.
+		const FColor Background = PixelAt(V.F.Render(), 0, 0);
+		const Vector3d Corners[4] = { { -3600.0f, -3600.0f, 0.0f }, { 3600.0f, -3600.0f, 0.0f }, { 3600.0f, 3600.0f, 0.0f }, { -3600.0f, 3600.0f, 0.0f } };
+		FVector2 Screen[4];
+		for (int32 I = 0; I < 4; ++I)
+		{
+			Screen[I] = V.F.At(Corners[I]);
+		}
+		int32 Checked = 0, Holes = 0;
+		for (float U = 0.0f; U <= 1.0f; U += 0.02f)
+		{
+			for (float W = 0.0f; W <= 1.0f; W += 0.02f)
+			{
+				const FVector2 Bottom = Screen[0] + (Screen[1] - Screen[0]) * U;
+				const FVector2 Top = Screen[3] + (Screen[2] - Screen[3]) * U;
+				const FVector2 P = Bottom + (Top - Bottom) * W;
+				if (P.X < 0.0f || P.Y < 0.0f || P.X >= 256.0f || P.Y >= 256.0f)
+				{
+					continue;
+				}
+				++Checked;
+				Holes += PixelAt(Pixels, static_cast<int32>(P.X), static_cast<int32>(P.Y)) == Background ? 1 : 0;
+			}
+		}
+		CHECK(Checked > 1000);
+		CHECK(Holes == 0);
+		CHECK(Log.Problems.empty());
+	}
+
+	TEST_CASE("Landscape components out of the view are not drawn")
+	{
+		FLodView V;
+		if (!V.Create(ERHIBackend::D3D12, 256))
+		{
+			MESSAGE("D3D12 device unavailable; skipped");
+			return;
+		}
+		// Close to a cube at one corner, looking out from over the landscape:
+		// most of it is behind or beside the camera.
+		Object* Cube = V.F.Doc->AddMesh("Cube", Vector3d(3900.0f, 3900.0f, 64.0f));
+		REQUIRE(Cube);
+		V.F.Doc->SetSelection({ Cube });
+		V.F.Client->FrameSelection();
+		V.F.Doc->ClearSelection();
+		int32 Triangles = 0, Components = 0;
+		V.Draw(Triangles, Components);
+		CHECK(Components > 0);
+		CHECK(Components < 32);
+		// Up close, the nearest ground is at full detail.
+		CHECK(Triangles > 200);
+	}
+
+	TEST_CASE("Editing a big landscape stays quick: no mesh is built for it")
+	{
+		EnsureMapCore();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		Mode.NewQuadsX = 512;
+		Mode.NewQuadsY = 512;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		REQUIRE(Mode.AddLayer(*Land));
+		Mode.Tool = ELandscapeTool::Sculpt;
+		Mode.Brush.Radius = 512.0f;
+		const double Start = FPlatformTime::Seconds();
+		Mode.BeginStroke(*Land, Vector3d(0.0f, 0.0f, 0.0f), false);
+		for (int32 Step = 0; Step < 30; ++Step)
+		{
+			Mode.ApplyAt(*Land, Vector3d(0.0f, 0.0f, 0.0f), 1.0f / 30.0f, false);
+			Vector3d Hit;
+			REQUIRE(Mode.TraceLandscape(Vector3d(10.0f, 10.0f, 4000.0f), Vector3d(0.0f, 0.0f, -1.0f), Hit) == Land);
+			CHECK(Hit.GetZ() > 0.0f);
+		}
+		Mode.EndStroke();
+		const double Seconds = FPlatformTime::Seconds() - Start;
+		MESSAGE("30 sculpt steps and traces on 512 x 512 quads: ", Seconds * 1000.0, " ms");
+		CHECK(Seconds < 1.5); // was about 3 s with a mesh built each step
+		// Bounds and the full mesh still agree.
+		Vector3d Low, High;
+		Land->GetBoundingVectors(Low, High);
+		CHECK(High.GetZ() == doctest::Approx(Land->GetLandscape().GetMaxHeight()));
+		CHECK(Land->GetMesh().GetNumVertices() == 513 * 513);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Landscape layers blended per pixel on the GPU.
+
+namespace
+{
+	// How much the pixels around a point differ (the spread of their green).
+	float Contrast(const TArray<uint8>& Pixels, int32 CX, int32 CY, int32 Half)
+	{
+		double Sum = 0.0, Squares = 0.0;
+		int32 Count = 0;
+		for (int32 Y = CY - Half; Y <= CY + Half; ++Y)
+		{
+			for (int32 X = CX - Half; X <= CX + Half; ++X)
+			{
+				const double G = PixelAt(Pixels, X, Y).G;
+				Sum += G;
+				Squares += G * G;
+				++Count;
+			}
+		}
+		const double Mean = Sum / Count;
+		return static_cast<float>(std::sqrt(FMath::Max(Squares / Count - Mean * Mean, 0.0)));
+	}
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("A landscape's layers are packed for the GPU: weights in two slices, textures a slice each")
+	{
+		EnsureMapCore();
+		const Landscape Field(8, 4, 32.0f);
+		std::vector<LandscapeLayer> Layers;
+		for (int32 Index = 0; Index < 6; ++Index)
+		{
+			LandscapeLayer Layer = Field.MakeLayer("L", static_cast<uint8>(40 * Index), 100, 200);
+			Layer.texture = Index == 2 ? "builtin:Rock" : "";
+			Layer.weights[static_cast<SIZE_T>(Index)] = 1.0f;
+			Layers.push_back(Layer);
+		}
+		const std::shared_ptr<const Landscape> Land = Field.WithLayers(Layers);
+		REQUIRE(FLandscapeLayerImages::CanBlend(*Land));
+		FLandscapeLayerImages Images;
+		CHECK(Images.UpdateWeights(Land) == FIntRect(0, 0, 9, 5));
+		REQUIRE(Images.GetWeights().size() == 9 * 5 * 4 * 2);
+		// Layer 1 is slice 0's green at point 1; layer 5 slice 1's green at point 5.
+		CHECK(Images.GetWeights()[1 * 4 + 1] == 255);
+		CHECK(Images.GetWeights()[9 * 5 * 4 + 5 * 4 + 1] == 255);
+		CHECK(Images.GetWeights()[0 * 4 + 1] == 0);
+		CHECK(Images.UpdateWeights(Land).IsEmpty());
+
+		// A change at one point: just it.
+		std::vector<LandscapeLayer> Changed = Land->GetLayers();
+		Changed[3].weights[9 * 2 + 4] = 0.5f;
+		const std::shared_ptr<const Landscape> Painted = Land->WithLayers(Changed);
+		CHECK(Images.UpdateWeights(Painted) == FIntRect(4, 2, 5, 3));
+		CHECK(Images.GetWeights()[(9 * 2 + 4) * 4 + 3] == 128);
+
+		// Textures: one size (the built-in rock's 256), all mips, a slice a layer.
+		REQUIRE(Images.UpdateTextures(*Land));
+		CHECK(!Images.UpdateTextures(*Painted)); // the look is the same
+		CHECK(Images.GetTextureSize() == 256);
+		CHECK(Images.GetMipLevels() == 9);
+		CHECK(Images.GetNumSlices() == 6);
+		const SIZE_T SliceBytes = GetMipChainBytes(EPixelFormat::R8G8B8A8_UNORM, 256, 256, 9);
+		REQUIRE(Images.GetTextures().size() == SliceBytes * 6);
+		// A plain layer is its color all over; the rock is tinted, about its color.
+		const uint8* Plain = Images.GetTextures().data() + SliceBytes * 4;
+		CHECK(Plain[0] == 160);
+		CHECK(Plain[1] == 100);
+		CHECK(Plain[2] == 200);
+		const uint8* RockSmallest = Images.GetTextures().data() + SliceBytes * 3 - 4;
+		CHECK(std::abs(static_cast<int32>(RockSmallest[0]) - 80) < 16);
+		CHECK(std::abs(static_cast<int32>(RockSmallest[2]) - 200) < 40);
+
+		float Constants[12];
+		FLandscapeLayerImages::GetConstants(*Land, Constants);
+		CHECK(Constants[0] == 256.0f);
+		CHECK(Constants[2] == 6.0f);
+		CHECK(Constants[4] == doctest::Approx(1.0f / 512.0f));
+		// More layers than the GPU blends: drawn baked.
+		Layers.resize(9, Layers[2]);
+		CHECK(!FLandscapeLayerImages::CanBlend(*Field.WithLayers(Layers)));
+	}
+
+	TEST_CASE("Landscape layers blended on the GPU are sharper up close than baked ones (D3D12 and Vulkan)")
+	{
+		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		{
+			CAPTURE(ToString(Backend));
+			FTestLogCapture Log;
+			FTempFolder Temp;
+			FViewFixture F;
+			if (!F.Create(Backend, EMapViewType::Perspective))
+			{
+				MESSAGE(ToString(Backend), " device unavailable; skipped");
+				continue;
+			}
+			// Big quads, and a checker of 8 x 8 squares repeating every 64 units:
+			// squares of 8 units, half a baked texel (256 / 16 units).
+			TArray<FColor> Checker;
+			for (int32 Y = 0; Y < 64; ++Y)
+			{
+				for (int32 X = 0; X < 64; ++X)
+				{
+					Checker.push_back(((X / 8 + Y / 8) & 1) ? FColor(255, 255, 255) : FColor(0, 0, 0));
+				}
+			}
+			const FString Bmp = Temp.File("checker.bmp");
+			WriteBmp(Bmp, 64, 64, Checker);
+			Object* Land = F.Doc->AddLandscape(Covered(Landscape(8, 8, 256.0f), "Checker", FColor(255, 255, 255), std::string(Bmp.View()), 64.0f),
+				Vector3d(0.0f, 0.0f, 0.0f));
+			REQUIRE(Land);
+			// Close over its middle: framed on a cube there, which then goes.
+			Object* Marker = F.Doc->AddMesh("Cube", Vector3d(0.0f, 0.0f, 64.0f));
+			REQUIRE(Marker);
+			F.Doc->SetSelection({ Marker });
+			F.Client->FrameSelection();
+			F.Doc->Undo();
+			F.Client->SetViewMode(EMapViewMode::Unlit);
+
+			F.Resources->bBlendLandscapeLayers = true;
+			const TArray<uint8> Sharp = F.Render();
+			F.Resources->bBlendLandscapeLayers = false;
+			const TArray<uint8> Baked = F.Render();
+			const float SharpContrast = Contrast(Sharp, 128, 160, 24);
+			const float BakedContrast = Contrast(Baked, 128, 160, 24);
+			MESSAGE(std::string(ToString(Backend)), ": contrast blended ", SharpContrast, ", baked ", BakedContrast);
+			CHECK(SharpContrast > 50.0f);
+			CHECK(SharpContrast > BakedContrast * 2.0f);
+			CHECK(Log.Problems.empty());
+			for (const FString& Problem : Log.Problems)
+			{
+				MESSAGE(Problem.c_str());
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Foliage.
+
+
+namespace
+{
+	struct FFoliageFixture
+	{
+		TUniquePtr<FMapDocument> Doc;
+		FMapFoliageMode Mode;
+		Object* Land = nullptr;
+
+		// A flat landscape 2048 units across, or one whose ground rises
+		// along X at Slope degrees.
+		explicit FFoliageFixture(float SlopeDegrees = 0.0f)
+		{
+			EnsureMapCore();
+			Doc = FMapDocument::CreateNew();
+			Mode.SetDocument(Doc.get());
+			std::vector<float> Heights;
+			const float Rise = std::tan(SlopeDegrees / 57.29578f) * 32.0f;
+			for (int32 Y = 0; Y <= 64; ++Y)
+			{
+				for (int32 X = 0; X <= 64; ++X)
+				{
+					Heights.push_back(static_cast<float>(X - 32) * Rise);
+				}
+			}
+			Land = Doc->AddLandscape(Landscape::Create(64, 64, 32.0f, Heights), Vector3d(0.0f, 0.0f, 0.0f));
+			REQUIRE(Land);
+			Mode.Brush.Radius = 256.0f;
+			Mode.Brush.Strength = 1.0f;
+			Mode.Brush.Falloff = 0.0f;
+		}
+
+		void Stroke(const Vector3d& At, float Seconds, bool bErase = false)
+		{
+			REQUIRE(Mode.BeginStroke(At, bErase));
+			for (float T = 0.0f; T < Seconds; T += 1.0f / 30.0f)
+			{
+				Mode.ApplyAt(At, 1.0f / 30.0f, bErase);
+			}
+			Mode.EndStroke();
+		}
+
+		const Foliage& Leaves() { return Mode.GetFoliageObject()->GetFoliage(); }
+	};
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("Foliage meshes are colored and stand on their pivot")
+	{
+		EnsureMapCore();
+		REQUIRE(StaticMesh::GetFoliageMeshNames().size() == 5);
+		for (const std::string& Name : StaticMesh::GetFoliageMeshNames())
+		{
+			CAPTURE(Name);
+			const std::shared_ptr<const StaticMesh> Mesh = StaticMesh::Find(Name.c_str());
+			REQUIRE(Mesh);
+			CHECK(Mesh->HasVertexColors());
+			CHECK(Mesh->GetTriangles().size() > 10);
+			CHECK(Mesh->GetTriangles().size() < 600); // cheap: there may be thousands
+			Vector3d Low, High;
+			Mesh->GetBounds(Low, High);
+			CHECK(High.GetZ() > 20.0f);
+			CHECK(Low.GetZ() > -40.0f); // at most a little below the ground
+		}
+		// The basic shapes are still just those.
+		CHECK(StaticMesh::GetBasicShapeNames().size() == 5);
+		// A tree is green on top and brown at its foot.
+		const std::shared_ptr<const StaticMesh> Tree = StaticMesh::Find("Tree");
+		const unsigned int Foot = Tree->GetVertexColor(0);
+		CHECK((Foot & 0xFF) > ((Foot >> 8) & 0xFF)); // more red than green: bark
+	}
+
+	TEST_CASE("Foliage instances are placed by their up, yaw and scale, and saved in .qle")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		FoliageType Bush = FMapFoliageMode::MakePreset("Bush");
+		FoliageType Tree = FMapFoliageMode::MakePreset("Tree");
+		Tree.name = "Big Oak";
+		FoliageInstance A;
+		A.type = 0;
+		A.position.NewVector(100.0f, 200.0f, 30.0f);
+		A.yaw = 1.5707963f; // a quarter turn: x goes to y
+		A.scale = 2.0f;
+		FoliageInstance B;
+		B.type = 1;
+		B.position.NewVector(-50.0f, 0.0f, 0.0f);
+		B.up.NewVector(1.0f, 0.0f, 1.0f); // leaning 45 degrees toward +x
+		const auto Leaves = std::make_shared<Foliage>(std::vector<FoliageType>{ Bush, Tree }, std::vector<FoliageInstance>{ A, B });
+		CHECK(Leaves->GetNumInstances() == 2);
+		CHECK(Leaves->CountInstances(1) == 1);
+		REQUIRE(Leaves->GetMesh(0));
+
+		const Matrix44 MA = Leaves->GetInstanceMatrix(A);
+		Vector3d P;
+		MA.Transform(P, Vector3d(10.0f, 0.0f, 0.0f));
+		CHECK(Same(P, Vector3d(100.0f, 220.0f, 30.0f)));
+		MA.Transform(P, Vector3d(0.0f, 0.0f, 10.0f));
+		CHECK(Same(P, Vector3d(100.0f, 200.0f, 50.0f)));
+		const Matrix44 MB = Leaves->GetInstanceMatrix(B);
+		MB.Transform(P, Vector3d(0.0f, 0.0f, 100.0f));
+		CHECK(Same(P, Vector3d(-50.0f + 70.7107f, 0.0f, 70.7107f)));
+
+		Vector3d Low, High;
+		REQUIRE(Leaves->GetBounds(Low, High));
+		CHECK(High.GetZ() > 30.0f);
+		// Removing the first type drops its instances; the second moves up.
+		const std::shared_ptr<const Foliage> Fewer = Leaves->WithTypes({ Tree }, { 1 });
+		CHECK(Fewer->GetNumTypes() == 1);
+		REQUIRE(Fewer->GetNumInstances() == 1);
+		CHECK(Fewer->GetInstances()[0].type == 0);
+
+		// .qle: types (names with spaces) and instances.
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		REQUIRE(Doc->AddFoliage(Leaves));
+		FString Error;
+		const FString Qle = Temp.File("foliage.qle");
+		REQUIRE(Doc->Save(Qle, Error));
+		TUniquePtr<FMapDocument> Reopened = FMapDocument::Open(Qle, Error);
+		REQUIRE(Reopened);
+		const Object* Loaded = nullptr;
+		for (Object* Obj : Reopened->GetObjects())
+		{
+			Loaded = Obj->HasFoliage() ? Obj : Loaded;
+		}
+		REQUIRE(Loaded);
+		const Foliage& Back = Loaded->GetFoliage();
+		REQUIRE(Back.GetNumTypes() == 2);
+		CHECK(Back.GetTypes()[1].name == "Big Oak");
+		CHECK(Back.GetTypes()[1] == Tree);
+		REQUIRE(Back.GetNumInstances() == 2);
+		CHECK(Same(Back.GetInstances()[0].position, A.position));
+		CHECK(Back.GetInstances()[0].yaw == doctest::Approx(A.yaw));
+		CHECK(Back.GetInstances()[0].scale == 2.0f);
+		CHECK(Same(Back.GetInstances()[1].up, B.up));
+	}
+
+	TEST_CASE("Painting foliage fills the brush to the type's density, on the ground, as one undo step")
+	{
+		FFoliageFixture F;
+		REQUIRE(F.Mode.AddType("Grass"));
+		CHECK(F.Doc->GetUndoDescription() == "Add Foliage Type");
+		F.Stroke(Vector3d(0.0f, 0.0f, 0.0f), 2.0f);
+		CHECK(F.Doc->GetUndoDescription() == "Paint Foliage");
+		const float Expected = 2000.0f * 1.0e-6f * 3.14159265f * 256.0f * 256.0f; // about 412
+		const int32 Count = F.Leaves().CountInstances(0);
+		MESSAGE("grass: ", Count, " of about ", Expected);
+		CHECK(Count > Expected * 0.85f);
+		CHECK(Count < Expected * 1.1f);
+		for (const FoliageInstance& Instance : F.Leaves().GetInstances())
+		{
+			const float R = std::sqrt(Instance.position.GetX() * Instance.position.GetX() + Instance.position.GetY() * Instance.position.GetY());
+			CHECK(R <= 256.5f);
+			CHECK(std::fabs(Instance.position.GetZ()) < 0.5f); // on the flat ground
+			CHECK(Instance.scale >= 0.7f);
+			CHECK(Instance.scale <= 1.4f);
+		}
+		// Painting again there adds nothing: it is full.
+		F.Stroke(Vector3d(0.0f, 0.0f, 0.0f), 1.0f);
+		CHECK(F.Leaves().CountInstances(0) < Count + Expected * 0.1f);
+		// Undo takes a whole stroke away (the second added little or nothing).
+		while (F.Doc->GetUndoDescription() == "Paint Foliage")
+		{
+			F.Doc->Undo();
+		}
+		REQUIRE(F.Mode.GetFoliageObject());
+		CHECK(F.Leaves().CountInstances(0) == 0);
+	}
+
+	TEST_CASE("Foliage keeps its spacing, grows only on the slopes it may, and erases")
+	{
+		FFoliageFixture F;
+		REQUIRE(F.Mode.AddType("Tree"));
+		REQUIRE(F.Mode.AddType("Bush"));
+		F.Mode.Brush.Radius = 900.0f;
+		F.Stroke(Vector3d(0.0f, 0.0f, 0.0f), 3.0f);
+		const std::vector<FoliageInstance>& All = F.Leaves().GetInstances();
+		int32 Trees = 0;
+		for (SIZE_T I = 0; I < All.size(); ++I)
+		{
+			if (All[I].type != 0)
+			{
+				continue;
+			}
+			++Trees;
+			for (SIZE_T J = I + 1; J < All.size(); ++J)
+			{
+				if (All[J].type == 0)
+				{
+					const float Dx = All[I].position.GetX() - All[J].position.GetX(), Dy = All[I].position.GetY() - All[J].position.GetY();
+					CHECK(Dx * Dx + Dy * Dy >= 220.0f * 220.0f);
+				}
+			}
+		}
+		CHECK(Trees > 5);
+		const int32 Bushes = F.Leaves().CountInstances(1);
+		CHECK(Bushes > 20);
+
+		// Erasing only the trees (bushes unchecked).
+		F.Mode.SetActive(1, false);
+		F.Mode.Brush.Radius = 2000.0f;
+		F.Stroke(Vector3d(0.0f, 0.0f, 0.0f), 2.0f, true);
+		CHECK(F.Doc->GetUndoDescription() == "Erase Foliage");
+		CHECK(F.Leaves().CountInstances(0) == 0);
+		CHECK(F.Leaves().CountInstances(1) == Bushes);
+
+		// Single: one where clicked.
+		F.Mode.SetActive(0, true);
+		F.Mode.Tool = EFoliageTool::Single;
+		F.Stroke(Vector3d(600.0f, 600.0f, 0.0f), 0.5f);
+		CHECK(F.Leaves().CountInstances(0) == 1);
+		CHECK(F.Doc->GetUndoDescription() == "Place Foliage");
+
+		// A 40 degree slope: no trees (30 at most), rocks (any slope) yes.
+		FFoliageFixture Steep(40.0f);
+		REQUIRE(Steep.Mode.AddType("Tree"));
+		REQUIRE(Steep.Mode.AddType("Rock"));
+		Steep.Mode.Brush.Radius = 600.0f;
+		Steep.Stroke(Vector3d(0.0f, 0.0f, 0.0f), 2.0f);
+		CHECK(Steep.Leaves().CountInstances(0) == 0);
+		CHECK(Steep.Leaves().CountInstances(1) > 3);
+		// Rocks lean with the ground, as far as they may (45 degrees).
+		const FoliageInstance& Rock = Steep.Leaves().GetInstances().back();
+		CHECK(std::acos(Rock.up.GetZ() / Rock.up.GetMag()) * 57.29578f == doctest::Approx(40.0f).epsilon(0.05));
+	}
+
+	TEST_CASE("Sculpting a landscape moves the foliage standing on it")
+	{
+		FFoliageFixture F;
+		REQUIRE(F.Mode.AddType("Bush"));
+		F.Mode.Brush.Radius = 700.0f;
+		F.Stroke(Vector3d(0.0f, 0.0f, 0.0f), 2.0f);
+		REQUIRE(F.Leaves().GetNumInstances() > 10);
+		FMapLandscapeMode Sculpt;
+		Sculpt.SetDocument(F.Doc.get());
+		Sculpt.Tool = ELandscapeTool::Sculpt;
+		Sculpt.Brush.Radius = 2000.0f;
+		Sculpt.Brush.Strength = 1.0f;
+		Sculpt.Brush.Falloff = 0.0f;
+		Sculpt.BeginStroke(*F.Land, Vector3d(0.0f, 0.0f, 0.0f), false);
+		Sculpt.ApplyAt(*F.Land, Vector3d(0.0f, 0.0f, 0.0f), 0.5f, false);
+		Sculpt.EndStroke();
+		const float Raised = F.Land->GetLandscape().GetHeight(32, 32);
+		CHECK(Raised > 100.0f);
+		for (const FoliageInstance& Instance : F.Leaves().GetInstances())
+		{
+			const float Ground = F.Land->GetLandscape().SampleHeight(Instance.position.GetX(), Instance.position.GetY());
+			CHECK(std::fabs(Instance.position.GetZ() - Ground) < 0.5f);
+		}
+		// One undo step puts both back.
+		CHECK(F.Doc->GetUndoDescription() == "Landscape Sculpt");
+		F.Doc->Undo();
+		CHECK(std::fabs(F.Leaves().GetInstances()[0].position.GetZ()) < 0.5f);
+	}
+
+	TEST_CASE("Foliage is drawn (D3D12 and Vulkan), culled past its distance, and not picked")
+	{
+		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		{
+			CAPTURE(std::string(ToString(Backend)));
+			FTestLogCapture Log;
+			FViewFixture F;
+			if (!F.Create(Backend, EMapViewType::Perspective))
+			{
+				MESSAGE(std::string(ToString(Backend)), " device unavailable; skipped");
+				continue;
+			}
+			Object* Land = F.Doc->AddLandscape(16, 16, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
+			REQUIRE(Land);
+			F.Doc->SetSelection({ Land });
+			F.Client->FrameSelection();
+			F.Doc->ClearSelection();
+			F.Client->SetViewMode(EMapViewMode::Lit);
+			const FVector2 Center = F.At(Vector3d(0.0f, 0.0f, 0.0f));
+			const int32 X = static_cast<int32>(Center.X), Y = static_cast<int32>(Center.Y);
+			const FColor Bare = PixelAt(F.Render(), X, Y);
+
+			FMapFoliageMode Mode;
+			Mode.SetDocument(F.Doc.get());
+			REQUIRE(Mode.AddType("Bush"));
+			FoliageType Dense = Mode.GetFoliageObject()->GetFoliage().GetTypes()[0];
+			Dense.density = 400.0f;
+			Dense.radius = 20.0f;
+			REQUIRE(Mode.SetType(0, Dense));
+			Mode.Brush.Radius = 200.0f;
+			Mode.Brush.Strength = 1.0f;
+			Mode.Brush.Falloff = 0.0f;
+			REQUIRE(Mode.BeginStroke(Vector3d(0.0f, 0.0f, 0.0f), false));
+			for (int32 Step = 0; Step < 60; ++Step)
+			{
+				Mode.ApplyAt(Vector3d(0.0f, 0.0f, 0.0f), 1.0f / 30.0f, false);
+			}
+			Mode.EndStroke();
+			REQUIRE(Mode.GetFoliageObject()->GetFoliage().GetNumInstances() > 20);
+
+			View::foliageInstancesDrawn = 0;
+			const TArray<uint8> Pixels = F.Render();
+			const FColor Leafy = PixelAt(Pixels, X, Y);
+			CHECK(View::foliageInstancesDrawn > 20);
+			CHECK(Leafy != Bare);
+			// Beside the origin's axis lines, the bushes' green.
+			int32 Green = 0, Seen = 0;
+			const FVector2 Beside = F.At(Vector3d(60.0f, 60.0f, 30.0f));
+			for (int32 DY = -6; DY <= 6; ++DY)
+			{
+				for (int32 DX = -6; DX <= 6; ++DX)
+				{
+					const FColor C = PixelAt(Pixels, static_cast<int32>(Beside.X) + DX, static_cast<int32>(Beside.Y) + DY);
+					Green += C.G > C.R + 20 && C.G > C.B + 20 ? 1 : 0;
+					++Seen;
+				}
+			}
+			CHECK(Green > Seen / 3);
+			// Culled: drawn nowhere farther than 1 unit.
+			Dense.cullDistance = 1.0f;
+			REQUIRE(Mode.SetType(0, Dense));
+			View::foliageInstancesDrawn = 0;
+			const FColor Culled = PixelAt(F.Render(), X, Y);
+			CHECK(View::foliageInstancesDrawn == 0);
+			CHECK(Culled == Bare);
+			// Rays go through it to the ground.
+			Vector3d Hit;
+			REQUIRE(Mode.TraceSurface(Vector3d(0.0f, 0.0f, 500.0f), Vector3d(0.0f, 0.0f, -1.0f), Hit));
+			CHECK(std::fabs(Hit.GetZ()) < 0.5f);
+			CHECK(Log.Problems.empty());
+			for (const FString& Problem : Log.Problems)
+			{
+				MESSAGE(Problem.c_str());
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Foliage drawn instanced on the GPU.
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("Instanced foliage looks as the triangles View makes would, and is quicker (D3D12 and Vulkan)")
+	{
+		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		{
+			CAPTURE(std::string(ToString(Backend)));
+			FTestLogCapture Log;
+			FViewFixture F;
+			if (!F.Create(Backend, EMapViewType::Perspective))
+			{
+				MESSAGE(std::string(ToString(Backend)), " device unavailable; skipped");
+				continue;
+			}
+			Object* Land = F.Doc->AddLandscape(32, 32, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
+			REQUIRE(Land);
+			F.Doc->SetSelection({ Land });
+			F.Client->FrameSelection();
+			F.Doc->ClearSelection();
+			F.Client->SetViewMode(EMapViewMode::Lit);
+
+			// Trees, bushes, rocks and grass all over it.
+			FMapFoliageMode Mode;
+			Mode.SetDocument(F.Doc.get());
+			for (const char* Name : { "Tree", "Bush", "Rock", "Grass" })
+			{
+				REQUIRE(Mode.AddType(Name));
+			}
+			Mode.Brush.Radius = 700.0f;
+			Mode.Brush.Strength = 1.0f;
+			Mode.Brush.Falloff = 0.0f;
+			REQUIRE(Mode.BeginStroke(Vector3d(0.0f, 0.0f, 0.0f), false));
+			for (int32 Step = 0; Step < 90; ++Step)
+			{
+				Mode.ApplyAt(Vector3d(0.0f, 0.0f, 0.0f), 1.0f / 30.0f, false);
+			}
+			Mode.EndStroke();
+			const int32 Instances = Mode.GetFoliageObject()->GetFoliage().GetNumInstances();
+			REQUIRE(Instances > 1500);
+
+			F.Resources->bInstanceMeshes = false;
+			const TArray<uint8> Triangles = F.Render();
+			F.Resources->bInstanceMeshes = true;
+			View::foliageInstancesDrawn = 0;
+			const TArray<uint8> Instanced = F.Render();
+			CHECK(View::foliageInstancesDrawn > 1000);
+
+			// The same picture but for edges (rasterizing the same triangles
+			// from other vertices): nearly every pixel within a few levels.
+			int32 Close = 0, Total = 0;
+			for (int32 Y = 0; Y < 256; ++Y)
+			{
+				for (int32 X = 0; X < 256; ++X)
+				{
+					const FColor A = PixelAt(Triangles, X, Y), B = PixelAt(Instanced, X, Y);
+					const int32 Diff = std::abs(int32(A.R) - int32(B.R)) + std::abs(int32(A.G) - int32(B.G)) + std::abs(int32(A.B) - int32(B.B));
+					Close += Diff <= 12 ? 1 : 0;
+					++Total;
+				}
+			}
+			MESSAGE(std::string(ToString(Backend)), ": ", Instances, " instances, ", Close * 100 / Total, "% of pixels alike");
+			CHECK(Close > Total * 9 / 10);
+
+			// And quicker to draw.
+			// (Frames as the editor draws them: no reading the picture back.)
+			const auto Time = [&F](bool bInstanced)
+			{
+				F.Resources->bInstanceMeshes = bInstanced;
+				F.Render();
+				const double Start = FPlatformTime::Seconds();
+				for (int32 Frame = 0; Frame < 10; ++Frame)
+				{
+					F.Client->RequestRedraw();
+					FRHICommandList& CommandList = F.Device->BeginFrame();
+					F.Renderer->BeginFrame();
+					F.Client->RenderIfNeeded(CommandList);
+					F.Device->EndFrame();
+				}
+				F.Device->WaitIdle();
+				return (FPlatformTime::Seconds() - Start) / 10.0;
+			};
+			const double Cpu = Time(false);
+			const double Gpu = Time(true);
+			MESSAGE(std::string(ToString(Backend)), ": a frame as triangles ", Cpu * 1000.0, " ms, instanced ", Gpu * 1000.0, " ms");
+			// (Software rasterizers, as tests use, spend the time filling
+			// pixels either way: instanced is no slower there.)
+			CHECK(Gpu < Cpu * 1.2);
+			CHECK(Log.Problems.empty());
+			for (const FString& Problem : Log.Problems)
+			{
+				MESSAGE(Problem.c_str());
+			}
+		}
+	}
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("Many foliage instances on the GPU (hardware adapter, when there is one)")
+	{
+		FViewFixture F;
+		if (!F.Create(ERHIBackend::D3D12, EMapViewType::Perspective, false))
+		{
+			MESSAGE("no hardware D3D12 device; skipped");
+			return;
+		}
+		Object* Land = F.Doc->AddLandscape(64, 64, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		F.Doc->SetSelection({ Land });
+		F.Client->FrameSelection();
+		F.Doc->ClearSelection();
+		F.Client->SetViewMode(EMapViewMode::Lit);
+		FMapFoliageMode Mode;
+		Mode.SetDocument(F.Doc.get());
+		REQUIRE(Mode.AddType("Bush"));
+		REQUIRE(Mode.AddType("Grass"));
+		FoliageType Bush = Mode.GetFoliageObject()->GetFoliage().GetTypes()[0];
+		Bush.density = 3000.0f;
+		Bush.radius = 0.0f;
+		REQUIRE(Mode.SetType(0, Bush));
+		FoliageType Grass = Mode.GetFoliageObject()->GetFoliage().GetTypes()[1];
+		Grass.density = 6000.0f;
+		Grass.cullDistance = 0.0f;
+		REQUIRE(Mode.SetType(1, Grass));
+		Mode.Brush.Radius = 1000.0f;
+		Mode.Brush.Strength = 1.0f;
+		Mode.Brush.Falloff = 0.0f;
+		REQUIRE(Mode.BeginStroke(Vector3d(0.0f, 0.0f, 0.0f), false));
+		for (int32 Step = 0; Step < 120; ++Step)
+		{
+			Mode.ApplyAt(Vector3d(0.0f, 0.0f, 0.0f), 1.0f / 30.0f, false);
+		}
+		Mode.EndStroke();
+		const int32 Instances = Mode.GetFoliageObject()->GetFoliage().GetNumInstances();
+		REQUIRE(Instances > 20000);
+		const auto Time = [&F](bool bInstanced)
+		{
+			F.Resources->bInstanceMeshes = bInstanced;
+			F.Render();
+			const double Start = FPlatformTime::Seconds();
+			for (int32 Frame = 0; Frame < 10; ++Frame)
+			{
+				F.Client->RequestRedraw();
+				FRHICommandList& CommandList = F.Device->BeginFrame();
+				F.Renderer->BeginFrame();
+				F.Client->RenderIfNeeded(CommandList);
+				F.Device->EndFrame();
+			}
+			F.Device->WaitIdle();
+			return (FPlatformTime::Seconds() - Start) / 10.0;
+		};
+		const double Cpu = Time(false);
+		View::foliageInstancesDrawn = 0;
+		const double Gpu = Time(true);
+		MESSAGE(Instances, " instances (", View::foliageInstancesDrawn / 11, " drawn a frame): as triangles ", Cpu * 1000.0, " ms a frame, instanced ",
+			Gpu * 1000.0, " ms");
+		CHECK(Gpu * 2.0 < Cpu);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Landscape splines.
+
+namespace
+{
+	LandscapeSplinePoint SplinePoint(float X, float Y, float Z, float Width = 128.0f, float Falloff = 128.0f)
+	{
+		LandscapeSplinePoint Point;
+		Point.position.NewVector(X, Y, Z);
+		Point.width = Width;
+		Point.falloff = Falloff;
+		return Point;
+	}
+}
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("A landscape spline's curve runs through its points, its width changing between them")
+	{
+		EnsureMapCore();
+		LandscapeSpline Spline;
+		Spline.points = { SplinePoint(0.0f, 0.0f, 0.0f, 100.0f), SplinePoint(500.0f, 200.0f, 50.0f, 300.0f), SplinePoint(1000.0f, 0.0f, 0.0f, 100.0f) };
+		std::vector<LandscapeSpline::Sample> Samples;
+		Spline.SampleCurve(10.0f, Samples);
+		REQUIRE(Samples.size() > 100);
+		CHECK(Same(Samples.front().position, Spline.points[0].position));
+		CHECK(Same(Samples.back().position, Spline.points[2].position));
+		// Through the middle point, smoothly (no step longer than about 10).
+		bool bThrough = false;
+		for (SIZE_T I = 0; I < Samples.size(); ++I)
+		{
+			bThrough |= Same(Samples[I].position, Spline.points[1].position);
+			if (I > 0)
+			{
+				Vector3d Step(Samples[I].position);
+				Step.SubVector(Samples[I - 1].position);
+				CHECK(Step.GetMag() < 14.0f);
+			}
+		}
+		CHECK(bThrough);
+		CHECK(Samples[Samples.size() / 4].width > 100.0f);
+		CHECK(Samples[Samples.size() / 4].width < 300.0f);
+		// Closed: back to the start.
+		Spline.closed = true;
+		Spline.SampleCurve(10.0f, Samples);
+		CHECK(Same(Samples.back().position, Spline.points[0].position));
+		CHECK(Samples.size() > 200);
+	}
+
+	TEST_CASE("Applying splines shapes the ground to them and paints their layer")
+	{
+		EnsureMapCore();
+		// Rolling ground about 0, 2048 units across.
+		std::vector<float> Heights;
+		for (int32 Y = 0; Y <= 64; ++Y)
+		{
+			for (int32 X = 0; X <= 64; ++X)
+			{
+				Heights.push_back(60.0f * std::sin(X * 0.3f) * std::cos(Y * 0.2f));
+			}
+		}
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Land = Doc->AddLandscape(Landscape::Create(64, 64, 32.0f, Heights), Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		REQUIRE(Mode.AddLayer(*Land)); // Grass
+		REQUIRE(Mode.AddLayer(*Land)); // Rock
+		// A road at height 20 across the middle, 128 wide, fading over 128.
+		LandscapeSpline Road;
+		Road.points = { SplinePoint(-800.0f, 0.0f, 20.0f), SplinePoint(0.0f, 0.0f, 20.0f), SplinePoint(800.0f, 0.0f, 20.0f) };
+		Road.layer = "Rock";
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({ Road }), "Road");
+		REQUIRE(Mode.ApplySplines(*Land));
+		CHECK(Doc->GetUndoDescription() == "Apply Splines to Landscape");
+		const Landscape& After = Land->GetLandscape();
+		CHECK(After.GetSplines().size() == 1); // the splines stay
+		// On the road (y = 0 is grid row 32): its height, and rock.
+		for (int32 X = 10; X <= 54; X += 4)
+		{
+			CHECK(After.GetHeight(X, 32) == doctest::Approx(20.0f).epsilon(0.001));
+			CHECK(After.GetWeight(1, X, 32) == 1.0f);
+			CHECK(After.GetWeight(0, X, 32) == 0.0f);
+		}
+		// Within the falloff: partly; well away: as it was.
+		CHECK(std::fabs(After.GetHeight(32, 32 + 5) - Heights[37 * 65 + 32]) > 0.0f);
+		CHECK(After.GetHeight(32, 32 + 12) == Heights[44 * 65 + 32]);
+		CHECK(After.GetWeight(1, 32, 44) == 0.0f);
+		// Well past its ends (beyond the falloff round them): untouched.
+		CHECK(After.GetHeight(0, 32) == Heights[32 * 65 + 0]);
+
+		// Raise only: ground above the road stays.
+		Doc->Undo();
+		Road.lowerTerrain = false;
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({ Road }), "Road");
+		REQUIRE(Mode.ApplySplines(*Land));
+		for (int32 X = 10; X <= 54; ++X)
+		{
+			const float Was = Heights[32 * 65 + X];
+			CHECK(Land->GetLandscape().GetHeight(X, 32) == doctest::Approx(Was > 20.0f ? Was : 20.0f).epsilon(0.001));
+		}
+		// Sculpting keeps the splines.
+		CHECK(Land->GetLandscape().WithHeights(Heights)->GetSplines().size() == 1);
+		CHECK(!Landscape(4, 4, 32.0f).WithSplinesApplied());
+	}
+
+	TEST_CASE("Spline points are added, extended, moved and deleted, each an undo step, and saved")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		Mode.NewQuadsX = 32;
+		Mode.NewQuadsY = 32;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		CHECK(!Mode.HasSelectedSplinePoint());
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(-300.0f, 0.0f, 0.0f)));
+		CHECK(Doc->GetUndoDescription() == "Add Spline Point");
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(0.0f, 100.0f, 0.0f)));
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(300.0f, 0.0f, 0.0f)));
+		REQUIRE(Land->GetLandscape().GetSplines().size() == 1);
+		CHECK(Land->GetLandscape().GetSplines()[0].points.size() == 3);
+		CHECK(Mode.SelectedPoint == 2);
+		// From the first point: before it.
+		Mode.SelectedPoint = 0;
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(-500.0f, -50.0f, 0.0f)));
+		CHECK(Mode.SelectedPoint == 0);
+		CHECK(Land->GetLandscape().GetSplines()[0].points[0].position.GetX() == -500.0f);
+		CHECK(Land->GetLandscape().GetSplines()[0].points.size() == 4);
+		// Nothing selected: a new spline.
+		Mode.SelectedSpline = Mode.SelectedPoint = -1;
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(0.0f, -400.0f, 0.0f)));
+		CHECK(Land->GetLandscape().GetSplines().size() == 2);
+		CHECK(Mode.SelectedSpline == 1);
+
+		REQUIRE(Mode.MoveSplinePoint(*Land, 0, 1, Vector3d(-250.0f, 30.0f, 0.0f)));
+		CHECK(Doc->GetUndoDescription() == "Move Spline Point");
+		CHECK(Land->GetLandscape().GetSplines()[0].points[1].position.GetY() == 30.0f);
+		Mode.SelectedSpline = 0;
+		Mode.SelectedPoint = 1;
+		REQUIRE(Mode.DeleteSelectedSplinePoint());
+		CHECK(Land->GetLandscape().GetSplines()[0].points.size() == 3);
+		Doc->Undo();
+		CHECK(Land->GetLandscape().GetSplines()[0].points.size() == 4);
+
+		// .qle
+		LandscapeSpline River = Land->GetLandscape().GetSplines()[0];
+		River.layer = "River Bed";
+		River.raiseTerrain = false;
+		River.closed = true;
+		River.points[2].width = 333.0f;
+		REQUIRE(Mode.SetSpline(*Land, 0, River));
+		FString Error;
+		const FString Qle = Temp.File("splines.qle");
+		REQUIRE(Doc->Save(Qle, Error));
+		TUniquePtr<FMapDocument> Reopened = FMapDocument::Open(Qle, Error);
+		REQUIRE(Reopened);
+		const Object* Loaded = nullptr;
+		for (Object* Obj : Reopened->GetObjects())
+		{
+			Loaded = Obj->HasLandscape() ? Obj : Loaded;
+		}
+		REQUIRE(Loaded);
+		const std::vector<LandscapeSpline>& Splines = Loaded->GetLandscape().GetSplines();
+		REQUIRE(Splines.size() == 2);
+		CHECK(Splines[0].layer == "River Bed");
+		CHECK(!Splines[0].raiseTerrain);
+		CHECK(Splines[0].lowerTerrain);
+		CHECK(Splines[0].closed);
+		REQUIRE(Splines[0].points.size() == 4);
+		CHECK(Splines[0].points[2].width == 333.0f);
+		CHECK(Same(Splines[0].points[0].position, River.points[0].position));
+		CHECK(Splines[1].points.size() == 1);
+	}
+
+	TEST_CASE("The Splines tool: Ctrl+click adds points, a drag moves one, with the mouse in a view")
+	{
+		FTestLogCapture Log;
+		FViewFixture F;
+		if (!F.Create(ERHIBackend::D3D12, EMapViewType::Top))
+		{
+			MESSAGE("D3D12 device unavailable; skipped");
+			return;
+		}
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(F.Doc.get());
+		Mode.NewQuadsX = 32;
+		Mode.NewQuadsY = 32;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		F.Doc->ClearSelection();
+		F.Client->ResetCamera();
+		Mode.Tool = ELandscapeTool::Splines;
+		F.Settings.EditorMode = &Mode;
+		F.Render();
+		const TSharedRef<SWindow> Window = ToSharedRef(F.Window);
+		const auto CtrlClick = [&](const Vector3d& At)
+		{
+			F.T.SetModifiers(false, true);
+			F.T.MouseMove(Window, F.At(At));
+			F.T.MouseDown(Window, F.At(At));
+			F.T.MouseUp(Window, F.At(At));
+			F.T.Tick();
+			F.T.SetModifiers(false, false);
+		};
+		CtrlClick(Vector3d(-200.0f, 0.0f, 0.0f));
+		CtrlClick(Vector3d(0.0f, 120.0f, 0.0f));
+		CtrlClick(Vector3d(200.0f, 0.0f, 0.0f));
+		REQUIRE(Land->GetLandscape().GetSplines().size() == 1);
+		CHECK(Land->GetLandscape().GetSplines()[0].points.size() == 3);
+		CHECK(F.Doc->GetSelection().empty()); // no box selection, no picking
+
+		// A drag of the middle point (one undo step).
+		F.T.MouseMove(Window, F.At(Vector3d(0.0f, 120.0f, 0.0f)));
+		F.T.MouseDown(Window, F.At(Vector3d(0.0f, 120.0f, 0.0f)));
+		F.T.Tick();
+		CHECK(Mode.SelectedPoint == 1);
+		F.T.MouseMove(Window, F.At(Vector3d(0.0f, 60.0f, 0.0f)));
+		F.T.MouseMove(Window, F.At(Vector3d(0.0f, -100.0f, 0.0f)));
+		F.T.MouseUp(Window, F.At(Vector3d(0.0f, -100.0f, 0.0f)));
+		F.T.Tick();
+		const Vector3d& Moved = Land->GetLandscape().GetSplines()[0].points[1].position;
+		CHECK(std::fabs(Moved.GetY() + 100.0f) < 8.0f);
+		CHECK(F.Doc->GetUndoDescription() == "Move Spline Point");
+		F.Doc->Undo();
+		CHECK(std::fabs(Land->GetLandscape().GetSplines()[0].points[1].position.GetY() - 120.0f) < 8.0f);
+		// The curve shows: a pixel on it is the spline's color.
+		const TArray<uint8> Pixels = F.Render();
+		const FVector2 OnCurve = F.At(Vector3d(-200.0f, 0.0f, 0.0f));
+		const FColor C = PixelAt(Pixels, static_cast<int32>(OnCurve.X), static_cast<int32>(OnCurve.Y));
+		CHECK(C.R > 180);
+		F.Settings.EditorMode = nullptr;
+		CHECK(Log.Problems.empty());
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Spline meshes.
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("Spline meshes run along +X, centered across, colored")
+	{
+		EnsureMapCore();
+		REQUIRE(StaticMesh::GetSplineMeshNames().size() == 4);
+		for (const std::string& Name : StaticMesh::GetSplineMeshNames())
+		{
+			CAPTURE(Name);
+			const std::shared_ptr<const StaticMesh> Mesh = StaticMesh::Find(Name.c_str());
+			REQUIRE(Mesh);
+			CHECK(Mesh->HasVertexColors());
+			Vector3d Low, High;
+			Mesh->GetBounds(Low, High);
+			CHECK(High.GetX() - Low.GetX() >= 190.0f);
+			CHECK(std::fabs(Low.GetY() + High.GetY()) < 1.0f);
+		}
+	}
+
+	TEST_CASE("A spline's mesh repeats along it and bends to it, fitted to its width")
+	{
+		EnsureMapCore();
+		LandscapeSpline Spline;
+		Spline.mesh = "Road";
+		Spline.points = { SplinePoint(0.0f, 0.0f, 10.0f, 300.0f), SplinePoint(1000.0f, 0.0f, 10.0f, 300.0f) };
+		const std::shared_ptr<const StaticMesh> Straight = Landscape::BuildSplineMesh(Spline);
+		REQUIRE(Straight);
+		const std::shared_ptr<const StaticMesh> Road = StaticMesh::Find("Road");
+		CHECK(Straight->GetNumVertices() == 2 * Road->GetNumVertices()); // 1000 / 512: two pieces
+		Vector3d Low, High;
+		Straight->GetBounds(Low, High);
+		CHECK(std::fabs(Low.GetX()) < 0.5f);
+		CHECK(High.GetX() == doctest::Approx(1000.0f).epsilon(0.002));
+		CHECK(High.GetY() == doctest::Approx(150.0f).epsilon(0.01)); // its 256 stretched to 300
+		CHECK(High.GetZ() == doctest::Approx(13.5f).epsilon(0.01));  // its top, 3.5 above the curve
+		// Its top faces up.
+		float Up = 0.0f;
+		int32 Count = 0;
+		for (const StaticMesh::Triangle& Triangle : Straight->GetTriangles())
+		{
+			if (Straight->GetVertex(Triangle.v[0]).GetZ() > 12.0f)
+			{
+				Up += Triangle.norm[0].GetZ();
+				++Count;
+			}
+		}
+		REQUIRE(Count > 0);
+		CHECK(Up / Count > 0.95f);
+
+		// Round a bend, every vertex stays on the road's band about the curve.
+		Spline.points = { SplinePoint(0.0f, 0.0f, 0.0f, 200.0f), SplinePoint(800.0f, 0.0f, 0.0f, 200.0f), SplinePoint(800.0f, 800.0f, 0.0f, 200.0f) };
+		const std::shared_ptr<const StaticMesh> Bent = Landscape::BuildSplineMesh(Spline);
+		REQUIRE(Bent);
+		std::vector<LandscapeSpline::Sample> Samples;
+		Spline.SampleCurve(4.0f, Samples);
+		for (int32 V = 0; V < Bent->GetNumVertices(); V += 7)
+		{
+			const Vector3d& P = Bent->GetVertex(V);
+			float Nearest = 1.0e9f;
+			for (const LandscapeSpline::Sample& Sample : Samples)
+			{
+				const float Dx = P.GetX() - Sample.position.GetX(), Dy = P.GetY() - Sample.position.GetY();
+				Nearest = FMath::Min(Nearest, std::sqrt(Dx * Dx + Dy * Dy));
+			}
+			CHECK(Nearest < 106.0f);
+		}
+		// No mesh, an unknown one, or one point: none.
+		Spline.mesh = "";
+		CHECK(!Landscape::BuildSplineMesh(Spline));
+		Spline.mesh = "Teapot";
+		CHECK(!Landscape::BuildSplineMesh(Spline));
+	}
+
+	TEST_CASE("A landscape keeps its splines' meshes through sculpting, takes them into its bounds, and saves them")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Land = Doc->AddLandscape(32, 32, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		LandscapeSpline Fence;
+		Fence.mesh = "Fence";
+		Fence.meshFitWidth = false;
+		Fence.meshScale = 1.5f;
+		Fence.meshZOffset = 4.0f;
+		Fence.points = { SplinePoint(-300.0f, 0.0f, 0.0f), SplinePoint(300.0f, 100.0f, 0.0f) };
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({ Fence }), "Fence");
+		const std::shared_ptr<const StaticMesh> Built = Land->GetLandscape().GetSplineMeshes()[0];
+		REQUIRE(Built);
+		// Sculpting: the same mesh, not made again.
+		const std::shared_ptr<const Landscape> Raised = Land->GetLandscape().WithHeights(std::vector<float>(33 * 33, 50.0f));
+		CHECK(Raised->GetSplineMeshes()[0] == Built);
+		// The fence's top (110 tall, 1.5 times, 4 up) is in the bounds.
+		Vector3d Low, High;
+		Land->GetLandscape().GetBounds(Low, High);
+		CHECK(High.GetZ() == doctest::Approx(169.0f).epsilon(0.01));
+
+		FString Error;
+		const FString Qle = Temp.File("fence.qle");
+		REQUIRE(Doc->Save(Qle, Error));
+		TUniquePtr<FMapDocument> Reopened = FMapDocument::Open(Qle, Error);
+		REQUIRE(Reopened);
+		const Object* Loaded = nullptr;
+		for (Object* Obj : Reopened->GetObjects())
+		{
+			Loaded = Obj->HasLandscape() ? Obj : Loaded;
+		}
+		REQUIRE(Loaded);
+		REQUIRE(Loaded->GetLandscape().GetSplines().size() == 1);
+		const LandscapeSpline& Back = Loaded->GetLandscape().GetSplines()[0];
+		CHECK(Back.mesh == "Fence");
+		CHECK(!Back.meshFitWidth);
+		CHECK(Back.meshScale == 1.5f);
+		CHECK(Back.meshZOffset == 4.0f);
+		REQUIRE(Loaded->GetLandscape().GetSplineMeshes()[0]);
+		CHECK(Loaded->GetLandscape().GetSplineMeshes()[0]->GetNumVertices() == Built->GetNumVertices());
+	}
+
+	TEST_CASE("A road spline's mesh is drawn on the landscape (D3D12 and Vulkan)")
+	{
+		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		{
+			CAPTURE(std::string(ToString(Backend)));
+			FTestLogCapture Log;
+			FViewFixture F;
+			if (!F.Create(Backend, EMapViewType::Perspective))
+			{
+				MESSAGE(std::string(ToString(Backend)), " device unavailable; skipped");
+				continue;
+			}
+			Object* Land = F.Doc->AddLandscape(32, 32, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
+			REQUIRE(Land);
+			F.Doc->SetSelection({ Land });
+			F.Client->FrameSelection();
+			F.Doc->ClearSelection();
+			F.Client->SetViewMode(EMapViewMode::Lit);
+			// Beside the origin's axis lines, and beside the spline's own line
+			// down the road's middle.
+			const FVector2 OnRoad = F.At(Vector3d(-200.0f, 360.0f, 0.0f));
+			const int32 X = static_cast<int32>(OnRoad.X), Y = static_cast<int32>(OnRoad.Y);
+			const FColor Ground = PixelAt(F.Render(), X, Y);
+			LandscapeSpline Road;
+			Road.mesh = "Road";
+			Road.points = { SplinePoint(-480.0f, 300.0f, 0.0f, 200.0f), SplinePoint(480.0f, 300.0f, 0.0f, 200.0f) };
+			F.Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({ Road }), "Road");
+			const FColor Asphalt = PixelAt(F.Render(), X, Y);
+			CHECK(Asphalt != Ground);
+			// Grey and dark: the road's.
+			CHECK(std::abs(int32(Asphalt.R) - int32(Asphalt.B)) < 20);
+			CHECK(Asphalt.G < Ground.G);
+			CHECK(Log.Problems.empty());
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Spline tangents and junctions.
+
+TEST_SUITE("MapEditor")
+{
+	TEST_CASE("A spline's tangents: automatic ones are Catmull-Rom's, ones set by hand steer the curve")
+	{
+		EnsureMapCore();
+		LandscapeSpline Spline;
+		Spline.points = { SplinePoint(0.0f, 0.0f, 0.0f), SplinePoint(400.0f, 0.0f, 0.0f), SplinePoint(800.0f, 400.0f, 0.0f) };
+		CHECK(Same(Spline.GetTangent(1), Vector3d(400.0f, 200.0f, 0.0f)));  // half of next - previous
+		CHECK(Same(Spline.GetTangent(0), Vector3d(200.0f, 0.0f, 0.0f)));    // the ends repeat
+		// Halfway between the first two points, Catmull-Rom's own value.
+		std::vector<LandscapeSpline::Sample> Samples;
+		Spline.SampleCurve(1000.0f, Samples); // a step a segment: t = 0, then the next point
+		REQUIRE(Samples.size() == 3);
+		Spline.SampleCurve(400.0f, Samples); // two steps on the first segment
+		// t = 0.5 on the first segment: 0.5 p1 + 0.125 m1 + 0.5 p2 - 0.125 m2.
+		CHECK(Same(Samples[1].position, Vector3d(200.0f + 25.0f - 50.0f, -25.0f, 0.0f)));
+
+		// By hand at the middle point: straight up the y axis, long.
+		Spline.points[1].autoTangent = false;
+		Spline.points[1].tangent.NewVector(0.0f, 900.0f, 0.0f);
+		Spline.SampleCurve(4.0f, Samples);
+		// Still through the point; leaving it along +y.
+		SIZE_T At = 0;
+		for (SIZE_T I = 0; I < Samples.size(); ++I)
+		{
+			At = Same(Samples[I].position, Spline.points[1].position) ? I : At;
+		}
+		REQUIRE(At > 0);
+		Vector3d Leaving(Samples[At + 1].position);
+		Leaving.SubVector(Samples[At].position);
+		CHECK(std::fabs(Leaving.GetX()) < 0.5f);
+		CHECK(Leaving.GetY() > 2.0f);
+		// It bulges: the first segment dips below y = 0 further than before.
+		float Lowest = 0.0f;
+		for (SIZE_T I = 0; I < At; ++I)
+		{
+			Lowest = FMath::Min(Lowest, Samples[I].position.GetY());
+		}
+		CHECK(Lowest < -60.0f);
+	}
+
+	TEST_CASE("Spline junctions: connecting points, moving them together, breaking and saving them")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(Doc.get());
+		Mode.NewQuadsX = 64;
+		Mode.NewQuadsY = 64;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		// A main road west to east, and a side road from the north.
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(-800.0f, 0.0f, 0.0f)));
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(0.0f, 0.0f, 0.0f)));
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(800.0f, 0.0f, 0.0f)));
+		Mode.SelectedSpline = Mode.SelectedPoint = -1;
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(0.0f, 800.0f, 0.0f)));
+		REQUIRE(Mode.AddSplinePoint(*Land, Vector3d(0.0f, 300.0f, 0.0f)));
+		// From the side road's end to the main road's middle: a junction.
+		REQUIRE(Mode.ConnectSplinePoint(*Land, 0, 1));
+		CHECK(Doc->GetUndoDescription() == "Connect Spline Points");
+		const std::vector<LandscapeSpline>* Splines = &Land->GetLandscape().GetSplines();
+		REQUIRE((*Splines)[1].points.size() == 3);
+		CHECK(Same((*Splines)[1].points[2].position, (*Splines)[0].points[1].position));
+		const int Joint = (*Splines)[0].points[1].joint;
+		CHECK(Joint >= 0);
+		CHECK((*Splines)[1].points[2].joint == Joint);
+		CHECK(Mode.SelectedSpline == 1);
+		CHECK(Mode.SelectedPoint == 2);
+
+		// Moving either moves both.
+		REQUIRE(Mode.MoveSplinePoint(*Land, 0, 1, Vector3d(50.0f, -40.0f, 0.0f)));
+		Splines = &Land->GetLandscape().GetSplines();
+		CHECK(Same((*Splines)[1].points[2].position, Vector3d(50.0f, -40.0f, 0.0f)));
+		CHECK(Same((*Splines)[0].points[1].position, Vector3d(50.0f, -40.0f, 0.0f)));
+
+		// From the main road's west end, nothing selected: a branch starts there.
+		Mode.SelectedSpline = Mode.SelectedPoint = -1;
+		REQUIRE(Mode.ConnectSplinePoint(*Land, 0, 0));
+		Splines = &Land->GetLandscape().GetSplines();
+		REQUIRE(Splines->size() == 3);
+		CHECK((*Splines)[2].points.size() == 1);
+		CHECK((*Splines)[2].points[0].joint == (*Splines)[0].points[0].joint);
+		CHECK((*Splines)[0].points[0].joint != Joint);
+		// From a middle point to another point: a spline between them.
+		Mode.SplineLand = Land;
+		Mode.SelectedSpline = 1;
+		Mode.SelectedPoint = 1;
+		REQUIRE(Mode.ConnectSplinePoint(*Land, 0, 2));
+		Splines = &Land->GetLandscape().GetSplines();
+		REQUIRE(Splines->size() == 4);
+		CHECK((*Splines)[3].points.size() == 2);
+		CHECK((*Splines)[3].points[0].joint == (*Splines)[1].points[1].joint);
+		CHECK((*Splines)[3].points[1].joint == (*Splines)[0].points[2].joint);
+		CHECK((*Splines)[3].points[0].joint != (*Splines)[3].points[1].joint); // two places, two junctions
+
+		// Breaking: it moves alone.
+		Mode.SelectedSpline = 1;
+		Mode.SelectedPoint = 2;
+		REQUIRE(Mode.BreakSelectedJunction());
+		REQUIRE(Mode.MoveSplinePoint(*Land, 1, 2, Vector3d(100.0f, 100.0f, 0.0f)));
+		Splines = &Land->GetLandscape().GetSplines();
+		CHECK(Same((*Splines)[0].points[1].position, Vector3d(50.0f, -40.0f, 0.0f)));
+		Doc->Undo();
+		Doc->Undo();
+		Splines = &Land->GetLandscape().GetSplines();
+		CHECK((*Splines)[1].points[2].joint == Joint);
+
+		// Tangents by hand and junctions in .qle; and back to automatic.
+		REQUIRE(Mode.SetSplineTangent(*Land, 0, 1, Vector3d(300.0f, 120.0f, 10.0f)));
+		CHECK(Doc->GetUndoDescription() == "Change Spline Tangent");
+		FString Error;
+		const FString Qle = Temp.File("junctions.qle");
+		REQUIRE(Doc->Save(Qle, Error));
+		TUniquePtr<FMapDocument> Reopened = FMapDocument::Open(Qle, Error);
+		REQUIRE(Reopened);
+		const Object* Loaded = nullptr;
+		for (Object* Obj : Reopened->GetObjects())
+		{
+			Loaded = Obj->HasLandscape() ? Obj : Loaded;
+		}
+		REQUIRE(Loaded);
+		const std::vector<LandscapeSpline>& Back = Loaded->GetLandscape().GetSplines();
+		REQUIRE(Back.size() == Splines->size());
+		CHECK(!Back[0].points[1].autoTangent);
+		CHECK(Same(Back[0].points[1].tangent, Vector3d(300.0f, 120.0f, 10.0f)));
+		CHECK(Back[0].points[1].joint == Joint);
+		CHECK(Back[1].points[2].joint == Joint);
+		CHECK(Back[1].points[0].autoTangent);
+		CHECK(Back[1].points[0].joint == -1);
+		REQUIRE(Mode.SetSplineAutoTangent(*Land, 0, 1));
+		CHECK(Land->GetLandscape().GetSplines()[0].points[1].autoTangent);
+
+		// Deleting one of a junction of two leaves the other in none.
+		Mode.SelectedSpline = 2;
+		Mode.SelectedPoint = 0;
+		REQUIRE(Mode.DeleteSelectedSplinePoint());
+		CHECK(Land->GetLandscape().GetSplines()[0].points[0].joint == -1);
+	}
+
+	TEST_CASE("Ctrl+click on a point makes a junction, and the selected point's tangent handle drags, with the mouse")
+	{
+		FTestLogCapture Log;
+		FViewFixture F;
+		if (!F.Create(ERHIBackend::D3D12, EMapViewType::Top))
+		{
+			MESSAGE("D3D12 device unavailable; skipped");
+			return;
+		}
+		FMapLandscapeMode Mode;
+		Mode.SetDocument(F.Doc.get());
+		Mode.NewQuadsX = 32;
+		Mode.NewQuadsY = 32;
+		Object* Land = Mode.CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+		REQUIRE(Land);
+		F.Doc->ClearSelection();
+		F.Client->ResetCamera();
+		Mode.Tool = ELandscapeTool::Splines;
+		F.Settings.EditorMode = &Mode;
+		F.Render();
+		const TSharedRef<SWindow> Window = ToSharedRef(F.Window);
+		const auto Click = [&](const Vector3d& At, bool bCtrl)
+		{
+			F.T.SetModifiers(false, bCtrl);
+			F.T.MouseMove(Window, F.At(At));
+			F.T.MouseDown(Window, F.At(At));
+			F.T.MouseUp(Window, F.At(At));
+			F.T.Tick();
+			F.T.SetModifiers(false, false);
+		};
+		// One road across, then a second from the north ending on its middle point.
+		Click(Vector3d(-200.0f, 0.0f, 0.0f), true);
+		Click(Vector3d(0.0f, 0.0f, 0.0f), true);
+		Click(Vector3d(200.0f, 0.0f, 0.0f), true);
+		Click(Vector3d(-150.0f, 150.0f, 0.0f), false); // nothing there: nothing selected
+		CHECK(!Mode.HasSelectedSplinePoint());
+		Click(Vector3d(0.0f, 200.0f, 0.0f), true);
+		Click(Vector3d(0.0f, 0.0f, 0.0f), true); // on the first road's point
+		const std::vector<LandscapeSpline>& Splines = Land->GetLandscape().GetSplines();
+		REQUIRE(Splines.size() == 2);
+		REQUIRE(Splines[1].points.size() == 2);
+		CHECK(Splines[1].points[1].joint >= 0);
+		CHECK(Splines[0].points[1].joint == Splines[1].points[1].joint);
+
+		// The first road's end point picked; its handle dragged sideways.
+		Click(Vector3d(200.0f, 0.0f, 0.0f), false);
+		REQUIRE(Mode.HasSelectedSplinePoint());
+		Vector3d Before, After;
+		REQUIRE(Mode.GetTangentHandles(Before, After));
+		F.Render();
+		F.T.MouseMove(Window, F.At(After));
+		F.T.MouseDown(Window, F.At(After));
+		F.T.Tick();
+		const Vector3d Target(After.GetX(), After.GetY() + 120.0f, 0.0f);
+		F.T.MouseMove(Window, F.At(Target));
+		F.T.MouseUp(Window, F.At(Target));
+		F.T.Tick();
+		const LandscapeSplinePoint& End = Land->GetLandscape().GetSplines()[0].points[2];
+		CHECK(!End.autoTangent);
+		CHECK(End.tangent.GetY() > 250.0f); // three times the handle's move
+		CHECK(F.Doc->GetUndoDescription() == "Change Spline Tangent");
+		F.Settings.EditorMode = nullptr;
+		CHECK(Log.Problems.empty());
+	}
+}
+
+TEST_SUITE("MapPackages")
+{
+	TEST_CASE("Content Browser imports native packages with their sidecars and hides payload files")
+	{
+		EnsureMapCore(); FTempFolder Temp; FString Error;
+		auto Doc = FMapDocument::CreateNew();
+		REQUIRE(Doc->AddLandscape(4, 4, 16, Vector3d()));
+		const auto Source = Temp.File("Source.gmap");
+		REQUIRE(Doc->Save(Source, Error));
+		const auto TargetDir = Temp.File("Imported");
+		std::filesystem::create_directory(std::filesystem::path(TargetDir.ToWide()));
+		FUITestApp App;
+		const auto Browser = SNew(SContentBrowser)
+			.Roots(TArray<FContentBrowserRoot>{ { "Content", TargetDir } }).InitialPath(TargetDir);
+		App.AddWindow(Browser);
+		REQUIRE(Browser->ImportFile(Source));
+		App.Tick();
+		const auto Imported = FString::FromWide((std::filesystem::path(TargetDir.ToWide()) / "Source.gmap").wstring());
+		auto Back = FMapDocument::Open(Imported, Error);
+		REQUIRE_MESSAGE(Back, *Error);
+		CHECK(Back->CountMeshes() == 1);
+		FAssetPackage OriginalPackage, CopiedPackage;
+		REQUIRE(FAssetPackageStore::Load(Source, OriginalPackage, Error));
+		REQUIRE(FAssetPackageStore::Load(Imported, CopiedPackage, Error));
+		CHECK(OriginalPackage.Id != CopiedPackage.Id);
+		CHECK(Browser->GetItems().size() == 1);
+		CHECK(Browser->GetAssetType(Imported) == EContentAssetType::Map);
+	}
+
+ TEST_CASE("Native worlds preserve brushes actors landscape layers splines and foliage")
+ {
+  EnsureMapCore();
+  FTempFolder Temp;
+  auto Doc = FMapDocument::CreateNew();
+  REQUIRE(Doc->AddPrefab(PrefabPath("Cube"), Vector3d(40, 80, 120)));
+  REQUIRE(Doc->AddEntity("light", Vector3d(100, 200, 300)));
+  auto* Mesh = Doc->AddMesh("Sphere", Vector3d(3, 4, 5));
+  REQUIRE(Mesh);
+  Mesh->SetScale(Vector3d(2, 3, 4));
+  Mesh->SetOrientation(SphrVector(0.2f, 0.3f, 0.4f));
+  auto* Terrain = Doc->AddLandscape(8, 12, 32, Vector3d(10, 20, 30));
+  REQUIRE(Terrain);
+  auto Heights = Terrain->GetLandscape().GetHeights();
+  for (size_t I = 0; I < Heights.size(); ++I) Heights[I] = static_cast<float>(I) * 0.123456f;
+  auto Layer = Terrain->GetLandscape().MakeLayer("Grass", 10, 20, 30);
+  Layer.texture = "builtin:Grass";
+  Layer.tiling = 192;
+  for (size_t I = 0; I < Layer.weights.size(); ++I) Layer.weights[I] = static_cast<float>(I % 5) / 5;
+  LandscapeSpline Road;
+  Road.mesh = "Road";
+  LandscapeSplinePoint Point;
+  Point.position = Vector3d(100, 20, 30); Point.autoTangent = false;
+  Point.tangent = Vector3d(30, 40, 50); Point.joint = 7;
+  Road.points.push_back(Point);
+  Point.position = Vector3d(300, 100, 40); Point.autoTangent = true; Point.joint = -1;
+  Road.points.push_back(Point);
+  Doc->SetLandscape(*Terrain, Landscape::Create(8, 12, 32, Heights, {Layer}, {Road}));
+  FoliageType Type; Type.name = "Tree"; Type.mesh = "Tree"; Type.alignToNormal = true; Type.density = 15;
+  FoliageInstance Instance; Instance.position = Vector3d(90, 80, 70); Instance.yaw = 0.6f; Instance.scale = 1.1f;
+  REQUIRE(Doc->AddFoliage(std::make_shared<Foliage>(std::vector<FoliageType>{Type}, std::vector<FoliageInstance>{Instance})));
+  FString Error;
+  const auto File = Temp.File("World.gmap");
+  REQUIRE_MESSAGE(Doc->Save(File, Error), *Error);
+  CHECK_FALSE(Doc->IsModified());
+  auto Back = FMapDocument::Open(File, Error);
+  REQUIRE_MESSAGE(Back, *Error);
+  CHECK_FALSE(Back->IsModified());
+  CHECK(Back->CountBrushes() == Doc->CountBrushes());
+  CHECK(Back->CountEntities() == Doc->CountEntities());
+  CHECK(Back->CountMeshes() == Doc->CountMeshes());
+  bool FoundLand = false, FoundFoliage = false, FoundMesh = false;
+  for (Object* Obj : Back->GetObjects())
+  {
+   if (Obj->HasLandscape())
+   {
+    FoundLand = true;
+    const auto& L = Obj->GetLandscape();
+    CHECK(L.GetHeights() == Heights);
+    REQUIRE(L.GetLayers().size() == 1);
+    CHECK(L.GetLayers()[0].weights == Layer.weights);
+    CHECK(L.GetLayers()[0].texture == Layer.texture);
+    CHECK(L.GetLayers()[0].tiling == Layer.tiling);
+    REQUIRE(L.GetSplines().size() == 1);
+    CHECK(L.GetSplines()[0].mesh == "Road");
+    CHECK(L.GetSplines()[0].points[0].joint == 7);
+    CHECK_FALSE(L.GetSplines()[0].points[0].autoTangent);
+    CHECK(Same(L.GetSplines()[0].points[0].tangent, Vector3d(30,40,50)));
+    CHECK(Same(Obj->GetPosition(), Terrain->GetPosition()));
+   }
+   else if (Obj->HasMesh())
+   {
+    FoundMesh = true;
+    CHECK(Same(Obj->GetScale(), Mesh->GetScale()));
+    CHECK(Obj->GetOrientation().GetRoll() == doctest::Approx(0.4f));
+   }
+   if (Obj->HasFoliage())
+   {
+    FoundFoliage = true;
+    REQUIRE(Obj->GetFoliage().GetInstances().size() == 1);
+    CHECK(Obj->GetFoliage().GetTypes()[0] == Type);
+    CHECK(Same(Obj->GetFoliage().GetInstances()[0].position, Instance.position));
+   }
+  }
+  CHECK(FoundLand); CHECK(FoundMesh); CHECK(FoundFoliage);
+  FAssetPackage Package;
+  REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+  const auto Id = Package.Id;
+  REQUIRE(Back->Save(File, Error));
+  REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+  CHECK(Package.Id == Id);
+  REQUIRE(Back->Save(Temp.File("Copy.gmap"), Error));
+  REQUIRE(FAssetPackageStore::Load(Temp.File("Copy.gmap"), Package, Error));
+  CHECK(Package.Id != Id);
+ }
+
+ TEST_CASE("Native prefab assets can be placed and legacy maps choose a native save path")
+ {
+  EnsureMapCore(); FTempFolder Temp; FString Error;
+  auto Doc = FMapDocument::CreateNew();
+  auto* Mesh = Doc->AddMesh("Cube", Vector3d(10,20,30));
+  REQUIRE(Mesh);
+  const auto Asset = Temp.File("Building.asset");
+  REQUIRE_MESSAGE(Doc->SavePrefab({Mesh}, Asset, Error), *Error);
+  auto* Placed = Doc->AddPrefab(Asset, Vector3d(100,200,300), &Error);
+  REQUIRE_MESSAGE(Placed, *Error);
+  REQUIRE(Placed->GetNumChildren() == 1);
+  CHECK(Placed->GetChild(0).HasMesh());
+  CHECK(Same(Placed->GetPosition(), Vector3d(100,200,300)));
+  REQUIRE(Doc->Save(Temp.File("Old.qle"), Error));
+  auto Legacy = FMapDocument::Open(Temp.File("Old.qle"), Error);
+  REQUIRE(Legacy);
+  CHECK(Legacy->GetPath() == Temp.File("Old.gmap"));
+  CHECK(Legacy->IsModified());
+  REQUIRE(Legacy->Save(Legacy->GetPath(), Error));
+  CHECK(FFile::Exists(Temp.File("Old.qle")));
+  auto SecondImport = FMapDocument::Open(Temp.File("Old.qle"), Error);
+  REQUIRE(SecondImport);
+  CHECK(SecondImport->GetPath().IsEmpty()); // Save As protects the existing native map
+ }
+
+ TEST_CASE("World schema rejects invalid bulk references and leaf hierarchies")
+ {
+  EnsureMapCore(); FTempFolder Temp; FString Error;
+  auto Doc = FMapDocument::CreateNew();
+  REQUIRE(Doc->AddLandscape(4,4,16,Vector3d()));
+  const auto File = Temp.File("World.gmap");
+  REQUIRE(Doc->Save(File, Error));
+  FAssetPackage Package;
+  REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+  Package.Exports["Root"]["Children"][0]["Landscape"]["Heights"]["Offset"] = 1000000;
+  REQUIRE(FAssetPackageStore::Save(File, Package, Error));
+  CHECK_FALSE(FMapDocument::Open(File, Error));
+  CHECK(Error.Contains("bulk range"));
+ }
 }

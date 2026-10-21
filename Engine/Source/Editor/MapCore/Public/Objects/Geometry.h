@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "math3d.h"
 #include "LCommon.h"
 #include "Texture.h"
+#include <vector>
 
 //==================== Point3d ====================
 
@@ -61,7 +62,7 @@ class Point3d : public Vector3d {
 class Points3d {
   friend class Geometry;
   friend class WireFrameGeom;
-  friend class StaticMesh;
+  friend class FMeshVertexBufferAdapter;
 
  public:
   Points3d(int initSize = 10);
@@ -216,6 +217,10 @@ class Geometry : public ElmNode {
   virtual ~Geometry(void);
 
   Geometry &operator=(const Geometry &src);
+
+  // Explicit polygon adapter for Genesis packages. No QLE parser involved.
+  // Faces keep their winding; all coordinates must be finite and bounded.
+  static Geometry *FromPolygons(const std::vector<std::vector<Vector3d>> &polygons);
 
   //===== Geometry Info =====
   int GetNumVertices(void) const { return vertices.GetNumPoints(); };

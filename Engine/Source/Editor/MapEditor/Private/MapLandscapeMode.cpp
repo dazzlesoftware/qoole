@@ -3,6 +3,7 @@
 #include "MapLandscapeMode.h"
 
 #include "MapEditorPrivate.h"
+#include "MapFoliageMode.h"
 #include "MapLandscapeTextures.h"
 
 #include <algorithm>
@@ -17,19 +18,84 @@ const char* ToString(ELandscapeTool Tool)
 	case ELandscapeTool::Sculpt: return "Sculpt";
 	case ELandscapeTool::Smooth: return "Smooth";
 	case ELandscapeTool::Flatten: return "Flatten";
+	case ELandscapeTool::Ramp: return "Ramp";
+	case ELandscapeTool::Erosion: return "Erosion";
 	case ELandscapeTool::Noise: return "Noise";
+	case ELandscapeTool::Splines: return "Splines";
 	case ELandscapeTool::Paint: return "Paint";
 	}
 	return "?";
 }
 
+const char* ToString(ELandscapeFlattenMode Mode)
+{
+	switch (Mode)
+	{
+	case ELandscapeFlattenMode::Both: return "Both";
+	case ELandscapeFlattenMode::Raise: return "Raise";
+	case ELandscapeFlattenMode::Lower: return "Lower";
+	}
+	return "?";
+}
+
+void FLandscapeBrush::Grow(int32 Steps)
+{
+	Radius = FMath::Clamp(Radius * std::pow(1.25f, static_cast<float>(Steps)), MinRadius, MaxRadius);
+}
+
+void FLandscapeBrush::Strengthen(int32 Steps)
+{
+	Strength = FMath::Clamp(std::round((Strength + 0.05f * static_cast<float>(Steps)) * 100.0f) / 100.0f, 0.01f, 1.0f);
+}
+
+float FLandscapeAutoPaint::WeightAt(const Landscape& Land, int32 X, int32 Y) const
+{
+	// The slope across the point, as the landscape's normals have it.
+	const float Size = Land.GetQuadSize();
+	const float Dx = (Land.GetHeight(X + 1, Y) - Land.GetHeight(X - 1, Y)) / ((FMath::Min(X + 1, Land.GetQuadsX()) - FMath::Max(X - 1, 0)) * Size);
+	const float Dy = (Land.GetHeight(X, Y + 1) - Land.GetHeight(X, Y - 1)) / ((FMath::Min(Y + 1, Land.GetQuadsY()) - FMath::Max(Y - 1, 0)) * Size);
+	const float Slope = std::atan(std::sqrt(Dx * Dx + Dy * Dy)) * 57.29578f;
+	const float Height = Land.GetHeight(X, Y);
+	// 1 inside each range, fading to 0 over its fade outside it.
+	const auto Band = [](float V, float Lo, float Hi, float Fade)
+	{
+		const float Outside = FMath::Max(FMath::Max(Lo - V, V - Hi), 0.0f);
+		return Fade > 0.0f ? FMath::Clamp(1.0f - Outside / Fade, 0.0f, 1.0f) : (Outside > 0.0f ? 0.0f : 1.0f);
+	};
+	return Band(Slope, MinSlope, MaxSlope, SlopeFade) * Band(Height, MinHeight, MaxHeight, HeightFade);
+}
+
 namespace
 {
+	// After a layer's weight at a point changed: the others share what is
+	// left, so the weights add up to 1 at most.
+	void GiveWay(std::vector<LandscapeLayer>& Layers, SIZE_T Kept, SIZE_T Point)
+	{
+		float Others = 0.0f;
+		for (SIZE_T L = 0; L < Layers.size(); ++L)
+		{
+			Others += L == Kept ? 0.0f : Layers[L].weights[Point];
+		}
+		const float Room = 1.0f - Layers[Kept].weights[Point];
+		if (Others > Room && Others > 0.0f)
+		{
+			const float Keep = Room / Others;
+			for (SIZE_T L = 0; L < Layers.size(); ++L)
+			{
+				if (L != Kept)
+				{
+					Layers[L].weights[Point] *= Keep;
+				}
+			}
+		}
+	}
+
 	constexpr float SculptSpeed = 256.0f; // units a second at full strength
 	constexpr float NoiseSpeed = 128.0f;
 	constexpr float BlendRate = 8.0f;     // Smooth and Flatten, a second at full strength
 	constexpr float StrokeStep = 1.0f / 60.0f; // what a click alone does
 	constexpr float PaintRate = 4.0f;          // weight a second at full strength
+	constexpr float ErosionRate = 6.0f;        // of the excess slope a second
 
 	struct FLayerPreset
 	{
@@ -156,7 +222,9 @@ bool FMapLandscapeMode::ImportHeightmap(Object& Land, const FString& Path, FStri
 		Error = "Can't fit the heightmap to the landscape";
 		return false;
 	}
+	const std::shared_ptr<const Landscape> Before = Land.GetLandscapePtr();
 	Document->SetLandscape(Land, std::move(Updated), "Import Heightmap");
+	SnapFoliageToLandscape(*Document, Land, *Before);
 	return true;
 }
 
@@ -378,7 +446,7 @@ Object* FMapLandscapeMode::TraceLandscape(const Vector3d& Origin, const Vector3d
 		}
 		LocalDirection.MultVector(1.0f / Length);
 		float Depth = 0.0f;
-		if (!Obj->GetMesh().HitMesh(Line(LocalOrigin, LocalDirection), 0.0f, 1.0e7f, Depth))
+		if (!Obj->GetLandscape().Raycast(Line(LocalOrigin, LocalDirection), 0.0f, 1.0e7f, Depth))
 		{
 			continue;
 		}
@@ -449,29 +517,16 @@ bool FMapLandscapeMode::ApplyAt(Object& Land, const Vector3d& ScopePoint, float 
 				const SIZE_T I = static_cast<SIZE_T>(Y * PointsX + X);
 				float& Own = Layers[Painted].weights[I];
 				const float Before = Own;
-				Own = FMath::Clamp(Own + Sign * Strength * PaintRate * DeltaSeconds * W, 0.0f, 1.0f);
+				// Toward the target weight (Shift: toward none), never past it.
+				const float Goal = bInvertTool ? 0.0f : FMath::Clamp(PaintTarget, 0.0f, 1.0f);
+				const float Step = Strength * PaintRate * DeltaSeconds * W;
+				Own = Own < Goal ? FMath::Min(Own + Step, Goal) : FMath::Max(Own - Step, Goal);
 				if (Own == Before)
 				{
 					continue;
 				}
 				bPainted = true;
-				float Others = 0.0f;
-				for (SIZE_T L = 0; L < Layers.size(); ++L)
-				{
-					Others += L == Painted ? 0.0f : Layers[L].weights[I];
-				}
-				const float Room = 1.0f - Own;
-				if (Others > Room && Others > 0.0f)
-				{
-					const float Keep = Room / Others;
-					for (SIZE_T L = 0; L < Layers.size(); ++L)
-					{
-						if (L != Painted)
-						{
-							Layers[L].weights[I] *= Keep;
-						}
-					}
-				}
+				GiveWay(Layers, Painted, I);
 			}
 		}
 		if (!bPainted)
@@ -481,11 +536,77 @@ bool FMapLandscapeMode::ApplyAt(Object& Land, const Vector3d& ScopePoint, float 
 		Document->SetLandscape(Land, Field.WithLayers(std::move(Layers)), "Landscape Paint");
 		return true;
 	}
+	if (Tool == ELandscapeTool::Ramp || Tool == ELandscapeTool::Splines)
+	{
+		return false; // a drag and a release (AddRamp), or points (splines)
+	}
 	const float Blend = FMath::Min(1.0f, Strength * BlendRate * DeltaSeconds);
 	const std::vector<float>& Old = Field.GetHeights();
 	std::vector<float> Heights = Old;
 	const int32 Stride = Field.GetPointsX();
 	bool bChanged = false;
+
+	if (Tool == ELandscapeTool::Erosion)
+	{
+		// Thermal erosion: where the ground drops more than the talus angle
+		// allows to a neighbour, half the excess slides down to it.
+		const float MaxDrop = std::tan(FMath::Clamp(ErosionTalus, 1.0f, 89.0f) / 57.29578f) * Size;
+		const float Rate = FMath::Min(1.0f, Strength * ErosionRate * DeltaSeconds);
+		std::vector<float> Delta(Heights.size(), 0.0f);
+		const int32 Offsets[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+		for (int32 Y = Y0; Y <= Y1; ++Y)
+		{
+			for (int32 X = X0; X <= X1; ++X)
+			{
+				const Vector3d Point = Field.GetPoint(X, Y);
+				const float Dx = Point.GetX() - Center.GetX();
+				const float Dy = Point.GetY() - Center.GetY();
+				const float W = Weight(std::sqrt(Dx * Dx + Dy * Dy), Radius, Brush.Falloff);
+				if (W <= 0.0f)
+				{
+					continue;
+				}
+				const SIZE_T I = static_cast<SIZE_T>(Y * Stride + X);
+				for (const auto& Offset : Offsets)
+				{
+					const int32 Nx = X + Offset[0];
+					const int32 Ny = Y + Offset[1];
+					if (Nx < 0 || Ny < 0 || Nx > Field.GetQuadsX() || Ny > Field.GetQuadsY())
+					{
+						continue;
+					}
+					const SIZE_T N = static_cast<SIZE_T>(Ny * Stride + Nx);
+					const float Excess = Old[I] - Old[N] - MaxDrop;
+					if (Excess > 0.0f)
+					{
+						// A quarter each way at most, so a point never gives
+						// more than it has above its neighbours.
+						const float Moved = Excess * 0.25f * Rate * W;
+						Delta[I] -= Moved;
+						Delta[N] += Moved;
+					}
+				}
+			}
+		}
+		for (SIZE_T I = 0; I < Heights.size(); ++I)
+		{
+			if (Delta[I] != 0.0f)
+			{
+				Heights[I] += Delta[I];
+				bChanged = true;
+			}
+		}
+		if (!bChanged)
+		{
+			return false;
+		}
+		const std::shared_ptr<const Landscape> Before = Land.GetLandscapePtr();
+		Document->SetLandscape(Land, Field.WithHeights(std::move(Heights)));
+		SnapFoliageToLandscape(*Document, Land, *Before);
+		return true;
+	}
+
+	const float FlattenTo = bFlattenToTarget ? FlattenTarget : FlattenHeight;
 	for (int32 Y = Y0; Y <= Y1; ++Y)
 	{
 		for (int32 X = X0; X <= X1; ++X)
@@ -521,10 +642,19 @@ bool FMapLandscapeMode::ApplyAt(Object& Land, const Vector3d& ScopePoint, float 
 				break;
 			}
 			case ELandscapeTool::Flatten:
-				H += (FlattenHeight - H) * Blend * W;
+			{
+				const float Moved = H + (FlattenTo - H) * Blend * W;
+				if ((FlattenMode == ELandscapeFlattenMode::Raise && Moved < H) || (FlattenMode == ELandscapeFlattenMode::Lower && Moved > H))
+				{
+					break;
+				}
+				H = Moved;
 				break;
+			}
 			case ELandscapeTool::Noise:
 				H += Hash(X, Y, NoiseSeed) * Strength * NoiseSpeed * DeltaSeconds * W;
+				break;
+			default:
 				break;
 			}
 			bChanged |= H != Before;
@@ -534,7 +664,460 @@ bool FMapLandscapeMode::ApplyAt(Object& Land, const Vector3d& ScopePoint, float 
 	{
 		return false;
 	}
+	const std::shared_ptr<const Landscape> Before = Land.GetLandscapePtr();
 	Document->SetLandscape(Land, Field.WithHeights(std::move(Heights)));
+	SnapFoliageToLandscape(*Document, Land, *Before);
+	return true;
+}
+
+bool FMapLandscapeMode::AddRamp(Object& Land, const Vector3d& From, const Vector3d& To)
+{
+	if (!Document || !Land.HasLandscape())
+	{
+		return false;
+	}
+	const Landscape& Field = Land.GetLandscape();
+	Vector3d A, B;
+	ToLocal(Land).Transform(A, From);
+	ToLocal(Land).Transform(B, To);
+	const float Ax = A.GetX(), Ay = A.GetY(), Ah = Field.SampleHeight(Ax, Ay);
+	const float Bx = B.GetX(), By = B.GetY(), Bh = Field.SampleHeight(Bx, By);
+	const float Lx = Bx - Ax, Ly = By - Ay;
+	const float Length2 = Lx * Lx + Ly * Ly;
+	const float Radius = LocalRadius(Land, Brush.Radius);
+	if (Length2 < 1.0f)
+	{
+		return false;
+	}
+	std::vector<float> Heights = Field.GetHeights();
+	const int32 Stride = Field.GetPointsX();
+	bool bChanged = false;
+	for (int32 Y = 0; Y <= Field.GetQuadsY(); ++Y)
+	{
+		for (int32 X = 0; X <= Field.GetQuadsX(); ++X)
+		{
+			const Vector3d Point = Field.GetPoint(X, Y);
+			// Along the ramp (0 at From, 1 at To) and how far to its side.
+			const float T = ((Point.GetX() - Ax) * Lx + (Point.GetY() - Ay) * Ly) / Length2;
+			if (T < 0.0f || T > 1.0f)
+			{
+				continue;
+			}
+			const float Sx = Point.GetX() - (Ax + Lx * T);
+			const float Sy = Point.GetY() - (Ay + Ly * T);
+			const float W = Weight(std::sqrt(Sx * Sx + Sy * Sy), Radius, Brush.Falloff);
+			if (W <= 0.0f)
+			{
+				continue;
+			}
+			float& H = Heights[static_cast<SIZE_T>(Y * Stride + X)];
+			const float Before = H;
+			H += (Ah + (Bh - Ah) * T - H) * W;
+			bChanged |= H != Before;
+		}
+	}
+	if (!bChanged)
+	{
+		return false;
+	}
+	const std::shared_ptr<const Landscape> Before = Land.GetLandscapePtr();
+	Document->SetLandscape(Land, Field.WithHeights(std::move(Heights)), "Landscape Ramp");
+	SnapFoliageToLandscape(*Document, Land, *Before);
+	return true;
+}
+
+bool FMapLandscapeMode::HasSelectedSplinePoint() const
+{
+	return GetSelectedSpline() && SelectedPoint >= 0 && SelectedPoint < static_cast<int32>(GetSelectedSpline()->points.size());
+}
+
+const LandscapeSpline* FMapLandscapeMode::GetSelectedSpline() const
+{
+	if (!Document || !SplineLand || !IsInScope(*Document, SplineLand) || !SplineLand->HasLandscape())
+	{
+		return nullptr;
+	}
+	const std::vector<LandscapeSpline>& Splines = SplineLand->GetLandscape().GetSplines();
+	return SelectedSpline >= 0 && SelectedSpline < static_cast<int32>(Splines.size()) ? &Splines[static_cast<SIZE_T>(SelectedSpline)] : nullptr;
+}
+
+bool FMapLandscapeMode::SetSpline(Object& Land, int32 Spline, const LandscapeSpline& NewSpline, const FString& Description)
+{
+	if (!Document || !Land.HasLandscape() || Spline < 0 || Spline >= static_cast<int32>(Land.GetLandscape().GetSplines().size()))
+	{
+		return false;
+	}
+	std::vector<LandscapeSpline> Splines = Land.GetLandscape().GetSplines();
+	Splines[static_cast<SIZE_T>(Spline)] = NewSpline;
+	Document->SetLandscape(Land, Land.GetLandscape().WithSplines(std::move(Splines)), Description);
+	return true;
+}
+
+bool FMapLandscapeMode::AddSplinePoint(Object& Land, const Vector3d& ScopePoint)
+{
+	if (!Document || !Land.HasLandscape())
+	{
+		return false;
+	}
+	LandscapeSplinePoint Point;
+	ToLocal(Land).Transform(Point.position, ScopePoint);
+	std::vector<LandscapeSpline> Splines = Land.GetLandscape().GetSplines();
+	const bool bExtend = SplineLand == &Land && HasSelectedSplinePoint();
+	if (bExtend)
+	{
+		// After the selected point, its width and falloff; at the start of
+		// a spline, before it.
+		LandscapeSpline& Spline = Splines[static_cast<SIZE_T>(SelectedSpline)];
+		const LandscapeSplinePoint& From = Spline.points[static_cast<SIZE_T>(SelectedPoint)];
+		Point.width = From.width;
+		Point.falloff = From.falloff;
+		const bool bAtStart = SelectedPoint == 0 && Spline.points.size() > 1 && !Spline.closed;
+		const int32 At = bAtStart ? 0 : SelectedPoint + 1;
+		Spline.points.insert(Spline.points.begin() + At, Point);
+		SelectedPoint = At;
+	}
+	else
+	{
+		LandscapeSpline Spline;
+		Spline.points.push_back(Point);
+		Splines.push_back(Spline);
+		SplineLand = &Land;
+		SelectedSpline = static_cast<int32>(Splines.size()) - 1;
+		SelectedPoint = 0;
+	}
+	Document->SetLandscape(Land, Land.GetLandscape().WithSplines(std::move(Splines)), "Add Spline Point");
+	return true;
+}
+
+bool FMapLandscapeMode::MoveSplinePoint(Object& Land, int32 Spline, int32 Point, const Vector3d& ScopePoint)
+{
+	if (!Document || !Land.HasLandscape() || Spline < 0 || Spline >= static_cast<int32>(Land.GetLandscape().GetSplines().size()))
+	{
+		return false;
+	}
+	std::vector<LandscapeSpline> Splines = Land.GetLandscape().GetSplines();
+	if (Point < 0 || Point >= static_cast<int32>(Splines[static_cast<SIZE_T>(Spline)].points.size()))
+	{
+		return false;
+	}
+	Vector3d At;
+	ToLocal(Land).Transform(At, ScopePoint);
+	// The point, and the others of its junction.
+	const int Joint = Splines[static_cast<SIZE_T>(Spline)].points[static_cast<SIZE_T>(Point)].joint;
+	for (int32 S = 0; S < static_cast<int32>(Splines.size()); ++S)
+	{
+		for (int32 P = 0; P < static_cast<int32>(Splines[static_cast<SIZE_T>(S)].points.size()); ++P)
+		{
+			LandscapeSplinePoint& Other = Splines[static_cast<SIZE_T>(S)].points[static_cast<SIZE_T>(P)];
+			if ((S == Spline && P == Point) || (Joint >= 0 && Other.joint == Joint))
+			{
+				Other.position = At;
+			}
+		}
+	}
+	Document->SetLandscape(Land, Land.GetLandscape().WithSplines(std::move(Splines)), "Move Spline Point");
+	return true;
+}
+
+bool FMapLandscapeMode::ConnectSplinePoint(Object& Land, int32 Spline, int32 Point)
+{
+	if (!Document || !Land.HasLandscape() || Spline < 0 || Spline >= static_cast<int32>(Land.GetLandscape().GetSplines().size()))
+	{
+		return false;
+	}
+	std::vector<LandscapeSpline> Splines = Land.GetLandscape().GetSplines();
+	if (Point < 0 || Point >= static_cast<int32>(Splines[static_cast<SIZE_T>(Spline)].points.size()))
+	{
+		return false;
+	}
+	const bool bFromSelected = SplineLand == &Land && HasSelectedSplinePoint();
+	if (bFromSelected && SelectedSpline == Spline && SelectedPoint == Point)
+	{
+		return false;
+	}
+	// A junction id none of the points has yet.
+	const auto NewJoint = [&Splines]()
+	{
+		int Highest = -1;
+		for (const LandscapeSpline& Each : Splines)
+		{
+			for (const LandscapeSplinePoint& Other : Each.points)
+			{
+				Highest = FMath::Max(Highest, Other.joint);
+			}
+		}
+		return Highest + 1;
+	};
+	// The target's junction, or a new one (the selected point is somewhere
+	// else: its own junction stays its own).
+	int Joint = Splines[static_cast<SIZE_T>(Spline)].points[static_cast<SIZE_T>(Point)].joint;
+	if (Joint < 0)
+	{
+		Joint = NewJoint();
+	}
+	LandscapeSplinePoint& Target = Splines[static_cast<SIZE_T>(Spline)].points[static_cast<SIZE_T>(Point)];
+	Target.joint = Joint;
+	LandscapeSplinePoint Joined = Target;
+	Joined.autoTangent = true;
+	if (!bFromSelected)
+	{
+		// A branch from the point: a spline of its own, starting there.
+		LandscapeSpline Branch;
+		Branch.points.push_back(Joined);
+		Splines.push_back(Branch);
+		SplineLand = &Land;
+		SelectedSpline = static_cast<int32>(Splines.size()) - 1;
+		SelectedPoint = 0;
+	}
+	else
+	{
+		LandscapeSpline& From = Splines[static_cast<SIZE_T>(SelectedSpline)];
+		LandscapeSplinePoint& Start = From.points[static_cast<SIZE_T>(SelectedPoint)];
+		const bool bAtEnd = !From.closed && SelectedPoint == static_cast<int32>(From.points.size()) - 1;
+		const bool bAtStart = !From.closed && SelectedPoint == 0 && From.points.size() > 1;
+		if (bAtEnd || bAtStart)
+		{
+			// The spline goes on to the target.
+			Joined.width = Start.width;
+			Joined.falloff = Start.falloff;
+			const int32 At = bAtEnd ? static_cast<int32>(From.points.size()) : 0;
+			From.points.insert(From.points.begin() + At, Joined);
+			SelectedPoint = At;
+		}
+		else
+		{
+			// From its middle: a new spline between the two, each end joined
+			// to its point (the start in the selected point's own junction).
+			if (Start.joint < 0)
+			{
+				Start.joint = NewJoint();
+			}
+			LandscapeSplinePoint Begin = Start;
+			Begin.autoTangent = true;
+			LandscapeSpline Link;
+			Link.layer = From.layer;
+			Link.mesh = From.mesh;
+			Link.points = { Begin, Joined };
+			Splines.push_back(Link);
+			SelectedSpline = static_cast<int32>(Splines.size()) - 1;
+			SelectedPoint = 1;
+		}
+	}
+	Document->SetLandscape(Land, Land.GetLandscape().WithSplines(std::move(Splines)), "Connect Spline Points");
+	return true;
+}
+
+bool FMapLandscapeMode::SetSplineTangent(Object& Land, int32 Spline, int32 Point, const Vector3d& Tangent)
+{
+	if (!Land.HasLandscape() || Spline < 0 || Spline >= static_cast<int32>(Land.GetLandscape().GetSplines().size()))
+	{
+		return false;
+	}
+	LandscapeSpline Changed = Land.GetLandscape().GetSplines()[static_cast<SIZE_T>(Spline)];
+	if (Point < 0 || Point >= static_cast<int32>(Changed.points.size()))
+	{
+		return false;
+	}
+	Changed.points[static_cast<SIZE_T>(Point)].autoTangent = false;
+	Changed.points[static_cast<SIZE_T>(Point)].tangent = Tangent;
+	return SetSpline(Land, Spline, Changed, "Change Spline Tangent");
+}
+
+bool FMapLandscapeMode::SetSplineAutoTangent(Object& Land, int32 Spline, int32 Point)
+{
+	if (!Land.HasLandscape() || Spline < 0 || Spline >= static_cast<int32>(Land.GetLandscape().GetSplines().size()))
+	{
+		return false;
+	}
+	LandscapeSpline Changed = Land.GetLandscape().GetSplines()[static_cast<SIZE_T>(Spline)];
+	if (Point < 0 || Point >= static_cast<int32>(Changed.points.size()) || Changed.points[static_cast<SIZE_T>(Point)].autoTangent)
+	{
+		return false;
+	}
+	Changed.points[static_cast<SIZE_T>(Point)].autoTangent = true;
+	return SetSpline(Land, Spline, Changed, "Change Spline Tangent");
+}
+
+bool FMapLandscapeMode::BreakSelectedJunction()
+{
+	if (!HasSelectedSplinePoint() || GetSelectedSpline()->points[static_cast<SIZE_T>(SelectedPoint)].joint < 0)
+	{
+		return false;
+	}
+	LandscapeSpline Changed = *GetSelectedSpline();
+	Changed.points[static_cast<SIZE_T>(SelectedPoint)].joint = -1;
+	return SetSpline(*SplineLand, SelectedSpline, Changed, "Break Spline Junction");
+}
+
+bool FMapLandscapeMode::GetTangentHandles(Vector3d& OutBefore, Vector3d& OutAfter) const
+{
+	if (!HasSelectedSplinePoint() || GetSelectedSpline()->points.size() < 2)
+	{
+		return false;
+	}
+	const LandscapeSpline& Spline = *GetSelectedSpline();
+	const Vector3d& At = Spline.points[static_cast<SIZE_T>(SelectedPoint)].position;
+	Vector3d Third = Spline.GetTangent(SelectedPoint);
+	Third.MultVector(1.0f / 3.0f);
+	Vector3d Before(At), After(At);
+	Before.SubVector(Third);
+	After.AddVector(Third);
+	const Matrix44 Forward = ToScope(*SplineLand);
+	Forward.Transform(OutBefore, Before);
+	Forward.Transform(OutAfter, After);
+	return true;
+}
+
+bool FMapLandscapeMode::DeleteSelectedSplinePoint()
+{
+	if (!HasSelectedSplinePoint())
+	{
+		return false;
+	}
+	std::vector<LandscapeSpline> Splines = SplineLand->GetLandscape().GetSplines();
+	LandscapeSpline& Spline = Splines[static_cast<SIZE_T>(SelectedSpline)];
+	const int Joint = Spline.points[static_cast<SIZE_T>(SelectedPoint)].joint;
+	Spline.points.erase(Spline.points.begin() + SelectedPoint);
+	if (Joint >= 0)
+	{
+		// A junction of one left is none.
+		LandscapeSplinePoint* Last = nullptr;
+		int Count = 0;
+		for (LandscapeSpline& Each : Splines)
+		{
+			for (LandscapeSplinePoint& Other : Each.points)
+			{
+				if (Other.joint == Joint)
+				{
+					Last = &Other;
+					++Count;
+				}
+			}
+		}
+		if (Count == 1)
+		{
+			Last->joint = -1;
+		}
+	}
+	if (Spline.points.empty())
+	{
+		Splines.erase(Splines.begin() + SelectedSpline);
+		SelectedSpline = -1;
+		SelectedPoint = -1;
+	}
+	else
+	{
+		SelectedPoint = FMath::Min(SelectedPoint, static_cast<int32>(Spline.points.size()) - 1);
+	}
+	Document->SetLandscape(*SplineLand, SplineLand->GetLandscape().WithSplines(std::move(Splines)), "Delete Spline Point");
+	return true;
+}
+
+bool FMapLandscapeMode::DeleteSelectedSpline()
+{
+	if (!GetSelectedSpline())
+	{
+		return false;
+	}
+	std::vector<LandscapeSpline> Splines = SplineLand->GetLandscape().GetSplines();
+	Splines.erase(Splines.begin() + SelectedSpline);
+	SelectedSpline = -1;
+	SelectedPoint = -1;
+	Document->SetLandscape(*SplineLand, SplineLand->GetLandscape().WithSplines(std::move(Splines)), "Delete Spline");
+	return true;
+}
+
+bool FMapLandscapeMode::ApplySplines(Object& Land)
+{
+	if (!Document || !Land.HasLandscape())
+	{
+		return false;
+	}
+	std::shared_ptr<const Landscape> Applied = Land.GetLandscape().WithSplinesApplied();
+	if (!Applied)
+	{
+		return false;
+	}
+	const std::shared_ptr<const Landscape> Before = Land.GetLandscapePtr();
+	const bool bOwn = !Document->IsInTransaction();
+	if (bOwn)
+	{
+		Document->BeginTransaction("Apply Splines to Landscape");
+	}
+	Document->SetLandscape(Land, std::move(Applied), "Apply Splines to Landscape");
+	SnapFoliageToLandscape(*Document, Land, *Before);
+	if (bOwn)
+	{
+		Document->EndTransaction();
+	}
+	return true;
+}
+
+bool FMapLandscapeMode::PickSplinePoint(const FMapViewportClient& View, FVector2 Local, float Pixels, Object*& OutLand, int32& OutSpline,
+	int32& OutPoint) const
+{
+	if (!Document)
+	{
+		return false;
+	}
+	float Best = Pixels * Pixels;
+	bool bFound = false;
+	for (Object* Obj : Document->GetObjects())
+	{
+		if (!Obj->HasLandscape())
+		{
+			continue;
+		}
+		const Matrix44 Forward = ToScope(*Obj);
+		const std::vector<LandscapeSpline>& Splines = Obj->GetLandscape().GetSplines();
+		for (int32 S = 0; S < static_cast<int32>(Splines.size()); ++S)
+		{
+			for (int32 P = 0; P < static_cast<int32>(Splines[static_cast<SIZE_T>(S)].points.size()); ++P)
+			{
+				Vector3d At;
+				Forward.Transform(At, Splines[static_cast<SIZE_T>(S)].points[static_cast<SIZE_T>(P)].position);
+				FVector2 Screen;
+				if (!View.MapToScreen(At, Screen))
+				{
+					continue;
+				}
+				const FVector2 Delta = Screen - Local;
+				const float D2 = Delta.X * Delta.X + Delta.Y * Delta.Y;
+				if (D2 <= Best)
+				{
+					Best = D2;
+					OutLand = Obj;
+					OutSpline = S;
+					OutPoint = P;
+					bFound = true;
+				}
+			}
+		}
+	}
+	return bFound;
+}
+
+bool FMapLandscapeMode::ApplyAutoPaint(Object& Land, int32 Layer)
+{
+	if (!Document || !Land.HasLandscape() || Layer < 0 || Layer >= Land.GetLandscape().GetNumLayers())
+	{
+		return false;
+	}
+	const Landscape& Field = Land.GetLandscape();
+	std::vector<LandscapeLayer> Layers = Field.GetLayers();
+	const SIZE_T Painted = static_cast<SIZE_T>(Layer);
+	const int32 PointsX = Field.GetPointsX();
+	for (int32 Y = 0; Y < Field.GetPointsY(); ++Y)
+	{
+		for (int32 X = 0; X < PointsX; ++X)
+		{
+			const SIZE_T I = static_cast<SIZE_T>(Y * PointsX + X);
+			Layers[Painted].weights[I] = AutoPaint.WeightAt(Field, X, Y);
+			GiveWay(Layers, Painted, I);
+		}
+	}
+	const FString Description = FString::Format("Auto Paint {}", Field.GetLayers()[Painted].name);
+	Document->SetLandscape(Land, Field.WithLayers(std::move(Layers)), Description);
 	return true;
 }
 
@@ -582,29 +1165,133 @@ bool FMapLandscapeMode::InputPress(FMapViewportClient& View, FVector2 Local, con
 {
 	// Every left press is the mode's, as in Unreal: off a landscape it does
 	// nothing (no box selection), on one it starts a stroke.
+	if (Tool == ELandscapeTool::Splines)
+	{
+		// Ctrl+click adds a point; a click picks one (and a drag moves it).
+		bHeld = true;
+		Object* Picked = nullptr;
+		int32 Spline = -1, Point = -1;
+		if (Event.IsControlDown())
+		{
+			// On another point: a junction (or a branch); else a new point.
+			if (PickSplinePoint(View, Local, 10.0f, Picked, Spline, Point) && !(Picked == SplineLand && Spline == SelectedSpline && Point == SelectedPoint))
+			{
+				ConnectSplinePoint(*Picked, Spline, Point);
+			}
+			else if (UpdateHover(View, Local))
+			{
+				AddSplinePoint(*HoverLand, HoverPoint);
+			}
+			return true;
+		}
+		// The selected point's tangent handles come first.
+		Vector3d Handles[2];
+		if (GetTangentHandles(Handles[0], Handles[1]))
+		{
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				FVector2 Screen;
+				if (View.MapToScreen(Handles[Side], Screen) && (Screen - Local).SizeSquared() <= 100.0f)
+				{
+					DraggingHandle = Side == 0 ? -1 : 1;
+					Document->BeginTransaction("Change Spline Tangent");
+					return true;
+				}
+			}
+		}
+		if (PickSplinePoint(View, Local, 10.0f, Picked, Spline, Point))
+		{
+			SplineLand = Picked;
+			SelectedSpline = Spline;
+			SelectedPoint = Point;
+			Document->BeginTransaction("Move Spline Point");
+			bDraggingPoint = true;
+		}
+		else
+		{
+			SelectedSpline = SelectedPoint = -1;
+		}
+		return true;
+	}
 	bHeld = true;
 	bInvert = Event.IsShiftDown();
+	RampLand = nullptr;
 	if (UpdateHover(View, Local))
 	{
-		BeginStroke(*HoverLand, HoverPoint, bInvert);
+		if (Tool == ELandscapeTool::Ramp)
+		{
+			RampLand = HoverLand;
+			RampFrom = HoverPoint;
+		}
+		else
+		{
+			BeginStroke(*HoverLand, HoverPoint, bInvert);
+		}
 	}
 	return true;
 }
 
 void FMapLandscapeMode::InputRelease(FMapViewportClient&)
 {
+	if (bDraggingPoint || DraggingHandle != 0)
+	{
+		bDraggingPoint = false;
+		DraggingHandle = 0;
+		if (Document && Document->IsInTransaction())
+		{
+			Document->EndTransaction();
+		}
+	}
 	bHeld = false;
 	EndStroke();
+	if (RampLand && HoverLand == RampLand)
+	{
+		AddRamp(*RampLand, RampFrom, HoverPoint);
+	}
+	RampLand = nullptr;
 }
 
 void FMapLandscapeMode::MouseMove(FMapViewportClient& View, FVector2 Local, const FPointerEvent& Event)
 {
 	UpdateHover(View, Local);
+	if (Tool == ELandscapeTool::Splines)
+	{
+		// The point dragged over the ground of its landscape.
+		if (bDraggingPoint && HoverLand == SplineLand && HasSelectedSplinePoint())
+		{
+			MoveSplinePoint(*SplineLand, SelectedSpline, SelectedPoint, HoverPoint);
+		}
+		// A handle: where the cursor's ray passes nearest it, so it moves
+		// in the plane facing the view (level in a top view).
+		Vector3d Handles[2], Origin, Direction;
+		if (DraggingHandle != 0 && GetTangentHandles(Handles[0], Handles[1]) && View.GetCursorRay(Local, Origin, Direction))
+		{
+			const Vector3d& Was = Handles[DraggingHandle < 0 ? 0 : 1];
+			Vector3d ToHandle(Was);
+			ToHandle.SubVector(Origin);
+			const float Length2 = FMath::Max(Direction.DotVector(Direction), 1e-12f);
+			Vector3d Now(Direction);
+			Now.MultVector(ToHandle.DotVector(Direction) / Length2).AddVector(Origin);
+			Vector3d LocalNow, LocalAt;
+			ToLocal(*SplineLand).Transform(LocalNow, Now);
+			LocalAt = GetSelectedSpline()->points[static_cast<SIZE_T>(SelectedPoint)].position;
+			Vector3d Tangent(LocalNow);
+			Tangent.SubVector(LocalAt);
+			Tangent.MultVector(3.0f * static_cast<float>(DraggingHandle));
+			SetSplineTangent(*SplineLand, SelectedSpline, SelectedPoint, Tangent);
+		}
+		return;
+	}
 	bInvert = Event.IsShiftDown();
 	// A press that began off the landscape strokes once the cursor is on it.
-	if (bHeld && !StrokeTarget && HoverLand)
+	if (bHeld && !StrokeTarget && HoverLand && Tool != ELandscapeTool::Ramp)
 	{
 		BeginStroke(*HoverLand, HoverPoint, bInvert);
+	}
+	if (bHeld && !RampLand && HoverLand && Tool == ELandscapeTool::Ramp)
+	{
+		RampLand = HoverLand;
+		RampFrom = HoverPoint;
 	}
 	if (StrokeTarget && HoverLand == StrokeTarget)
 	{
@@ -630,8 +1317,106 @@ void FMapLandscapeMode::Tick(FMapViewportClient&, float DeltaSeconds)
 	}
 }
 
+void DrawLandscapeSplines(const FMapDocument& Document, const FMapViewportClient& View, FSlateWindowElementList& Out, float DpiScale,
+	const Object* SelectedLand, int32 SelectedSpline, int32 SelectedPoint)
+{
+	const FIntPoint Pixels = View.GetSize();
+	const FPaintGeometry Whole = FPaintGeometry::Make(FVector2::Zero(), Pixels.ToVector2() / DpiScale, DpiScale);
+	std::vector<LandscapeSpline::Sample> Samples;
+	for (Object* Obj : Document.GetObjects())
+	{
+		if (!Obj->HasLandscape() || Obj->GetLandscape().GetSplines().empty())
+		{
+			continue;
+		}
+		const Matrix44 Forward = ToScope(*Obj);
+		const std::vector<LandscapeSpline>& Splines = Obj->GetLandscape().GetSplines();
+		for (int32 S = 0; S < static_cast<int32>(Splines.size()); ++S)
+		{
+			const LandscapeSpline& Spline = Splines[static_cast<SIZE_T>(S)];
+			const bool bSelected = Obj == SelectedLand && S == SelectedSpline;
+			const FColor Line = bSelected ? FColor(255, 200, 90) : FColor(240, 150, 70, 220);
+			// The curve, in runs that break where it leaves the view.
+			Spline.SampleCurve(Obj->GetLandscape().GetQuadSize(), Samples);
+			TArray<FVector2> Run;
+			const auto Flush = [&]
+			{
+				if (Run.size() > 1)
+				{
+					Out.AddLines(8, Whole, Run, Line, bSelected ? 2.0f : 1.5f);
+				}
+				Run.clear();
+			};
+			for (const LandscapeSpline::Sample& Sample : Samples)
+			{
+				Vector3d At;
+				Forward.Transform(At, Sample.position);
+				FVector2 Screen;
+				if (View.MapToScreen(At, Screen))
+				{
+					Run.push_back(Screen);
+				}
+				else
+				{
+					Flush();
+				}
+			}
+			Flush();
+			// The control points.
+			for (int32 P = 0; P < static_cast<int32>(Spline.points.size()); ++P)
+			{
+				Vector3d At;
+				Forward.Transform(At, Spline.points[static_cast<SIZE_T>(P)].position);
+				FVector2 Screen;
+				if (!View.MapToScreen(At, Screen))
+				{
+					continue;
+				}
+				const bool bPoint = bSelected && P == SelectedPoint;
+				// A junction: a bigger square, outlined.
+				const bool bJoint = Spline.points[static_cast<SIZE_T>(P)].joint >= 0;
+				const float Size = bJoint ? 11.0f : (bPoint ? 9.0f : 6.0f);
+				Out.AddRoundedBox(9, FPaintGeometry::Make(Screen - FVector2(Size * 0.5f, Size * 0.5f), FVector2(Size, Size), DpiScale),
+					bPoint ? FColor(255, 255, 255) : Line, bJoint ? 1.5f : Size * 0.5f, bJoint ? FColor(255, 255, 255) : FColor(30, 30, 30), bJoint ? 1.5f : 1.0f);
+			}
+		}
+	}
+}
+
 void FMapLandscapeMode::DrawOverlay(const FMapViewportClient& View, FSlateWindowElementList& Out, float DpiScale) const
 {
+	// Splines: the selected point (drawn for every view by the client, the
+	// selection here); no brush ring.
+	if (Tool == ELandscapeTool::Splines)
+	{
+		if (Document && HasSelectedSplinePoint())
+		{
+			const LandscapeSplinePoint& Point = GetSelectedSpline()->points[static_cast<SIZE_T>(SelectedPoint)];
+			Vector3d At;
+			ToScope(*SplineLand).Transform(At, Point.position);
+			FVector2 Screen;
+			if (View.MapToScreen(At, Screen))
+			{
+				Out.AddRoundedBox(10, FPaintGeometry::Make(Screen - FVector2(7.0f, 7.0f), FVector2(14.0f, 14.0f), DpiScale), FColor(0, 0, 0, 0), 7.0f,
+					FColor(255, 255, 255), 2.0f);
+				// Its tangent handles, on a line through it.
+				Vector3d Handles[2];
+				FVector2 Ends[2];
+				if (GetTangentHandles(Handles[0], Handles[1]) && View.MapToScreen(Handles[0], Ends[0]) && View.MapToScreen(Handles[1], Ends[1]))
+				{
+					const FIntPoint Pixels = View.GetSize();
+					const FPaintGeometry Whole = FPaintGeometry::Make(FVector2::Zero(), Pixels.ToVector2() / DpiScale, DpiScale);
+					Out.AddLines(10, Whole, { Ends[0], Screen, Ends[1] }, FColor(120, 210, 255), 1.5f);
+					for (const FVector2& End : Ends)
+					{
+						Out.AddRoundedBox(11, FPaintGeometry::Make(End - FVector2(4.5f, 4.5f), FVector2(9.0f, 9.0f), DpiScale), FColor(120, 210, 255), 1.5f,
+							FColor(20, 40, 60), 1.0f);
+					}
+				}
+			}
+		}
+		return;
+	}
 	if (!Document || HoverView != &View || !IsInScope(*Document, HoverLand) || !HoverLand->HasLandscape())
 	{
 		return;
@@ -693,6 +1478,42 @@ void FMapLandscapeMode::DrawOverlay(const FMapViewportClient& View, FSlateWindow
 	{
 		Out.AddRoundedBox(8, FPaintGeometry::Make(Dot - FVector2(2.5f, 2.5f), FVector2(5.0f, 5.0f), DpiScale), FColor(110, 190, 255), 2.5f);
 	}
+	// The ramp being dragged out: its middle and its two sides on the ground.
+	if (RampLand == HoverLand)
+	{
+		Vector3d From;
+		ToLocal(*HoverLand).Transform(From, RampFrom);
+		const float Lx = Center.GetX() - From.GetX();
+		const float Ly = Center.GetY() - From.GetY();
+		const float Length = std::sqrt(Lx * Lx + Ly * Ly);
+		if (Length > 1.0f)
+		{
+			const float Nx = -Ly / Length * Radius;
+			const float Ny = Lx / Length * Radius;
+			for (const float Side : { 0.0f, 1.0f, -1.0f })
+			{
+				TArray<FVector2> Run;
+				constexpr int32 Steps = 32;
+				for (int32 Step = 0; Step <= Steps; ++Step)
+				{
+					const float T = static_cast<float>(Step) / Steps;
+					const float X = From.GetX() + Lx * T + Nx * Side;
+					const float Y = From.GetY() + Ly * T + Ny * Side;
+					Vector3d Point;
+					Forward.Transform(Point, Vector3d(X, Y, Field.SampleHeight(X, Y)));
+					FVector2 Screen;
+					if (View.MapToScreen(Point, Screen))
+					{
+						Run.push_back(Screen);
+					}
+				}
+				if (Run.size() > 1)
+				{
+					Out.AddLines(8, Whole, Run, FColor(110, 190, 255, Side == 0.0f ? 255 : 160), Side == 0.0f ? 2.0f : 1.0f);
+				}
+			}
+		}
+	}
 }
 
 FString FMapLandscapeMode::GetHint() const
@@ -700,6 +1521,10 @@ FString FMapLandscapeMode::GetHint() const
 	switch (Tool)
 	{
 	case ELandscapeTool::Sculpt: return "Landscape: Sculpt (Shift lowers)";
+	case ELandscapeTool::Flatten:
+		return bFlattenToTarget ? FString::Format("Landscape: Flatten to {:.0f}", FlattenTarget) : FString("Landscape: Flatten");
+	case ELandscapeTool::Ramp: return "Landscape: Ramp (drag from the bottom to the top)";
+	case ELandscapeTool::Splines: return "Landscape: Splines (Ctrl+click adds a point or joins one, drag moves one or a tangent handle, Delete removes it)";
 	case ELandscapeTool::Paint:
 	{
 		const Object* Land = GetTargetLandscape();

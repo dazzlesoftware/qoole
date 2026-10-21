@@ -49,6 +49,9 @@ class Clip {
   int  ClipPolygon(int &numPts, Point3d *buf1,
                    Point3d *buf2, Point3d **fPtr) const;
   int  BoundObject(const Object &obj) const;
+  // A box's corners (view space): 1 all inside, -1 all outside one side of
+  // the volume, 0 otherwise.
+  int  BoundBox(const Point3d corners[8]) const;
   bool IsObjectInVolume(Object &obj) const;
 
  private:

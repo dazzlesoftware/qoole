@@ -4,6 +4,7 @@
 // editing operations are in MapDocumentOps.cpp.
 
 #include "MapDocument.h"
+#include "MapPackage.h"
 
 #include "MapEdits.h"
 
@@ -64,6 +65,8 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	Geometry* BrushB = B.SetBrush(nullptr);
 	std::shared_ptr<const Landscape> LandA = A.SetLandscape(nullptr);
 	std::shared_ptr<const Landscape> LandB = B.SetLandscape(nullptr);
+	std::shared_ptr<const Foliage> FoliageA = A.SetFoliage(nullptr);
+	std::shared_ptr<const Foliage> FoliageB = B.SetFoliage(nullptr);
 	std::shared_ptr<const StaticMesh> MeshA = A.SetMesh(nullptr);
 	std::shared_ptr<const StaticMesh> MeshB = B.SetMesh(nullptr);
 
@@ -73,6 +76,8 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	B.SetMesh(MeshA);
 	A.SetLandscape(LandB); // with its own mesh
 	B.SetLandscape(LandA);
+	A.SetFoliage(FoliageB);
+	B.SetFoliage(FoliageA);
 	A.SetEntity(EntityB, false);
 	B.SetEntity(EntityA, false);
 	const TransSpace SpaceA = A;
@@ -185,6 +190,14 @@ namespace
 	{
 		return FPaths::GetExtension(Path).Equals(Extension, ESearchCase::IgnoreCase);
 	}
+
+	FString NativeImportDestination(const FString& Source)
+	{
+		const FString Native = FString::FromWide(std::filesystem::path(Source.ToWide()).replace_extension(L".gmap").wstring());
+		// If a native level already exists beside an import, ask for a save
+		// destination through the ordinary untitled-document Save As flow.
+		return FFileHelper::FileExists(Native) ? FString() : Native;
+	}
 }
 
 TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutError)
@@ -195,6 +208,18 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 		return nullptr;
 	}
 	const std::string AnsiPath = InPath.ToAnsi();
+	if (HasExtension(InPath, "gmap"))
+	{
+		FString Id;
+		auto Loaded = FMapPackage::Load(InPath, Id, OutError);
+		if (!Loaded) return nullptr;
+		const FMapGameSet* Active = FMapEditorEnvironment::GetActiveGameSet();
+		check(Active);
+		TUniquePtr<FMapDocument> Doc(new FMapDocument(Loaded.release(), *Active));
+		Doc->Path = InPath;
+		Doc->PackageId = Id;
+		return Doc;
+	}
 
 	if (HasExtension(InPath, "map"))
 	{
@@ -208,8 +233,7 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 		}
 		TUniquePtr<FMapDocument> Doc(new FMapDocument(Root, *Active));
 		// An imported map is saved as .qle next to it.
-		const std::filesystem::path QlePath = std::filesystem::path(InPath.ToWide()).replace_extension(L".qle");
-		Doc->Path = FString::FromWide(QlePath.wstring());
+		Doc->Path = NativeImportDestination(InPath);
 		Doc->SavedVersion = -1;
 		return Doc;
 	}
@@ -252,8 +276,8 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 		Root->SetEntity(new Entity("worldspawn"));
 	}
 	TUniquePtr<FMapDocument> Doc(new FMapDocument(Root, *Set));
-	Doc->Path = InPath;
-	if (bConverted)
+	Doc->Path = NativeImportDestination(InPath);
+	if (bConverted || HasExtension(InPath, "qle"))
 	{
 		Doc->SavedVersion = -1; // saving writes the new header
 	}
@@ -263,6 +287,17 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 bool FMapDocument::Save(const FString& InPath, FString& OutError)
 {
 	check(!Pending);
+	if (HasExtension(InPath, "gmap"))
+	{
+		// Save As creates a distinct package; ordinary saves keep its identity.
+		FString Id = Path == InPath ? PackageId : FString();
+		if (!FMapPackage::Save(InPath, *Root, Id, OutError)) return false;
+		PackageId = Id;
+		Path = InPath;
+		SavedVersion = Version;
+		Changed(EMapChange::File);
+		return true;
+	}
 	const std::string AnsiPath = InPath.ToAnsi();
 	if (HasExtension(InPath, "map"))
 	{

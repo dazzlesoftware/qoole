@@ -68,8 +68,9 @@ public:
 
 	VkImage GetImage() const { return Image; }
 	VkFormat GetVkFormat() const { return Format; }
-	// Descriptor set (set 0) for pipelines using the given sampler filter.
-	VkDescriptorSet GetDescriptorSet(ESamplerFilter Filter);
+	// Its descriptor set (the image and a sampler, GetSamplerIndex), bound
+	// at the set of the texture slot it is in.
+	VkDescriptorSet GetDescriptorSet(uint32 SamplerIndex);
 	// Framebuffer for render passes into this texture (render targets only),
 	// optionally with a depth buffer; one depth buffer is kept at a time.
 	VkFramebuffer GetFramebuffer(VkRenderPass CompatibleRenderPass, FVulkanTexture* Depth = nullptr);
@@ -85,8 +86,8 @@ private:
 	VkFramebuffer Framebuffer = VK_NULL_HANDLE;
 	VkFramebuffer DepthFramebuffer = VK_NULL_HANDLE;
 	VkImageView DepthFramebufferView = VK_NULL_HANDLE; // the depth view DepthFramebuffer was made with
-	VkDescriptorSet DescriptorSets[2] = {};
-	VkDescriptorPool DescriptorPools[2] = {};
+	VkDescriptorSet DescriptorSets[NumSamplers] = {};
+	VkDescriptorPool DescriptorPools[NumSamplers] = {};
 };
 
 class FVulkanGraphicsPipeline final : public FRHIGraphicsPipeline
@@ -175,10 +176,13 @@ public:
 	void SetScissor(const FIntRect& Rect) override;
 	void SetPipeline(FRHIGraphicsPipeline& Pipeline) override;
 	void SetPushConstants(const void* Data, uint32 Size) override;
-	void SetTexture(FRHITexture& Texture) override;
-	void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride) override;
+	using FRHICommandList::SetTexture;
+	void SetTexture(FRHITexture& Texture, uint32 Slot) override;
+	using FRHICommandList::SetVertexBuffer;
+	void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride, uint32 Slot) override;
 	void SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndexFormat Format) override;
 	void DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex) override;
+	void DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance) override;
 
 private:
 	void BeginPass(VkRenderPass RenderPass, VkFramebuffer Framebuffer, uint32 Width, uint32 Height, const TOptional<FLinearColor>& ClearColor,
@@ -191,7 +195,7 @@ private:
 	bool bSkipPass = false; // the target could not be drawn into; commands are dropped
 	FIntPoint PassSize;
 	FVulkanGraphicsPipeline* Pipeline = nullptr;
-	FVulkanTexture* Texture = nullptr;
+	FVulkanTexture* Textures[MaxTextures] = {};
 	bool bDescriptorDirty = true;
 	bool bPushConstantsDirty = false;
 	uint8 PushConstantData[64] = {};
@@ -224,7 +228,7 @@ public:
 	TSharedPtr<FRHIBuffer> CreateBuffer(const FRHIBufferDesc& Desc) override;
 	TSharedPtr<FRHITexture> CreateTexture(const FRHITextureDesc& Desc) override;
 	TSharedPtr<FRHIGraphicsPipeline> CreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc) override;
-	void UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch = 0) override;
+	void UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch = 0, uint32 Slice = 0) override;
 	bool ReadbackTexture(FRHITexture& Texture, TArray<uint8>& OutPixels) override;
 	FRHICommandList& BeginFrame() override;
 	void EndFrame() override;
@@ -252,8 +256,10 @@ public:
 	// all passes with the same formats are compatible.
 	VkRenderPass GetRenderPass(VkFormat Format, bool bClear, VkImageLayout InitialLayout, VkImageLayout FinalLayout,
 		VkFormat DepthFormat = VK_FORMAT_UNDEFINED, bool bClearDepth = false);
-	VkPipelineLayout GetPipelineLayout(ESamplerFilter Filter) const { return PipelineLayouts[static_cast<uint32>(Filter)]; }
-	VkDescriptorSet AllocateDescriptorSet(ESamplerFilter Filter, VkDescriptorPool& OutPool);
+	// A set per texture slot, each the same layout (so a texture's set fits
+	// any slot), and the push constants; made when first asked for.
+	VkPipelineLayout GetPipelineLayout(uint32 SamplerIndex, uint32 NumTextures);
+	VkDescriptorSet AllocateDescriptorSet(uint32 SamplerIndex, VkDescriptorPool& OutPool);
 	FVulkanTexture& GetWhiteTexture() const { return *WhiteTexture; }
 
 	// Starts an upload; see the header comment. StagingSize may be 0.
@@ -306,9 +312,9 @@ private:
 	FString AdapterName;
 	bool bLibraryLoaded = false;
 
-	VkSampler Samplers[2] = {};
-	VkDescriptorSetLayout SetLayouts[2] = {};
-	VkPipelineLayout PipelineLayouts[2] = {};
+	VkSampler Samplers[NumSamplers] = {};
+	VkDescriptorSetLayout SetLayouts[NumSamplers] = {};
+	TMap<uint32, VkPipelineLayout> PipelineLayouts; // by sampler and texture count
 	TArray<VkDescriptorPool> DescriptorPools;
 	TMap<uint64, VkRenderPass> RenderPasses;
 

@@ -53,7 +53,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ConformanceMode>false</ConformanceMode>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>Private;Public\Basic;Public\Objects;Public\Render;Public\Game;$(GenesisRuntimeDir)Core\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;Private;Public\Basic;Public\Objects;Public\Render;Public\Game;$(GenesisRuntimeDir)Core\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -75,14 +75,15 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Private\Basic\LCommon.cpp" />
-    <ClCompile Include="Private\Basic\Math3D.cpp" />
+
     <ClCompile Include="Private\Objects\EntList.cpp" />
     <ClCompile Include="Private\Objects\Entity.cpp" />
     <ClCompile Include="Private\Objects\Game.cpp" />
     <ClCompile Include="Private\Objects\Geometry.cpp" />
     <ClCompile Include="Private\Objects\Objects.cpp" />
-    <ClCompile Include="Private\Objects\StaticMesh.cpp" />
-    <ClCompile Include="Private\Objects\Landscape.cpp" />
+
+
+
     <ClCompile Include="Private\Objects\Texture.cpp" />
     <ClCompile Include="Private\Render\Clip.cpp" />
     <ClCompile Include="Private\Render\DrawBase.cpp" />
@@ -92,7 +93,7 @@
     <ClCompile Include="Private\Game\MapIO.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Private\MapCorePCH.h" />
+    <ClInclude Include="Private\MapCorePCH.h" /><ClInclude Include="Private\Render\MeshVertexBuffer.h" />
     <ClInclude Include="Public\Basic\LCommon.h" />
     <ClInclude Include="Public\Basic\List.h" />
     <ClInclude Include="Public\Basic\Math3D.h" />
@@ -102,6 +103,7 @@
     <ClInclude Include="Public\Objects\Geometry.h" />
     <ClInclude Include="Public\Objects\Objects.h" />
     <ClInclude Include="Public\Objects\StaticMesh.h" />
+    <ClInclude Include="Public\Objects\Foliage.h" />
     <ClInclude Include="Public\Objects\Landscape.h" />
     <ClInclude Include="Public\Objects\Texture.h" />
     <ClInclude Include="Public\Render\Clip.h" />
@@ -116,5 +118,6 @@
       <Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Engine\Engine.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C04}</Project></ProjectReference></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

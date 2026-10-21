@@ -3,15 +3,20 @@
 #include "MapViewportClient.h"
 
 #include "MapDraw.h"
+#include "MapLandscapeMode.h"
 #include "MapEditorPrivate.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontCache.h"
 #include "Styling/SlateStyle.h"
 
+#include "MapShaders_PSLandscape_DXIL.h"
 #include "MapShaders_PSTextured_DXIL.h"
+#include "MapShaders_VSFoliage_DXIL.h"
 #include "MapShaders_VSMain_DXIL.h"
+#include "Shaders/MapShaders_PSLandscape_SPIRV.h"
 #include "Shaders/MapShaders_PSTextured_SPIRV.h"
+#include "Shaders/MapShaders_VSFoliage_SPIRV.h"
 #include "Shaders/MapShaders_VSMain_SPIRV.h"
 
 #include <algorithm>
@@ -62,8 +67,11 @@ const char* ToString(EMapViewMode Mode)
 namespace
 {
 	constexpr FColor BackgroundColor(24, 26, 31);
-	constexpr float ClipDepth2D = 8192.0f;
-	constexpr float ClipDepth3D = 8192.0f;
+	// How deep the views see: far enough for the biggest landscapes, which
+	// are drawn coarser with distance (View::RenderLandscapeSolid).
+	constexpr float ClipDepth2D = 65536.0f;
+	constexpr float ClipDepth3D = 65536.0f;
+	constexpr float DropDepth3D = 4096.0f; // the ground counts for drops this near
 	constexpr float DragThreshold = 4.0f; // logical pixels before a press becomes a drag
 	constexpr float MinZoom = 0.02f;
 	constexpr float MaxZoom = 16.0f;
@@ -213,22 +221,231 @@ FRHIGraphicsPipeline* FMapRenderResources::GetSolidPipeline(EPixelFormat TargetF
 	Desc.BlendMode = EBlendMode::Opaque;
 	Desc.RenderTargetFormat = TargetFormat;
 	Desc.DepthFormat = EPixelFormat::D32_FLOAT;
-	Desc.PushConstantSize = 16;
+	// The shaders' constants are 64 bytes (MapShaders.hlsl), faces use 16.
+	Desc.PushConstantSize = 64;
 	Desc.DebugName = "Map solid faces";
 	SolidPipeline = Device.CreateGraphicsPipeline(Desc);
 	SolidFormat = TargetFormat;
 	return SolidPipeline.get();
 }
 
-FMapRenderResources::~FMapRenderResources()
+FRHIGraphicsPipeline* FMapRenderResources::GetLandscapePipeline(EPixelFormat TargetFormat)
 {
-	for (auto& [Land, Entry] : Landscapes)
+	if (LandscapePipeline && LandscapeFormat == TargetFormat)
 	{
-		if (Entry->Texture)
+		return LandscapePipeline.get();
+	}
+	FRHIGraphicsPipeline* Solid = GetSolidPipeline(TargetFormat);
+	if (!Solid)
+	{
+		return nullptr;
+	}
+	FRHIGraphicsPipelineDesc Desc = Solid->GetDesc();
+	const bool bVulkan = Device.GetBackend() == ERHIBackend::Vulkan;
+	Desc.PixelShader = bVulkan ? FRHIShaderBytecode{ g_MapShaders_PSLandscape_SPIRV, sizeof(g_MapShaders_PSLandscape_SPIRV) }
+		: FRHIShaderBytecode{ g_MapShaders_PSLandscape_DXIL, sizeof(g_MapShaders_PSLandscape_DXIL) };
+	// Slot 0 unused, then the weights and the layers' textures (which repeat).
+	Desc.NumTextures = 3;
+	Desc.SamplerAddress = ESamplerAddress::Wrap;
+	Desc.DebugName = "Map landscape layers";
+	LandscapePipeline = Device.CreateGraphicsPipeline(Desc);
+	LandscapeFormat = TargetFormat;
+	return LandscapePipeline.get();
+}
+
+namespace
+{
+	// A corner of a mesh's triangle for the instanced pipeline.
+	struct FInstancedVertex
+	{
+		float Position[3];
+		float Normal[3];
+		uint32 Color; // RGBA8, R in the low byte
+	};
+}
+
+FRHIGraphicsPipeline* FMapRenderResources::GetInstancedPipeline(EPixelFormat TargetFormat)
+{
+	if (InstancedPipeline && InstancedFormat == TargetFormat)
+	{
+		return InstancedPipeline.get();
+	}
+	FRHIGraphicsPipeline* Solid = GetSolidPipeline(TargetFormat);
+	if (!Solid)
+	{
+		return nullptr;
+	}
+	FRHIGraphicsPipelineDesc Desc = Solid->GetDesc();
+	const bool bVulkan = Device.GetBackend() == ERHIBackend::Vulkan;
+	Desc.VertexShader = bVulkan ? FRHIShaderBytecode{ g_MapShaders_VSFoliage_SPIRV, sizeof(g_MapShaders_VSFoliage_SPIRV) }
+		: FRHIShaderBytecode{ g_MapShaders_VSFoliage_DXIL, sizeof(g_MapShaders_VSFoliage_DXIL) };
+	// The mesh's corners, then each copy's object-to-view rows.
+	Desc.VertexAttributes = {
+		{ "POSITION", 0, EVertexFormat::Float3, offsetof(FInstancedVertex, Position), 0 },
+		{ "NORMAL", 0, EVertexFormat::Float3, offsetof(FInstancedVertex, Normal), 0 },
+		{ "COLOR", 0, EVertexFormat::UByte4N, offsetof(FInstancedVertex, Color), 0 },
+		{ "TEXCOORD", 1, EVertexFormat::Float4, 0, 1 },
+		{ "TEXCOORD", 2, EVertexFormat::Float4, 16, 1 },
+		{ "TEXCOORD", 3, EVertexFormat::Float4, 32, 1 },
+	};
+	Desc.VertexStride = sizeof(FInstancedVertex);
+	Desc.InstanceStride = 12 * sizeof(float);
+	// Closed meshes (and two-sided blades): back faces need not be drawn.
+	// Counterclockwise from outside in map space, their outsides are
+	// counterclockwise on screen (y flipped): "front" to the RHI.
+	Desc.CullMode = ECullMode::Front;
+	Desc.DebugName = "Map instanced meshes";
+	InstancedPipeline = Device.CreateGraphicsPipeline(Desc);
+	InstancedFormat = TargetFormat;
+	return InstancedPipeline.get();
+}
+
+const FMapRenderResources::FMeshBuffers* FMapRenderResources::GetMeshBuffers(const StaticMesh& Mesh)
+{
+	if (const auto Found = MeshBuffers.find(&Mesh); Found != MeshBuffers.end())
+	{
+		return &Found->second;
+	}
+	// A vertex a corner: the triangles' own normals there.
+	TArray<FInstancedVertex> Corners;
+	for (const StaticMesh::Triangle& Triangle : Mesh.GetTriangles())
+	{
+		for (int Corner = 0; Corner < 3; ++Corner)
 		{
-			Device.DeferRelease(Entry->Texture);
+			const Vector3d& P = Mesh.GetVertex(Triangle.v[Corner]);
+			const Vector3d& N = Triangle.norm[Corner];
+			FInstancedVertex Vertex{ { P.GetX(), P.GetY(), P.GetZ() }, { N.GetX(), N.GetY(), N.GetZ() },
+				Mesh.HasVertexColors() ? Mesh.GetVertexColor(Triangle.v[Corner]) : 0xFFFFFFFFu };
+			Corners.push_back(Vertex);
 		}
 	}
+	if (Corners.empty())
+	{
+		return nullptr;
+	}
+	TArray<uint32> Order(Corners.size());
+	for (SIZE_T Index = 0; Index < Order.size(); ++Index)
+	{
+		Order[Index] = static_cast<uint32>(Index);
+	}
+	FMeshBuffers Buffers;
+	FRHIBufferDesc VertexDesc;
+	VertexDesc.Size = Corners.size() * sizeof(FInstancedVertex);
+	VertexDesc.Usage = EBufferUsage::Vertex;
+	VertexDesc.Memory = EBufferMemory::Default;
+	VertexDesc.InitialData = Corners.data();
+	VertexDesc.DebugName = "Instanced mesh";
+	Buffers.Vertices = Device.CreateBuffer(VertexDesc);
+	FRHIBufferDesc IndexDesc;
+	IndexDesc.Size = Order.size() * sizeof(uint32);
+	IndexDesc.Usage = EBufferUsage::Index;
+	IndexDesc.Memory = EBufferMemory::Default;
+	IndexDesc.InitialData = Order.data();
+	IndexDesc.DebugName = "Instanced mesh indices";
+	Buffers.Indices = Device.CreateBuffer(IndexDesc);
+	Buffers.IndexCount = static_cast<uint32>(Order.size());
+	if (!Buffers.Vertices || !Buffers.Indices)
+	{
+		return nullptr;
+	}
+	return &(MeshBuffers[&Mesh] = std::move(Buffers));
+}
+
+FMapRenderResources::~FMapRenderResources()
+{
+	for (auto& [Mesh, Buffers] : MeshBuffers)
+	{
+		Device.DeferRelease(Buffers.Vertices);
+		Device.DeferRelease(Buffers.Indices);
+	}
+	for (auto& [Land, Entry] : Landscapes)
+	{
+		Release(*Entry);
+	}
+}
+
+void FMapRenderResources::Release(FLandscapeEntry& Entry)
+{
+	for (TSharedPtr<FRHITexture>* Texture : { &Entry.Texture, &Entry.WeightTexture, &Entry.LayerTexture })
+	{
+		if (*Texture)
+		{
+			Device.DeferRelease(*Texture);
+			Texture->reset();
+		}
+	}
+}
+
+FMapRenderResources::FLandscapeEntry& FMapRenderResources::FindEntry(const Object& Land)
+{
+	std::unique_ptr<FLandscapeEntry>& Entry = Landscapes[&Land];
+	if (!Entry)
+	{
+		Entry = std::make_unique<FLandscapeEntry>();
+	}
+	Entry->LastUsed = Frame;
+	return *Entry;
+}
+
+bool FMapRenderResources::GetLandscapeLayers(const Object& Land, FRHITexture*& OutWeights, FRHITexture*& OutLayers)
+{
+	if (!bBlendLandscapeLayers || !Land.HasLandscape() || !FLandscapeLayerImages::CanBlend(Land.GetLandscape()))
+	{
+		return false;
+	}
+	FLandscapeEntry& Entry = FindEntry(Land);
+	FLandscapeLayerImages& Images = Entry.Layers;
+
+	// The weights: a two-slice texture of the grid's size; a stroke copies
+	// just the points it changed.
+	const FIntRect Changed = Images.UpdateWeights(Land.GetLandscapePtr());
+	const uint32 PointsX = static_cast<uint32>(Images.GetPointsX());
+	const uint32 PointsY = static_cast<uint32>(Images.GetPointsY());
+	if (!Entry.WeightTexture || Entry.WeightTexture->GetWidth() != PointsX || Entry.WeightTexture->GetHeight() != PointsY)
+	{
+		if (Entry.WeightTexture)
+		{
+			Device.DeferRelease(Entry.WeightTexture);
+		}
+		FRHITextureDesc Desc;
+		Desc.Width = PointsX;
+		Desc.Height = PointsY;
+		Desc.ArraySize = 2;
+		Desc.InitialData = Images.GetWeights().data();
+		Desc.DebugName = "Landscape weights";
+		Entry.WeightTexture = Device.CreateTexture(Desc);
+	}
+	else if (!Changed.IsEmpty())
+	{
+		const uint32 Pitch = PointsX * 4;
+		for (uint32 Slice = 0; Slice < 2; ++Slice)
+		{
+			const uint8* First = Images.GetWeights().data() + SIZE_T(Pitch) * PointsY * Slice + SIZE_T(Changed.Top) * Pitch + SIZE_T(Changed.Left) * 4;
+			Device.UpdateTexture(*Entry.WeightTexture, Changed, First, Pitch, Slice);
+		}
+	}
+
+	// The layers' textures: made again when a layer looks different.
+	if (Images.UpdateTextures(Land.GetLandscape()) || !Entry.LayerTexture)
+	{
+		if (Entry.LayerTexture)
+		{
+			Device.DeferRelease(Entry.LayerTexture);
+		}
+		FRHITextureDesc Desc;
+		Desc.Width = Desc.Height = static_cast<uint32>(Images.GetTextureSize());
+		Desc.MipLevels = static_cast<uint32>(Images.GetMipLevels());
+		// An array of one would read as a plain texture: two at least.
+		Desc.ArraySize = static_cast<uint32>(FMath::Max(Images.GetNumSlices(), 2));
+		TArray<uint8> Pixels = Images.GetTextures();
+		Pixels.resize(GetMipChainBytes(Desc.Format, Desc.Width, Desc.Height, Desc.MipLevels) * Desc.ArraySize, 255);
+		Desc.InitialData = Pixels.data();
+		Desc.DebugName = "Landscape layer textures";
+		Entry.LayerTexture = Device.CreateTexture(Desc);
+	}
+	OutWeights = Entry.WeightTexture.get();
+	OutLayers = Entry.LayerTexture.get();
+	return OutWeights && OutLayers;
 }
 
 FRHITexture* FMapRenderResources::GetLandscapeTexture(const Object& Land)
@@ -237,12 +454,7 @@ FRHITexture* FMapRenderResources::GetLandscapeTexture(const Object& Land)
 	{
 		return nullptr;
 	}
-	std::unique_ptr<FLandscapeEntry>& Entry = Landscapes[&Land];
-	if (!Entry)
-	{
-		Entry = std::make_unique<FLandscapeEntry>();
-	}
-	Entry->LastUsed = Frame;
+	FLandscapeEntry* Entry = &FindEntry(Land);
 	const FIntRect Baked = Entry->Bake.Update(Land.GetLandscapePtr());
 	const uint32 Width = static_cast<uint32>(Entry->Bake.GetWidth());
 	const uint32 Height = static_cast<uint32>(Entry->Bake.GetHeight());
@@ -277,10 +489,7 @@ void FMapRenderResources::Trim()
 	{
 		if (Frame - It->second->LastUsed > 300)
 		{
-			if (It->second->Texture)
-			{
-				Device.DeferRelease(It->second->Texture);
-			}
+			Release(*It->second);
 			It = Landscapes.erase(It);
 		}
 		else
@@ -556,7 +765,7 @@ Vector3d FMapViewportClient::GetDropPoint(FVector2 LocalPosition) const
 	if (Direction.GetZ() < -1e-3f)
 	{
 		const float ToGround = -Origin.GetZ() / Direction.GetZ();
-		if (ToGround > 0.0f && ToGround < ClipDepth3D * 0.5f)
+		if (ToGround > 0.0f && ToGround < DropDepth3D)
 		{
 			Distance = ToGround;
 		}
@@ -1556,6 +1765,11 @@ void FMapViewportClient::DrawScaleBar(FSlateWindowElementList& Out, FIntPoint Pi
 void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint PixelSize)
 {
 	const float Scale = GetDpiScale();
+	// Landscape splines, in every mode (the Landscape mode marks its pick).
+	if (Document)
+	{
+		DrawLandscapeSplines(*Document, *this, Out, Scale);
+	}
 	const auto Geo = [Scale](FVector2 Position, FVector2 Extent) { return FPaintGeometry::Make(Position, Extent, Scale); };
 
 	if (Drag == EDrag::BoxSelect)
@@ -1658,6 +1872,7 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	UpdateProjection();
 	MapDraw->SetLineThickness(FMath::Max(1.0f, std::floor(GetDpiScale() + 0.25f)));
 	MapDraw->Reset();
+	MapDraw->bInstancing = Resources.bInstanceMeshes;
 	const FScopedEntityDisplay Entities(ShowFlags.bEntities);
 	const EMapViewMode Mode = GetViewMode();
 	const bool bSolid = Mode != EMapViewMode::Wireframe;
@@ -1695,7 +1910,9 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	DrawOverlay(Elements, PixelSize);
 
 	const TArray<FMapVertex>& Triangles = MapDraw->GetTriangles();
-	FRHIGraphicsPipeline* Pipeline = bSolid && !Triangles.empty() ? Resources.GetSolidPipeline(RenderTarget.GetTexture().GetFormat()) : nullptr;
+	const TArray<FMapInstanceBatch>& InstanceBatches = MapDraw->GetInstanceBatches();
+	FRHIGraphicsPipeline* Pipeline = bSolid && (!Triangles.empty() || !InstanceBatches.empty())
+		? Resources.GetSolidPipeline(RenderTarget.GetTexture().GetFormat()) : nullptr;
 	Resources.Trim();
 	if (!Pipeline)
 	{
@@ -1718,12 +1935,13 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	}
 
 	// One-frame buffers, released once the GPU is done with them.
+	// (One vertex at least: a frame may have only instanced meshes.)
 	FRHIBufferDesc VertexDesc;
-	VertexDesc.Size = Triangles.size() * sizeof(FMapVertex);
+	VertexDesc.Size = FMath::Max<SIZE_T>(Triangles.size(), 1) * sizeof(FMapVertex);
 	VertexDesc.Usage = EBufferUsage::Vertex;
 	VertexDesc.DebugName = "Map faces";
 	TSharedPtr<FRHIBuffer> Vertices = Device.CreateBuffer(VertexDesc);
-	TArray<uint32> IndexData(Triangles.size());
+	TArray<uint32> IndexData(FMath::Max<SIZE_T>(Triangles.size(), 1), 0);
 	for (SIZE_T Index = 0; Index < IndexData.size(); ++Index)
 	{
 		IndexData[Index] = static_cast<uint32>(Index);
@@ -1738,28 +1956,131 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 		Renderer.Render(CommandList, RenderTarget.GetTexture(), Elements, Clear);
 		return;
 	}
-	std::memcpy(Vertices->GetMappedData(), Triangles.data(), VertexDesc.Size);
+	std::memcpy(Vertices->GetMappedData(), Triangles.data(), Triangles.size() * sizeof(FMapVertex));
 	std::memcpy(Indices->GetMappedData(), IndexData.data(), IndexDesc.Size);
 
-	// Textured landscapes' images, baked and copied before the pass.
+	// Instanced meshes: each copy's rows in one buffer, a mesh's together;
+	// the meshes' own buffers made (once) before the pass.
+	struct FInstanceDraw
+	{
+		const FMapRenderResources::FMeshBuffers* Mesh = nullptr;
+		uint32 First = 0;
+		uint32 Count = 0;
+	};
+	TArray<FInstanceDraw> InstanceDraws;
+	TSharedPtr<FRHIBuffer> InstanceRows;
+	FRHIGraphicsPipeline* InstancedPipeline = InstanceBatches.empty() ? nullptr : Resources.GetInstancedPipeline(RenderTarget.GetTexture().GetFormat());
+	if (InstancedPipeline)
+	{
+		uint32 Total = 0;
+		for (const FMapInstanceBatch& Batch : InstanceBatches)
+		{
+			if (const FMapRenderResources::FMeshBuffers* Mesh = Resources.GetMeshBuffers(*Batch.Mesh))
+			{
+				InstanceDraws.push_back({ Mesh, Total, Batch.Count() });
+			}
+			Total += Batch.Count();
+		}
+		FRHIBufferDesc RowsDesc;
+		RowsDesc.Size = SIZE_T(Total) * 12 * sizeof(float);
+		RowsDesc.Usage = EBufferUsage::Vertex;
+		RowsDesc.DebugName = "Map instances";
+		InstanceRows = Total > 0 ? Device.CreateBuffer(RowsDesc) : nullptr;
+		if (InstanceRows)
+		{
+			uint8* Out = static_cast<uint8*>(InstanceRows->GetMappedData());
+			for (const FMapInstanceBatch& Batch : InstanceBatches)
+			{
+				std::memcpy(Out, Batch.Rows.data(), Batch.Rows.size() * sizeof(float));
+				Out += Batch.Rows.size() * sizeof(float);
+			}
+		}
+		else
+		{
+			InstanceDraws.clear();
+		}
+	}
+
+	// Textured landscapes: their layers for the GPU to blend, or else their
+	// baked images, brought up to date before the pass.
+	struct FBatchDraw
+	{
+		FRHITexture* Texture = nullptr; // baked, or none (white)
+		FRHITexture* Weights = nullptr; // with Layers: blended per pixel
+		FRHITexture* Layers = nullptr;
+		float LandConstants[12] = {};
+	};
 	const TArray<FMapTriangleBatch>& Batches = MapDraw->GetBatches();
-	TArray<FRHITexture*> BatchTextures(Batches.size(), nullptr);
+	TArray<FBatchDraw> Draws(Batches.size());
+	FRHIGraphicsPipeline* LandscapePipeline = Resources.GetLandscapePipeline(RenderTarget.GetTexture().GetFormat());
 	for (SIZE_T Index = 0; Index < Batches.size(); ++Index)
 	{
-		BatchTextures[Index] = Batches[Index].Landscape ? Resources.GetLandscapeTexture(*Batches[Index].Landscape) : nullptr;
+		const Object* Land = Batches[Index].Landscape;
+		if (!Land)
+		{
+			continue;
+		}
+		FBatchDraw& Draw = Draws[Index];
+		if (LandscapePipeline && Resources.GetLandscapeLayers(*Land, Draw.Weights, Draw.Layers))
+		{
+			FLandscapeLayerImages::GetConstants(Land->GetLandscape(), Draw.LandConstants);
+			continue;
+		}
+		Draw.Weights = Draw.Layers = nullptr;
+		Draw.Texture = Resources.GetLandscapeTexture(*Land);
 	}
 
 	FRHITexture& White = Resources.GetWhiteTexture();
 	CommandList.BeginRenderPass(RenderTarget.GetTexture(), *DepthBuffer, Clear, 1.0f);
-	CommandList.SetPipeline(*Pipeline);
-	const float Constants[4] = { 2.0f / static_cast<float>(PixelSize.X), 2.0f / static_cast<float>(PixelSize.Y), 0.0f, 0.0f };
-	CommandList.SetPushConstants(Constants, sizeof(Constants));
-	CommandList.SetVertexBuffer(*Vertices, 0, sizeof(FMapVertex));
-	CommandList.SetIndexBuffer(*Indices, 0, EIndexFormat::UInt32);
+	float Constants[16] = { 2.0f / static_cast<float>(PixelSize.X), 2.0f / static_cast<float>(PixelSize.Y), 0.0f, 0.0f };
+	FRHIGraphicsPipeline* Bound = nullptr;
 	for (SIZE_T Index = 0; Index < Batches.size(); ++Index)
 	{
-		CommandList.SetTexture(BatchTextures[Index] ? *BatchTextures[Index] : White);
+		const FBatchDraw& Draw = Draws[Index];
+		FRHIGraphicsPipeline* Wanted = Draw.Layers ? LandscapePipeline : Pipeline;
+		if (Wanted != Bound)
+		{
+			CommandList.SetPipeline(*Wanted);
+			CommandList.SetVertexBuffer(*Vertices, 0, sizeof(FMapVertex));
+			CommandList.SetIndexBuffer(*Indices, 0, EIndexFormat::UInt32);
+			Bound = Wanted;
+		}
+		if (Draw.Layers)
+		{
+			std::memcpy(&Constants[4], Draw.LandConstants, sizeof(Draw.LandConstants));
+			CommandList.SetPushConstants(Constants, sizeof(Constants));
+			CommandList.SetTexture(White, 0);
+			CommandList.SetTexture(*Draw.Weights, 1);
+			CommandList.SetTexture(*Draw.Layers, 2);
+		}
+		else
+		{
+			CommandList.SetPushConstants(Constants, sizeof(float) * 4);
+			CommandList.SetTexture(Draw.Texture ? *Draw.Texture : White);
+		}
 		CommandList.DrawIndexed(Batches[Index].NumVertices, Batches[Index].FirstVertex, 0);
+	}
+	if (!InstanceDraws.empty())
+	{
+		// Projected and lit as View would (MapDraw has View's numbers).
+		const FVector2 Origin = MapDraw->GetOrigin();
+		const Vector3d& Light = MapDraw->GetInstanceLight();
+		const Vector3d& Up = MapDraw->GetInstanceUp();
+		const float InstanceConstants[16] = { Constants[0], Constants[1], 0.0f, 0.0f,
+			Origin.X, Origin.Y, MapDraw->GetInstanceWinWidth(), MapDraw->IsShaded() ? 1.0f : 0.0f,
+			Light.GetX(), Light.GetY(), Light.GetZ(), 0.0f,
+			Up.GetX(), Up.GetY(), Up.GetZ(), 0.0f };
+		CommandList.SetPipeline(*InstancedPipeline);
+		CommandList.SetPushConstants(InstanceConstants, sizeof(InstanceConstants));
+		CommandList.SetTexture(White);
+		for (const FInstanceDraw& Draw : InstanceDraws)
+		{
+			CommandList.SetVertexBuffer(*Draw.Mesh->Vertices, 0, sizeof(FInstancedVertex), 0);
+			CommandList.SetVertexBuffer(*InstanceRows, 0, 12 * sizeof(float), 1);
+			CommandList.SetIndexBuffer(*Draw.Mesh->Indices, 0, EIndexFormat::UInt32);
+			CommandList.DrawIndexedInstanced(Draw.Mesh->IndexCount, Draw.Count, 0, 0, Draw.First);
+		}
+		Device.DeferRelease(InstanceRows);
 	}
 	CommandList.EndRenderPass();
 	Device.DeferRelease(Vertices);

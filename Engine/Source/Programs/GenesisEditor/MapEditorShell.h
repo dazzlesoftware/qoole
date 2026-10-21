@@ -20,6 +20,7 @@
 #include "RHI.h"
 #include "MapDocument.h"
 #include "MapViewportClient.h"
+#include "MapFoliageMode.h"
 #include "MapLandscapeMode.h"
 #include "SContentBrowser.h"
 #include "SMapViewport.h"
@@ -34,12 +35,14 @@ class SWindow;
 // Unreal's editor modes, for the ones this editor has. A mode picks the
 // tools (and the panel at the left): Selection has Select, Rotate and Scale
 // with Place Actors; Landscape makes and sculpts landscapes
-// (FMapLandscapeMode takes the views' left drags); Brush Editing has Clip
-// and the vertex, edge and face tools with the brush operations.
+// (FMapLandscapeMode takes the views' left drags); Foliage paints foliage
+// (FMapFoliageMode); Brush Editing has Clip and the vertex, edge and face
+// tools with the brush operations.
 enum class EMapEditorMode : uint8
 {
 	Selection,
 	Landscape,
+	Foliage,
 	BrushEditing,
 };
 
@@ -121,6 +124,9 @@ public:
 	TSharedPtr<SContentBrowser> GetContentBrowser(int32 Index) const { return ContentBrowsers[Index].lock(); }
 	TSharedPtr<SPlaceActors> GetPlaceActors() const { return PlaceActors; }
 	FMapLandscapeMode& GetLandscapeMode() { return LandscapeMode; }
+	FMapFoliageMode& GetFoliageMode() { return FoliageMode; }
+	// Landscape or Foliage: left drags are the mode's, [ and ] the brush's.
+	bool HasBrushMode() const { return Mode == EMapEditorMode::Landscape || Mode == EMapEditorMode::Foliage; }
 
 	void Log(const FString& Line);
 	const TArray<FString>& GetLogLines() const { return LogLines; }
@@ -130,12 +136,13 @@ public:
 		TSharedPtr<FUICommandInfo> NewMap, OpenMap, SaveMap, SaveMapAs, ExportMap, Exit;
 		TSharedPtr<FUICommandInfo> Undo, Redo, Cut, Copy, Paste, Duplicate, Delete, SelectAll, SelectNone;
 		TSharedPtr<FUICommandInfo> FrameSelection, ResetViews, ShowGrid, SnapToGrid, GridSmaller, GridLarger, SolidView;
+		TSharedPtr<FUICommandInfo> BrushWeaker, BrushStronger;
 		TSharedPtr<FUICommandInfo> ToolSelect, ToolRotate, ToolScale, ToolClip, ToolVertex, ToolEdge, ToolFace;
 		TSharedPtr<FUICommandInfo> AddCube, Group, Ungroup, EnterGroup, ScopeUp;
 		TSharedPtr<FUICommandInfo> HollowIn, HollowOut, Subtract, Intersect;
 		TSharedPtr<FUICommandInfo> FlipX, FlipY, FlipZ, RotateLeft, RotateRight;
 		TSharedPtr<FUICommandInfo> SavePrefab;
-		TSharedPtr<FUICommandInfo> SelectionMode, LandscapeMode, BrushEditingMode;
+		TSharedPtr<FUICommandInfo> SelectionMode, LandscapeMode, FoliageMode, BrushEditingMode;
 		TSharedPtr<FUICommandInfo> EditorPreferences;
 		TSharedPtr<FUICommandInfo> ResetLayout, About;
 	} Cmd;
@@ -165,6 +172,12 @@ private:
 	TSharedRef<SDockTab> MakePlaceActorsTab();
 	TSharedRef<SDockTab> MakeBrushEditingTab();
 	TSharedRef<SDockTab> MakeLandscapeTab();
+	TSharedRef<SDockTab> MakeFoliageTab();
+	// The foliage type list (and the selected type's settings), when the
+	// types changed.
+	void RefreshFoliageTypes();
+	TSharedRef<SWidget> MakeFoliageTypeList();
+	TSharedRef<SWidget> MakeFoliageTypeSettings();
 	// The paint layer list, when the layers (or the landscape) changed.
 	void RefreshLandscapeLayers();
 	// A heightmap or weightmap file to read or write (false if cancelled).
@@ -176,6 +189,8 @@ private:
 	// Logs and shows an import or export's outcome.
 	void ReportLandscapeFile(bool bOk, const FString& Done, const FString& Error);
 	TSharedRef<SWidget> MakeLandscapeLayerList();
+	// The Splines tool's settings: the selected point's and its spline's.
+	TSharedRef<SWidget> MakeLandscapeSplineSettings();
 	TSharedRef<SDockTab> MakeOutlinerTab();
 	TSharedRef<SDockTab> MakeDetailsTab();
 	TSharedRef<SDockTab> MakeContentBrowserTab(int32 Index);
@@ -220,7 +235,14 @@ private:
 	FString ContentBrowserPaths[MaxContentBrowsers]; // kept while closed, and saved
 	EMapEditorMode Mode = EMapEditorMode::Selection;
 	FMapLandscapeMode LandscapeMode;
+	FMapFoliageMode FoliageMode;
+	int32 SelectedFoliageType = 0;
+	TWeakPtr<SBox> FoliageTypeHost;
+	TWeakPtr<SBox> FoliageSettingsHost;
+	FString FoliageSignature;
+	bool bFoliageQueued = false;
 	TWeakPtr<SBox> LandscapeLayerHost;
+	TWeakPtr<SBox> LandscapeSplineHost;
 	FString LandscapeLayerSignature;
 	bool bLandscapeLayersQueued = false;
 	TWeakPtr<SWindow> PreferencesWindow;

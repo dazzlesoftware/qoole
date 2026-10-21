@@ -73,6 +73,8 @@ public:
 	void UseBuf(int bufNum) { check(bufNum < numBufs); useBuf = bufNum; }
 	int GetNumBufs(void) { return numBufs; }
 	void SetZoomPtr(float *_pZoomVal) { pZoomVal = _pZoomVal; }
+	// What RenderLine and RenderPoint scale by.
+	float GetZoom(void) const { return pZoomVal ? *pZoomVal : 1.0f; }
 
 	void RenderLine(float x1, float y1, float x2, float y2);
 	void RenderPoint(float x, float y, int size = 5);
@@ -128,6 +130,13 @@ public:
 		if (color) ZBufColoredTriangle(zpoint, shade, color); else ZBufShadedTriangle(zpoint, shade);
 	}
 	virtual void ZBufRender(void) = 0;
+	// Instanced meshes (foliage). Before an object's copies View gives the
+	// light's and the sky's directions in view space and the projection's
+	// width (x and z are scaled by winWidth / y); then for each copy of a
+	// mesh its object-to-view matrix. A renderer that draws copies on the
+	// GPU returns true; otherwise View draws the copy's triangles.
+	virtual void ZBufInstanceLight(const Vector3d &light, const Vector3d &up, float winWidth) { (void)light; (void)up; (void)winWidth; }
+	virtual bool ZBufMeshInstance(const StaticMesh &mesh, const Matrix44 &toView) { (void)mesh; (void)toView; return false; }
 
 	void ZBufTextured(bool textured) { zbufTextured = textured; }
 	bool ZBufSetup(Object *obj, FaceTex *faceTex, Vector3d norm);

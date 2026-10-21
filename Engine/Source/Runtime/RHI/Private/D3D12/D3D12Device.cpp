@@ -407,18 +407,19 @@ void FD3D12CommandList::SetPushConstants(const void* Data, uint32 Size)
 	List->SetGraphicsRoot32BitConstants(0, Size / 4, Data, 0);
 }
 
-void FD3D12CommandList::SetTexture(FRHITexture& Texture)
+void FD3D12CommandList::SetTexture(FRHITexture& Texture, uint32 Slot)
 {
-	check(CurrentPipeline);
-	const uint32 TableIndex = CurrentPipeline->GetDesc().PushConstantSize > 0 ? 1 : 0;
+	check(CurrentPipeline && Slot < CurrentPipeline->GetDesc().NumTextures);
+	// A table per slot, after the constants.
+	const uint32 TableIndex = (CurrentPipeline->GetDesc().PushConstantSize > 0 ? 1 : 0) + Slot;
 	List->SetGraphicsRootDescriptorTable(TableIndex, Device.GetSrvHeap().GetGpuHandle(static_cast<FD3D12Texture&>(Texture).GetSrvIndex()));
 }
 
-void FD3D12CommandList::SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride)
+void FD3D12CommandList::SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride, uint32 Slot)
 {
 	ID3D12Resource* Resource = static_cast<FD3D12Buffer&>(Buffer).GetResource();
 	const D3D12_VERTEX_BUFFER_VIEW View{ Resource->GetGPUVirtualAddress() + Offset, static_cast<UINT>(Buffer.GetSize() - Offset), Stride };
-	List->IASetVertexBuffers(0, 1, &View);
+	List->IASetVertexBuffers(Slot, 1, &View);
 }
 
 void FD3D12CommandList::SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndexFormat Format)
@@ -432,6 +433,11 @@ void FD3D12CommandList::SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndex
 void FD3D12CommandList::DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex)
 {
 	List->DrawIndexedInstanced(IndexCount, 1, FirstIndex, BaseVertex, 0);
+}
+
+void FD3D12CommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance)
+{
+	List->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, BaseVertex, FirstInstance);
 }
 
 // ---------------------------------------------------------------------------
@@ -725,8 +731,10 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 	ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	ResourceDesc.Width = TextureDesc.Width;
 	ResourceDesc.Height = TextureDesc.Height;
-	ResourceDesc.DepthOrArraySize = 1;
-	ResourceDesc.MipLevels = 1;
+	const uint32 ArraySize = FMath::Max(TextureDesc.ArraySize, 1u);
+	ResourceDesc.DepthOrArraySize = static_cast<UINT16>(ArraySize);
+	const uint32 MipLevels = FMath::Clamp(TextureDesc.MipLevels, 1u, GetFullMipLevels(TextureDesc.Width, TextureDesc.Height));
+	ResourceDesc.MipLevels = static_cast<UINT16>(MipLevels);
 	ResourceDesc.Format = Format;
 	ResourceDesc.SampleDesc.Count = 1;
 	ResourceDesc.Flags = TextureDesc.bRenderTarget ? D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET : D3D12_RESOURCE_FLAG_NONE;
@@ -756,8 +764,17 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 	}
 	D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc{};
 	SrvDesc.Format = Format;
-	SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	SrvDesc.Texture2D.MipLevels = 1;
+	if (ArraySize > 1)
+	{
+		SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+		SrvDesc.Texture2DArray.MipLevels = MipLevels;
+		SrvDesc.Texture2DArray.ArraySize = ArraySize;
+	}
+	else
+	{
+		SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		SrvDesc.Texture2D.MipLevels = MipLevels;
+	}
 	// Single-channel textures read as (1, 1, 1, R): alpha masks (glyphs)
 	// then work with the same shader path as RGBA images.
 	SrvDesc.Shader4ComponentMapping = TextureDesc.Format == EPixelFormat::R8_UNORM
@@ -783,8 +800,18 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 			// was created in COPY_DEST, so move it there first.
 			const D3D12_RESOURCE_BARRIER Barrier = Transition(Texture->GetResource(), D3D12_RESOURCE_STATE_COPY_DEST, TextureIdleState);
 			List->ResourceBarrier(1, &Barrier);
-			RecordTextureCopy(List, *Texture, FIntRect(0, 0, static_cast<int32>(TextureDesc.Width), static_cast<int32>(TextureDesc.Height)),
-				TextureDesc.InitialData, TextureDesc.InitialRowPitch, ImmediateUpload);
+			// Each slice's levels after the one before, tightly packed.
+			const uint8* Level = static_cast<const uint8*>(TextureDesc.InitialData);
+			for (uint32 Slice = 0; Slice < ArraySize; ++Slice)
+			{
+				for (uint32 Mip = 0; Mip < MipLevels; ++Mip)
+				{
+					const uint32 W = GetMipSize(TextureDesc.Width, Mip), H = GetMipSize(TextureDesc.Height, Mip);
+					RecordTextureCopy(List, *Texture, FIntRect(0, 0, static_cast<int32>(W), static_cast<int32>(H)), Level,
+						MipLevels > 1 || ArraySize > 1 ? 0 : TextureDesc.InitialRowPitch, ImmediateUpload, Mip + Slice * MipLevels);
+					Level += SIZE_T(W) * H * GetBytesPerPixel(TextureDesc.Format);
+				}
+			}
 		});
 	}
 	return Texture;
@@ -825,15 +852,18 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateDepthTexture(const FRHITextureDesc& 
 	return std::make_shared<FD3D12Texture>(*this, TextureDesc, std::move(Resource), FD3D12DescriptorHeap::Invalid, Dsv);
 }
 
-ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(uint32 PushConstantSize, ESamplerFilter Filter)
+ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(const FRHIGraphicsPipelineDesc& PipelineDesc)
 {
-	const uint32 Key = (PushConstantSize << 8) | static_cast<uint32>(Filter);
+	const uint32 PushConstantSize = PipelineDesc.PushConstantSize;
+	const ESamplerFilter Filter = PipelineDesc.SamplerFilter;
+	const uint32 NumTextures = FMath::Clamp(PipelineDesc.NumTextures, 1u, MaxTextures);
+	const uint32 Key = (PushConstantSize << 16) | (NumTextures << 8) | GetSamplerIndex(Filter, PipelineDesc.SamplerAddress);
 	if (auto It = RootSignatures.find(Key); It != RootSignatures.end())
 	{
 		return It->second;
 	}
 
-	D3D12_ROOT_PARAMETER Params[2]{};
+	D3D12_ROOT_PARAMETER Params[1 + MaxTextures]{};
 	uint32 NumParams = 0;
 	if (PushConstantSize > 0)
 	{
@@ -843,19 +873,25 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(uint32 PushConstantSi
 		Constants.Constants.Num32BitValues = PushConstantSize / 4;
 		Constants.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	}
-	D3D12_DESCRIPTOR_RANGE Range{};
-	Range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	Range.NumDescriptors = 1;
-	Range.BaseShaderRegister = 0;
-	D3D12_ROOT_PARAMETER& Table = Params[NumParams++];
-	Table.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	Table.DescriptorTable.NumDescriptorRanges = 1;
-	Table.DescriptorTable.pDescriptorRanges = &Range;
-	Table.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	// A one-descriptor table per texture slot (tk): textures keep their own
+	// descriptors anywhere in the heap.
+	D3D12_DESCRIPTOR_RANGE Ranges[MaxTextures]{};
+	for (uint32 Slot = 0; Slot < NumTextures; ++Slot)
+	{
+		Ranges[Slot].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		Ranges[Slot].NumDescriptors = 1;
+		Ranges[Slot].BaseShaderRegister = Slot;
+		D3D12_ROOT_PARAMETER& Table = Params[NumParams++];
+		Table.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		Table.DescriptorTable.NumDescriptorRanges = 1;
+		Table.DescriptorTable.pDescriptorRanges = &Ranges[Slot];
+		Table.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	}
 
 	D3D12_STATIC_SAMPLER_DESC Sampler{};
 	Sampler.Filter = Filter == ESamplerFilter::Point ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-	Sampler.AddressU = Sampler.AddressV = Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	Sampler.AddressU = Sampler.AddressV = Sampler.AddressW =
+		PipelineDesc.SamplerAddress == ESamplerAddress::Wrap ? D3D12_TEXTURE_ADDRESS_MODE_WRAP : D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	Sampler.MaxLOD = D3D12_FLOAT32_MAX;
 	Sampler.ShaderRegister = 0;
 	Sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
@@ -885,7 +921,11 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(uint32 PushConstantSi
 TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& PipelineDesc)
 {
 	check(PipelineDesc.PushConstantSize % 4 == 0 && PipelineDesc.PushConstantSize <= 64);
-	ComPtr<ID3D12RootSignature> RootSignature = GetRootSignature(PipelineDesc.PushConstantSize, PipelineDesc.SamplerFilter);
+	if (!ensuref(PipelineDesc.NumTextures >= 1 && PipelineDesc.NumTextures <= MaxTextures, "D3D12: a pipeline has 1 to {} textures", MaxTextures))
+	{
+		return nullptr;
+	}
+	ComPtr<ID3D12RootSignature> RootSignature = GetRootSignature(PipelineDesc);
 	if (!RootSignature)
 	{
 		return nullptr;
@@ -894,8 +934,9 @@ TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHI
 	TArray<D3D12_INPUT_ELEMENT_DESC> Elements;
 	for (const FVertexAttribute& Attribute : PipelineDesc.VertexAttributes)
 	{
-		Elements.push_back({ Attribute.SemanticName, Attribute.SemanticIndex, ToDxgi(Attribute.Format), 0, Attribute.Offset,
-			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+		const bool bInstance = Attribute.BufferSlot == 1;
+		Elements.push_back({ Attribute.SemanticName, Attribute.SemanticIndex, ToDxgi(Attribute.Format), Attribute.BufferSlot, Attribute.Offset,
+			bInstance ? D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA : D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, bInstance ? 1u : 0u });
 	}
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC PsoDesc{};
@@ -909,7 +950,8 @@ TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHI
 	PsoDesc.SampleDesc.Count = 1;
 	PsoDesc.SampleMask = UINT_MAX;
 	PsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	PsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	PsoDesc.RasterizerState.CullMode = PipelineDesc.CullMode == ECullMode::Back ? D3D12_CULL_MODE_BACK
+		: PipelineDesc.CullMode == ECullMode::Front ? D3D12_CULL_MODE_FRONT : D3D12_CULL_MODE_NONE;
 	PsoDesc.RasterizerState.DepthClipEnable = TRUE;
 	PsoDesc.DepthStencilState.DepthEnable = FALSE;
 	if (PipelineDesc.DepthFormat != EPixelFormat::Unknown)
@@ -1006,7 +1048,8 @@ FD3D12Device::FUploadAllocation FD3D12Device::AllocateUpload(FUploadRing& Ring, 
 	return { Ring.Chunks[Ring.CurrentChunk].Get(), Offset, Ring.ChunkCpu[Ring.CurrentChunk] + Offset };
 }
 
-void FD3D12Device::RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Texture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, FUploadRing& Ring)
+void FD3D12Device::RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Texture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, FUploadRing& Ring,
+	uint32 Subresource)
 {
 	const uint32 Width = static_cast<uint32>(Region.Width());
 	const uint32 Height = static_cast<uint32>(Region.Height());
@@ -1023,6 +1066,7 @@ void FD3D12Device::RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Text
 	D3D12_TEXTURE_COPY_LOCATION Dest{};
 	Dest.pResource = Texture.GetResource();
 	Dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+	Dest.SubresourceIndex = Subresource;
 	D3D12_TEXTURE_COPY_LOCATION Source{};
 	Source.pResource = Upload.Resource;
 	Source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
@@ -1053,13 +1097,16 @@ void FD3D12Device::ExecuteImmediate(F&& Record)
 	FlushDebugMessages();
 }
 
-void FD3D12Device::UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch)
+void FD3D12Device::UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, uint32 Slice)
 {
 	check(!Region.IsEmpty() && Region.Right <= static_cast<int32>(Texture.GetWidth()) && Region.Bottom <= static_cast<int32>(Texture.GetHeight()));
+	check(Slice < FMath::Max(Texture.GetDesc().ArraySize, 1u));
 	auto& D3DTexture = static_cast<FD3D12Texture&>(Texture);
+	// Level 0 of the slice.
+	const uint32 Subresource = Slice * FMath::Clamp(Texture.GetDesc().MipLevels, 1u, GetFullMipLevels(Texture.GetWidth(), Texture.GetHeight()));
 	if (!bInFrame)
 	{
-		ExecuteImmediate([&](ID3D12GraphicsCommandList* List) { RecordTextureCopy(List, D3DTexture, Region, Data, RowPitch, ImmediateUpload); });
+		ExecuteImmediate([&](ID3D12GraphicsCommandList* List) { RecordTextureCopy(List, D3DTexture, Region, Data, RowPitch, ImmediateUpload, Subresource); });
 		return;
 	}
 	FFrame& Frame = Frames[FrameIndex];
@@ -1068,7 +1115,7 @@ void FD3D12Device::UpdateTexture(FRHITexture& Texture, const FIntRect& Region, c
 		UploadList->Reset(Frame.UploadAllocator.Get(), nullptr);
 		Frame.bUploadOpen = true;
 	}
-	RecordTextureCopy(UploadList.Get(), D3DTexture, Region, Data, RowPitch, Frame.Upload);
+	RecordTextureCopy(UploadList.Get(), D3DTexture, Region, Data, RowPitch, Frame.Upload, Subresource);
 }
 
 bool FD3D12Device::ReadbackTexture(FRHITexture& Texture, TArray<uint8>& OutPixels)

@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapEditorShell.h"
+#include "ProjectDescriptor.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/MultiBox/MenuRegistry.h"
@@ -32,8 +33,8 @@ namespace
 	const TArray<FFileTypeFilter>& MapFilters()
 	{
 		static const TArray<FFileTypeFilter> Filters = {
-			{ "Maps (*.qle, *.map)", "*.qle;*.map" },
-			{ "Genesis maps (*.qle)", "*.qle" },
+			{ "Maps (*.gmap, *.qle, *.map)", "*.gmap;*.qle;*.map" },
+			{ "Genesis levels (*.gmap)", "*.gmap" },
 			{ "Quake maps (*.map)", "*.map" },
 		};
 		return Filters;
@@ -46,6 +47,7 @@ const char* ToString(EMapEditorMode Mode)
 	{
 	case EMapEditorMode::Selection: return "Selection";
 	case EMapEditorMode::Landscape: return "Landscape";
+	case EMapEditorMode::Foliage: return "Foliage";
 	case EMapEditorMode::BrushEditing: return "Brush Editing";
 	}
 	return "?";
@@ -68,6 +70,10 @@ FMapEditorShell::FMapEditorShell(FHost InHost)
 		if (Id == FName("Landscape"))
 		{
 			SetMode(EMapEditorMode::Landscape);
+		}
+		else if (Id == FName("Foliage"))
+		{
+			SetMode(EMapEditorMode::Foliage);
 		}
 		else if (Id == FName("PlaceActors"))
 		{
@@ -105,6 +111,7 @@ FMapEditorShell::~FMapEditorShell()
 {
 	ViewSettings.EditorMode = nullptr;
 	LandscapeMode.SetDocument(nullptr);
+	FoliageMode.SetDocument(nullptr);
 	for (const TSharedPtr<FMapViewportClient>& View : Views)
 	{
 		View->SetDocument(nullptr);
@@ -239,8 +246,10 @@ void FMapEditorShell::SetDocument(TUniquePtr<FMapDocument> NewDocument)
 		Properties->SetObjects({});
 	}
 	LandscapeMode.SetDocument(nullptr);
+	FoliageMode.SetDocument(nullptr);
 	Document = std::move(NewDocument);
 	LandscapeMode.SetDocument(Document.get());
+	FoliageMode.SetDocument(Document.get());
 	if (Document)
 	{
 		DocumentHandle = Document->OnChanged.AddLambda([this](EMapChange Change) { OnDocumentChanged(Change); });
@@ -265,6 +274,7 @@ void FMapEditorShell::OnDocumentChanged(EMapChange Change)
 		RefreshOutliner();
 		RefreshProperties();
 		RefreshLandscapeLayers();
+		RefreshFoliageTypes();
 	}
 	if (HasAnyChange(Change, EMapChange::File))
 	{
@@ -284,7 +294,7 @@ void FMapEditorShell::UpdateTitle()
 		Window->SetTitle("Genesis Editor");
 		return;
 	}
-	Window->SetTitle(FString::Format("{}{} - Genesis Editor", Document->GetDisplayName(), Document->IsModified() ? " *" : ""));
+	Window->SetTitle(FString::Format("{}{} - {}Genesis Editor", Document->GetDisplayName(), Document->IsModified() ? " *" : "", FProjectContext::GetActive() ? FProjectContext::GetActive()->GetDescriptor().Name + " - " : FString()));
 }
 
 bool FMapEditorShell::ConfirmDiscard()
@@ -306,8 +316,8 @@ bool FMapEditorShell::ConfirmDiscard()
 		{
 			FFileDialogOptions Options;
 			Options.Title = "Save map";
-			Options.Filters = { { "Genesis maps (*.qle)", "*.qle" } };
-			Options.DefaultExtension = "qle";
+			Options.Filters = { { "Genesis levels (*.gmap)", "*.gmap" } };
+			Options.DefaultExtension = "gmap";
 			Options.InitialPath = DefaultFolder();
 			if (!FServices::GetFileDialogs().SaveFile(Options, Path))
 			{
@@ -387,6 +397,7 @@ FString FMapEditorShell::GetLastMap()
 
 FString FMapEditorShell::DefaultFolder() const
 {
+	if (const auto* Project = FProjectContext::GetActive(); Project && (!Document || Document->GetPath().IsEmpty())) return Project->GetContentDir();
 	if (Document && !Document->GetPath().IsEmpty())
 	{
 		return Document->GetPath();
@@ -521,7 +532,8 @@ void FMapEditorShell::SetMode(EMapEditorMode NewMode)
 		ViewSettings.Tool = EMapTool::Select;
 	}
 	// Landscape takes the views' left drags over landscapes.
-	ViewSettings.EditorMode = Mode == EMapEditorMode::Landscape ? &LandscapeMode : nullptr;
+	ViewSettings.EditorMode = Mode == EMapEditorMode::Landscape ? static_cast<IMapViewportMode*>(&LandscapeMode)
+		: Mode == EMapEditorMode::Foliage ? static_cast<IMapViewportMode*>(&FoliageMode) : nullptr;
 	ViewSettings.Changed();
 	ShowModeTab();
 	Log(FString::Format("{} mode", ToString(Mode)));
@@ -530,7 +542,8 @@ void FMapEditorShell::SetMode(EMapEditorMode NewMode)
 void FMapEditorShell::ShowModeTab()
 {
 	bShowingModeTab = true;
-	TabManager->TryInvokeTab(Mode == EMapEditorMode::BrushEditing ? FName("BrushEditing") : (Mode == EMapEditorMode::Landscape ? FName("Landscape") : FName("PlaceActors")));
+	TabManager->TryInvokeTab(Mode == EMapEditorMode::BrushEditing ? FName("BrushEditing") : Mode == EMapEditorMode::Landscape ? FName("Landscape")
+		: Mode == EMapEditorMode::Foliage ? FName("Foliage") : FName("PlaceActors"));
 	bShowingModeTab = false;
 }
 
@@ -643,9 +656,9 @@ void FMapEditorShell::SaveSelectionAsPrefab()
 	}
 	FFileDialogOptions Options;
 	Options.Title = "Save the selection as a prefab";
-	Options.Filters = { { "Prefabs (*.qle)", "*.qle" } };
-	Options.DefaultExtension = "qle";
-	Options.InitialPath = FMapEditorEnvironment::GetUserPrefabFolder();
+	Options.Filters = { { "Genesis prefab assets (*.asset)", "*.asset" } };
+	Options.DefaultExtension = "asset";
+	Options.InitialPath = FProjectContext::GetActive() ? FProjectContext::GetActive()->GetContentDir() : FMapEditorEnvironment::GetUserPrefabFolder();
 	FString Path;
 	if (!FServices::GetFileDialogs().SaveFile(Options, Path))
 	{
@@ -674,7 +687,7 @@ void FMapEditorShell::RegisterCommands()
 		return Context->AddCommand(Name, Label, Tip, Type, Chord).ToSharedPtr();
 	};
 	Cmd.NewMap = Add("NewMap", "New", "Start a new map", T::Button, FInputChord(EKey::N, M::Control));
-	Cmd.OpenMap = Add("OpenMap", "Open...", "Open a .qle map or import a .map file", T::Button, FInputChord(EKey::O, M::Control));
+	Cmd.OpenMap = Add("OpenMap", "Open...", "Open a .gmap level or import a legacy map", T::Button, FInputChord(EKey::O, M::Control));
 	Cmd.SaveMap = Add("SaveMap", "Save", "Save the map", T::Button, FInputChord(EKey::S, M::Control));
 	Cmd.SaveMapAs = Add("SaveMapAs", "Save As...", "Save the map under another name", T::Button, FInputChord(EKey::S, M::Control | M::Shift));
 	Cmd.ExportMap = Add("ExportMap", "Export .map...", "Write the map as a Quake .map file", T::Button, FInputChord(EKey::E, M::Control));
@@ -696,6 +709,9 @@ void FMapEditorShell::RegisterCommands()
 	Cmd.SnapToGrid = Add("SnapToGrid", "Snap", "Snap to the grid (hold Alt while dragging to move freely)", T::ToggleButton, FInputChord(EKey::N));
 	Cmd.GridSmaller = Add("GridSmaller", "Smaller Grid", "Halve the grid size", T::Button, FInputChord(EKey::LeftBracket));
 	Cmd.GridLarger = Add("GridLarger", "Larger Grid", "Double the grid size", T::Button, FInputChord(EKey::RightBracket));
+	// In Landscape mode [ and ] size the brush instead, as in Unreal; with Ctrl, its strength.
+	Cmd.BrushWeaker = Add("BrushWeaker", "Weaker Brush", "Lower the landscape tool's strength", T::Button, FInputChord(EKey::LeftBracket, M::Control));
+	Cmd.BrushStronger = Add("BrushStronger", "Stronger Brush", "Raise the landscape tool's strength", T::Button, FInputChord(EKey::RightBracket, M::Control));
 	Cmd.SolidView = Add("SolidView", "Solid 3D", "Draw the perspective view lit, with solid faces, instead of wireframes", T::ToggleButton, FInputChord(EKey::F3));
 
 	Cmd.ToolSelect = Add("ToolSelect", "Select", "Select, and move the selection by dragging it", T::RadioButton, FInputChord(EKey::M));
@@ -724,6 +740,7 @@ void FMapEditorShell::RegisterCommands()
 
 	Cmd.SelectionMode = Add("SelectionMode", "Selection Mode", "Select, move, turn and scale; place actors", T::RadioButton, FInputChord(EKey::One, M::Shift));
 	Cmd.LandscapeMode = Add("LandscapeMode", "Landscape Mode", "Make landscapes and sculpt them", T::RadioButton, FInputChord(EKey::Two, M::Shift));
+	Cmd.FoliageMode = Add("FoliageMode", "Foliage Mode", "Paint grass, bushes, trees and rocks onto the ground", T::RadioButton, FInputChord(EKey::Three, M::Shift));
 	Cmd.BrushEditingMode = Add("BrushEditingMode", "Brush Editing Mode", "Clip brushes and drag their corners, edges and faces", T::RadioButton, FInputChord(EKey::Six, M::Shift));
 	Cmd.EditorPreferences = Add("EditorPreferences", "Editor Preferences...", "Graphics, appearance, keyboard shortcuts, viewports, grid and snapping");
 	Cmd.ResetLayout = Add("ResetLayout", "Reset Layout", "Go back to the default window layout");
@@ -774,8 +791,8 @@ void FMapEditorShell::RegisterCommands()
 	{
 		FFileDialogOptions Options;
 		Options.Title = "Save map as";
-		Options.Filters = { { "Genesis maps (*.qle)", "*.qle" } };
-		Options.DefaultExtension = "qle";
+		Options.Filters = { { "Genesis levels (*.gmap)", "*.gmap" } };
+		Options.DefaultExtension = "gmap";
 		Options.InitialPath = DefaultFolder();
 		FString Path;
 		if (FServices::GetFileDialogs().SaveFile(Options, Path))
@@ -790,7 +807,8 @@ void FMapEditorShell::RegisterCommands()
 		Options.Filters = { { "Quake maps (*.map)", "*.map" } };
 		Options.DefaultExtension = "map";
 		const FString Base = DefaultFolder();
-		Options.InitialPath = Base.EndsWith(".qle", ESearchCase::IgnoreCase) ? Base.Left(Base.Len() - 4) + ".map" : Base;
+		Options.InitialPath = Base.EndsWith(".gmap", ESearchCase::IgnoreCase) ? Base.Left(Base.Len() - 5) + ".map" :
+			Base.EndsWith(".qle", ESearchCase::IgnoreCase) ? Base.Left(Base.Len() - 4) + ".map" : Base;
 		FString Path;
 		if (FServices::GetFileDialogs().SaveFile(Options, Path))
 		{
@@ -841,7 +859,18 @@ void FMapEditorShell::RegisterCommands()
 		const float Step = ViewSettings.GridSize;
 		Document->DuplicateObjects(Document->GetSelection(), Vector3d(Step, Step, 0.0f));
 	}, HasSelection);
-	List.MapAction(ToSharedRef(Cmd.Delete), [this] { Document->DeleteObjects(Document->GetSelection()); }, HasSelection);
+	// With the landscape's Splines tool, Delete takes the selected spline point.
+	const auto DeletesSplinePoint = [this] { return Mode == EMapEditorMode::Landscape && LandscapeMode.Tool == ELandscapeTool::Splines
+		&& LandscapeMode.HasSelectedSplinePoint(); };
+	List.MapAction(ToSharedRef(Cmd.Delete), [this, DeletesSplinePoint]
+	{
+		if (DeletesSplinePoint())
+		{
+			LandscapeMode.DeleteSelectedSplinePoint();
+			return;
+		}
+		Document->DeleteObjects(Document->GetSelection());
+	}, [HasSelection, DeletesSplinePoint] { return DeletesSplinePoint() || HasSelection(); });
 	List.MapAction(ToSharedRef(Cmd.SelectAll), [this] { Document->SelectAll(); }, HasDocument);
 	List.MapAction(ToSharedRef(Cmd.SelectNone), [this] { Document->ClearSelection(); }, HasSelection);
 
@@ -864,10 +893,34 @@ void FMapEditorShell::RegisterCommands()
 		[this] { return ViewSettings.bShowGrid; });
 	List.MapAction(ToSharedRef(Cmd.SnapToGrid), [this] { ViewSettings.bSnapToGrid = !ViewSettings.bSnapToGrid; ViewSettings.Changed(); }, nullptr,
 		[this] { return ViewSettings.bSnapToGrid; });
-	List.MapAction(ToSharedRef(Cmd.GridSmaller), [this] { SetGridSize(ViewSettings.GridSize * 0.5f); },
-		[this] { return ViewSettings.GridSize > FMapViewSettings::MinGridSize; });
-	List.MapAction(ToSharedRef(Cmd.GridLarger), [this] { SetGridSize(ViewSettings.GridSize * 2.0f); },
-		[this] { return ViewSettings.GridSize < FMapViewSettings::MaxGridSize; });
+	const auto ChangeBrush = [this](int32 Size, int32 Strength)
+	{
+		FLandscapeBrush& Brush = Mode == EMapEditorMode::Foliage ? FoliageMode.Brush : LandscapeMode.Brush;
+		Brush.Grow(Size);
+		Brush.Strengthen(Strength);
+		StatusText = FString::Format("Brush size {:.0f}, strength {:.2f}", Brush.Radius, Brush.Strength);
+		ViewSettings.Changed();
+	};
+	List.MapAction(ToSharedRef(Cmd.GridSmaller), [this, ChangeBrush]
+	{
+		if (HasBrushMode())
+		{
+			ChangeBrush(-1, 0);
+			return;
+		}
+		SetGridSize(ViewSettings.GridSize * 0.5f);
+	}, [this] { return HasBrushMode() || ViewSettings.GridSize > FMapViewSettings::MinGridSize; });
+	List.MapAction(ToSharedRef(Cmd.GridLarger), [this, ChangeBrush]
+	{
+		if (HasBrushMode())
+		{
+			ChangeBrush(1, 0);
+			return;
+		}
+		SetGridSize(ViewSettings.GridSize * 2.0f);
+	}, [this] { return HasBrushMode() || ViewSettings.GridSize < FMapViewSettings::MaxGridSize; });
+	List.MapAction(ToSharedRef(Cmd.BrushWeaker), [ChangeBrush] { ChangeBrush(0, -1); }, [this] { return HasBrushMode(); });
+	List.MapAction(ToSharedRef(Cmd.BrushStronger), [ChangeBrush] { ChangeBrush(0, 1); }, [this] { return HasBrushMode(); });
 	List.MapAction(ToSharedRef(Cmd.SolidView), [this]
 	{
 		const TSharedPtr<FMapViewportClient> View = GetPerspectiveView();
@@ -889,7 +942,7 @@ void FMapEditorShell::RegisterCommands()
 		// Not in Landscape mode, whose left drags sculpt and paint (as Unreal
 		// greys the transform tools there): S, R and the others are also
 		// keys one flies with.
-		List.MapAction(ToSharedRef(Command), [this, ThisTool] { SetTool(ThisTool); }, [this] { return Mode != EMapEditorMode::Landscape; },
+		List.MapAction(ToSharedRef(Command), [this, ThisTool] { SetTool(ThisTool); }, [this] { return !HasBrushMode(); },
 			[this, ThisTool] { return ViewSettings.Tool == ThisTool; });
 	}
 
@@ -973,6 +1026,7 @@ void FMapEditorShell::RegisterCommands()
 	// Modes.
 	List.MapAction(ToSharedRef(Cmd.SelectionMode), [this] { SetMode(EMapEditorMode::Selection); }, nullptr, [this] { return Mode == EMapEditorMode::Selection; });
 	List.MapAction(ToSharedRef(Cmd.LandscapeMode), [this] { SetMode(EMapEditorMode::Landscape); }, nullptr, [this] { return Mode == EMapEditorMode::Landscape; });
+	List.MapAction(ToSharedRef(Cmd.FoliageMode), [this] { SetMode(EMapEditorMode::Foliage); }, nullptr, [this] { return Mode == EMapEditorMode::Foliage; });
 	List.MapAction(ToSharedRef(Cmd.BrushEditingMode), [this] { SetMode(EMapEditorMode::BrushEditing); }, nullptr, [this] { return Mode == EMapEditorMode::BrushEditing; });
 
 	// Window, Help.
@@ -1157,6 +1211,7 @@ void FMapEditorShell::RegisterMenus()
 	FMenuSection& ModeList = Registry.RegisterMenu("MapEditor.Modes").AddSection("Modes", "Editor Modes");
 	ModeList.AddCommand(Cmd.SelectionMode);
 	ModeList.AddCommand(Cmd.LandscapeMode);
+	ModeList.AddCommand(Cmd.FoliageMode);
 	ModeList.AddCommand(Cmd.BrushEditingMode);
 	FMenuDefinition& QuickAdd = Registry.RegisterMenu("MapEditor.QuickAdd");
 	for (const char* Category : { "Basic", "Lights", "Shapes", "Geometry" })

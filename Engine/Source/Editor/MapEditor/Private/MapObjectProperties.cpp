@@ -86,7 +86,7 @@ FString FMapObjectProperties::GetDisplayName() const
 	}
 	if (Obj.HasMesh())
 	{
-		return FString::FromAnsi(Obj.GetMesh().GetName());
+		return FString::FromAnsi(Obj.GetMeshName());
 	}
 	return FMapDocument::IsGroup(Obj) ? FString("Group") : FString("Brush");
 }
@@ -232,7 +232,7 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 			const TArray<FString> Options = MeshOptions();
 			for (SIZE_T Index = 0; Index < Options.size(); ++Index)
 			{
-				if (Options[Index].Equals(Obj.GetMesh().GetName(), ESearchCase::IgnoreCase))
+				if (Options[Index].Equals(Obj.GetMeshName(), ESearchCase::IgnoreCase))
 				{
 					return static_cast<int32>(Index);
 				}

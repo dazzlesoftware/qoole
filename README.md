@@ -8,6 +8,19 @@ Design documents live in `Engine/Documentation/Source`; start with
 [GenesisUI.md](Engine/Documentation/Source/GenesisUI.md), the design of the
 Genesis UI framework the editor is built on, which replaced MFC.
 
+Native project/package migration is underway. See
+[ProjectAssetMigration.md](Engine/Documentation/Source/ProjectAssetMigration.md)
+for the format specification, implemented scope, remaining landscape work,
+runtime/editor ownership split, and subsequent plugin stage.
+
+Create a project with `GenesisEditor.exe -newproject="D:\Projects\MyWorld\MyWorld.gproject"`,
+then open that `.gproject` with the editor. Projects have their own Content,
+Config, Source, Plugins, Saved and Intermediate folders. Save levels as `.gmap`
+and prefab assets as `.asset`; the manifests reference `.gexp` exports and
+`.gbulk` binary payloads. Keep their referenced sidecars together. QLE and MAP
+files still import, choosing a separate `.gmap` destination. Standalone editing
+without a project remains available.
+
 ## Layout
 
 The tree follows Unreal Engine's:
@@ -15,7 +28,7 @@ The tree follows Unreal Engine's:
     Genesis.slnx                 the solution
     Engine/
       Source/
-        Runtime/                 Core, ApplicationCore, RHI, SlateCore, Slate, SlateRHIRenderer
+        Runtime/                 Core, Projects, AssetCore, Geometry, Engine, ApplicationCore, RHI, SlateCore, Slate, SlateRHIRenderer
         Editor/                  MapCore, MapEditor
         Programs/                GenesisEditor, GenesisTests, EngineTests, TestApps
         ThirdParty/              FreeType2, HarfBuzz, Vulkan, doctest
@@ -25,6 +38,12 @@ The tree follows Unreal Engine's:
       Binaries/Win64/            programs (built)
       Intermediate/Build/Win64/  libraries and objects (built)
       Saved/                     test app results (written at run time)
+
+`Geometry` owns the 3D math and static mesh data; `Engine` owns landscape,
+spline and foliage data. These runtime libraries have no Editor dependencies.
+`RuntimeDataCheck.exe` exercises them without MapCore, UI or graphics startup.
+MapCore still supplies the legacy world tree, brushes, entity definitions and
+viewport renderer while their replacements are migrated.
 
 ## Building
 
@@ -72,7 +91,7 @@ Vulkan:
   (Place Actors > Shapes, 128 units across). They keep their location,
   rotation and scale (Details > Transform, and the Static Mesh to show),
   draw lit with smooth shading, are picked like brushes, are saved in
-  `.qle`, and take no part in CSG, clipping or `.map` export.
+  native `.gmap` packages, and take no part in CSG, clipping or `.map` export.
 - Landscapes, as in Unreal: the Landscape mode (Shift+2) makes a flat
   heightfield of up to 512 x 512 quads (New Landscape: quads and quad
   size) and sculpts it with a left drag in any view, under a brush ring:
@@ -80,7 +99,7 @@ Vulkan:
   strength and falloff, and Paint: weight-blended paint layers (Grass,
   Rock, Dirt, Sand, Snow, or your own names and colors) painted under the
   brush, Shift erasing. A stroke is one undo step. Landscapes are saved in
-  `.qle` with their heights and layers, and draw and pick like static meshes.
+  native `.gmap` packages with their heights and layers, and draw and pick like static meshes.
   Heightmaps and weightmaps import and export as in Unreal: grayscale PNG
   (16-bit heights, 8-bit weights; BMP, JPEG and TIFF are read too) or
   headerless RAW (`.r16`, `.r8`, `.raw`), mid-grey being height 0 and a
@@ -95,6 +114,54 @@ Vulkan:
   are blended by their weights into one image per landscape, up to
   2048 x 2048, that the views draw it with; a stroke re-bakes only the part
   it touched.
+  More of Unreal's tools and settings: Ramp (drag from one point to another
+  for a slope the brush's size wide), Erosion (steep slopes wear down past a
+  talus angle), Flatten to a target height or only up or only down, Paint
+  toward a target weight, and Auto Paint (a layer laid wherever the slope
+  and height are in a range). In Landscape mode, [ and ] size the brush and
+  Ctrl+[ and Ctrl+] set its strength; the mode follows the Landscape tab,
+  and the transform tools' keys are off, as in Unreal.
+  Landscape splines, as Unreal's: the Splines tool makes chains of control
+  points over the ground (Ctrl+click adds one after the selected point or
+  starts a spline, a drag moves one, Delete removes it), each with a width
+  and a side falloff, the curve passing smoothly through them; Apply
+  Splines to Landscape raises and/or lowers the ground to them and paints
+  their layer along them (roads, paths, river beds), foliage on the ground
+  moving with it. Splines show in every view and are saved with the
+  landscape. A spline can carry a mesh (Unreal's spline meshes): Road,
+  Fence, Wall, River or any static mesh, repeated a whole number of times
+  along it and bent to the curve, fitted to its width or scaled, raised by
+  an offset; it is drawn with the landscape and kept through sculpting.
+  Splines join at junctions: Ctrl+click on another point continues the
+  selected spline to it (or, from a middle point, links the two with a new
+  spline; with nothing selected, starts a branch there), and the joined
+  points move together, drawn as larger squares, until Break Junction.
+  The selected point shows tangent handles: dragging one sets the curve's
+  direction and pull there by hand, and Auto Tangent goes back to the
+  smooth automatic one.
+  Big landscapes stay quick: they are drawn in components of 32 x 32
+  quads, those out of view culled and the rest coarser with distance (or,
+  in 2D views, with the zoom), their seams stitched so no cracks open.
+  Picking and the brush trace the heightfield itself, and the full
+  triangle mesh is only built when something needs it, so a sculpt step
+  on 512 x 512 quads takes milliseconds. The views see 65536 units deep.
+  Textured layers are blended per pixel on the GPU (up to 8 layers): the
+  weights go up as a texture and each layer's texture repeats at full
+  resolution with mipmaps, so ground stays sharp up close; a stroke uploads
+  only the weights it changed. Landscapes with more layers fall back to a
+  baked image. The Vulkan shaders are built with glslc
+  (`BuildMapShaders.cmd`; the Android NDK's or the Vulkan SDK's).
+- Foliage, as in Unreal: the Foliage mode (Shift+3) paints foliage types
+  (Grass, Bush, Tree, Pine and Rock meshes, or any static mesh) onto
+  whatever is under the brush, each type to its density, keeping its
+  spacing, on the slopes and heights it allows, scaled and turned at random,
+  upright or along the ground; Shift or Erase takes them away, Single places
+  one. A stroke is one undo step. The instances live in the map's Foliage
+  object (saved in `.qle`), are culled out of view and past their type's
+  cull distance, and move with a landscape as it is sculpted. The GPU draws
+  them instanced: each mesh's triangles are uploaded once and each visible
+  copy is one matrix a frame (28,000 bushes and grass tufts in view: 3 ms a
+  frame on an RTX 4090, against 53 ms as CPU-made triangles).
 - Prefab brushes and entities from the built-in Genesis game
   (`Engine/Content/Editor`); entity keys are edited with the types the
   entity set gives them. Selections can be saved as prefabs.

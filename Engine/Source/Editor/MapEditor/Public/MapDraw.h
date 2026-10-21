@@ -41,6 +41,15 @@ struct FMapTriangleBatch
 	uint32 NumVertices = 0;
 };
 
+// Copies of one mesh drawn on the GPU (foliage): each copy's
+// object-to-view matrix, its first three rows (12 floats a copy).
+struct FMapInstanceBatch
+{
+	const StaticMesh* Mesh = nullptr;
+	TArray<float> Rows;
+	uint32 Count() const { return static_cast<uint32>(Rows.size() / 12); }
+};
+
 class FMapDraw final : public FDraw
 {
 public:
@@ -66,6 +75,16 @@ public:
 	const TArray<FMapVertex>& GetTriangles() const { return Triangles; }
 	// The triangles in drawing order, by texture.
 	const TArray<FMapTriangleBatch>& GetBatches() const { return Batches; }
+	// Meshes whose copies the GPU draws (ZBufMeshInstance), and how to
+	// light and project them: the light and the sky in view space, the
+	// projection's width, and the window's center (all set by View).
+	bool bInstancing = true;
+	const TArray<FMapInstanceBatch>& GetInstanceBatches() const { return InstanceBatches; }
+	const Vector3d& GetInstanceLight() const { return InstanceLight; }
+	const Vector3d& GetInstanceUp() const { return InstanceUp; }
+	float GetInstanceWinWidth() const { return InstanceWinWidth; }
+	FVector2 GetOrigin() const { return FVector2(static_cast<float>(orgX), static_cast<float>(orgY)); }
+	bool IsShaded() const { return bShaded; }
 
 	FColor GetPaletteColor(int Index) const;
 
@@ -82,6 +101,8 @@ public:
 	void ZBufShadedTriangle(ZPoint Points[3], const float Shades[3]) override;
 	void ZBufColoredTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3]) override;
 	void ZBufLandscapeTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3]) override;
+	void ZBufInstanceLight(const Vector3d& Light, const Vector3d& Up, float WinWidth) override;
+	bool ZBufMeshInstance(const StaticMesh& Mesh, const Matrix44& ToView) override;
 	void ZBufRender() override {}
 
 private:
@@ -95,6 +116,10 @@ private:
 	TArray<uint32> LineIndices;
 	TArray<FMapVertex> Triangles;
 	TArray<FMapTriangleBatch> Batches;
+	TArray<FMapInstanceBatch> InstanceBatches;
+	Vector3d InstanceLight;
+	Vector3d InstanceUp;
+	float InstanceWinWidth = 1.0f;
 	int CurrentColor = 0;
 	float LineThickness = 1.0f;
 	bool bShaded = true;

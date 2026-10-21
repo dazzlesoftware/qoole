@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "LCommon.h"
 #include "StaticMesh.h"
 #include "Landscape.h"
+#include "Foliage.h"
 
 //==================== Object ====================
 
@@ -96,18 +97,29 @@ class Object : public ElmNode, public TransSpace {
   //===== Static Mesh (Genesis) =====
   // A leaf can hold a mesh instead of a brush or an entity. The object's
   // transform places it and is kept as it is (location, rotation, scale).
-  bool HasMesh(void) const { return mesh != nullptr; };
-  const StaticMesh &GetMesh(void) const { check(mesh != nullptr); return *mesh; };
-  const std::shared_ptr<const StaticMesh> &GetMeshPtr(void) const { return mesh; };
+  // A landscape's mesh is its own (Landscape::GetMesh: built when first
+  // asked for, so code that only needs a name or bounds asks for those).
+  bool HasMesh(void) const { return mesh != nullptr || landscape != nullptr; };
+  const StaticMesh &GetMesh(void) const { check(HasMesh()); return landscape ? *landscape->GetMesh() : *mesh; };
+  const std::shared_ptr<const StaticMesh> &GetMeshPtr(void) const { return landscape ? landscape->GetMesh() : mesh; };
+  const char *GetMeshName(void) const { return landscape ? "Landscape" : (mesh ? mesh->GetName() : ""); };
   // Returns the mesh it held. A landscape's leaf stops being one.
   std::shared_ptr<const StaticMesh> SetMesh(std::shared_ptr<const StaticMesh> meshPtr);
 
   //===== Landscape (Genesis) =====
-  // A landscape leaf holds the heightfield and draws, picks and bounds with
-  // its mesh (HasMesh is true too).
+  // A landscape leaf holds the heightfield; it draws, picks and bounds from
+  // it (HasMesh is true too).
   bool HasLandscape(void) const { return landscape != nullptr; };
   const Landscape &GetLandscape(void) const { check(landscape != nullptr); return *landscape; };
   const std::shared_ptr<const Landscape> &GetLandscapePtr(void) const { return landscape; };
+  //===== Foliage (Genesis) =====
+  // A foliage leaf holds foliage types and their instances (Foliage.h),
+  // placed by the object's transform as a mesh is.
+  bool HasFoliage(void) const { return foliage != nullptr; };
+  const Foliage &GetFoliage(void) const { check(foliage != nullptr); return *foliage; };
+  const std::shared_ptr<const Foliage> &GetFoliagePtr(void) const { return foliage; };
+  std::shared_ptr<const Foliage> SetFoliage(std::shared_ptr<const Foliage> foliagePtr);
+
   // Returns the landscape it held (null takes the landscape and its mesh away).
   std::shared_ptr<const Landscape> SetLandscape(std::shared_ptr<const Landscape> landPtr);
 
@@ -217,6 +229,7 @@ class Object : public ElmNode, public TransSpace {
   Entity *entityPtr;
   std::shared_ptr<const StaticMesh> mesh;
   std::shared_ptr<const Landscape> landscape;
+  std::shared_ptr<const Foliage> foliage;
   bool viewTag;
   bool itemApprx;
   bool treeAttrib;

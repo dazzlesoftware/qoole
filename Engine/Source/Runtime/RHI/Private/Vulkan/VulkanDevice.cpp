@@ -154,9 +154,12 @@ FVulkanDevice::~FVulkanDevice()
 		{
 			vkDestroyDescriptorPool(Device, Pool, nullptr);
 		}
-		for (uint32 Index = 0; Index < 2; ++Index)
+		for (auto& [Key, Layout] : PipelineLayouts)
 		{
-			if (PipelineLayouts[Index]) vkDestroyPipelineLayout(Device, PipelineLayouts[Index], nullptr);
+			vkDestroyPipelineLayout(Device, Layout, nullptr);
+		}
+		for (uint32 Index = 0; Index < NumSamplers; ++Index)
+		{
 			if (SetLayouts[Index]) vkDestroyDescriptorSetLayout(Device, SetLayouts[Index], nullptr);
 			if (Samplers[Index]) vkDestroySampler(Device, Samplers[Index], nullptr);
 		}
@@ -398,18 +401,23 @@ bool FVulkanDevice::CreateLogicalDevice()
 
 bool FVulkanDevice::CreateSharedObjects()
 {
-	// Samplers, set layouts and pipeline layouts, one per ESamplerFilter.
-	for (uint32 Index = 0; Index < 2; ++Index)
+	// Samplers and set layouts, one per filter and address mode
+	// (GetSamplerIndex); pipeline layouts are made as pipelines need them.
+	for (uint32 Index = 0; Index < NumSamplers; ++Index)
 	{
-		const VkFilter Filter = static_cast<ESamplerFilter>(Index) == ESamplerFilter::Linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+		const bool bLinear = (Index & 1) == static_cast<uint32>(ESamplerFilter::Linear);
+		const bool bWrap = (Index >> 1) == static_cast<uint32>(ESamplerAddress::Wrap);
+		const VkFilter Filter = bLinear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+		const VkSamplerAddressMode Address = bWrap ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 		VkSamplerCreateInfo SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 		SamplerInfo.magFilter = Filter;
 		SamplerInfo.minFilter = Filter;
-		SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-		SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		SamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		SamplerInfo.maxLod = 0.0f;
+		// Between mip levels as D3D12's MIN_MAG_MIP filters do.
+		SamplerInfo.mipmapMode = bLinear ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+		SamplerInfo.addressModeU = Address;
+		SamplerInfo.addressModeV = Address;
+		SamplerInfo.addressModeW = Address;
+		SamplerInfo.maxLod = 1000.0f; // VK_LOD_CLAMP_NONE
 		if (!VulkanUtil::Check(vkCreateSampler(Device, &SamplerInfo, nullptr, &Samplers[Index]), "vkCreateSampler"))
 		{
 			return false;
@@ -433,24 +441,15 @@ bool FVulkanDevice::CreateSharedObjects()
 		{
 			return false;
 		}
-
-		VkPushConstantRange PushRange{};
-		PushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		PushRange.offset = 0;
-		PushRange.size = MaxPushConstantSize;
-
-		VkPipelineLayoutCreateInfo LayoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-		LayoutInfo.setLayoutCount = 1;
-		LayoutInfo.pSetLayouts = &SetLayouts[Index];
-		LayoutInfo.pushConstantRangeCount = 1;
-		LayoutInfo.pPushConstantRanges = &PushRange;
-		if (!VulkanUtil::Check(vkCreatePipelineLayout(Device, &LayoutInfo, nullptr, &PipelineLayouts[Index]), "vkCreatePipelineLayout"))
+		if (!GetPipelineLayout(Index, 1))
 		{
 			return false;
 		}
 	}
 	SetDebugName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64>(Samplers[0]), "LinearClampSampler");
 	SetDebugName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64>(Samplers[1]), "PointClampSampler");
+	SetDebugName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64>(Samplers[2]), "LinearWrapSampler");
+	SetDebugName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64>(Samplers[3]), "PointWrapSampler");
 
 	// Frames in flight.
 	for (FFrame& Frame : Frames)
@@ -692,11 +691,41 @@ VkRenderPass FVulkanDevice::GetRenderPass(VkFormat Format, bool bClear, VkImageL
 	return RenderPass;
 }
 
-VkDescriptorSet FVulkanDevice::AllocateDescriptorSet(ESamplerFilter Filter, VkDescriptorPool& OutPool)
+VkPipelineLayout FVulkanDevice::GetPipelineLayout(uint32 SamplerIndex, uint32 NumTextures)
+{
+	const uint32 Key = SamplerIndex | (NumTextures << 8);
+	if (const auto Found = PipelineLayouts.find(Key); Found != PipelineLayouts.end())
+	{
+		return Found->second;
+	}
+	VkDescriptorSetLayout Sets[MaxTextures];
+	for (uint32 Slot = 0; Slot < NumTextures; ++Slot)
+	{
+		Sets[Slot] = SetLayouts[SamplerIndex];
+	}
+	VkPushConstantRange PushRange{};
+	PushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	PushRange.offset = 0;
+	PushRange.size = MaxPushConstantSize;
+	VkPipelineLayoutCreateInfo LayoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+	LayoutInfo.setLayoutCount = NumTextures;
+	LayoutInfo.pSetLayouts = Sets;
+	LayoutInfo.pushConstantRangeCount = 1;
+	LayoutInfo.pPushConstantRanges = &PushRange;
+	VkPipelineLayout Layout = VK_NULL_HANDLE;
+	if (!VulkanUtil::Check(vkCreatePipelineLayout(Device, &LayoutInfo, nullptr, &Layout), "vkCreatePipelineLayout"))
+	{
+		return VK_NULL_HANDLE;
+	}
+	PipelineLayouts.emplace(Key, Layout);
+	return Layout;
+}
+
+VkDescriptorSet FVulkanDevice::AllocateDescriptorSet(uint32 SamplerIndex, VkDescriptorPool& OutPool)
 {
 	VkDescriptorSetAllocateInfo AllocInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
 	AllocInfo.descriptorSetCount = 1;
-	AllocInfo.pSetLayouts = &SetLayouts[static_cast<uint32>(Filter)];
+	AllocInfo.pSetLayouts = &SetLayouts[SamplerIndex];
 
 	// Try the newest pool first, then create a new one.
 	for (int32 Attempt = 0; Attempt < 2; ++Attempt)
@@ -903,7 +932,7 @@ void FVulkanDevice::FlushPendingUploads()
 	SubmitImmediate(Frame.UploadCommandBuffer);
 }
 
-void FVulkanDevice::UpdateTexture(FRHITexture& InTexture, const FIntRect& Region, const void* Data, uint32 RowPitch)
+void FVulkanDevice::UpdateTexture(FRHITexture& InTexture, const FIntRect& Region, const void* Data, uint32 RowPitch, uint32 Slice)
 {
 	FVulkanTexture& Texture = static_cast<FVulkanTexture&>(InTexture);
 	if (!ensuref(Data && !Region.IsEmpty() && Region.Left >= 0 && Region.Top >= 0
@@ -939,14 +968,14 @@ void FVulkanDevice::UpdateTexture(FRHITexture& InTexture, const FIntRect& Region
 	Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	Barrier.image = Texture.GetImage();
-	Barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+	Barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, Slice, 1 };
 	vkCmdPipelineBarrier(Upload.CommandBuffer,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
 
 	VkBufferImageCopy Copy{};
 	Copy.bufferOffset = Upload.StagingOffset;
-	Copy.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+	Copy.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, Slice, 1 };
 	Copy.imageOffset = { Region.Left, Region.Top, 0 };
 	Copy.imageExtent = { static_cast<uint32>(Region.Width()), Rows, 1 };
 	vkCmdCopyBufferToImage(Upload.CommandBuffer, Upload.StagingBuffer, Texture.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Copy);

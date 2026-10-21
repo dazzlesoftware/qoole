@@ -74,6 +74,9 @@ public:
 	int GetNumKeys(void);
 	const char *GetKeyNum(int num) const;
 	void DelKey(const char *skey);	
+	// Native package adapter: restore keys and attribute state explicitly.
+	void ClearKeys();
+	void SetAttribState(int index, bool enabled, bool hidden);
   
 	void SetOrigin(const Vector3d &pos);
 	void SetAngle(int ang);

@@ -8,9 +8,12 @@
 //
 // Binding model (deliberately fixed and small): every pipeline sees
 //   - up to 64 bytes of push constants      (HLSL: cbuffer at b0 / [[vk::push_constant]])
-//   - one 2D texture                         (t0 / [[vk::binding(0)]])
-//   - one sampler chosen at pipeline creation (s0 / [[vk::binding(1)]])
-// It grows when the engine renderer needs more.
+//   - NumTextures 2D textures (1 by default, MaxTextures at most): slot k
+//     is tk / [[vk::binding(0, k)]] (descriptor set k)
+//   - one sampler chosen at pipeline creation, its filter and whether it
+//     clamps or repeats (s0 / [[vk::binding(1)]]; every set holds it)
+// Textures may have mip levels (FRHITextureDesc::MipLevels), which the
+// sampler blends between, and slices (ArraySize: array textures). It grows when the engine renderer needs more.
 //
 // Frame model: BeginFrame() returns the frame's command list (it waits until
 // the GPU has finished the frame that used the same resources,
@@ -44,6 +47,11 @@ enum class EPixelFormat : uint8
 };
 
 uint32 GetBytesPerPixel(EPixelFormat Format);
+// How many levels a full mip chain of this size has, and the byte size of
+// one level / of the first Levels levels (tightly packed).
+uint32 GetFullMipLevels(uint32 Width, uint32 Height);
+inline uint32 GetMipSize(uint32 Size, uint32 Level) { return (Size >> Level) > 0 ? (Size >> Level) : 1; }
+SIZE_T GetMipChainBytes(EPixelFormat Format, uint32 Width, uint32 Height, uint32 Levels);
 inline bool IsDepthFormat(EPixelFormat Format) { return Format == EPixelFormat::D32_FLOAT; }
 
 enum class EBufferUsage : uint8
@@ -89,6 +97,13 @@ struct FRHITextureDesc
 	bool bRenderTarget = false;          // can be drawn into with BeginRenderPass
 	const void* InitialData = nullptr;   // tightly packed rows unless InitialRowPitch is set
 	uint32 InitialRowPitch = 0;
+	// Mip levels, each half the one before (at least 1 x 1). With more than
+	// one, InitialData holds them all, largest first, each tightly packed
+	// (InitialRowPitch is not used). UpdateTexture changes level 0 only.
+	uint32 MipLevels = 1;
+	// Slices: with more than one it is an array texture (Texture2DArray in
+	// shaders), and InitialData holds each slice's mip levels in turn.
+	uint32 ArraySize = 1;
 	FLinearColor ClearColor = FLinearColor::Transparent(); // optimized clear value for render targets
 	const char* DebugName = nullptr;
 };
@@ -150,6 +165,9 @@ struct FVertexAttribute
 	uint32 SemanticIndex = 0;
 	EVertexFormat Format = EVertexFormat::Float2;
 	uint32 Offset = 0;
+	// 0: from the vertex buffer (VertexStride a vertex); 1: from the
+	// instance buffer (InstanceStride an instance), for instanced draws.
+	uint32 BufferSlot = 0;
 };
 
 enum class EBlendMode : uint8
@@ -165,14 +183,44 @@ enum class ESamplerFilter : uint8
 	Point,
 };
 
+// Which triangles are not drawn. Front faces are those clockwise on the
+// render target (as it is seen, y down).
+enum class ECullMode : uint8
+{
+	None,
+	Back,
+	Front,
+};
+
+// What the sampler does past a texture's edge.
+enum class ESamplerAddress : uint8
+{
+	Clamp,
+	Wrap, // repeats (tiled textures)
+};
+
+// The samplers there are: one for each filter and address mode.
+constexpr uint32 NumSamplers = 4;
+inline uint32 GetSamplerIndex(ESamplerFilter Filter, ESamplerAddress Address)
+{
+	return static_cast<uint32>(Filter) + 2u * static_cast<uint32>(Address);
+}
+
+// Texture slots a pipeline may have.
+constexpr uint32 MaxTextures = 12;
+
 struct FRHIGraphicsPipelineDesc
 {
 	FRHIShaderBytecode VertexShader;
 	FRHIShaderBytecode PixelShader;
 	TArray<FVertexAttribute> VertexAttributes;
 	uint32 VertexStride = 0;
+	uint32 InstanceStride = 0; // with attributes in slot 1: bytes an instance
 	EBlendMode BlendMode = EBlendMode::AlphaBlend;
 	ESamplerFilter SamplerFilter = ESamplerFilter::Linear;
+	ESamplerAddress SamplerAddress = ESamplerAddress::Clamp;
+	uint32 NumTextures = 1; // texture slots, 1 to MaxTextures
+	ECullMode CullMode = ECullMode::None;
 	EPixelFormat RenderTargetFormat = EPixelFormat::R8G8B8A8_UNORM;
 	uint32 PushConstantSize = 0; // bytes, multiple of 4, at most 64
 	// D32_FLOAT for pipelines used in passes with a depth buffer; the test is
@@ -218,10 +266,16 @@ public:
 	virtual void SetScissor(const FIntRect& Rect) = 0;
 	virtual void SetPipeline(FRHIGraphicsPipeline& Pipeline) = 0;
 	virtual void SetPushConstants(const void* Data, uint32 Size) = 0;
-	virtual void SetTexture(FRHITexture& Texture) = 0;
-	virtual void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride) = 0;
+	// Into a texture slot of the pipeline (0 to its NumTextures - 1).
+	virtual void SetTexture(FRHITexture& Texture, uint32 Slot) = 0;
+	void SetTexture(FRHITexture& Texture) { SetTexture(Texture, 0); }
+	// Slot 0 holds the vertices, slot 1 the instances (per-instance data).
+	virtual void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride, uint32 Slot) = 0;
+	void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride) { SetVertexBuffer(Buffer, Offset, Stride, 0); }
 	virtual void SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndexFormat Format) = 0;
 	virtual void DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex) = 0;
+	// InstanceCount copies, reading instances FirstInstance on from slot 1.
+	virtual void DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance) = 0;
 };
 
 struct FRHIDeviceDesc
@@ -249,10 +303,10 @@ public:
 	virtual TSharedPtr<FRHITexture> CreateTexture(const FRHITextureDesc& Desc) = 0;
 	virtual TSharedPtr<FRHIGraphicsPipeline> CreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc) = 0;
 
-	// Copies pixels into a region of a texture. The copy happens on the GPU
-	// timeline before the next submitted frame; Data may be freed on return.
-	// RowPitch 0 means tightly packed.
-	virtual void UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch = 0) = 0;
+	// Copies pixels into a region of a texture (mip level 0 of a slice). The
+	// copy happens on the GPU timeline before the next submitted frame; Data
+	// may be freed on return. RowPitch 0 means tightly packed.
+	virtual void UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch = 0, uint32 Slice = 0) = 0;
 
 	// Waits for the GPU and copies a texture's pixels back (tightly packed
 	// rows). Slow; meant for tests and screenshots.

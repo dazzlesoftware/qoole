@@ -522,3 +522,168 @@ void FLandscapeBake::Bake(const Landscape& Land, const FIntRect& Texels)
 		Worker.join();
 	}
 }
+
+// ---------------------------------------------------------------------------
+
+bool FLandscapeLayerImages::CanBlend(const Landscape& Land)
+{
+	return Land.GetNumLayers() <= MaxLayers && FLandscapeTextureLibrary::IsTextured(Land);
+}
+
+FIntRect FLandscapeLayerImages::UpdateWeights(const std::shared_ptr<const Landscape>& Land)
+{
+	if (!Land || Land == WeightsOf)
+	{
+		return FIntRect();
+	}
+	const int32 NewX = Land->GetPointsX();
+	const int32 NewY = Land->GetPointsY();
+	const int32 NewLayers = FMath::Min(Land->GetNumLayers(), MaxLayers);
+	FIntRect Dirty(0, 0, NewX, NewY);
+	if (WeightsOf && NewX == PointsX && NewY == PointsY && NewLayers == Layers)
+	{
+		// Only the points whose weights changed.
+		int32 MinX = INT32_MAX, MinY = INT32_MAX, MaxX = -1, MaxY = -1;
+		for (int32 Layer = 0; Layer < NewLayers; ++Layer)
+		{
+			const std::vector<float>& New = Land->GetLayers()[static_cast<SIZE_T>(Layer)].weights;
+			const std::vector<float>& Old = WeightsOf->GetLayers()[static_cast<SIZE_T>(Layer)].weights;
+			for (SIZE_T Index = 0; Index < New.size(); ++Index)
+			{
+				if (New[Index] != Old[Index])
+				{
+					const int32 X = static_cast<int32>(Index % NewX);
+					const int32 Y = static_cast<int32>(Index / NewX);
+					MinX = FMath::Min(MinX, X);
+					MinY = FMath::Min(MinY, Y);
+					MaxX = FMath::Max(MaxX, X);
+					MaxY = FMath::Max(MaxY, Y);
+				}
+			}
+		}
+		WeightsOf = Land;
+		if (MaxX < 0)
+		{
+			return FIntRect();
+		}
+		Dirty = FIntRect(MinX, MinY, MaxX + 1, MaxY + 1);
+	}
+	else
+	{
+		PointsX = NewX;
+		PointsY = NewY;
+		Layers = NewLayers;
+		Weights.assign(static_cast<SIZE_T>(PointsX) * PointsY * 4 * 2, 0);
+		WeightsOf = Land;
+	}
+	const SIZE_T SliceBytes = static_cast<SIZE_T>(PointsX) * PointsY * 4;
+	for (int32 Layer = 0; Layer < Layers; ++Layer)
+	{
+		const std::vector<float>& W = Land->GetLayers()[static_cast<SIZE_T>(Layer)].weights;
+		uint8* Slice = Weights.data() + SliceBytes * static_cast<SIZE_T>(Layer / 4);
+		for (int32 Y = Dirty.Top; Y < Dirty.Bottom; ++Y)
+		{
+			for (int32 X = Dirty.Left; X < Dirty.Right; ++X)
+			{
+				const SIZE_T Point = static_cast<SIZE_T>(Y) * PointsX + X;
+				Slice[Point * 4 + static_cast<SIZE_T>(Layer % 4)] = static_cast<uint8>(FMath::Clamp(W[Point], 0.0f, 1.0f) * 255.0f + 0.5f);
+			}
+		}
+	}
+	return Dirty;
+}
+
+bool FLandscapeLayerImages::UpdateTextures(const Landscape& Land)
+{
+	FLandscapeTextureLibrary& Library = FLandscapeTextureLibrary::Get();
+	const int32 Count = FMath::Max(FMath::Min(Land.GetNumLayers(), MaxLayers), 1);
+	std::string NewLook;
+	TArray<const FLandscapeTexture*> Sources;
+	int32 Size = 16;
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const LandscapeLayer* Layer = Index < Land.GetNumLayers() ? &Land.GetLayers()[static_cast<SIZE_T>(Index)] : nullptr;
+		const FLandscapeTexture* Source = Layer ? Library.Find(Layer->texture) : nullptr;
+		Sources.push_back(Source);
+		if (Layer)
+		{
+			NewLook += Layer->texture + "|" + std::to_string(Layer->r) + "," + std::to_string(Layer->g) + "," + std::to_string(Layer->b)
+				+ (Source ? "+" : "-") + ";";
+		}
+		if (Source)
+		{
+			Size = FMath::Max(Size, FMath::Max(Source->Mips[0].Width, Source->Mips[0].Height));
+		}
+	}
+	if (NewLook == Look && !Textures.empty())
+	{
+		return false;
+	}
+	Look = NewLook;
+	// One size for all: the biggest texture's, a power of two.
+	TextureSize = 16;
+	while (TextureSize < FMath::Min(Size, MaxTextureSize))
+	{
+		TextureSize *= 2;
+	}
+	Slices = Count;
+	Textures.clear();
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const LandscapeLayer* Layer = Index < Land.GetNumLayers() ? &Land.GetLayers()[static_cast<SIZE_T>(Index)] : nullptr;
+		const FLandscapeTexture* Source = Sources[static_cast<SIZE_T>(Index)];
+		const float Color[3] = { Layer ? static_cast<float>(Layer->r) : 255.0f, Layer ? static_cast<float>(Layer->g) : 255.0f,
+			Layer ? static_cast<float>(Layer->b) : 255.0f };
+		FLandscapeTexture Slice;
+		FLandscapeImage Top;
+		Top.Width = Top.Height = TextureSize;
+		Top.Pixels.resize(static_cast<SIZE_T>(TextureSize) * TextureSize * 4);
+		float Sampled[3];
+		for (int32 Y = 0; Y < TextureSize; ++Y)
+		{
+			for (int32 X = 0; X < TextureSize; ++X)
+			{
+				uint8* Texel = &Top.Pixels[(static_cast<SIZE_T>(Y) * TextureSize + X) * 4];
+				const float* Own = Color;
+				if (Source)
+				{
+					// The texture over one repeat, from the level nearest this size.
+					Source->Sample((X + 0.5f) / TextureSize, (Y + 0.5f) / TextureSize, 1.0f / TextureSize, Sampled);
+					if (Source->bTint)
+					{
+						for (int32 C = 0; C < 3; ++C)
+						{
+							Sampled[C] = Color[C] * Sampled[C] / 128.0f;
+						}
+					}
+					Own = Sampled;
+				}
+				for (int32 C = 0; C < 3; ++C)
+				{
+					Texel[C] = static_cast<uint8>(FMath::Clamp(Own[C] + 0.5f, 0.0f, 255.0f));
+				}
+				Texel[3] = 255;
+			}
+		}
+		Slice.Mips.push_back(std::move(Top));
+		MakeMips(Slice);
+		MipLevels = static_cast<int32>(Slice.Mips.size());
+		for (const FLandscapeImage& Mip : Slice.Mips)
+		{
+			Textures.insert(Textures.end(), Mip.Pixels.begin(), Mip.Pixels.end());
+		}
+	}
+	return true;
+}
+
+void FLandscapeLayerImages::GetConstants(const Landscape& Land, float Out[12])
+{
+	Out[0] = Land.GetSizeX();
+	Out[1] = Land.GetSizeY();
+	Out[2] = static_cast<float>(FMath::Min(Land.GetNumLayers(), MaxLayers));
+	Out[3] = 0.0f;
+	for (int32 Index = 0; Index < MaxLayers; ++Index)
+	{
+		Out[4 + Index] = Index < Land.GetNumLayers() ? 1.0f / FMath::Max(Land.GetLayers()[static_cast<SIZE_T>(Index)].tiling, 1.0f) : 0.0f;
+	}
+}

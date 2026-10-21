@@ -7,10 +7,26 @@
 //
 //   Sculpt   raises the ground (Shift lowers it)
 //   Smooth   evens out bumps
-//   Flatten  pulls the ground to the height where the stroke began
+//   Flatten  pulls the ground to the height where the stroke began, or to
+//            a set height; only up or only down if asked (FlattenMode)
+//   Ramp     a drag from one point to another lays a slope between them,
+//            the brush's radius wide, when the button comes up
+//   Erosion  wears steep slopes down onto the ground below them (thermal
+//            erosion: earth slides where a slope is steeper than ErosionTalus)
 //   Noise    roughens it
-//   Paint    paints the selected paint layer (Shift erases it); the other
-//            layers give way so the weights at a point add up to 1 at most
+//   Splines  edits the landscape's splines (Unreal's Manage > Splines):
+//            Ctrl+click adds a control point after the selected one (or
+//            starts a spline); Ctrl+click on another point joins the
+//            selected one to it (a junction) or branches from it; a click
+//            selects a point and a drag moves it (a junction's points
+//            together); the selected point's tangent handles bend the
+//            curve there; Apply Splines shapes the ground to them
+//   Paint    paints the selected paint layer toward PaintTarget (Shift
+//            erases it); the other layers give way so the weights at a
+//            point add up to 1 at most
+//
+// Auto Paint lays a layer where the ground's slope and height are in a
+// range, all over the landscape at once (Unreal's auto material, done once).
 //
 // The brush has a radius in map units, a strength (0 to 1) and a falloff
 // (the outer part of the radius, as a fraction, over which the effect fades
@@ -29,11 +45,24 @@ enum class ELandscapeTool : uint8
 	Sculpt,
 	Smooth,
 	Flatten,
+	Ramp,
+	Erosion,
 	Noise,
+	Splines,
 	Paint,
 };
 
 const char* ToString(ELandscapeTool Tool);
+
+// Which way Flatten may move the ground (Unreal's Flatten Mode).
+enum class ELandscapeFlattenMode : uint8
+{
+	Both,
+	Raise,
+	Lower,
+};
+
+const char* ToString(ELandscapeFlattenMode Mode);
 
 struct FLandscapeBrush
 {
@@ -43,7 +72,32 @@ struct FLandscapeBrush
 
 	static constexpr float MinRadius = 8.0f;
 	static constexpr float MaxRadius = 8192.0f;
+
+	// Unreal's [ and ] (a step of a quarter), and Ctrl with them for strength.
+	void Grow(int32 Steps);
+	void Strengthen(int32 Steps);
 };
+
+// Where Auto Paint lays a layer: slopes in degrees, heights in the
+// landscape's units; the edges fade over SlopeFade degrees and HeightFade units.
+struct FLandscapeAutoPaint
+{
+	float MinSlope = 0.0f;
+	float MaxSlope = 90.0f;
+	float SlopeFade = 5.0f;
+	float MinHeight = -65536.0f;
+	float MaxHeight = 65536.0f;
+	float HeightFade = 32.0f;
+
+	// 0 to 1 at a point of the landscape.
+	float WeightAt(const Landscape& Land, int32 X, int32 Y) const;
+};
+
+// Every landscape's splines over a view (all modes): the curves and their
+// control points, the selected one (Selected* of the Landscape mode, if
+// any) bigger.
+void DrawLandscapeSplines(const FMapDocument& Document, const FMapViewportClient& View, FSlateWindowElementList& Out, float DpiScale,
+	const Object* SelectedLand = nullptr, int32 SelectedSpline = -1, int32 SelectedPoint = -1);
 
 class FMapLandscapeMode final : public IMapViewportMode
 {
@@ -52,6 +106,54 @@ public:
 
 	ELandscapeTool Tool = ELandscapeTool::Sculpt;
 	FLandscapeBrush Brush;
+
+	// Tool settings (Unreal's Tool Settings, per tool).
+	ELandscapeFlattenMode FlattenMode = ELandscapeFlattenMode::Both;
+	bool bFlattenToTarget = false; // to FlattenTarget, not where the stroke began
+	float FlattenTarget = 0.0f;    // a height in the landscape's units
+	float ErosionTalus = 30.0f;    // degrees: steeper slopes slide
+	float PaintTarget = 1.0f;      // the weight painting moves toward
+
+	// A slope from From to To (scope space, on the landscape) the brush's
+	// radius wide, its edges fading over the falloff; one undo step.
+	bool AddRamp(Object& Land, const Vector3d& From, const Vector3d& To);
+
+	// Splines: the selected control point (on SplineLand; -1 for none).
+	Object* SplineLand = nullptr;
+	int32 SelectedSpline = -1;
+	int32 SelectedPoint = -1;
+	bool HasSelectedSplinePoint() const;
+	const LandscapeSpline* GetSelectedSpline() const;
+	// A control point where the ground is (scope space): after the
+	// selected one of its spline (or before it, at its start), else a new
+	// spline's first; it becomes the selected one. One undo step.
+	bool AddSplinePoint(Object& Land, const Vector3d& ScopePoint);
+	// Moves a point, and every point of its junction with it.
+	bool MoveSplinePoint(Object& Land, int32 Spline, int32 Point, const Vector3d& ScopePoint);
+	// A segment from the selected point to another (a junction there): from
+	// an end of its spline, the spline goes on to it; else a new spline
+	// runs between them. With nothing selected, a new spline branches from
+	// it. The new end is selected. One undo step.
+	bool ConnectSplinePoint(Object& Land, int32 Spline, int32 Point);
+	// The point's tangent by hand (landscape space), or automatic again.
+	bool SetSplineTangent(Object& Land, int32 Spline, int32 Point, const Vector3d& Tangent);
+	bool SetSplineAutoTangent(Object& Land, int32 Spline, int32 Point);
+	// The selected point no longer in a junction.
+	bool BreakSelectedJunction();
+	// Where the selected point's tangent handles are (scope space): the
+	// curve's Bezier controls, a third of the tangent either way.
+	bool GetTangentHandles(Vector3d& OutBefore, Vector3d& OutAfter) const;
+	bool DeleteSelectedSplinePoint();
+	bool DeleteSelectedSpline();
+	bool SetSpline(Object& Land, int32 Spline, const LandscapeSpline& NewSpline, const FString& Description = "Change Spline");
+	// The ground shaped to every spline of it, their layers painted.
+	bool ApplySplines(Object& Land);
+	// The control point within Pixels of a view point, nearest first.
+	bool PickSplinePoint(const FMapViewportClient& View, FVector2 Local, float Pixels, Object*& OutLand, int32& OutSpline, int32& OutPoint) const;
+
+	FLandscapeAutoPaint AutoPaint;
+	// The layer where AutoPaint says, the others giving way; one undo step.
+	bool ApplyAutoPaint(Object& Land, int32 Layer);
 
 	// The size of a new landscape (Unreal's New Landscape panel).
 	int32 NewQuadsX = 64;
@@ -126,7 +228,12 @@ private:
 	Object* StrokeTarget = nullptr;
 	Vector3d StrokePoint;
 	float FlattenHeight = 0.0f; // landscape space
+	// A ramp being dragged out: from where, on which landscape.
+	Object* RampLand = nullptr;
+	Vector3d RampFrom;
 	bool bInvert = false;
 	bool bHeld = false; // the left button, pressed in a view
+	bool bDraggingPoint = false;
+	int32 DraggingHandle = 0; // -1 the handle before the point, +1 after
 	uint32 NoiseSeed = 1;
 };
