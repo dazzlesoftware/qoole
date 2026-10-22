@@ -31,7 +31,23 @@ struct FMaterialAsset
 struct FStaticMeshAsset
 {
 	std::shared_ptr<const StaticMesh> Mesh;
-	FAssetReference Material;
+	FAssetReference Material;					 // slot zero
+	TArray<FAssetReference> AdditionalMaterials; // slots 1-63
+	TArray<FString> MaterialSlotNames;			 // optional, includes slot zero
+	FString GetMaterialName(int32 Slot) const
+	{
+		return Slot < static_cast<int32>(MaterialSlotNames.size()) && !MaterialSlotNames[Slot].IsEmpty()
+				   ? FString::Format("Slot {} ({})", Slot, MaterialSlotNames[Slot])
+				   : FString::Format("Slot {}", Slot);
+	}
+	int32 GetNumMaterials() const
+	{
+		return 1 + static_cast<int32>(AdditionalMaterials.size());
+	}
+	const FAssetReference& GetMaterial(int32 Slot) const
+	{
+		return Slot == 0 ? Material : AdditionalMaterials.at(Slot - 1);
+	}
 };
 
 // Typed codecs never read image files or depend on editor/graphics libraries.
@@ -47,13 +63,23 @@ class FRenderAssetCodec
 	static bool DecodeMesh(const FAssetPackage&, FStaticMeshAsset&, FString& Error);
 };
 
-struct FLoadedMeshAsset
+struct FLoadedMaterialSlot
 {
-	FAssetReference Source, MaterialOverride;
-	FStaticMeshAsset Data;
 	TOptional<FMaterialAsset> Material;
 	TOptional<FTextureAsset> Texture;
 	TOptional<FTextureAsset> NormalTexture;
+};
+
+struct FLoadedMeshAsset : FLoadedMaterialSlot
+{
+	FAssetReference Source, MaterialOverride;
+	FStaticMeshAsset Data;
+	TArray<FAssetReference> AdditionalOverrides;
+	TArray<FLoadedMaterialSlot> AdditionalSlots;
+	const FLoadedMaterialSlot& GetSlot(int32 Slot) const
+	{
+		return Slot == 0 ? *this : AdditionalSlots.at(Slot - 1);
+	}
 	std::shared_ptr<const StaticMesh> DisplayMesh;
 };
 
@@ -66,7 +92,8 @@ class FRenderAssetLoader
 	bool LoadTexture(const FAssetReference&, FTextureAsset&, FString& Error) const;
 	bool LoadMaterial(const FAssetReference&, FMaterialAsset&, FString& Error) const;
 	bool LoadMesh(const FAssetReference&, FLoadedMeshAsset&, FString& Error,
-				  const FAssetReference& MaterialOverride = {}) const;
+				  const FAssetReference& MaterialOverride = {},
+				  const TArray<FAssetReference>& AdditionalOverrides = {}) const;
 
   private:
 	const FAssetRegistry& Registry;

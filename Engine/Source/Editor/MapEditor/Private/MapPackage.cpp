@@ -174,14 +174,26 @@ namespace
 		{
 			if (const auto Asset=Obj.GetMeshAsset())
 			{
-				Out["Mesh"]["Asset"]=Asset->Source.ToJson(); Out["Mesh"]["MaterialOverride"]=Asset->MaterialOverride.ToJson();
-				for(const auto& Ref : {Asset->Source,Asset->MaterialOverride}) if(!Ref.Path.IsEmpty()) Package.Dependencies.push_back(Ref.Path);
+				Out["Mesh"]["Asset"] = Asset->Source.ToJson();
+				Out["Mesh"]["MaterialOverride"] = Asset->MaterialOverride.ToJson();
+				for (const auto& Ref : {Asset->Source, Asset->MaterialOverride})
+					if (!Ref.Path.IsEmpty())
+						Package.Dependencies.push_back(Ref.Path);
+				Out["Mesh"]["AdditionalOverrides"] = J::MakeArray();
+				for (const auto& Ref : Asset->AdditionalOverrides)
+				{
+					Out["Mesh"]["AdditionalOverrides"].Push(Ref.ToJson());
+					if (!Ref.Path.IsEmpty())
+						Package.Dependencies.push_back(Ref.Path);
+				}
 			}
-			else {
-			// Today's placed meshes come from the built-in library. Reject custom
-			// geometry rather than silently discarding it during this transition.
-			Require(StaticMesh::Find(Obj.GetMeshName()).get() == Obj.GetMeshPtr().get(), "Custom meshes need an asset serializer before saving.");
-			Out["Mesh"] = Ansi(Obj.GetMeshName());
+			else
+			{
+				// Today's placed meshes come from the built-in library. Reject custom
+				// geometry rather than silently discarding it during this transition.
+				Require(StaticMesh::Find(Obj.GetMeshName()).get() == Obj.GetMeshPtr().get(),
+						"Custom meshes need an asset serializer before saving.");
+				Out["Mesh"] = Ansi(Obj.GetMeshName());
 			}
 		}
 		if (Obj.HasFoliage())
@@ -260,12 +272,31 @@ namespace
 		}
 		if (In.Contains("Mesh"))
 		{
-			if(In.Get("Mesh").IsObject()) {
-				FString Error; const auto Ref=FAssetReference::FromJson(In.Get("Mesh").Get("Asset"),Error), Override=FAssetReference::FromJson(In.Get("Mesh").Get("MaterialOverride"),Error);
-				Require(Ref && !Ref->IsNull() && Override,"Invalid mesh asset reference.");
-				const auto Asset=FMapAssetLibrary::LoadMesh(*Ref,*Override,Error); if(!Asset) throw std::runtime_error(Error.ToStdString()); Obj->SetMeshAsset(Asset);
-			} else {
-			auto Mesh = StaticMesh::Find(Text(In.Get("Mesh")).c_str()); Require(Mesh != nullptr, "Unknown static mesh."); Obj->SetMesh(Mesh);
+			if (In.Get("Mesh").IsObject())
+			{
+				FString Error;
+				const auto Ref = FAssetReference::FromJson(In.Get("Mesh").Get("Asset"), Error),
+						   Override = FAssetReference::FromJson(In.Get("Mesh").Get("MaterialOverride"), Error);
+				Require(Ref && !Ref->IsNull() && Override, "Invalid mesh asset reference.");
+				TArray<FAssetReference> Additional;
+				const auto& Values = In.Get("Mesh").Get("AdditionalOverrides");
+				Require(Values.IsNull() || (Values.IsArray() && Values.Num() <= 63), "Invalid material overrides.");
+				for (const auto& V : Values.GetItems())
+				{
+					const auto R = FAssetReference::FromJson(V, Error);
+					Require(R.has_value(), "Invalid slot override.");
+					Additional.push_back(*R);
+				}
+				const auto Asset = FMapAssetLibrary::LoadMesh(*Ref, *Override, Error, Additional);
+				if (!Asset)
+					throw std::runtime_error(Error.ToStdString());
+				Obj->SetMeshAsset(Asset);
+			}
+			else
+			{
+				auto Mesh = StaticMesh::Find(Text(In.Get("Mesh")).c_str());
+				Require(Mesh != nullptr, "Unknown static mesh.");
+				Obj->SetMesh(Mesh);
 			}
 		}
 		if (In.Contains("Landscape"))
@@ -333,7 +364,7 @@ bool FMapPackage::Save(const FString& Path, Object& Root, FString& Id, FString& 
 		FAssetPackage Package; Package.Id = Id;
 		Package.Kind = bPrefab ? EAssetPackageKind::Asset : EAssetPackageKind::Map;
 		Package.Schema = bPrefab ? "Genesis.Prefab" : "Genesis.World";
-		Package.SchemaVersion = 2;
+		Package.SchemaVersion = 3;
 		if (const auto* Set = FMapEditorEnvironment::GetActiveGameSet())
 		{
 			Package.Exports["GameSet"]["Game"] = Set->Game;
@@ -356,13 +387,13 @@ TUniquePtr<Object> FMapPackage::Load(const FString& Path, FString& Id, FString& 
 	if (!ExpectedId.IsEmpty() && Package.Id != ExpectedId)
 	{ Error = "The prefab identity changed since discovery; refresh content before placing it."; return {}; }
 	if (Package.Kind != (bPrefab ? EAssetPackageKind::Asset : EAssetPackageKind::Map) ||
-		Package.Schema != (bPrefab ? "Genesis.Prefab" : "Genesis.World") || (Package.SchemaVersion != 1 && Package.SchemaVersion != 2))
+		Package.Schema != (bPrefab ? "Genesis.Prefab" : "Genesis.World") || (Package.SchemaVersion < 1 || Package.SchemaVersion > 3))
 	{ Error = "Unsupported Genesis world schema."; return {}; }
 	const auto* PreviousSet = FMapEditorEnvironment::GetActiveGameSet();
 	try
 	{
 		FJsonValue LegacyRoot;
-		if (Package.SchemaVersion == 2)
+		if (Package.SchemaVersion >= 2)
 		{
 			const auto World = FWorld::FromJson(Package.Exports.Get("Scene"), Error);
 			if (!World || !FMapWorldAdapter::ToLegacy(*World, LegacyRoot, Error)) return {};
@@ -374,7 +405,7 @@ TUniquePtr<Object> FMapPackage::Load(const FString& Path, FString& Id, FString& 
 		Require(!bPrefab || PreviousSet == Set, "Convert the prefab to this world's entity definition set before placing it.");
 		if (FMapEditorEnvironment::GetActiveGameSet() != Set && !FMapEditorEnvironment::Activate(*Set, &Error)) return {};
 		int Total = 0; auto Root = ReadObject(LegacyRoot, Package, 0, Total);
-		if (bUpgraded) *bUpgraded = Package.SchemaVersion == 1;
+		if (bUpgraded) *bUpgraded = Package.SchemaVersion < 3;
 		Id = Package.Id; return Root;
 	}
 	catch (const std::exception& Exception)

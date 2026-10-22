@@ -279,12 +279,13 @@ FRHIGraphicsPipeline* FMapRenderResources::GetMaterialPipeline(EPixelFormat Targ
 }
 
 bool FMapRenderResources::GetMaterialTextures(const std::shared_ptr<const FLoadedMeshAsset>& Asset, FRHITexture*& Color,
-											  FRHITexture*& Normal)
+											  FRHITexture*& Normal, int32 SlotIndex)
 {
 	Color = Normal = &GetWhiteTexture();
 	if (!Asset)
 		return false;
-	if (auto It = Materials.find(Asset.get()); It != Materials.end())
+	const auto& Slot = Asset->GetSlot(SlotIndex);
+	if (auto It = Materials.find(&Slot); It != Materials.end())
 	{
 		It->second.LastUsed = Frame;
 		if (It->second.Color)
@@ -311,8 +312,8 @@ bool FMapRenderResources::GetMaterialTextures(const std::shared_ptr<const FLoade
 		Out = Device.CreateTexture(Desc);
 		return Out != nullptr;
 	};
-	if ((Asset->Texture && !Upload(*Asset->Texture, false, Entry.Color)) ||
-		(Asset->NormalTexture && !Upload(*Asset->NormalTexture, true, Entry.Normal)))
+	if ((Slot.Texture && !Upload(*Slot.Texture, false, Entry.Color)) ||
+		(Slot.NormalTexture && !Upload(*Slot.NormalTexture, true, Entry.Normal)))
 	{
 		if (Entry.Color)
 			Device.DeferRelease(Entry.Color);
@@ -324,7 +325,7 @@ bool FMapRenderResources::GetMaterialTextures(const std::shared_ptr<const FLoade
 		Color = Entry.Color.get();
 	if (Entry.Normal)
 		Normal = Entry.Normal.get();
-	Materials[Asset.get()] = std::move(Entry);
+	Materials[&Slot] = std::move(Entry);
 	return true;
 }
 
@@ -2068,15 +2069,29 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 
 	TSharedPtr<FRHIBuffer> MaterialBuffer;
 	FRHIGraphicsPipeline* MaterialPipeline=MaterialVertices.empty()?nullptr:Resources.GetMaterialPipeline(RenderTarget.GetTexture().GetFormat());
-	struct FMaterialDraw { FRHITexture* Color=nullptr; FRHITexture* Normal=nullptr; bool Valid=false; };
+	struct FMaterialDraw
+	{
+		FRHITexture* Color = nullptr;
+		FRHITexture* Normal = nullptr;
+		bool Valid = false;
+	};
 	TArray<FMaterialDraw> MaterialDraws(MaterialBatches.size());
-	FRHIGraphicsPipeline* TransparentPipeline = MaterialPipeline ? Resources.GetMaterialPipeline(RenderTarget.GetTexture().GetFormat(), true) : nullptr;
-	if(MaterialPipeline) {
-		FRHIBufferDesc Desc; Desc.Size=MaterialVertices.size()*sizeof(FMapMaterialVertex); Desc.Usage=EBufferUsage::Vertex; Desc.DebugName="Native material vertices";
-		MaterialBuffer=Device.CreateBuffer(Desc);
-		if(MaterialBuffer) {
-			std::memcpy(MaterialBuffer->GetMappedData(),MaterialVertices.data(),Desc.Size);
-			for(size_t I=0; I<MaterialBatches.size(); ++I) MaterialDraws[I].Valid=Resources.GetMaterialTextures(MaterialBatches[I].Mesh->GetMeshAsset(),MaterialDraws[I].Color,MaterialDraws[I].Normal);
+	FRHIGraphicsPipeline* TransparentPipeline =
+		MaterialPipeline ? Resources.GetMaterialPipeline(RenderTarget.GetTexture().GetFormat(), true) : nullptr;
+	if (MaterialPipeline)
+	{
+		FRHIBufferDesc Desc;
+		Desc.Size = MaterialVertices.size() * sizeof(FMapMaterialVertex);
+		Desc.Usage = EBufferUsage::Vertex;
+		Desc.DebugName = "Native material vertices";
+		MaterialBuffer = Device.CreateBuffer(Desc);
+		if (MaterialBuffer)
+		{
+			std::memcpy(MaterialBuffer->GetMappedData(), MaterialVertices.data(), Desc.Size);
+			for (size_t I = 0; I < MaterialBatches.size(); ++I)
+				MaterialDraws[I].Valid =
+					Resources.GetMaterialTextures(MaterialBatches[I].Mesh->GetMeshAsset(), MaterialDraws[I].Color,
+												  MaterialDraws[I].Normal, MaterialBatches[I].Slot);
 		}
 	}
 
@@ -2194,7 +2209,7 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 			TArray<size_t> Order;
 			for (size_t I = 0; I < MaterialBatches.size(); ++I)
 			{
-				const auto M = MaterialBatches[I].Mesh->GetMeshAsset()->Material;
+				const auto M = MaterialBatches[I].Mesh->GetMeshAsset()->GetSlot(MaterialBatches[I].Slot).Material;
 				if ((M && M->BlendMode == EMaterialBlendMode::Translucent) == Transparent)
 					Order.push_back(I);
 			}
@@ -2208,8 +2223,9 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 				if (!Draw.Valid)
 					continue;
 				const auto Asset = MaterialBatches[I].Mesh->GetMeshAsset();
-				const FMaterialAsset Material = Asset->Material.value_or(FMaterialAsset{});
-				const int Flags = (MapDraw->IsShaded() ? 1 : 0) | (Asset->NormalTexture ? 4 : 0) |
+				const auto& Slot = Asset->GetSlot(MaterialBatches[I].Slot);
+				const FMaterialAsset Material = Slot.Material.value_or(FMaterialAsset{});
+				const int Flags = (MapDraw->IsShaded() ? 1 : 0) | (Slot.NormalTexture ? 4 : 0) |
 								  (Material.BlendMode == EMaterialBlendMode::Masked ? 8 : 0) | (Transparent ? 16 : 0) |
 								  (static_cast<int>(Material.OpacityMaskClip * 65535.0f + 0.5f) << 5);
 				const float Params[16] = {Constants[0],

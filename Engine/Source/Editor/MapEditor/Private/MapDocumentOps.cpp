@@ -231,12 +231,38 @@ Object* FMapDocument::AddMeshAsset(const FAssetReference& Ref, const Vector3d& P
 	AddObjects({Obj}); return Obj;
 }
 
-bool FMapDocument::SetMeshMaterial(Object& Obj, const FAssetReference& Ref, FString& Error)
+bool FMapDocument::SetMeshMaterial(Object& Obj, const FAssetReference& Ref, FString& Error, int32 Slot)
 {
-	if(!Obj.GetMeshAsset()) { Error="Save this mesh as a native mesh asset and place it before assigning a material."; return false; }
-	const auto Asset=FMapAssetLibrary::LoadMesh(Obj.GetMeshAsset()->Source,Ref,Error); if(!Asset) return false;
-	const bool Own=BeginOwnTransaction("Assign Material"); CaptureObjects({&Obj}); Obj.SetMeshAsset(Asset); Changed(EMapChange::Geometry);
-	if(Own) EndTransaction(); return true;
+	if (!Obj.GetMeshAsset())
+	{
+		Error = "Save this mesh as a native mesh asset and place it before assigning a material.";
+		return false;
+	}
+	const auto& Old = *Obj.GetMeshAsset();
+	if (Slot < 0 || Slot >= Old.Data.GetNumMaterials())
+	{
+		Error = "Material slot outside mesh.";
+		return false;
+	}
+	auto Overrides = Old.AdditionalOverrides;
+	auto First = Old.MaterialOverride;
+	if (Slot == 0)
+		First = Ref;
+	else
+	{
+		Overrides.resize(Old.Data.AdditionalMaterials.size());
+		Overrides[Slot - 1] = Ref;
+	}
+	const auto Asset = FMapAssetLibrary::LoadMesh(Old.Source, First, Error, Overrides);
+	if (!Asset)
+		return false;
+	const bool Own = BeginOwnTransaction("Assign Material");
+	CaptureObjects({&Obj});
+	Obj.SetMeshAsset(Asset);
+	Changed(EMapChange::Geometry);
+	if (Own)
+		EndTransaction();
+	return true;
 }
 
 Object* FMapDocument::AddLandscape(int32 QuadsX, int32 QuadsY, float QuadSize, const Vector3d& Position)
@@ -384,7 +410,7 @@ bool FMapDocument::SavePrefab(const TArray<Object*>& Objects, const FString& Pre
 		{
 			FAssetPackageMetadata Existing;
 			if (!FAssetPackageStore::ReadMetadata(PrefabPath, Existing, OutError)) return false;
-			if (Existing.Kind != EAssetPackageKind::Asset || Existing.Schema != "Genesis.Prefab" || (Existing.SchemaVersion != 1 && Existing.SchemaVersion != 2))
+			if (Existing.Kind != EAssetPackageKind::Asset || Existing.Schema != "Genesis.Prefab" || (Existing.SchemaVersion < 1 || Existing.SchemaVersion > 3))
 			{ OutError = "Choose a different filename: the existing package is not a supported prefab asset."; return false; }
 			Id = Existing.Id;
 		}
@@ -1048,3 +1074,47 @@ void FMapDocument::SetMesh(Object& Obj, const FString& MeshName)
 		EndTransaction();
 	}
 }
+
+bool FMapDocument::ReloadMeshAssets(const FAssetReference* Filter, FString& Error)
+{
+	TArray<std::pair<Object*, std::shared_ptr<const FLoadedMeshAsset>>> Updates;
+	const auto Visit = [&](auto&& Self, Object& Obj) -> bool {
+		if (const auto Old = Obj.GetMeshAsset(); Old && (!Filter || Old->Source.Id == Filter->Id))
+		{
+			const auto Loaded =
+				FMapAssetLibrary::LoadMesh(Old->Source, Old->MaterialOverride, Error, Old->AdditionalOverrides);
+			if (!Loaded)
+				return false;
+			Updates.push_back({&Obj, Loaded});
+		}
+		for (int I = 0; I < Obj.GetNumChildren(); ++I)
+			if (!Self(Self, Obj.GetChild(I)))
+				return false;
+		return true;
+	};
+	if (!Visit(Visit, GetRoot()))
+		return false;
+	if (Updates.empty())
+	{
+		Error.Empty();
+		return true;
+	}
+	const bool Own = BeginOwnTransaction(Filter ? "Refresh Mesh Asset" : "Refresh Render Assets");
+	TArray<Object*> Objects;
+	for (const auto& Update : Updates)
+		Objects.push_back(Update.first);
+	CaptureObjects(Objects);
+	for (const auto& Update : Updates)
+		Update.first->SetMeshAsset(Update.second);
+	Changed(EMapChange::Geometry);
+	if (Own)
+		EndTransaction();
+	Error.Empty();
+	return true;
+}
+
+bool FMapDocument::ReloadMeshAsset(const FAssetReference& Ref,FString& Error) {
+ if(Ref.Id.IsEmpty()) { Error="A mesh identity is required to refresh instances."; return false; }
+ return ReloadMeshAssets(&Ref,Error);
+}
+bool FMapDocument::ReloadRenderAssets(FString& Error) { return ReloadMeshAssets(nullptr,Error); }

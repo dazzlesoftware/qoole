@@ -63,6 +63,7 @@ struct FMapMaterialBatch
 	const Object* Mesh = nullptr;
 	uint32 FirstVertex = 0, NumVertices = 0;
 	float Depth = 0;
+	uint32 Slot = 0;
 };
 
 class FMapDraw final : public FDraw

@@ -43,7 +43,7 @@ namespace
 				FAssetPackageMetadata Metadata;
 				FString PackageError;
 				if (!FAssetPackageStore::ReadMetadata(FString::FromWide(Entry.path().wstring()), Metadata, PackageError) ||
-					Metadata.Kind != EAssetPackageKind::Asset || Metadata.Schema != "Genesis.Prefab" || (Metadata.SchemaVersion != 1 && Metadata.SchemaVersion != 2)) continue;
+					Metadata.Kind != EAssetPackageKind::Asset || Metadata.Schema != "Genesis.Prefab" || (Metadata.SchemaVersion < 1 || Metadata.SchemaVersion > 3)) continue;
 			}
 			FString Name = FString::FromWide(Entry.path().stem().wstring());
 			if (!Name.IsEmpty())

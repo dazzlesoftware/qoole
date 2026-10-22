@@ -39,7 +39,7 @@ int wmain(int Argc, wchar_t** Argv)
 	if (Argc > 1)
 	{
 		FAssetPackage Package;
-		if (!FAssetPackageStore::Load(FString::FromWide(Argv[1]), Package, Error) || Package.Schema != "Genesis.World" || Package.SchemaVersion != 2)
+		if (!FAssetPackageStore::Load(FString::FromWide(Argv[1]), Package, Error) || Package.Schema != "Genesis.World" || (Package.SchemaVersion < 2 || Package.SchemaVersion > 3))
 		{ std::fprintf(stderr, "Cannot load native runtime world: %s\n", *Error); return 7; }
 		auto Loaded = FWorld::FromJson(Package.Exports.Get("Scene"), Error);
 		if (!Loaded) { std::fprintf(stderr, "%s\n", *Error); return 8; }
@@ -51,7 +51,12 @@ int wmain(int Argc, wchar_t** Argv)
 			FRenderAssetLoader Loader(Registry); int Assets=0;
 			for(const auto& Actor:Loaded->GetActors()) for(const auto& C:Actor.Components) {
 				if(C.Type=="Genesis.StaticMesh" && !C.Assets.empty()) {
-					FLoadedMeshAsset Mesh; if(!Loader.LoadMesh(C.Assets[0],Mesh,Error,C.Assets.size()>1?C.Assets[1]:FAssetReference{})) { std::fprintf(stderr,"%s\n",*Error); return 11; } ++Assets;
+					const auto& Data=C.Properties.Get("Data");
+					const auto First=FAssetReference::FromJson(Data.Get("MaterialOverride"),Error); if(!First) return 11;
+					TArray<FAssetReference> Additional; const auto& Values=Data.Get("AdditionalOverrides");
+					if(!Values.IsNull() && (!Values.IsArray() || Values.Num()>63)) return 11;
+					for(const auto& V:Values.GetItems()) { auto Ref=FAssetReference::FromJson(V,Error); if(!Ref) return 11; Additional.push_back(*Ref); }
+					FLoadedMeshAsset Mesh; if(!Loader.LoadMesh(C.Assets[0],Mesh,Error,*First,Additional)) { std::fprintf(stderr,"%s\n",*Error); return 11; } ++Assets;
 				} else if(C.Type=="Genesis.Landscape") for(const auto& Ref:C.Assets) { FTextureAsset Texture; if(!Loader.LoadTexture(Ref,Texture,Error)) return 12; ++Assets; }
 			}
 			std::printf("Native mesh/material/texture dependencies: %d scene assets validated.\n",Assets);

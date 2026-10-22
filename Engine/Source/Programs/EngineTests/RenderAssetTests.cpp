@@ -121,7 +121,7 @@ TEST_SUITE("RenderAssets")
 			Bad.Bulk[I] = 0;
 		CHECK_FALSE(FRenderAssetCodec::DecodeMesh(Bad, Out, Error));
 		Bad = P;
-		Bad.SchemaVersion = 2;
+		Bad.SchemaVersion = 3;
 		CHECK_FALSE(FRenderAssetCodec::DecodeMesh(Bad, Out, Error));
 		CHECK_FALSE(Out.Mesh);
 		Bad = P;
@@ -169,4 +169,53 @@ TEST_CASE("Material blend modes round trip and older packages remain opaque" * d
 	auto Original = Package.Exports.ToString();
 	CHECK_FALSE(FRenderAssetCodec::EncodeMaterial(Source, Package, Error));
 	CHECK(Package.Exports.ToString() == Original);
+}
+
+TEST_CASE("Mesh material slots validate and version one meshes retain slot zero" * doctest::test_suite("RenderAssets"))
+{
+	FString Error;
+	auto Mesh = std::make_shared<StaticMesh>("Two slots");
+	Mesh->AddVertex(Vector3d());
+	Mesh->AddVertex(Vector3d(1, 0, 0));
+	Mesh->AddVertex(Vector3d(0, 1, 0));
+	Mesh->AddFlatTriangle(0, 1, 2);
+	Mesh->AddFlatTriangle(2, 1, 0);
+	Mesh->SetTriangleMaterial(1, 1);
+	Mesh->Finish();
+	FStaticMeshAsset Source{Mesh, {FAssetId::New(), "/Game/Red"}, {{FAssetId::New(), "/Game/Blue"}}};
+	FAssetPackage Package;
+	REQUIRE(FRenderAssetCodec::EncodeMesh(Source, Package, Error));
+	CHECK(Package.SchemaVersion == 2);
+	CHECK(Package.Dependencies.size() == 2);
+	FStaticMeshAsset Back;
+	REQUIRE(FRenderAssetCodec::DecodeMesh(Package, Back, Error));
+	CHECK(Back.GetNumMaterials() == 2);
+	CHECK(Back.Mesh->GetTriangles()[1].MaterialSlot == 1);
+	CHECK(Back.GetMaterial(1).Id == Source.GetMaterial(1).Id);
+	auto Broken = Package;
+	Broken.Bulk[36 + 72] = 2;
+	const auto Original = Back.Mesh;
+	CHECK_FALSE(FRenderAssetCodec::DecodeMesh(Broken, Back, Error));
+	CHECK(Back.Mesh == Original);
+	Broken = Package;
+	Broken.Exports["Materials"] = FJsonValue::MakeArray();
+	CHECK_FALSE(FRenderAssetCodec::DecodeMesh(Broken, Back, Error));
+	Source.AdditionalMaterials.resize(64);
+	CHECK_FALSE(FRenderAssetCodec::EncodeMesh(Source, Broken, Error));
+	Source.AdditionalMaterials.clear();
+	CHECK_FALSE(FRenderAssetCodec::EncodeMesh(Source, Broken, Error));
+	// Build an actual legacy 72-byte triangle stream from the current geometry.
+	auto Legacy = Package;
+	Legacy.SchemaVersion = 1;
+	Legacy.Exports["Material"] = Source.Material.ToJson();
+	Legacy.Exports["MaterialSlotNames"] = FJsonValue();
+	Legacy.Bulk.clear();
+	Legacy.Bulk.insert(Legacy.Bulk.end(), Package.Bulk.begin(), Package.Bulk.begin() + 36);
+	for (int I = 0; I < 2; ++I)
+		Legacy.Bulk.insert(Legacy.Bulk.end(), Package.Bulk.begin() + 36 + I * 76,
+						   Package.Bulk.begin() + 36 + I * 76 + 72);
+	REQUIRE(FRenderAssetCodec::DecodeMesh(Legacy, Back, Error));
+	CHECK(Back.GetNumMaterials() == 1);
+	for (const auto& T : Back.Mesh->GetTriangles())
+		CHECK(T.MaterialSlot == 0);
 }

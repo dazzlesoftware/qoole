@@ -29,7 +29,8 @@ adapter. Compatibility include headers remain at the old MapCore locations.
 paint data, raycasts, spline meshes and foliage without initializing MapCore.
 
 `Runtime/Engine` now also owns the world/actor/component model and persistent
-scene identities. Native world/prefab schema version 2 stores that runtime scene.
+scene identities. Native world/prefab schema version 3 stores that runtime scene and per-slot
+mesh material overrides; versions 1/2 remain readable.
 `Editor/MapEditor/MapPackage` uses a transitional adapter for the existing editor
 model. Component payloads explicitly describe brushes with texture settings, entity keys and
 flags, built-in mesh references, landscapes, paint layers, foliage types and

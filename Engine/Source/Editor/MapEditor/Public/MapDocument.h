@@ -137,7 +137,9 @@ public:
 	// if there is no such mesh.
 	Object* AddMesh(const FString& MeshName, const Vector3d& Position);
 	Object* AddMeshAsset(const FAssetReference&, const Vector3d& Position, FString& Error);
-	bool SetMeshMaterial(Object&, const FAssetReference&, FString& Error);
+	bool SetMeshMaterial(Object&, const FAssetReference&, FString& Error, int32 Slot = 0);
+	bool ReloadMeshAsset(const FAssetReference&, FString& Error);
+	bool ReloadRenderAssets(FString& Error);
 	// A flat landscape of QuadsX x QuadsY quads centered on Position.
 	Object* AddLandscape(int32 QuadsX, int32 QuadsY, float QuadSize, const Vector3d& Position);
 	// This landscape (an imported one) centered on Position.
@@ -222,6 +224,7 @@ public:
 private:
 	FMapDocument(Object* InRoot, const FMapGameSet& InGameSet);
 
+	bool ReloadMeshAssets(const FAssetReference* Filter, FString& Error);
 	void ApplySelection(const TArray<Object*>& Objects);
 	void ApplyScope(Object& NewScope);
 	bool IsInMap(const Object& Obj) const;

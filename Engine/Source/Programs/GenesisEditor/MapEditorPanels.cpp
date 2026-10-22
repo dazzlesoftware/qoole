@@ -18,6 +18,11 @@
 #include "MapAssetLibrary.h"
 #include "MapObjectProperties.h"
 #include "Services/FileDialogs.h"
+#include "MeshAssetEditor.h"
+#include "TextureAssetEditor.h"
+#include "STextureAssetPreview.h"
+#include "SlateRHIRenderer.h"
+#include "Widgets/SViewport.h"
 #include "Services/MessageDialog.h"
 #include "Services/Services.h"
 #include "SOutputLog.h"
@@ -1572,24 +1577,38 @@ TSharedRef<SDockTab> FMapEditorShell::MakeContentBrowserTab(int32 Index)
 		PrefabFolders.push_back(UserPrefabs);
 	}
 	TSharedPtr<SContentBrowser> Browser;
-	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label(FString::Format("Content Browser {}", Index + 1))
-	[
-		SAssignNew(Browser, SContentBrowser)
-		.Roots(Roots)
-		.Registry(AssetRegistry)
-		.PrefabFolders(PrefabFolders)
-		.InitialPath(ContentBrowserPaths[Index])
-		.OnAssetActivated([this](const FContentBrowserItem& Item) { OnAssetActivated(Item); })
-		.OnSaveAll([this] { Commands->ExecuteAction(*Cmd.SaveMap); })
-		.OnCreateMesh([this](const FString& File,FString& Error) {
-			const auto Selected=Document->GetSelection();
-			if(Selected.size()!=1 || !Selected[0]->HasMesh() || Selected[0]->HasLandscape()) { Error="Select one static mesh actor to create a mesh asset."; return false; }
-			FStaticMeshAsset Asset;
-			if(const auto Existing=Selected[0]->GetMeshAsset()) { Asset=Existing->Data; if(!Existing->MaterialOverride.IsNull()) Asset.Material=Existing->MaterialOverride; }
-			else Asset.Mesh=Selected[0]->GetMeshPtr();
-			FAssetPackage P; return FRenderAssetCodec::EncodeMesh(Asset,P,Error) && FAssetPackageStore::Save(File,P,Error);
-		})
-	];
+	const TSharedRef<SDockTab> Tab = SNew(SDockTab).Label(FString::Format(
+		"Content Browser {}",
+		Index + 1))[SAssignNew(Browser, SContentBrowser)
+						.Roots(Roots)
+						.Registry(AssetRegistry)
+						.PrefabFolders(PrefabFolders)
+						.InitialPath(ContentBrowserPaths[Index])
+						.OnAssetActivated([this](const FContentBrowserItem& Item) { OnAssetActivated(Item); })
+						.OnSaveAll([this] { Commands->ExecuteAction(*Cmd.SaveMap); })
+						.OnCreateMesh([this](const FString& File, FString& Error) {
+							const auto Selected = Document->GetSelection();
+							if (Selected.size() != 1 || !Selected[0]->HasMesh() || Selected[0]->HasLandscape())
+							{
+								Error = "Select one static mesh actor to create a mesh asset.";
+								return false;
+							}
+							FStaticMeshAsset Asset;
+							if (const auto Existing = Selected[0]->GetMeshAsset())
+							{
+								Asset = Existing->Data;
+								if (!Existing->MaterialOverride.IsNull())
+									Asset.Material = Existing->MaterialOverride;
+								for (size_t I = 0; I < Existing->AdditionalOverrides.size(); ++I)
+									if (!Existing->AdditionalOverrides[I].IsNull())
+										Asset.AdditionalMaterials[I] = Existing->AdditionalOverrides[I];
+							}
+							else
+								Asset.Mesh = Selected[0]->GetMeshPtr();
+							FAssetPackage P;
+							return FRenderAssetCodec::EncodeMesh(Asset, P, Error) &&
+								   FAssetPackageStore::Save(File, P, Error);
+						})];
 	ContentBrowsers[Index] = Browser;
 	Tab->SetOnTabClosed(FOnTabClosed::CreateLambda([this, Index](const TSharedRef<SDockTab>&)
 	{
@@ -1712,11 +1731,21 @@ void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem &Item)
 		.AutoHeight()[SNew(STextBlock)
 						  .Text("Lit previews use the editor light. Unlit displays base color without lighting.")
 						  .AutoWrapText(true)];
-	Content->AddSlot()
-		.AutoHeight()[SNew(SButton).Text("Save and Apply to Selected Mesh Assets").OnClicked([this, Item, Material] {
+	auto ApplySlot = std::make_shared<int32>(0);
+	Content->AddSlot().AutoHeight()[SNew(SHorizontalBox) +
+									SHorizontalBox::Slot().FillWidth(1)[SNew(STextBlock).Text("Apply to Slot")] +
+									SHorizontalBox::Slot().FillWidth(
+										1)[SNew(SSpinBox<int32>)
+											   .MinValue(0)
+											   .MaxValue(63)
+											   .Delta(1)
+											   .Value([ApplySlot] { return *ApplySlot; })
+											   .OnValueChanged([ApplySlot](int32 V) { *ApplySlot = V; })]];
+	Content->AddSlot().AutoHeight()
+		[SNew(SButton).Text("Save and Apply to Selected Mesh Assets").OnClicked([this, Item, Material, ApplySlot] {
 			FString SaveError;
 			FAssetPackage P;
-			const auto *Current =
+			const auto* Current =
 				AssetRegistry->Resolve({Item.PackageId, Item.PackagePath}, SaveError, "Genesis.Material");
 			if (!Current)
 			{
@@ -1724,15 +1753,16 @@ void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem &Item)
 				return FReply::Handled();
 			}
 			const auto Target = Current->FilePath;
-			for (const auto& TextureRef : {Material->BaseColorTexture,Material->NormalTexture}) if (!TextureRef.IsNull())
-			{
-				FTextureAsset Texture;
-				if (!FRenderAssetLoader(*AssetRegistry).LoadTexture(TextureRef, Texture, SaveError))
+			for (const auto& TextureRef : {Material->BaseColorTexture,Material->NormalTexture})
+				if (!TextureRef.IsNull())
 				{
-					Log(SaveError);
-					return FReply::Handled();
+					FTextureAsset Texture;
+					if (!FRenderAssetLoader(*AssetRegistry).LoadTexture(TextureRef, Texture, SaveError))
+					{
+						Log(SaveError);
+						return FReply::Handled();
+					}
 				}
-			}
 			if (!AssetRegistry->Load({Item.PackageId, Item.PackagePath}, P, SaveError, "Genesis.Material") ||
 				!FRenderAssetCodec::EncodeMaterial(*Material, P, SaveError) ||
 				!FAssetPackageStore::Save(Target, P, SaveError))
@@ -1747,7 +1777,7 @@ void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem &Item)
 				for (auto *Obj : Document->GetSelection())
 					if (Obj->HasMesh() && !Obj->HasLandscape())
 					{
-						if (!Document->SetMeshMaterial(*Obj, {Item.PackageId, Item.PackagePath}, SaveError))
+						if (!Document->SetMeshMaterial(*Obj, {Item.PackageId, Item.PackagePath}, SaveError, *ApplySlot))
 							Log(SaveError);
 					}
 				Document->EndTransaction();
@@ -1758,7 +1788,7 @@ void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem &Item)
 	FSlateApplication::Get().AddWindow(SNew(SWindow)
 										   .Title("Material: " + Item.Name)
 										   .BackgroundColor(FSlateColor(FColor(32,35,40)))
-										   .ClientSize(FVector2(460, 640))[SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Panel")).Padding(FMargin(12))[Content]]);
+										   .ClientSize(FVector2(460, 680))[SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Panel")).Padding(FMargin(12))[Content]]);
 }
 
 void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
@@ -1767,21 +1797,14 @@ void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
 	{
 	case EContentAssetType::StaticMesh:
 	{
-		FMapPlaceable Placeable; Placeable.Kind=EMapPlaceableKind::MeshAsset; Placeable.SourceAsset={Item.PackageId,Item.PackagePath}; Placeable.Label=Item.Name; Place(Placeable); break;
+		OpenMeshAsset(Item); break;
 	}
 	case EContentAssetType::Material:
 		OpenMaterialAsset(Item); break;
 	case EContentAssetType::Texture:
-	{
-		if(Item.Schema!="Genesis.Texture2D") { Log("Import this image to create a native texture asset first."); break; }
-		auto* Land=LandscapeMode.GetTargetLandscape();
-		if(!Land) { Log("Select a landscape and paint layer to assign this texture."); break; }
-		const auto Token=FMapAssetLibrary::TextureToken({Item.PackageId,Item.PackagePath});
-		FTextureAsset Texture; FString Error;
-		if(!FMapAssetLibrary::LoadTexture(Token,Texture,Error)) Log(Error);
-		else if(!LandscapeMode.SetLayerTexture(*Land,LandscapeMode.SelectedLayer,Token)) Log("Add or select a paint layer first.");
+		if(Item.Schema=="Genesis.Texture2D") OpenTextureAsset(Item);
+		else Log("Import this image to create a native texture asset first.");
 		break;
-	}
 	case EContentAssetType::Prefab:
 		if (AssetRegistry && !Item.PackagePath.IsEmpty())
 		{
@@ -1811,4 +1834,376 @@ void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
 TSharedRef<SDockTab> FMapEditorShell::MakeOutputLogTab()
 {
 	return SNew(SDockTab).Label("Output Log")[SNew(SOutputLog)];
+}
+
+void FMapEditorShell::OpenMeshAsset(const FContentBrowserItem& Item)
+{
+	FString Error;
+	auto Session = FMeshAssetEditSession::Open(*AssetRegistry, {Item.PackageId, Item.PackagePath}, Error);
+	if (!Session)
+	{
+		Log(Error);
+		return;
+	}
+	struct FPreviewState
+	{
+		TUniquePtr<FMeshAssetEditSession> Session;
+		FString Status;
+		FMapViewSettings Settings;
+		TUniquePtr<FMapDocument> Doc;
+		TSharedPtr<FMapViewportClient> Client; // destroyed before its document and settings
+		Object* Mesh = nullptr;
+	};
+	auto State = std::make_shared<FPreviewState>();
+	State->Session = std::move(Session);
+	State->Settings.bShowGrid = false;
+	State->Doc = FMapDocument::CreateNew();
+	State->Mesh = State->Doc->AddMesh("Cube", Vector3d());
+	State->Client = std::make_shared<FMapViewportClient>(*Host.Device, *Host.Renderer, *RenderResources,
+														 State->Settings, EMapViewType::Perspective);
+	State->Client->SetDocument(State->Doc.get());
+	State->Client->SetViewMode(EMapViewMode::Lit);
+	const auto UpdatePreview = [this, State](bool Frame) {
+		auto Loaded = std::make_shared<FLoadedMeshAsset>();
+		FString PreviewError;
+		if (!State->Session->BuildPreview(*AssetRegistry, *Loaded, PreviewError))
+		{
+			State->Status = PreviewError;
+			Loaded->Data = State->Session->GetMesh();
+			Loaded->DisplayMesh = Loaded->Data.Mesh;
+			Loaded->AdditionalSlots.resize(Loaded->Data.AdditionalMaterials.size());
+		}
+		State->Mesh->SetMeshAsset(Loaded);
+		if (Frame)
+		{
+			State->Doc->SetSelection({State->Mesh});
+			State->Client->FrameSelection();
+			State->Doc->ClearSelection();
+		}
+		State->Client->RequestRedraw();
+	};
+	UpdatePreview(true);
+	// Aliasing owners keep settings/document alive until the viewport releases its client.
+	const TSharedPtr<FRenderTargetViewportClient> RenderClient(State, State->Client.get());
+	Host.WindowRenderer->AddViewportClient(ToSharedRef(RenderClient));
+	const TSharedPtr<IViewportClient> InputClient(State, State->Client.get());
+	auto Slots = SNew(SBox);
+	auto Rebuild = std::make_shared<TFunction<void()>>();
+	*Rebuild = [this, State, Slots, UpdatePreview] {
+		auto List = SNew(SVerticalBox);
+		auto Labels = std::make_shared<TArray<FString>>();
+		auto Refs = std::make_shared<TArray<FAssetReference>>();
+		Labels->push_back("None");
+		Refs->push_back({});
+		for (const auto& Asset : AssetRegistry->GetAssets())
+			if (Asset.Metadata.Schema == "Genesis.Material" && Asset.Metadata.SchemaVersion >= 1 &&
+				Asset.Metadata.SchemaVersion <= 3)
+			{
+				Labels->push_back(Asset.PackagePath);
+				Refs->push_back(Asset.GetReference());
+			}
+		const auto& Data = State->Session->GetMesh();
+		for (int I = 0; I < Data.GetNumMaterials(); ++I)
+		{
+			List->AddSlot().AutoHeight()[SNew(STextBlock).Text(Data.GetMaterialName(I))];
+			List->AddSlot().AutoHeight()[SNew(SComboBox<FString>)
+											 .OptionsSource(Labels.get())
+											 .OnGenerateWidget([](const FString& Label) -> TSharedRef<SWidget> {
+												 return SNew(STextBlock).Text(Label);
+											 })
+											 .OnSelectionChanged([this, State, Labels, Refs, I,
+																  UpdatePreview](const FString& Label, ESelectInfo) {
+												 for (size_t J = 0; J < Labels->size(); ++J)
+													 if ((*Labels)[J] == Label)
+													 {
+														 FString AssignError;
+														 if (!State->Session->SetMaterial(I, (*Refs)[J], *AssetRegistry,
+																						  AssignError))
+															 State->Status = AssignError;
+														 else
+														 {
+															 State->Status =
+																 "Draft updated. Save to apply mesh defaults.";
+															 UpdatePreview(false);
+														 }
+													 }
+											 })[SNew(STextBlock).Text([State, I] {
+												 const auto& Ref = State->Session->GetMesh().GetMaterial(I);
+												 return Ref.IsNull() ? FString("None") : Ref.Path;
+											 })]];
+		}
+		Slots->SetContent(List);
+	};
+	(*Rebuild)();
+	auto Panel = SNew(SVerticalBox);
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock).Text(Item.PackagePath)];
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock)
+									  .Text([State] {
+										  const auto& Data = State->Session->GetMesh();
+										  return FString::Format(
+											  "{} vertices, {} triangles, {} slots{}", Data.Mesh->GetNumVertices(),
+											  Data.Mesh->GetTriangles().size(), Data.GetNumMaterials(),
+											  State->Session->IsDirty() ? " - unsaved draft" : "");
+									  })
+									  .AutoWrapText(true)];
+	Panel->AddSlot().AutoHeight()[SNew(SHorizontalBox) +
+								  SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Frame").OnClicked([State] {
+									  State->Client->FrameSelection();
+									  return FReply::Handled();
+								  })] +
+								  SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Lit").OnClicked([State] {
+									  State->Client->SetViewMode(EMapViewMode::Lit);
+									  return FReply::Handled();
+								  })] +
+								  SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Unlit").OnClicked([State] {
+									  State->Client->SetViewMode(EMapViewMode::Unlit);
+									  return FReply::Handled();
+								  })] +
+								  SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Wire").OnClicked([State] {
+									  State->Client->SetViewMode(EMapViewMode::Wireframe);
+									  return FReply::Handled();
+								  })]];
+
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock).Text("Default Materials")];
+	Panel->AddSlot().FillHeight(1)[SNew(SScrollBox) + SScrollBox::Slot()[Slots]];
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock)
+									  .Text([State] {
+										  return "Source: " + (State->Session->GetSourceFile().IsEmpty()
+																   ? FString("Not recorded")
+																   : State->Session->GetSourceFile());
+									  })
+									  .AutoWrapText(true)];
+	const auto Reimport = [State, Rebuild, UpdatePreview](const FString& File) {
+		FString ImportError;
+		if (!State->Session->Reimport(File, ImportError))
+			State->Status = ImportError;
+		else
+		{
+			State->Status = "Geometry reimported into the draft. Save to apply.";
+			(*Rebuild)();
+			UpdatePreview(true);
+		}
+	};
+	Panel->AddSlot().AutoHeight()[SNew(SButton)
+									  .Text("Reimport Recorded Source")
+									  .IsEnabled([State] { return !State->Session->GetSourceFile().IsEmpty(); })
+									  .OnClicked([State, Reimport] {
+										  Reimport(State->Session->GetSourceFile());
+										  return FReply::Handled();
+									  })];
+	Panel->AddSlot().AutoHeight()[SNew(SButton).Text("Reimport from OBJ...").OnClicked([State, Reimport] {
+		FFileDialogOptions Options;
+		Options.Title = "Reimport Mesh Geometry";
+		Options.Filters = {{"Wavefront OBJ", "*.obj"}};
+		Options.DefaultExtension = "obj";
+		Options.InitialPath = State->Session->GetSourceFile();
+		FString File;
+		if (FServices::GetFileDialogs().OpenFile(Options, File))
+			Reimport(File);
+		return FReply::Handled();
+	})];
+	Panel->AddSlot().AutoHeight()[SNew(SButton).Text("Save Mesh Asset").OnClicked([this, State, Rebuild] {
+		FString SaveError;
+		if (!State->Session->Save(*AssetRegistry, SaveError))
+			State->Status = SaveError;
+		else
+		{
+			RefreshAssetRegistry();
+			(*Rebuild)();
+			if (Document && !Document->ReloadMeshAsset(State->Session->GetReference(), SaveError))
+				State->Status = "Saved; level refresh failed: " + SaveError;
+			else
+				State->Status = "Saved mesh asset and refreshed level instances.";
+		}
+		Log(State->Status);
+		return FReply::Handled();
+	})];
+	Panel->AddSlot().AutoHeight()[SNew(SButton).Text("Place in Level").OnClicked([this, State, Item] {
+		if (State->Session->IsDirty())
+		{
+			State->Status = "Save the draft before placing this mesh.";
+			return FReply::Handled();
+		}
+		FMapPlaceable Placeable;
+		Placeable.Kind = EMapPlaceableKind::MeshAsset;
+		Placeable.SourceAsset = State->Session->GetReference();
+		Placeable.Label = Item.Name;
+		Place(Placeable);
+		return FReply::Handled();
+	})];
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock).Text([State] { return State->Status; }).AutoWrapText(true)];
+	auto Content =
+		SNew(SHorizontalBox) +
+		SHorizontalBox::Slot().FillWidth(
+			2)[SNew(SVerticalBox) +
+			   SVerticalBox::Slot()
+				   .AutoHeight()[SNew(STextBlock).Text("Preview - Alt + left drag to orbit, wheel to zoom")] +
+			   SVerticalBox::Slot().FillHeight(1)[SNew(SViewport).ViewportClient(InputClient)]] +
+		SHorizontalBox::Slot().FillWidth(1)[Panel];
+	FSlateApplication::Get().AddWindow(
+		SNew(SWindow)
+			.Title("Static Mesh: " + Item.Name)
+			.BackgroundColor(FSlateColor(FColor(32, 35, 40)))
+			.ClientSize(FVector2(
+				1000,
+				700))[SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Panel")).Padding(FMargin(12))[Content]]);
+}
+
+void FMapEditorShell::OpenTextureAsset(const FContentBrowserItem& Item)
+{
+	FString Error;
+	auto Session = FTextureAssetEditSession::Open(*AssetRegistry, {Item.PackageId, Item.PackagePath}, Error);
+	if (!Session)
+	{
+		Log(Error);
+		return;
+	}
+	struct FState
+	{
+		TUniquePtr<FTextureAssetEditSession> Session;
+		FString Status;
+		ETexturePreviewChannel Channel = ETexturePreviewChannel::RGBA;
+	};
+	auto State = std::make_shared<FState>();
+	State->Session = std::move(Session);
+	auto Preview = SNew(STextureAssetPreview);
+	const auto Update = [State, Preview] {
+		FString PreviewError;
+		if (!Preview->Update(State->Session->GetTexture(), State->Channel, PreviewError))
+			State->Status = PreviewError;
+	};
+	Update();
+	auto Panel = SNew(SVerticalBox);
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock).Text(Item.PackagePath)];
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock)
+									  .Text([State] {
+										  const auto& T = State->Session->GetTexture();
+										  return FString::Format("{} x {}, RGBA8, {} bytes{}", T.Width, T.Height,
+																 T.Pixels.size(),
+																 State->Session->IsDirty() ? " - unsaved draft" : "");
+									  })
+									  .AutoWrapText(true)];
+	Panel->AddSlot().AutoHeight()[SNew(SCheckBox)
+									  .Text("sRGB Color Texture")
+									  .IsChecked([State] {
+										  return State->Session->GetTexture().bSRGB ? ECheckBoxState::Checked
+																					: ECheckBoxState::Unchecked;
+									  })
+									  .OnCheckStateChanged([State, Update](ECheckBoxState Value) {
+										  State->Session->SetSRGB(Value == ECheckBoxState::Checked);
+										  State->Status = "Draft updated. Save to apply.";
+										  Update();
+									  })];
+	auto Labels = std::make_shared<TArray<FString>>(TArray<FString>{"RGBA", "RGB", "Red", "Green", "Blue", "Alpha"});
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock).Text("Preview Channels")];
+	Panel->AddSlot().AutoHeight()
+		[SNew(SComboBox<FString>)
+			 .OptionsSource(Labels.get())
+			 .OnGenerateWidget([](const FString& Label) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(Label); })
+			 .OnSelectionChanged([State, Labels, Update](const FString& Label, ESelectInfo) {
+				 for (size_t I = 0; I < Labels->size(); ++I)
+					 if ((*Labels)[I] == Label)
+					 {
+						 State->Channel = static_cast<ETexturePreviewChannel>(I);
+						 Update();
+					 }
+			 })[SNew(STextBlock).Text([State, Labels] { return (*Labels)[static_cast<int>(State->Channel)]; })]];
+	Panel->AddSlot().AutoHeight()[SNew(SButton).Text("Fit Preview").OnClicked([Preview] {
+		Preview->Fit();
+		return FReply::Handled();
+	})];
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock)
+									  .Text("Wheel: zoom. Middle drag: pan. RGB respects sRGB; individual channels "
+											"show stored values. Preview is limited to 2048 pixels per side.")
+									  .AutoWrapText(true)];
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock)
+									  .Text("Disable sRGB for linear data maps. Tangent-space normal maps are always "
+											"sampled as linear by mesh materials.")
+									  .AutoWrapText(true)];
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock)
+									  .Text([State] {
+										  return "Source: " + (State->Session->GetSourceFile().IsEmpty()
+																   ? FString("Not recorded")
+																   : State->Session->GetSourceFile());
+									  })
+									  .AutoWrapText(true)];
+	const auto Reimport = [State, Preview, Update](const FString& File) {
+		FString ImportError;
+		if (!State->Session->Reimport(File, ImportError))
+			State->Status = ImportError;
+		else
+		{
+			State->Status = "Reimported into draft. Save to apply.";
+			Preview->Fit();
+			Update();
+		}
+	};
+	Panel->AddSlot().AutoHeight()[SNew(SButton)
+									  .Text("Reimport Recorded Source")
+									  .IsEnabled([State] { return !State->Session->GetSourceFile().IsEmpty(); })
+									  .OnClicked([State, Reimport] {
+										  Reimport(State->Session->GetSourceFile());
+										  return FReply::Handled();
+									  })];
+	Panel->AddSlot().AutoHeight()[SNew(SButton).Text("Reimport Image...").OnClicked([State, Reimport] {
+		FFileDialogOptions Options;
+		Options.Title = "Reimport Texture Image";
+		Options.Filters = {{"Image files", "*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff"}};
+		Options.InitialPath = State->Session->GetSourceFile();
+		FString File;
+		if (FServices::GetFileDialogs().OpenFile(Options, File))
+			Reimport(File);
+		return FReply::Handled();
+	})];
+	Panel->AddSlot().AutoHeight()[SNew(SButton).Text("Save Texture Asset").OnClicked([this, State] {
+		FString SaveError;
+		if (!State->Session->Save(*AssetRegistry, SaveError))
+			State->Status = SaveError;
+		else
+		{
+			RefreshAssetRegistry();
+			ViewSettings.Changed();
+			if (Document && !Document->ReloadRenderAssets(SaveError))
+				State->Status = "Saved; level refresh failed: " + SaveError;
+			else
+				State->Status = "Saved texture and refreshed level assets.";
+		}
+		Log(State->Status);
+		return FReply::Handled();
+	})];
+	Panel->AddSlot().AutoHeight()[SNew(SButton).Text("Use for Selected Landscape Layer").OnClicked([this, State] {
+		if (State->Session->IsDirty())
+		{
+			State->Status = "Save the draft before assigning this texture.";
+			return FReply::Handled();
+		}
+		auto* Land = LandscapeMode.GetTargetLandscape();
+		if (!Land)
+			State->Status = "Select a landscape and paint layer first.";
+		else
+		{
+			const auto Token = FMapAssetLibrary::TextureToken(State->Session->GetReference());
+			FTextureAsset T;
+			FString AssignError;
+			if (!FMapAssetLibrary::LoadTexture(Token, T, AssignError))
+				State->Status = AssignError;
+			else if (!LandscapeMode.SetLayerTexture(*Land, LandscapeMode.SelectedLayer, Token))
+				State->Status = "Add or select a paint layer first.";
+			else
+				State->Status = "Assigned texture to landscape paint layer.";
+		}
+		return FReply::Handled();
+	})];
+	Panel->AddSlot().AutoHeight()[SNew(STextBlock).Text([State] { return State->Status; }).AutoWrapText(true)];
+	FSlateApplication::Get().AddWindow(
+		SNew(SWindow)
+			.Title("Texture: " + Item.Name)
+			.BackgroundColor(FSlateColor(FColor(32, 35, 40)))
+			.ClientSize(FVector2(
+				1000,
+				700))[SNew(SBorder)
+						  .BorderImage(&FAppStyle::Get().GetBrush("Panel"))
+						  .Padding(FMargin(12))[SNew(SHorizontalBox) + SHorizontalBox::Slot().FillWidth(2)[Preview] +
+												SHorizontalBox::Slot().FillWidth(1).Padding(FMargin(
+													8, 0, 0, 0))[SNew(SScrollBox) + SScrollBox::Slot()[Panel]]]]);
 }

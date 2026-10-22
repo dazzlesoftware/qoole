@@ -158,7 +158,7 @@ public:
 	FRHIGraphicsPipeline* GetSolidPipeline(EPixelFormat TargetFormat);
 	FRHIGraphicsPipeline* GetMaterialPipeline(EPixelFormat TargetFormat, bool Translucent = false);
 	bool bMeshMaterials = true;
-	bool GetMaterialTextures(const std::shared_ptr<const struct FLoadedMeshAsset>&, FRHITexture*& Color, FRHITexture*& Normal);
+	bool GetMaterialTextures(const std::shared_ptr<const struct FLoadedMeshAsset>&, FRHITexture*& Color, FRHITexture*& Normal, int32 Slot = 0);
 	// Textured landscapes, their layers blended per pixel (PSLandscape).
 	FRHIGraphicsPipeline* GetLandscapePipeline(EPixelFormat TargetFormat);
 	// Meshes drawn instanced (foliage: VSFoliage), and a mesh's triangles
@@ -201,7 +201,7 @@ private:
 		TSharedPtr<FRHITexture> Color, Normal;
 		uint64 LastUsed = 0;
 	};
-	std::map<const struct FLoadedMeshAsset*, FMaterialEntry> Materials;
+	std::map<const struct FLoadedMaterialSlot*, FMaterialEntry> Materials;
 	struct FLandscapeEntry
 	{
 		FLandscapeBake Bake;

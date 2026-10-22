@@ -77,7 +77,6 @@ bool FMapDraw::ZBufMaterialMesh(const Object& Obj, const Matrix44& ToView)
 	if (!bMaterials || !Asset)
 		return false;
 	const auto& Mesh = *Asset->Data.Mesh;
-	const bool Translucent = Asset->Material && Asset->Material->BlendMode == EMaterialBlendMode::Translucent;
 	Vector3d Origin, Axis[3], Cofactor[3];
 	ToView.Transform(Origin, Vector3d());
 	for (int I = 0; I < 3; ++I)
@@ -92,11 +91,10 @@ bool FMapDraw::ZBufMaterialMesh(const Object& Obj, const Matrix44& ToView)
 	const float Det = Axis[0].DotVector(Cofactor[0]);
 	if (!std::isfinite(Det) || std::abs(Det) < 1e-30f)
 		return false;
-	FMapMaterialBatch Batch;
-	Batch.Mesh = &Obj;
-	Batch.FirstVertex = static_cast<uint32>(MaterialVertices.size());
 	for (const auto& T : Mesh.GetTriangles())
 	{
+		const auto& Slot = Asset->GetSlot(T.MaterialSlot);
+		const bool Translucent = Slot.Material && Slot.Material->BlendMode == EMaterialBlendMode::Translucent;
 		Vector3d P[3], A, B, Face;
 		for (int K = 0; K < 3; ++K)
 			ToView.Transform(P[K], Mesh.GetVertex(T.v[K]));
@@ -124,12 +122,14 @@ bool FMapDraw::ZBufMaterialMesh(const Object& Obj, const Matrix44& ToView)
 									Mesh.HasVertexColors() ? Mesh.GetVertexColor(T.v[K]) : 0xffffffffu};
 			MaterialVertices.push_back(V);
 		}
-		if (Translucent)
-			MaterialBatches.push_back({&Obj, TriangleStart, 3, (P[0].GetY() + P[1].GetY() + P[2].GetY()) / 3});
+		if (!Translucent && !MaterialBatches.empty() && MaterialBatches.back().Mesh == &Obj &&
+			MaterialBatches.back().Slot == T.MaterialSlot &&
+			MaterialBatches.back().FirstVertex + MaterialBatches.back().NumVertices == TriangleStart)
+			MaterialBatches.back().NumVertices += 3;
+		else
+			MaterialBatches.push_back(
+				{&Obj, TriangleStart, 3, (P[0].GetY() + P[1].GetY() + P[2].GetY()) / 3, T.MaterialSlot});
 	}
-	Batch.NumVertices = static_cast<uint32>(MaterialVertices.size()) - Batch.FirstVertex;
-	if (Batch.NumVertices && !Translucent)
-		MaterialBatches.push_back(Batch);
 	return true;
 }
 

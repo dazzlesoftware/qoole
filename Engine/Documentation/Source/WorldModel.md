@@ -56,7 +56,7 @@ This does not yet provide runtime construction/rendering of every component.
 
 The editor reads version 1 native worlds/prefabs through the old codec. Opening
 a version 1 world creates scene IDs and marks it modified; saving writes version
-2. QLE/MAP import remains available. Native version 2 files preserve active actor
+3. QLE/MAP import remains available. Native version 2 and 3 files preserve active actor
 and component IDs across save/load. Older editor builds cannot open version 2.
 
 ## Editor bridge and migration boundary
@@ -90,7 +90,12 @@ references, streaming, and plugin loading remain later stages.
 
 `World` tests cover hierarchy/transforms, mutation rollback, owned references,
 subtree duplication/removal, identity collisions and malformed scenes.
-`MapPackages` tests cover version 1 upgrades, version 2 save/load, prefab instance
+`MapPackages` tests cover version 1 upgrades, version 2/3 save/load, prefab instance
 identity, grouped copies and content undo. The editor self-test checks identity
 across native save/reopen. `RuntimeDataCheck.exe [World.gmap]` can load a version
 2 world and evaluate its actor transforms without linking any editor modules.
+
+World/prefab schema v3 adds per-slot mesh material overrides. Versions 1/2
+remain readable and are marked for upgrade. Version 2 scene identities survive
+the upgrade. Mesh component assets list source followed by non-null overrides
+in slot order, matching the component Data payload.

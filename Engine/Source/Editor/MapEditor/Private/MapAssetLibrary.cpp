@@ -7,7 +7,7 @@ std::weak_ptr<FAssetRegistry> Registry;
 uint64 Context = 0, MeshRevision = 0;
 TMap<std::string, std::weak_ptr<const FLoadedMeshAsset>> Meshes;
 } // namespace
-void FMapAssetLibrary::SetRegistry(const std::shared_ptr<FAssetRegistry> &In)
+void FMapAssetLibrary::SetRegistry(const std::shared_ptr<FAssetRegistry>& In)
 {
 	Registry = In;
 	++Context;
@@ -23,8 +23,9 @@ std::string FMapAssetLibrary::RevisionKey()
 	const auto R = GetRegistry();
 	return FString::Format("{}:{}", Context, R ? R->GetRevision() : 0).ToStdString();
 }
-std::shared_ptr<const FLoadedMeshAsset> FMapAssetLibrary::LoadMesh(const FAssetReference &Ref,
-																   const FAssetReference &Override, FString &Error)
+std::shared_ptr<const FLoadedMeshAsset> FMapAssetLibrary::LoadMesh(const FAssetReference& Ref,
+																   const FAssetReference& Override, FString& Error,
+																   const TArray<FAssetReference>& AdditionalOverrides)
 {
 	const auto R = GetRegistry();
 	if (!R)
@@ -37,7 +38,9 @@ std::shared_ptr<const FLoadedMeshAsset> FMapAssetLibrary::LoadMesh(const FAssetR
 		Meshes.clear();
 		MeshRevision = R->GetRevision();
 	}
-	const auto Key = Ref.ToJson().ToString(false).ToStdString() + Override.ToJson().ToString(false).ToStdString();
+	auto Key = Ref.ToJson().ToString(false).ToStdString() + Override.ToJson().ToString(false).ToStdString();
+	for (const auto& SlotRef : AdditionalOverrides)
+		Key += SlotRef.ToJson().ToString(false).ToStdString();
 	if (const auto It = Meshes.find(Key); It != Meshes.end())
 		if (auto Existing = It->second.lock())
 		{
@@ -45,16 +48,16 @@ std::shared_ptr<const FLoadedMeshAsset> FMapAssetLibrary::LoadMesh(const FAssetR
 			return Existing;
 		}
 	auto Loaded = std::make_shared<FLoadedMeshAsset>();
-	if (!FRenderAssetLoader(*R).LoadMesh(Ref, *Loaded, Error, Override))
+	if (!FRenderAssetLoader(*R).LoadMesh(Ref, *Loaded, Error, Override, AdditionalOverrides))
 		return {};
 	Meshes[Key] = Loaded;
 	return Loaded;
 }
-FString FMapAssetLibrary::TextureToken(const FAssetReference &Ref)
+FString FMapAssetLibrary::TextureToken(const FAssetReference& Ref)
 {
 	return "asset:" + Ref.ToJson().ToString(false);
 }
-bool FMapAssetLibrary::ParseTextureToken(const FString &Token, FAssetReference &Out, FString &Error)
+bool FMapAssetLibrary::ParseTextureToken(const FString& Token, FAssetReference& Out, FString& Error)
 {
 	if (Token.View().substr(0, 6) != "asset:")
 	{
@@ -73,7 +76,7 @@ bool FMapAssetLibrary::ParseTextureToken(const FString &Token, FAssetReference &
 	Out = *Ref;
 	return true;
 }
-bool FMapAssetLibrary::LoadTexture(const FString &Token, FTextureAsset &Out, FString &Error)
+bool FMapAssetLibrary::LoadTexture(const FString& Token, FTextureAsset& Out, FString& Error)
 {
 	FAssetReference Ref;
 	if (!ParseTextureToken(Token, Ref, Error))
@@ -86,12 +89,12 @@ bool FMapAssetLibrary::LoadTexture(const FString &Token, FTextureAsset &Out, FSt
 	}
 	return FRenderAssetLoader(*R).LoadTexture(Ref, Out, Error);
 }
-bool FMapAssetLibrary::HasNativeAssets(const Object &Obj)
+bool FMapAssetLibrary::HasNativeAssets(const Object& Obj)
 {
 	if (Obj.GetMeshAsset())
 		return true;
 	if (Obj.HasLandscape())
-		for (const auto &Layer : Obj.GetLandscape().GetLayers())
+		for (const auto& Layer : Obj.GetLandscape().GetLayers())
 			if (Layer.texture.rfind("asset:", 0) == 0)
 				return true;
 	for (int I = 0; I < Obj.GetNumChildren(); ++I)

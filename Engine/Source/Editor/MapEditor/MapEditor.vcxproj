@@ -50,7 +50,7 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Private\MapDocument.cpp" /><ClCompile Include="Private\MapPackage.cpp" /><ClCompile Include="Private\MapWorldAdapter.cpp" /><ClCompile Include="Private\MapAssetLibrary.cpp" /><ClCompile Include="Private\MapAssetImport.cpp" />
+    <ClCompile Include="Private\MapDocument.cpp" /><ClCompile Include="Private\MapPackage.cpp" /><ClCompile Include="Private\MapWorldAdapter.cpp" /><ClCompile Include="Private\MapAssetLibrary.cpp" /><ClCompile Include="Private\MapAssetImport.cpp" /><ClCompile Include="Private\MeshAssetEditor.cpp" /><ClCompile Include="Private\TextureAssetEditor.cpp" /><ClCompile Include="Private\STextureAssetPreview.cpp" />
     <ClCompile Include="Private\MapDocumentOps.cpp" />
     <ClCompile Include="Private\MapDraw.cpp" /><ClCompile Include="Private\MapMaterialTextures.cpp" />
     <ClCompile Include="Private\MapEditorEnvironment.cpp" />
@@ -74,7 +74,7 @@
     <ClInclude Include="Private\Shaders\MapShaders_PSTextured_SPIRV.h" />
     <ClInclude Include="Private\Shaders\MapShaders_VSFoliage_SPIRV.h" />
     <ClInclude Include="Private\Shaders\MapShaders_VSMain_SPIRV.h" />
-    <ClInclude Include="Public\MapDocument.h" /><ClInclude Include="Public\MapPackage.h" /><ClInclude Include="Public\MapWorldAdapter.h" /><ClInclude Include="Public\MapAssetLibrary.h" /><ClInclude Include="Public\MapAssetImport.h" />
+    <ClInclude Include="Public\MapDocument.h" /><ClInclude Include="Public\MapPackage.h" /><ClInclude Include="Public\MapWorldAdapter.h" /><ClInclude Include="Public\MapAssetLibrary.h" /><ClInclude Include="Public\MapAssetImport.h" /><ClInclude Include="Public\MeshAssetEditor.h" /><ClInclude Include="Public\TextureAssetEditor.h" /><ClInclude Include="Public\STextureAssetPreview.h" />
     <ClInclude Include="Public\MapDraw.h" /><ClInclude Include="Public\MapMaterialTextures.h" />
     <ClInclude Include="Public\MapEditorEnvironment.h" />
     <ClInclude Include="Public\MapFoliageMode.h" />

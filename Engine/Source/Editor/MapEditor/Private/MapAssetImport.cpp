@@ -12,7 +12,7 @@
 #include <sstream>
 #include <stdexcept>
 
-bool FMapAssetImport::ReadObj(const FString &File, FStaticMeshAsset &Out, FString &Error)
+bool FMapAssetImport::ReadObj(const FString& File, FStaticMeshAsset& Out, FString& Error)
 {
 	int Line = 0;
 	try
@@ -29,13 +29,15 @@ bool FMapAssetImport::ReadObj(const FString &File, FStaticMeshAsset &Out, FStrin
 		std::vector<std::pair<float, float>> UVs;
 		std::set<std::pair<int, int>> Edges;
 		std::string Text;
-		const auto ReadNumber = [](std::istringstream &S) {
+		std::vector<std::string> MaterialNames;
+		unsigned int MaterialSlot = 0;
+		const auto ReadNumber = [](std::istringstream& S) {
 			float V;
 			if (!(S >> V) || !std::isfinite(V) || std::abs(V) > 1e9f)
 				throw std::runtime_error("Invalid OBJ number.");
 			return V;
 		};
-		const auto Index = [](const std::string &Token, size_t Count) {
+		const auto Index = [](const std::string& Token, size_t Count) {
 			int I = 0;
 			const auto R = std::from_chars(Token.data(), Token.data() + Token.size(), I);
 			if (R.ec != std::errc() || R.ptr != Token.data() + Token.size() || I == 0)
@@ -81,8 +83,29 @@ bool FMapAssetImport::ReadObj(const FString &File, FStaticMeshAsset &Out, FStrin
 					throw std::runtime_error("Too many OBJ UVs.");
 				UVs.emplace_back(U, V);
 			}
+			else if (Kind == "usemtl")
+			{
+				std::string Name;
+				if (!(S >> Name) || Name[0] == '#')
+					throw std::runtime_error("Missing OBJ material name.");
+				auto It = std::find(MaterialNames.begin(), MaterialNames.end(), Name);
+				if (It == MaterialNames.end())
+				{
+					if (MaterialNames.size() >= 64)
+						throw std::runtime_error("OBJ exceeds 64 material slots.");
+					if (Name.size() > 256)
+						throw std::runtime_error("OBJ material name exceeds 256 bytes.");
+					MaterialNames.push_back(Name);
+					It = MaterialNames.end() - 1;
+				}
+				MaterialSlot = static_cast<unsigned int>(It - MaterialNames.begin());
+			}
 			else if (Kind == "f")
 			{
+				if (MaterialNames.empty())
+				{
+					MaterialNames.push_back("");
+				}
 				struct Corner
 				{
 					int V, UV = -1, N = -1;
@@ -106,7 +129,7 @@ bool FMapAssetImport::ReadObj(const FString &File, FStaticMeshAsset &Out, FStrin
 				if (Face.size() < 3 || Mesh->GetTriangles().size() + Face.size() - 2 > 2000000)
 					throw std::runtime_error("Invalid OBJ face or triangle limit exceeded.");
 				// Reject nonconvex/nonplanar polygons; fan triangulation must not change the shape.
-				const auto &P = Mesh->GetVertex(Face[0].V);
+				const auto& P = Mesh->GetVertex(Face[0].V);
 				Vector3d First;
 				for (size_t I = 1; I + 1 < Face.size(); ++I)
 				{
@@ -137,6 +160,7 @@ bool FMapAssetImport::ReadObj(const FString &File, FStaticMeshAsset &Out, FStrin
 					}
 					Mesh->AddTriangle(C[0].V, C[1].V, C[2].V, Ns[0], Ns[1], Ns[2]);
 					Mesh->SetTriangleUVs(static_cast<int>(Mesh->GetTriangles().size()) - 1, Coords);
+					Mesh->SetTriangleMaterial(static_cast<int>(Mesh->GetTriangles().size()) - 1, MaterialSlot);
 				}
 				for (size_t I = 0; I < Face.size(); ++I)
 				{
@@ -158,22 +182,25 @@ bool FMapAssetImport::ReadObj(const FString &File, FStaticMeshAsset &Out, FStrin
 		}
 		if (Stream.bad() || Mesh->GetTriangles().empty())
 			throw std::runtime_error("OBJ contains no readable triangles.");
-		for (const auto &E : Edges)
+		for (const auto& E : Edges)
 			Mesh->AddEdge(E.first, E.second);
 		Mesh->Finish();
 		FStaticMeshAsset Asset;
 		Asset.Mesh = std::move(Mesh);
+		Asset.AdditionalMaterials.resize(MaterialNames.size() - 1);
+		for (const auto& Name : MaterialNames)
+			Asset.MaterialSlotNames.push_back(FString(Name));
 		Out = std::move(Asset);
 		Error.Empty();
 		return true;
 	}
-	catch (const std::exception &E)
+	catch (const std::exception& E)
 	{
 		Error = FString::Format("OBJ line {}: {}", Line, E.what());
 		return false;
 	}
 }
-bool FMapAssetImport::ImportTexture(const FString &File, const FString &Target, FString &Error)
+bool FMapAssetImport::ImportTexture(const FString& File, const FString& Target, FString& Error)
 {
 	FLandscapeImage Image;
 	if (!FLandscapeTextureLibrary::LoadImageFile(File, Image, Error))
@@ -183,12 +210,42 @@ bool FMapAssetImport::ImportTexture(const FString &File, const FString &Target, 
 	T.Height = Image.Height;
 	T.Pixels = std::move(Image.Pixels);
 	FAssetPackage P;
-	return FRenderAssetCodec::EncodeTexture(T, P, Error) && FAssetPackageStore::Save(Target, P, Error);
+	if(!FRenderAssetCodec::EncodeTexture(T,P,Error)) return false;
+	SetImportSource(P,Target,File);
+	return FAssetPackageStore::Save(Target,P,Error);
 }
-bool FMapAssetImport::ImportMesh(const FString &File, const FString &Target, FString &Error)
+bool FMapAssetImport::ImportMesh(const FString& File, const FString& Target, FString& Error)
 {
 	FStaticMeshAsset M;
 	FAssetPackage P;
-	return ReadObj(File, M, Error) && FRenderAssetCodec::EncodeMesh(M, P, Error) &&
-		   FAssetPackageStore::Save(Target, P, Error);
+	if (!ReadObj(File, M, Error) || !FRenderAssetCodec::EncodeMesh(M, P, Error))
+		return false;
+	SetMeshImportSource(P, Target, File);
+	return FAssetPackageStore::Save(Target, P, Error);
 }
+
+FString FMapAssetImport::GetImportSource(const FAssetPackage& P, const FString& Target)
+{
+	const auto File = P.Exports.Get("ImportSource").Get("File").AsString();
+	if (File.IsEmpty())
+		return {};
+	try
+	{
+		const auto Base = std::filesystem::absolute(std::filesystem::path(Target.ToWide())).parent_path();
+		return FString::FromWide((Base / std::filesystem::path(File.ToWide())).lexically_normal().wstring());
+	}
+	catch (...)
+	{
+		return {};
+	}
+}
+void FMapAssetImport::SetImportSource(FAssetPackage& P, const FString& Target, const FString& File)
+{
+	const auto Base = std::filesystem::absolute(std::filesystem::path(Target.ToWide())).parent_path();
+	const auto Full = std::filesystem::absolute(std::filesystem::path(File.ToWide())).lexically_normal();
+	const auto Relative = Full.lexically_relative(Base);
+	P.Exports["ImportSource"]["File"] = FString::FromWide((Relative.empty() ? Full : Relative).generic_wstring());
+}
+
+FString FMapAssetImport::GetMeshImportSource(const FAssetPackage& P,const FString& Target) { return GetImportSource(P,Target); }
+void FMapAssetImport::SetMeshImportSource(FAssetPackage& P,const FString& Target,const FString& File) { SetImportSource(P,Target,File); }

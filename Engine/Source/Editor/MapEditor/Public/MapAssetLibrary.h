@@ -8,13 +8,14 @@ class Object;
 class FMapAssetLibrary
 {
   public:
-	static void SetRegistry(const std::shared_ptr<FAssetRegistry> &);
+	static void SetRegistry(const std::shared_ptr<FAssetRegistry>&);
 	static std::shared_ptr<FAssetRegistry> GetRegistry();
 	static std::string RevisionKey();
-	static std::shared_ptr<const FLoadedMeshAsset> LoadMesh(const FAssetReference &, const FAssetReference &Override,
-															FString &Error);
-	static FString TextureToken(const FAssetReference &);
-	static bool ParseTextureToken(const FString &, FAssetReference &, FString &Error);
-	static bool LoadTexture(const FString &Token, FTextureAsset &, FString &Error);
-	static bool HasNativeAssets(const Object &);
+	static std::shared_ptr<const FLoadedMeshAsset> LoadMesh(const FAssetReference&, const FAssetReference& Override,
+															FString& Error,
+															const TArray<FAssetReference>& AdditionalOverrides = {});
+	static FString TextureToken(const FAssetReference&);
+	static bool ParseTextureToken(const FString&, FAssetReference&, FString& Error);
+	static bool LoadTexture(const FString& Token, FTextureAsset&, FString& Error);
+	static bool HasNativeAssets(const Object&);
 };

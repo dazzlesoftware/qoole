@@ -435,9 +435,9 @@ FContentBrowserItem SContentBrowser::DescribeItem(const FString& FilePath) const
 		Item.PackageId = Metadata.Id;
 		Item.Schema = Metadata.Schema;
 		if (!Item.Error.IsEmpty()) Item.Type = EContentAssetType::InvalidPackage;
-		else if (Metadata.Schema == "Genesis.World" && (Metadata.SchemaVersion == 1 || Metadata.SchemaVersion == 2) && Metadata.Kind == EAssetPackageKind::Map) Item.Type = EContentAssetType::Map;
-		else if (Metadata.Schema == "Genesis.Prefab" && (Metadata.SchemaVersion == 1 || Metadata.SchemaVersion == 2) && Metadata.Kind == EAssetPackageKind::Asset) Item.Type = EContentAssetType::Prefab;
-		else if (Metadata.Kind == EAssetPackageKind::Asset && Metadata.SchemaVersion == 1 && Metadata.Schema == "Genesis.StaticMesh") Item.Type = EContentAssetType::StaticMesh;
+		else if (Metadata.Schema == "Genesis.World" && (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) && Metadata.Kind == EAssetPackageKind::Map) Item.Type = EContentAssetType::Map;
+		else if (Metadata.Schema == "Genesis.Prefab" && (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) && Metadata.Kind == EAssetPackageKind::Asset) Item.Type = EContentAssetType::Prefab;
+		else if (Metadata.Kind == EAssetPackageKind::Asset && (Metadata.SchemaVersion == 1 || Metadata.SchemaVersion == 2) && Metadata.Schema == "Genesis.StaticMesh") Item.Type = EContentAssetType::StaticMesh;
 		else if (Metadata.Kind == EAssetPackageKind::Asset && Metadata.SchemaVersion == 1 && Metadata.Schema == "Genesis.Texture2D") Item.Type = EContentAssetType::Texture;
 		else if (Metadata.Kind == EAssetPackageKind::Asset && (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) && Metadata.Schema == "Genesis.Material") Item.Type = EContentAssetType::Material;
 		else Item.Type = EContentAssetType::Package;

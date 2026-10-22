@@ -15,6 +15,8 @@
 #include "MapWorldAdapter.h"
 #include "MapAssetLibrary.h"
 #include "MapAssetImport.h"
+#include "MeshAssetEditor.h"
+#include "TextureAssetEditor.h"
 #include "MapMaterialTextures.h"
 #include "MapDraw.h"
 #include "AssetPackage.h"
@@ -4108,7 +4110,7 @@ TEST_SUITE("MapPackages")
 		CHECK(First->GetChild(0).GetIdentity().Actor != Id.Actor);
 		const auto File = Temp.File("Scene.gmap"); REQUIRE_MESSAGE(Doc->Save(File, Error), *Error);
 		FAssetPackage Package; REQUIRE(FAssetPackageStore::Load(File, Package, Error));
-		CHECK(Package.SchemaVersion == 2); CHECK_FALSE(Package.Exports.Contains("Root"));
+		CHECK(Package.SchemaVersion == 3); CHECK_FALSE(Package.Exports.Contains("Root"));
 		auto World = FWorld::FromJson(Package.Exports.Get("Scene"), Error); REQUIRE_MESSAGE(World, *Error);
 		const auto* Actor = World->FindActor(Id.Actor); REQUIRE(Actor);
 		CHECK(Actor->Root.Id == Id.Transform); REQUIRE(Actor->Components.size() == 1); CHECK(Actor->Components[0].Id == Id.Payload);
@@ -4161,7 +4163,7 @@ TEST_SUITE("MapPackages")
 		REQUIRE(FAssetPackageStore::Save(File, Package, Error));
 		auto Back = FMapDocument::Open(File, Error); REQUIRE_MESSAGE(Back, *Error); CHECK(Back->IsModified()); CHECK(Back->CountMeshes() == 1);
 		const auto ActorId = Back->GetObjects()[0]->GetIdentity().Actor;
-		REQUIRE(Back->Save(File, Error)); REQUIRE(FAssetPackageStore::Load(File, Package, Error)); CHECK(Package.SchemaVersion == 2);
+		REQUIRE(Back->Save(File, Error)); REQUIRE(FAssetPackageStore::Load(File, Package, Error)); CHECK(Package.SchemaVersion == 3);
 		auto Again = FMapDocument::Open(File, Error); REQUIRE(Again); CHECK_FALSE(Again->IsModified()); CHECK(Again->GetObjects()[0]->GetIdentity().Actor == ActorId);
 	}
 
@@ -4436,4 +4438,538 @@ TEST_SUITE("ContentRegistry")
   CHECK(StillMaterial.Id == Material.Id);
   CHECK(StillMaterial.Schema == "Genesis.Material");
  }
+}
+
+TEST_CASE("Per-slot overrides preserve defaults undo identities and native world references" * doctest::test_suite("MapPackages"))
+{
+ EnsureMapCore(); FTempFolder Temp; FString Error;
+ auto Registry=std::make_shared<FAssetRegistry>(); REQUIRE(Registry->SetMounts({{"/Game",FString::FromWide(Temp.Path.wstring())}},Error));
+ struct FRestoreSlots { std::shared_ptr<FAssetRegistry> Old=FMapAssetLibrary::GetRegistry(); ~FRestoreSlots(){ FMapAssetLibrary::SetRegistry(Old); } } Restore;
+ FMapAssetLibrary::SetRegistry(Registry);
+ FMaterialAsset Red,Blue; Red.BaseColor[1]=Red.BaseColor[2]=0; Blue.BaseColor[0]=Blue.BaseColor[1]=0;
+ FAssetPackage A,B,M; REQUIRE(FRenderAssetCodec::EncodeMaterial(Red,A,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Red.asset"),A,Error));
+ REQUIRE(FRenderAssetCodec::EncodeMaterial(Blue,B,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Blue.asset"),B,Error));
+ const FAssetReference RedRef{A.Id,"/Game/Red"},BlueRef{B.Id,"/Game/Blue"};
+ FStaticMeshAsset Source{StaticMesh::Find("Cube"),RedRef,{BlueRef}};
+ REQUIRE(FRenderAssetCodec::EncodeMesh(Source,M,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"),M,Error)); REQUIRE(Registry->Scan());
+ auto Doc=FMapDocument::CreateNew(); auto* Obj=Doc->AddMeshAsset({M.Id,"/Game/Mesh"},Vector3d(),Error); REQUIRE_MESSAGE(Obj,*Error); const auto Id=Obj->GetIdentity();
+ REQUIRE(Obj->GetMeshAsset()->GetSlot(1).Material); CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2]==1);
+ REQUIRE(Doc->SetMeshMaterial(*Obj,RedRef,Error,1)); CHECK(Obj->GetMeshAsset()->MaterialOverride.IsNull()); CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].Id==A.Id);
+ Doc->Undo(); CHECK(Obj->GetMeshAsset()->AdditionalOverrides.empty()); Doc->Redo(); CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2]==0);
+ REQUIRE(Doc->SetMeshMaterial(*Obj,BlueRef,Error,0)); CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].Id==A.Id);
+ CHECK_FALSE(Doc->SetMeshMaterial(*Obj,BlueRef,Error,2)); CHECK_FALSE(Doc->SetMeshMaterial(*Obj,BlueRef,Error,-1));
+ FMapObjectProperties Props(*Doc,*Obj); TArray<FPropertyDesc> Descs; Props.GetProperties(Descs); CHECK(std::get<FString>(Props.GetValue(FName("StaticMesh")))=="/Game/Mesh");
+ const auto Override=Obj->GetMeshAsset(); Props.SetValue(FName("MaterialSlot:1"),int32(0)); CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].IsNull()); CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2]==1); Doc->Undo(); CHECK(Obj->GetMeshAsset()==Override);
+ const auto File=Temp.File("Slots.gmap"); REQUIRE(Doc->Save(File,Error)); auto Back=FMapDocument::Open(File,Error); REQUIRE_MESSAGE(Back,*Error);
+ const auto Loaded=Back->GetObjects()[0]->GetMeshAsset(); REQUIRE(Loaded); CHECK(Loaded->MaterialOverride.Id==B.Id); CHECK(Loaded->AdditionalOverrides[0].Id==A.Id); CHECK(Back->GetObjects()[0]->GetIdentity().Actor==Id.Actor);
+ REQUIRE(Doc->SavePrefab({Obj},Temp.File("Slots.asset"),Error)); auto* Placed=Doc->AddPrefab(Temp.File("Slots.asset"),Vector3d(),&Error); REQUIRE_MESSAGE(Placed,*Error); CHECK(Placed->GetChild(0).GetMeshAsset()->AdditionalOverrides[0].Id==A.Id);
+ // A v2 scene upgrades without replacing persistent identities.
+ FAssetPackage World; REQUIRE(FAssetPackageStore::Load(File,World,Error)); World.SchemaVersion=2; REQUIRE(FAssetPackageStore::Save(Temp.File("Old.gmap"),World,Error));
+ auto Old=FMapDocument::Open(Temp.File("Old.gmap"),Error); REQUIRE(Old); CHECK(Old->IsModified()); CHECK(Old->GetObjects()[0]->GetIdentity().Actor==Id.Actor);
+ // Slot overrides keep authoritative UUID resolution and distinct cache entries.
+ const auto Default=FMapAssetLibrary::LoadMesh({M.Id,"/Game/Mesh"},BlueRef,Error); CHECK(Default!=Loaded);
+ auto BadRef=RedRef; BadRef.Id=FAssetId::New(); const auto Before=Obj->GetMeshAsset(); CHECK_FALSE(Doc->SetMeshMaterial(*Obj,BadRef,Error,1)); CHECK(Obj->GetMeshAsset()==Before);
+ FLoadedMeshAsset Invalid;
+ CHECK_FALSE(FRenderAssetLoader(*Registry).LoadMesh({M.Id, "/Game/Mesh"}, Invalid, Error, {}, {{}, {}}));
+}
+
+TEST_CASE("OBJ usemtl groups become persistent material slots" * doctest::test_suite("MapPackages"))
+{
+	FTempFolder Temp;
+	FString Error;
+	const auto File = Temp.File("Grouped.obj");
+	const FString Text =
+		"v 0 0 0\nv 1 0 0\nv 0 1 0\nusemtl Body\nf 1 2 3\nusemtl Trim\nf 3 2 1\nusemtl Body\nf 1 2 3\n";
+	REQUIRE(FFile::WriteAllText(File, Text));
+	FStaticMeshAsset Mesh;
+	REQUIRE_MESSAGE(FMapAssetImport::ReadObj(File, Mesh, Error), *Error);
+	CHECK(Mesh.GetNumMaterials() == 2);
+	CHECK(Mesh.MaterialSlotNames[0] == "Body");
+	CHECK(Mesh.MaterialSlotNames[1] == "Trim");
+	CHECK(Mesh.Mesh->GetTriangles()[0].MaterialSlot == 0);
+	CHECK(Mesh.Mesh->GetTriangles()[1].MaterialSlot == 1);
+	CHECK(Mesh.Mesh->GetTriangles()[2].MaterialSlot == 0);
+	FAssetPackage P;
+	REQUIRE(FRenderAssetCodec::EncodeMesh(Mesh, P, Error));
+	FStaticMeshAsset Back;
+	REQUIRE(FRenderAssetCodec::DecodeMesh(P, Back, Error));
+	CHECK(Back.Mesh->GetTriangles()[1].MaterialSlot == 1);
+	CHECK(Back.MaterialSlotNames[1] == "Trim");
+	REQUIRE(FFile::WriteAllText(File, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\nusemtl Trim\nf 3 2 1\n"));
+	REQUIRE(FMapAssetImport::ReadObj(File, Back, Error));
+	CHECK(Back.GetNumMaterials() == 2);
+	CHECK(Back.Mesh->GetTriangles()[1].MaterialSlot == 1);
+}
+
+TEST_CASE("Mesh slots independently render textures masks and translucency on both backends" *
+		  doctest::test_suite("MeshMaterials"))
+{
+	for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+	{
+		CAPTURE(std::string(ToString(Backend)));
+		FTestLogCapture Log;
+		FViewFixture F;
+		if (!F.Create(Backend, EMapViewType::Perspective))
+		{
+			MESSAGE("Device unavailable");
+			continue;
+		}
+		F.Settings.bShowGrid = false;
+		auto Flags = F.Client->GetShowFlags();
+		Flags.bAxes = false;
+		Flags.bViewportStats = false;
+		F.Client->SetShowFlags(Flags);
+		const auto Cube = StaticMesh::Find("Cube");
+		auto Mesh = std::make_shared<StaticMesh>("Multi slot cube");
+		for (int I = 0; I < Cube->GetNumVertices(); ++I)
+			Mesh->AddVertex(Cube->GetVertex(I));
+		for (const auto& T : Cube->GetTriangles())
+		{
+			Mesh->AddTriangle(T.v[0], T.v[1], T.v[2], T.norm[0], T.norm[1], T.norm[2]);
+			const int I = static_cast<int>(Mesh->GetTriangles().size()) - 1;
+			Mesh->SetTriangleUVs(I, T.uv);
+			Mesh->SetTriangleMaterial(I, T.norm[0].GetY() < -0.5f ? 1 : 0);
+		}
+		Mesh->Finish();
+		auto Asset = std::make_shared<FLoadedMeshAsset>();
+		Asset->Data.Mesh = Mesh;
+		Asset->Data.AdditionalMaterials.resize(1);
+		Asset->DisplayMesh = Mesh;
+		Asset->Material = FMaterialAsset{};
+		Asset->Material->BaseColor[1] = Asset->Material->BaseColor[2] = 0;
+		Asset->AdditionalSlots.resize(1);
+		Asset->AdditionalSlots[0].Material = FMaterialAsset{};
+		FTextureAsset Green;
+		Green.Width = Green.Height = 1;
+		Green.Pixels = {0, 255, 0, 255};
+		Asset->AdditionalSlots[0].Texture = Green;
+		auto* Obj = F.Doc->AddMesh("Cube", Vector3d());
+		REQUIRE(Obj);
+		Obj->SetMeshAsset(Asset);
+		F.Client->FrameSelection();
+		F.Doc->ClearSelection();
+		F.Client->SetViewMode(EMapViewMode::Unlit);
+		auto Sample = [&](const TArray<uint8>& Pixels, const Vector3d& Point) {
+			const auto P = F.At(Point);
+			return PixelAt(Pixels, static_cast<int>(P.X), static_cast<int>(P.Y));
+		};
+		const Vector3d Front(-32, -64, 32), Top(-20, -10, 64);
+		const auto Opaque = F.Render();
+		const auto FrontColor = Sample(Opaque, Front), TopColor = Sample(Opaque, Top);
+		CHECK(FrontColor.G > 240);
+		CHECK(FrontColor.R < 10);
+		CHECK(TopColor.R > 240);
+		CHECK(TopColor.G < 10);
+		auto Hole = std::make_shared<FLoadedMeshAsset>(*Asset);
+		Hole->AdditionalSlots[0].Material->BlendMode = EMaterialBlendMode::Translucent;
+		Hole->AdditionalSlots[0].Material->BaseColor[3] = 0;
+		Obj->SetMeshAsset(Hole);
+		const auto Background = F.Render();
+		CHECK(Sample(Background, Top) == TopColor);
+		auto Half = std::make_shared<FLoadedMeshAsset>(*Hole);
+		Half->AdditionalSlots[0].Material->BaseColor[3] = 0.5f;
+		Obj->SetMeshAsset(Half);
+		const auto Mixed = Sample(F.Render(), Front), Bg = Sample(Background, Front);
+		CHECK(std::abs(int(Mixed.G) - (int(FrontColor.G) + int(Bg.G)) / 2) <= 3);
+		auto Mask = std::make_shared<FLoadedMeshAsset>(*Half);
+		Mask->AdditionalSlots[0].Material->BlendMode = EMaterialBlendMode::Masked;
+		Mask->AdditionalSlots[0].Material->OpacityMaskClip = 0.6f;
+		Obj->SetMeshAsset(Mask);
+		CHECK(F.Render() == Background);
+		Mask = std::make_shared<FLoadedMeshAsset>(*Mask);
+		Mask->AdditionalSlots[0].Material->OpacityMaskClip = 0.4f;
+		Obj->SetMeshAsset(Mask);
+		CHECK(F.Render() == Opaque);
+		CHECK(Log.Problems.empty());
+	}
+}
+
+TEST_CASE("Mesh editor saves defaults and reimports named slots without changing identity" *
+		  doctest::test_suite("MeshAssetEditor"))
+{
+	EnsureMapCore();
+	FTempFolder Temp;
+	FString Error;
+	FAssetRegistry Registry;
+	REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+	const auto Source = Temp.File("Source.obj"), Target = Temp.File("Mesh.asset");
+	const FString Vertices = "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+	REQUIRE(FFile::WriteAllText(Source, Vertices + "usemtl Body\nf 1 2 3\nusemtl Trim\nf 3 2 1\n"));
+	REQUIRE(FMapAssetImport::ImportMesh(Source, Target, Error));
+	REQUIRE(Registry.Scan());
+	const auto* Data = Registry.FindByPath("/Game/Mesh");
+	REQUIRE(Data);
+	const auto Ref = Data->GetReference();
+	auto Edit = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	REQUIRE_MESSAGE(Edit, *Error);
+	CHECK_FALSE(Edit->IsDirty());
+	CHECK(Edit->GetSourceFile() == Source);
+	FMaterialAsset Material;
+	Material.BaseColor[1] = 0.2f;
+	FAssetPackage MP;
+	REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, MP, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Material.asset"), MP, Error));
+	REQUIRE(Registry.Scan());
+	const FAssetReference Mat{MP.Id, "/Game/Material"};
+	REQUIRE(Edit->SetMaterial(1, Mat, Registry, Error));
+	CHECK(Edit->IsDirty());
+	FLoadedMeshAsset Preview;
+	REQUIRE(Edit->BuildPreview(Registry, Preview, Error));
+	REQUIRE(Preview.GetSlot(1).Material);
+	CHECK(Preview.GetSlot(1).Material->BaseColor[1] == doctest::Approx(0.2));
+	REQUIRE(Edit->Save(Registry, Error));
+	CHECK_FALSE(Edit->IsDirty());
+	REQUIRE(Registry.Scan());
+	auto Other = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	REQUIRE(Other);
+	CHECK(Other->GetMesh().GetMaterial(1).Id == MP.Id);
+	// Group order changes, one group disappears, and a new group is appended.
+	REQUIRE(FFile::WriteAllText(Source, "v 0 0 0\nv 2 0 0\nv 0 2 0\nusemtl Trim\nf 1 2 3\nusemtl Glass\nf 3 2 1\n"));
+	REQUIRE(Edit->Reimport(Source, Error));
+	CHECK(Edit->GetMesh().GetNumMaterials() == 3);
+	CHECK(Edit->GetMesh().MaterialSlotNames[0] == "Body");
+	CHECK(Edit->GetMesh().MaterialSlotNames[1] == "Trim");
+	CHECK(Edit->GetMesh().MaterialSlotNames[2] == "Glass");
+	CHECK(Edit->GetMesh().Mesh->GetTriangles()[0].MaterialSlot == 1);
+	CHECK(Edit->GetMesh().Mesh->GetTriangles()[1].MaterialSlot == 2);
+	CHECK(Edit->GetMesh().GetMaterial(1).Id == MP.Id);
+	CHECK(Edit->GetMesh().Mesh->GetVertex(1).GetX() == 2);
+	REQUIRE(Edit->Save(Registry, Error));
+	FAssetPackage Back;
+	REQUIRE(FAssetPackageStore::Load(Target, Back, Error));
+	CHECK(Back.Id == Ref.Id);
+	CHECK(FMapAssetImport::GetMeshImportSource(Back, Target) == Source);
+	// The second editor retains its draft but cannot overwrite a newer generation.
+	REQUIRE(Other->SetMaterial(0, Mat, Registry, Error));
+	CHECK_FALSE(Other->Save(Registry, Error));
+	CHECK_FALSE(Error.IsEmpty());
+	CHECK(Other->IsDirty());
+	REQUIRE(FAssetPackageStore::Load(Target, Back, Error));
+	CHECK(Back.Id == Ref.Id);
+	FStaticMeshAsset Mesh;
+	REQUIRE(FRenderAssetCodec::DecodeMesh(Back, Mesh, Error));
+	CHECK(Mesh.GetNumMaterials() == 3);
+	REQUIRE(Registry.Scan());
+	auto Reopened = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	REQUIRE(Reopened);
+	const auto Geometry = Reopened->GetMesh().Mesh;
+	REQUIRE(FFile::WriteAllText(Source, "this is invalid OBJ\n"));
+	CHECK_FALSE(Reopened->Reimport(Source, Error));
+	CHECK(Reopened->GetMesh().Mesh == Geometry);
+	CHECK_FALSE(Reopened->IsDirty());
+	CHECK_FALSE(Reopened->SetMaterial(9, Mat, Registry, Error));
+	CHECK_FALSE(Reopened->SetMaterial(-1, Mat, Registry, Error));
+	auto Stale = Mat;
+	Stale.Id = FAssetId::New();
+	CHECK_FALSE(Reopened->SetMaterial(1, Stale, Registry, Error));
+	CHECK(Reopened->GetMesh().GetMaterial(1).Id == MP.Id);
+	Back.Id = FAssetId::New();
+	REQUIRE(FAssetPackageStore::Save(Target, Back, Error));
+	CHECK_FALSE(FMeshAssetEditSession::Open(Registry, {{}, "/Game/Mesh"}, Error));
+	CHECK_FALSE(Reopened->Save(Registry, Error));
+}
+
+TEST_CASE("Mesh draft refresh keeps placed transforms identities and actor overrides" *
+		  doctest::test_suite("MeshAssetEditor"))
+{
+	EnsureMapCore();
+	FTempFolder Temp;
+	FString Error;
+	auto Registry = std::make_shared<FAssetRegistry>();
+	REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+	struct FRestoreMeshEdit
+	{
+		std::shared_ptr<FAssetRegistry> Old = FMapAssetLibrary::GetRegistry();
+		~FRestoreMeshEdit()
+		{
+			FMapAssetLibrary::SetRegistry(Old);
+		}
+	} Restore;
+	FMapAssetLibrary::SetRegistry(Registry);
+	FAssetPackage A, B, M;
+	FMaterialAsset Red, Blue;
+	Red.BaseColor[1] = Red.BaseColor[2] = 0;
+	Blue.BaseColor[0] = Blue.BaseColor[1] = 0;
+	REQUIRE(FRenderAssetCodec::EncodeMaterial(Red, A, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Red.asset"), A, Error));
+	REQUIRE(FRenderAssetCodec::EncodeMaterial(Blue, B, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Blue.asset"), B, Error));
+	const FAssetReference RedRef{A.Id, "/Game/Red"}, BlueRef{B.Id, "/Game/Blue"};
+	REQUIRE(FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Cube"), RedRef, {RedRef}, {"Body", "Trim"}}, M, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"), M, Error));
+	REQUIRE(Registry->Scan());
+	const FAssetReference MeshRef{M.Id, "/Game/Mesh"};
+	auto Doc = FMapDocument::CreateNew();
+	auto* First = Doc->AddMeshAsset(MeshRef, Vector3d(10, 20, 30), Error);
+	auto* Second = Doc->AddMeshAsset(MeshRef, Vector3d(-10, 30, 50), Error);
+	REQUIRE(First);
+	REQUIRE(Second);
+	REQUIRE(Doc->SetMeshMaterial(*Second, BlueRef, Error, 1));
+	const auto Id = Second->GetIdentity();
+	const auto Before = First->GetMeshAsset();
+	auto Edit = FMeshAssetEditSession::Open(*Registry, MeshRef, Error);
+	REQUIRE(Edit);
+	REQUIRE(Edit->SetMaterial(0, BlueRef, *Registry, Error));
+	REQUIRE(Edit->Save(*Registry, Error));
+	REQUIRE(Registry->Scan());
+	REQUIRE(Doc->ReloadMeshAsset(MeshRef, Error));
+	CHECK(First->GetMeshAsset()->Material->BaseColor[2] == 1);
+	CHECK(Second->GetMeshAsset()->AdditionalOverrides[0].Id == B.Id);
+	CHECK(Second->GetMeshAsset()->GetSlot(1).Material->BaseColor[2] == 1);
+	CHECK(Second->GetIdentity().Actor == Id.Actor);
+	CHECK(Second->GetPosition() == Vector3d(-10, 30, 50));
+	Doc->Undo();
+	CHECK(First->GetMeshAsset() == Before);
+	Doc->Redo();
+	CHECK(First->GetMeshAsset()->Material->BaseColor[2] == 1);
+	// An unresolved actor override makes refresh fail before any actor changes.
+	B.Id = FAssetId::New();
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Blue.asset"), B, Error));
+	REQUIRE(Registry->Scan());
+	const auto Kept = First->GetMeshAsset();
+	CHECK_FALSE(Doc->ReloadMeshAsset(MeshRef, Error));
+	CHECK(First->GetMeshAsset() == Kept);
+}
+
+TEST_CASE("Reimport rejects ambiguous and overflowing slots without replacing its draft" *
+		  doctest::test_suite("MeshAssetEditor"))
+{
+	EnsureMapCore();
+	FTempFolder Temp;
+	FString Error;
+	FAssetRegistry Registry;
+	REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+	const auto Source = Temp.File("Source.obj"), Target = Temp.File("Mesh.asset");
+	REQUIRE(FFile::WriteAllText(Source, "v 0 0 0\nv 1 0 0\nv 0 1 0\nusemtl New\nf 1 2 3\n"));
+	FStaticMeshAsset Mesh{StaticMesh::Find("Cube"), {}, TArray<FAssetReference>(63)};
+	for (int I = 0; I < 64; ++I)
+		Mesh.MaterialSlotNames.push_back(FString::Format("Old{}", I));
+	FAssetPackage P;
+	REQUIRE(FRenderAssetCodec::EncodeMesh(Mesh, P, Error));
+	REQUIRE(FAssetPackageStore::Save(Target, P, Error));
+	REQUIRE(Registry.Scan());
+	const auto Ref = Registry.FindByPath("/Game/Mesh")->GetReference();
+	auto Edit = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	REQUIRE(Edit);
+	const auto Before = Edit->GetMesh().Mesh;
+	CHECK_FALSE(Edit->Reimport(Source, Error));
+	CHECK(Edit->GetMesh().Mesh == Before);
+	CHECK(Edit->GetMesh().GetNumMaterials() == 64);
+	CHECK_FALSE(Edit->IsDirty());
+	Mesh.AdditionalMaterials.resize(1);
+	Mesh.MaterialSlotNames = {"New", "New"};
+	REQUIRE(FRenderAssetCodec::EncodeMesh(Mesh, P, Error));
+	REQUIRE(FAssetPackageStore::Save(Target, P, Error));
+	REQUIRE(Registry.Scan());
+	Edit = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	REQUIRE(Edit);
+	CHECK_FALSE(Edit->Reimport(Source, Error));
+	CHECK_FALSE(Edit->IsDirty());
+	// An unnamed primitive adopts incoming slot zero without leaving an unused slot.
+	Mesh.AdditionalMaterials.clear();
+	Mesh.MaterialSlotNames.clear();
+	REQUIRE(FRenderAssetCodec::EncodeMesh(Mesh, P, Error));
+	REQUIRE(FAssetPackageStore::Save(Target, P, Error));
+	REQUIRE(Registry.Scan());
+	Edit = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	REQUIRE(Edit);
+	REQUIRE(Edit->Reimport(Source, Error));
+	CHECK(Edit->GetMesh().GetNumMaterials() == 1);
+	CHECK(Edit->GetMesh().MaterialSlotNames[0] == "New");
+	REQUIRE(Edit->Save(Registry, Error));
+	REQUIRE(Registry.Scan());
+	// Moving the package while its editor is open cannot recreate an asset at the old path.
+	FAssetPackage MovedPackage;
+	REQUIRE(FAssetPackageStore::Load(Target, MovedPackage, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Moved.asset"), MovedPackage, Error));
+	REQUIRE(FFile::Delete(Target));
+	REQUIRE(Registry.Scan());
+	CHECK_FALSE(Edit->Save(Registry, Error));
+	CHECK_FALSE(FFile::Exists(Target));
+	auto Moved = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	REQUIRE(Moved);
+	CHECK(Moved->GetSourceFile() == Source);
+}
+
+TEST_CASE("Texture preview preserves pixels and distinguishes color alpha and data channels" *
+		  doctest::test_suite("TextureAssetEditor"))
+{
+	FString Error;
+	FTextureAsset T;
+	T.Width = T.Height = 1;
+	T.Pixels = {128, 64, 255, 128};
+	FTextureAsset Out;
+	const auto Pixels = T.Pixels;
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGB, Out, Error));
+	CHECK(Out.Pixels[0] == 128);
+	CHECK(Out.Pixels[1] == 64);
+	CHECK(Out.Pixels[2] == 255);
+	CHECK(Out.Pixels[3] == 255);
+	T.bSRGB = false;
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGB, Out, Error));
+	CHECK(Out.Pixels[0] >= 187);
+	CHECK(Out.Pixels[0] <= 189);
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::Red, Out, Error));
+	CHECK(Out.Pixels[0] == 128);
+	CHECK(Out.Pixels[1] == 128);
+	CHECK(Out.Pixels[2] == 128);
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::Green, Out, Error));
+	CHECK(Out.Pixels[0] == 64);
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::Blue, Out, Error));
+	CHECK(Out.Pixels[0] == 255);
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::Alpha, Out, Error));
+	CHECK(Out.Pixels[0] == 128);
+	CHECK(T.Pixels == Pixels);
+	T.bSRGB = true;
+	T.Pixels = {255, 0, 0, 128};
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGBA, Out, Error));
+	CHECK(Out.Pixels[0] >= 200);
+	CHECK(Out.Pixels[0] <= 204);
+	CHECK(Out.Pixels[1] >= 84);
+	CHECK(Out.Pixels[1] <= 86);
+	T.Pixels[3] = 0;
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGBA, Out, Error));
+	CHECK(Out.Pixels[0] == Out.Pixels[1]);
+	CHECK(Out.Pixels[1] == Out.Pixels[2]);
+	T.Width = 8192;
+	T.Height = 1;
+	T.Pixels.assign(8192 * 4, 255);
+	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGBA, Out, Error));
+	CHECK(Out.Width == 2048);
+	CHECK(Out.Height == 1);
+	const auto Kept = Out.Pixels;
+	T.Pixels.pop_back();
+	CHECK_FALSE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGBA, Out, Error));
+	CHECK(Out.Pixels == Kept);
+}
+
+TEST_CASE("Texture reimport and saves preserve identity source color setting and reject stale editors" *
+		  doctest::test_suite("TextureAssetEditor"))
+{
+	EnsureMapCore();
+	FTempFolder Temp;
+	FString Error;
+	FAssetRegistry Registry;
+	REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+	const auto Image = Temp.File("Image.png"), Target = Temp.File("Texture.asset");
+	FHeightmap Source;
+	Source.Width = Source.Height = 2;
+	Source.Samples = {0, 65535, 32768, 1000};
+	REQUIRE(Source.Save(Image, Error, 8));
+	REQUIRE(FMapAssetImport::ImportTexture(Image, Target, Error));
+	REQUIRE(Registry.Scan());
+	const auto Ref = Registry.FindByPath("/Game/Texture")->GetReference();
+	auto Edit = FTextureAssetEditSession::Open(Registry, Ref, Error);
+	auto Other = FTextureAssetEditSession::Open(Registry, Ref, Error);
+	REQUIRE(Edit);
+	REQUIRE(Other);
+	CHECK(Edit->GetSourceFile() == Image);
+	CHECK_FALSE(Edit->IsDirty());
+	Edit->SetSRGB(false);
+	CHECK(Edit->IsDirty());
+	REQUIRE(Edit->Save(Registry, Error));
+	CHECK_FALSE(Edit->IsDirty());
+	REQUIRE(Registry.Scan());
+	FTextureAsset Loaded;
+	REQUIRE(FRenderAssetLoader(Registry).LoadTexture(Ref, Loaded, Error));
+	CHECK_FALSE(Loaded.bSRGB);
+	Source.Width = 3;
+	Source.Height = 2;
+	Source.Samples = {65535, 32768, 0, 0, 32768, 65535};
+	REQUIRE(Source.Save(Image, Error, 8));
+	REQUIRE(Edit->Reimport(Image, Error));
+	CHECK(Edit->GetTexture().Width == 3);
+	CHECK_FALSE(Edit->GetTexture().bSRGB);
+	REQUIRE(Edit->Save(Registry, Error));
+	REQUIRE(Registry.Scan());
+	FLandscapeImage Decoded;
+	REQUIRE(FLandscapeTextureLibrary::LoadImageFile(Image, Decoded, Error));
+	REQUIRE(FRenderAssetLoader(Registry).LoadTexture(Ref, Loaded, Error));
+	CHECK(Loaded.Pixels == Decoded.Pixels);
+	FAssetPackage P;
+	REQUIRE(FAssetPackageStore::Load(Target, P, Error));
+	CHECK(P.Id == Ref.Id);
+	CHECK(FMapAssetImport::GetImportSource(P, Target) == Image);
+	Other->SetSRGB(false);
+	CHECK_FALSE(Other->Save(Registry, Error));
+	CHECK(Other->IsDirty());
+	const auto Kept = Edit->GetTexture().Pixels;
+	CHECK_FALSE(Edit->Reimport(Temp.File("Missing.png"), Error));
+	CHECK(Edit->GetTexture().Pixels == Kept);
+	CHECK_FALSE(Edit->IsDirty());
+	P.Id = FAssetId::New();
+	REQUIRE(FAssetPackageStore::Save(Target, P, Error));
+	CHECK_FALSE(FTextureAssetEditSession::Open(Registry, {{}, "/Game/Texture"}, Error));
+	CHECK_FALSE(Edit->Save(Registry, Error));
+}
+
+TEST_CASE("Texture saves refresh mesh dependencies and landscape caches without changing references" *
+		  doctest::test_suite("TextureAssetEditor"))
+{
+	EnsureMapCore();
+	FTempFolder Temp;
+	FString Error;
+	auto Registry = std::make_shared<FAssetRegistry>();
+	REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+	struct FRestoreTextureEdit
+	{
+		std::shared_ptr<FAssetRegistry> Old = FMapAssetLibrary::GetRegistry();
+		~FRestoreTextureEdit()
+		{
+			FMapAssetLibrary::SetRegistry(Old);
+		}
+	} Restore;
+	FMapAssetLibrary::SetRegistry(Registry);
+	FTextureAsset Texture;
+	Texture.Width = Texture.Height = 1;
+	Texture.Pixels = {128, 64, 32, 255};
+	FAssetPackage T, M, S;
+	REQUIRE(FRenderAssetCodec::EncodeTexture(Texture, T, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Texture.asset"), T, Error));
+	const FAssetReference Tex{T.Id, "/Game/Texture"};
+	FMaterialAsset Mat;
+	Mat.BaseColorTexture = Tex;
+	REQUIRE(FRenderAssetCodec::EncodeMaterial(Mat, M, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Material.asset"), M, Error));
+	REQUIRE(FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Cube"), {M.Id, "/Game/Material"}}, S, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"), S, Error));
+	REQUIRE(Registry->Scan());
+	auto Doc = FMapDocument::CreateNew();
+	auto* Obj = Doc->AddMeshAsset({S.Id, "/Game/Mesh"}, Vector3d(1, 2, 3), Error);
+	REQUIRE(Obj);
+	const auto Id = Obj->GetIdentity();
+	const auto Before = Obj->GetMeshAsset();
+	auto* Land = Doc->AddLandscape(4, 4, 16, Vector3d());
+	REQUIRE(Land);
+	auto Layer = Land->GetLandscape().MakeLayer("Native", 255, 255, 255);
+	Layer.texture = FMapAssetLibrary::TextureToken(Tex).ToStdString();
+	Layer.weights.assign(25, 1);
+	Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({Layer}));
+	const auto* OldImage = FLandscapeTextureLibrary::Get().Find(Layer.texture);
+	REQUIRE(OldImage);
+	CHECK(OldImage->Mips[0].Pixels[0] == 128);
+	auto Edit = FTextureAssetEditSession::Open(*Registry, Tex, Error);
+	REQUIRE(Edit);
+	const auto File = Temp.File("Changed.png");
+	FHeightmap Image;
+	Image.Width = Image.Height = 2;
+	Image.Samples = {25700, 25700, 25700, 25700};
+	REQUIRE(Image.Save(File, Error, 8));
+	REQUIRE(Edit->Reimport(File, Error));
+	Edit->SetSRGB(false);
+	REQUIRE(Edit->Save(*Registry, Error));
+	REQUIRE(Registry->Scan());
+	REQUIRE(Doc->ReloadRenderAssets(Error));
+	CHECK(Obj->GetMeshAsset()->Texture->Pixels[0] == 100);
+	CHECK_FALSE(Obj->GetMeshAsset()->Texture->bSRGB);
+	CHECK(Obj->GetIdentity().Actor == Id.Actor);
+	CHECK(Obj->GetPosition() == Vector3d(1, 2, 3));
+	CHECK(Obj->GetMeshAsset()->Material->BaseColorTexture.Id == Tex.Id);
+	const auto* Updated = FLandscapeTextureLibrary::Get().Find(Layer.texture);
+	REQUIRE(Updated);
+	CHECK(Updated->Mips[0].Pixels[0] >= 167); CHECK(Updated->Mips[0].Pixels[0] <= 169);
+	Doc->Undo();
+	CHECK(Obj->GetMeshAsset() == Before);
+	Doc->Redo();
+	CHECK(Obj->GetMeshAsset()->Texture->Pixels[0] == 100);
 }

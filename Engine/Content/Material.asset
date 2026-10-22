@@ -2,18 +2,18 @@
 	"Magic": "GenesisPackage",
 	"FormatVersion": 1,
 	"Id": "79bc7b89-6661-495d-a9fc-667cdddfbb11",
-	"Generation": "047e7ec2-029a-4e2d-98a2-e92f01a805d3",
+	"Generation": "7e349955-146a-4369-8fa5-f096ceffe759",
 	"Kind": "Asset",
 	"Schema": "Genesis.Material",
 	"SchemaVersion": 3,
 	"Dependencies": [],
 	"Exports": {
-		"File": "Material.047e7ec2-029a-4e2d-98a2-e92f01a805d3.gexp",
-		"Size": 178,
-		"Checksum": "6a3d9910b76bfe86"
+		"File": "Material.7e349955-146a-4369-8fa5-f096ceffe759.gexp",
+		"Size": 195,
+		"Checksum": "f7e34396a8b2c16e"
 	},
 	"Bulk": {
-		"File": "Material.047e7ec2-029a-4e2d-98a2-e92f01a805d3.gbulk",
+		"File": "Material.7e349955-146a-4369-8fa5-f096ceffe759.gbulk",
 		"Size": 0,
 		"Checksum": "cbf29ce484222325"
 	}

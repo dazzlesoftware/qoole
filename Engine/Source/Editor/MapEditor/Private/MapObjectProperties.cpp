@@ -3,6 +3,7 @@
 #include "MapObjectProperties.h"
 
 #include "MapEditorPrivate.h"
+#include "MapAssetLibrary.h"
 
 #include <cstdlib>
 
@@ -19,6 +20,17 @@ namespace
 	const FName MeshProperty("StaticMesh");
 	const FName LandscapeSizeProperty("LandscapeSize");
 	const FName LandscapeQuadsProperty("LandscapeQuads");
+
+	TArray<FString> MaterialOptions()
+	{
+		TArray<FString> Result{"Use Mesh Default"};
+		if (const auto Registry = FMapAssetLibrary::GetRegistry())
+			for (const auto& Asset : Registry->GetAssets())
+				if (Asset.Metadata.Schema == "Genesis.Material" && Asset.Metadata.SchemaVersion >= 1 &&
+					Asset.Metadata.SchemaVersion <= 3)
+					Result.push_back(Asset.PackagePath);
+		return Result;
+	}
 
 	TArray<FString> MeshOptions()
 	{
@@ -107,13 +119,26 @@ void FMapObjectProperties::GetProperties(TArray<FPropertyDesc>& Out) const
 			Out.push_back(FPropertyDesc(LandscapeSizeProperty, EPropertyType::String, "Size", "Landscape").SetReadOnly());
 			return;
 		}
-		Out.push_back(FPropertyDesc(MeshProperty, EPropertyType::Enum, "Static Mesh", "Static Mesh").SetOptions(MeshOptions()));
+		if(const auto Asset=Obj.GetMeshAsset()) {
+			Out.push_back(FPropertyDesc(MeshProperty,EPropertyType::String,"Static Mesh","Static Mesh").SetReadOnly());
+			for (int I = 0; I < Asset->Data.GetNumMaterials(); ++I)
+				Out.push_back(
+					FPropertyDesc(FName(*FString::Format("MaterialSlot:{}", I)), EPropertyType::Enum,
+								  Asset->Data.GetMaterialName(I), "Materials")
+						.SetOptions(MaterialOptions())
+						.SetToolTip("Use Mesh Default clears this actor override; other slots remain unchanged."));
+		}
+		else
+			Out.push_back(FPropertyDesc(MeshProperty, EPropertyType::Enum, "Static Mesh", "Static Mesh")
+							  .SetOptions(MeshOptions()));
 		return;
 	}
-	Out.push_back(FPropertyDesc(PositionProperty, EPropertyType::Vector3, "Position", "Object").SetToolTip("In the space of the group being edited"));
+	Out.push_back(FPropertyDesc(PositionProperty, EPropertyType::Vector3, "Position", "Object")
+					  .SetToolTip("In the space of the group being edited"));
 	if (Obj.HasBrush() || Obj.CountBrushes() > 0)
 	{
-		Out.push_back(FPropertyDesc(TextureProperty, EPropertyType::String, "Texture", "Surface").SetToolTip("Applied to every face"));
+		Out.push_back(FPropertyDesc(TextureProperty, EPropertyType::String, "Texture", "Surface")
+						  .SetToolTip("Applied to every face"));
 	}
 	if (!Obj.HasEntity())
 	{
@@ -192,6 +217,25 @@ void FMapObjectProperties::GetProperties(TArray<FPropertyDesc>& Out) const
 FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 {
 	const FString Name = Property.ToString();
+	if(Name.StartsWith("MaterialSlot:") && Obj.GetMeshAsset()) {
+		const int I=std::atoi(Name.ToAnsi().c_str()+13); const auto& Asset=*Obj.GetMeshAsset();
+		if (I < 0 || I >= Asset.Data.GetNumMaterials())
+			return int32(0);
+		const auto Ref =
+			I == 0 ? Asset.MaterialOverride
+				   : (I <= static_cast<int>(Asset.AdditionalOverrides.size()) ? Asset.AdditionalOverrides[I - 1]
+																			  : FAssetReference{});
+		const auto Options = MaterialOptions();
+		if (Ref.IsNull())
+			return int32(0);
+		const auto Registry = FMapAssetLibrary::GetRegistry();
+		FString Error;
+		const auto* Data = Registry ? Registry->Resolve(Ref, Error, "Genesis.Material") : nullptr;
+		for (size_t N = 1; N < Options.size(); ++N)
+			if (Data && Options[N] == Data->PackagePath)
+				return static_cast<int32>(N);
+		return int32(0);
+	}
 	if (Property == NameProperty)
 	{
 		return FString::FromAnsi(Obj.GetObjName());
@@ -199,7 +243,7 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 	if (Property == PositionProperty)
 	{
 		const Vector3d& P = Obj.GetPosition();
-		return FPropertyVector3{ P.GetX(), P.GetY(), P.GetZ() };
+		return FPropertyVector3{P.GetX(), P.GetY(), P.GetZ()};
 	}
 	if (Property == TextureProperty)
 	{
@@ -229,6 +273,7 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 		}
 		if (Property == MeshProperty)
 		{
+			if(const auto Asset=Obj.GetMeshAsset()) return Asset->Source.Path;
 			const TArray<FString> Options = MeshOptions();
 			for (SIZE_T Index = 0; Index < Options.size(); ++Index)
 			{
@@ -299,6 +344,15 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 void FMapObjectProperties::SetValue(FName Property, const FPropertyValue& Value)
 {
 	const FString Name = Property.ToString();
+	if(Name.StartsWith("MaterialSlot:") && Obj.GetMeshAsset()) {
+		const int Slot=std::atoi(Name.ToAnsi().c_str()+13); const auto Options=MaterialOptions();
+		if(const auto* Index=std::get_if<int32>(&Value);Index && *Index>=0 && *Index<static_cast<int32>(Options.size())) {
+			FAssetReference Ref; FString Error;
+			if(*Index>0) { const auto Registry=FMapAssetLibrary::GetRegistry(); const auto* Data=Registry?Registry->Resolve({{},Options[*Index]},Error,"Genesis.Material"):nullptr; if(!Data) { UE_LOG(LogMapEditor,Warning,"{}",Error); return; } Ref=Data->GetReference(); }
+			if(!Document.SetMeshMaterial(Obj,Ref,Error,Slot)) UE_LOG(LogMapEditor,Warning,"{}",Error);
+		}
+		return;
+	}
 	if (Property == NameProperty)
 	{
 		Document.SetObjectName(Obj, ValueText(Value));
@@ -310,13 +364,13 @@ void FMapObjectProperties::SetValue(FName Property, const FPropertyValue& Value)
 		{
 			Vector3d Delta(V->X, V->Y, V->Z);
 			Delta.SubVector(Obj.GetPosition());
-			Document.MoveObjects({ &Obj }, Delta);
+			Document.MoveObjects({&Obj}, Delta);
 		}
 		return;
 	}
 	if (Property == TextureProperty)
 	{
-		Document.SetTexture({ &Obj }, ValueText(Value));
+		Document.SetTexture({&Obj}, ValueText(Value));
 		return;
 	}
 	if (Property == RotationProperty)

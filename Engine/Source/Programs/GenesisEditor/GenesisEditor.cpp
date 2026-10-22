@@ -161,7 +161,7 @@ private:
 	void Capture(const char* Name, const TSharedPtr<SWindow>& Window = nullptr);
 	FVector2 ViewPointToWindow(EMapViewType Type, const Vector3d& Point) const;
 	void Drag(const FVector2& From, const FVector2& To, EMouseButton Button = EMouseButton::Left);
-	bool PointAtText(std::string_view Text, bool bClick);
+	bool PointAtText(std::string_view Text, bool bClick, TSharedPtr<SWindow> Target = nullptr);
 	void SimulateDpiChange(float NewScale);
 	Object* FindByClass(const char* ClassName) const;
 
@@ -542,7 +542,7 @@ void FMapEditorApp::Drag(const FVector2& From, const FVector2& To, EMouseButton 
 	App->OnMouseUp(Native, Button, To);
 }
 
-bool FMapEditorApp::PointAtText(std::string_view Text, bool bClick)
+bool FMapEditorApp::PointAtText(std::string_view Text, bool bClick, TSharedPtr<SWindow> Target)
 {
 	STextBlock* Found = nullptr;
 	const TFunction<void(const SWidget&)> Find = [&](const SWidget& Widget)
@@ -556,13 +556,14 @@ bool FMapEditorApp::PointAtText(std::string_view Text, bool bClick)
 			Find(Child.Widget.Get());
 		}
 	};
-	Find(*MainWindow);
+	const auto Window = Target ? Target : MainWindow;
+	Find(*Window);
 	if (!Found)
 	{
 		UE_LOG(LogGenesisEditor, Warning, "Self-test: no \"{}\" to point at", Text);
 		return false;
 	}
-	const TSharedRef<IPlatformWindow> Native = ToSharedRef(MainWindow->GetNativeWindow());
+	const TSharedRef<IPlatformWindow> Native = ToSharedRef(Window->GetNativeWindow());
 	const FVector2 Center = Found->GetCachedGeometry().GetLayoutBoundingRect().GetCenter();
 	App->OnMouseMove(Native, Center);
 	if (bClick)
@@ -1345,36 +1346,112 @@ void FMapEditorApp::TickSelfTest()
 		bool Good=FRenderAssetCodec::EncodeTexture(Pattern,Color,Error) && FAssetPackageStore::Save(File,Color,Error);
 		Project->ResolvePackage("/Game/MaterialNormal",false,File,Error);
 		Good=Good && FRenderAssetCodec::EncodeTexture(Normals,Normal,Error) && FAssetPackageStore::Save(File,Normal,Error);
-		for(int I=0; I<5 && Good; ++I) {
-			FMaterialAsset Material; Material.Roughness=I==0?0.10f:I==1?0.85f:0.4f; Material.Metallic=I>=2?0.0f:1.0f;
-			if(I<2) { Material.BaseColor[0]=0.95f; Material.BaseColor[1]=0.67f; Material.BaseColor[2]=0.27f; }
-			else { Material.BaseColorTexture={Color.Id,"/Game/MaterialPattern"}; Material.NormalTexture={Normal.Id,"/Game/MaterialNormal"}; }
-			if(I==3) { Material.BlendMode=EMaterialBlendMode::Masked; Material.NormalTexture={}; }
-			if(I==4) { Material.BlendMode=EMaterialBlendMode::Translucent; Material.BaseColor[3]=0.4f; Material.NormalTexture={}; }
-			const auto MaterialPath=FString::Format("/Game/PreviewMaterial{}",I), MeshPath=FString::Format("/Game/PreviewSphere{}",I);
-			FAssetPackage M,S; Project->ResolvePackage(MaterialPath,false,File,Error);
-			Good=FRenderAssetCodec::EncodeMaterial(Material,M,Error) && FAssetPackageStore::Save(File,M,Error);
-			Project->ResolvePackage(MeshPath,false,File,Error);
-			Good=Good && FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Sphere"),{M.Id,MaterialPath}},S,Error) && FAssetPackageStore::Save(File,S,Error);
+		TArray<FAssetReference> PreviewMaterials;
+		for (int I = 0; I < 5 && Good; ++I)
+		{
+			FMaterialAsset Material;
+			Material.Roughness = I == 0 ? 0.10f : I == 1 ? 0.85f : 0.4f;
+			Material.Metallic = I >= 2 ? 0.0f : 1.0f;
+			if (I < 2)
+			{
+				Material.BaseColor[0] = 0.95f;
+				Material.BaseColor[1] = 0.67f;
+				Material.BaseColor[2] = 0.27f;
+			}
+			else
+			{
+				Material.BaseColorTexture = {Color.Id, "/Game/MaterialPattern"};
+				Material.NormalTexture = {Normal.Id, "/Game/MaterialNormal"};
+			}
+			if (I == 3)
+			{
+				Material.BlendMode = EMaterialBlendMode::Masked;
+				Material.NormalTexture = {};
+			}
+			if (I == 4)
+			{
+				Material.BlendMode = EMaterialBlendMode::Translucent;
+				Material.BaseColor[3] = 0.4f;
+				Material.NormalTexture = {};
+			}
+			const auto MaterialPath = FString::Format("/Game/PreviewMaterial{}", I),
+					   MeshPath = FString::Format("/Game/PreviewSphere{}", I);
+			FAssetPackage M, S;
+			Project->ResolvePackage(MaterialPath, false, File, Error);
+			Good = FRenderAssetCodec::EncodeMaterial(Material, M, Error) && FAssetPackageStore::Save(File, M, Error);
+			PreviewMaterials.push_back({M.Id, MaterialPath});
+			Project->ResolvePackage(MeshPath, false, File, Error);
+			Good = Good &&
+				   FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Sphere"), {M.Id, MaterialPath}}, S, Error) &&
+				   FAssetPackageStore::Save(File, S, Error);
 			Shell->RefreshAssetRegistry();
-			if(auto* Obj=Good?Doc->AddMeshAsset({S.Id,MeshPath},Vector3d(30000+(I-2)*180.0f,0,80),Error):nullptr) Obj->SetObjName(I==0?"Smooth Metal":I==1?"Rough Metal":I==2?"Textured Normal":I==3?"Masked Material":"Translucent Material");
-			else Good=false;
+			if (auto* Obj = Good ? Doc->AddMeshAsset({S.Id, MeshPath}, Vector3d(30000 + (I - 2) * 180.0f, 0, 80), Error)
+								 : nullptr)
+				Obj->SetObjName(I == 0	 ? "Smooth Metal"
+								: I == 1 ? "Rough Metal"
+								: I == 2 ? "Textured Normal"
+								: I == 3 ? "Masked Material"
+										 : "Translucent Material");
+			else
+				Good = false;
 		}
-		const FString Native=Doc->GetPath(); Good=Good && Shell->SaveMap(Native) && Shell->OpenMap(Native);
-		Report(Good?"PBR and normal map assets saved and reopened":"FAILED: PBR assets");
+		if (Good && PreviewMaterials.size() == 5)
+		{
+			const auto Sphere = StaticMesh::Find("Sphere");
+			auto Multi = std::make_shared<StaticMesh>("Slotted Sphere");
+			for (int I = 0; I < Sphere->GetNumVertices(); ++I)
+				Multi->AddVertex(Sphere->GetVertex(I));
+			for (const auto& T : Sphere->GetTriangles())
+			{
+				Multi->AddTriangle(T.v[0], T.v[1], T.v[2], T.norm[0], T.norm[1], T.norm[2]);
+				const int I = static_cast<int>(Multi->GetTriangles().size()) - 1;
+				Multi->SetTriangleUVs(I, T.uv);
+				const float X = (Sphere->GetVertex(T.v[0]).GetX() + Sphere->GetVertex(T.v[1]).GetX() +
+								 Sphere->GetVertex(T.v[2]).GetX()) /
+								3;
+				Multi->SetTriangleMaterial(I, X < -20 ? 0 : X > 20 ? 1 : 2);
+			}
+			Multi->Finish();
+			FStaticMeshAsset Slotted{
+				Multi, PreviewMaterials[0], {PreviewMaterials[2], PreviewMaterials[3]}, {"Metal", "Paint", "Cutout"}};
+			FAssetPackage P;
+			Project->ResolvePackage("/Game/PreviewSlots", false, File, Error);
+			Good = FRenderAssetCodec::EncodeMesh(Slotted, P, Error) && FAssetPackageStore::Save(File, P, Error);
+			Shell->RefreshAssetRegistry();
+			if (auto* Obj =
+					Good ? Doc->AddMeshAsset({P.Id, "/Game/PreviewSlots"}, Vector3d(30540, 0, 80), Error) : nullptr)
+				Obj->SetObjName("Material Slots");
+			else
+				Good = false;
+		}
+		const FString Native = Doc->GetPath();
+		Good = Good && Shell->SaveMap(Native) && Shell->OpenMap(Native);
+		Report(Good ? "PBR normal maps and material slots saved and reopened" : "FAILED: material slot assets");
 		break;
 	}
 	case 407:
-		if (FProjectContext::GetActive()) Capture("content_registry");
+		if (FProjectContext::GetActive())
+			Capture("content_registry");
 		break;
 	case 408:
-		if(const auto Browser=Shell->GetContentBrowser(0)) {
-			for(const auto& Item:Browser->GetItems()) if(Item.Type==EContentAssetType::Material) { Browser->Activate(Item); MaterialWindowOpenedAt=FPlatformTime::Seconds(); break; }
+		if (const auto Browser = Shell->GetContentBrowser(0))
+		{
+			for (const auto& Item : Browser->GetItems())
+				if (Item.Type == EContentAssetType::Material)
+				{
+					Browser->Activate(Item);
+					MaterialWindowOpenedAt = FPlatformTime::Seconds();
+					break;
+				}
 		}
 		break;
 	case 412:
 		// Let the OS finish its native window fade-in before capturing pixels.
-		if(MaterialWindowOpenedAt>0 && FPlatformTime::Seconds()-MaterialWindowOpenedAt<0.5) { --SelfTestFrame; break; }
+		if (MaterialWindowOpenedAt > 0 && FPlatformTime::Seconds() - MaterialWindowOpenedAt < 0.5)
+		{
+			--SelfTestFrame;
+			break;
+		}
 		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().View().substr(0,9)=="Material:") Capture("material_asset",Window.ToSharedPtr());
 		break;
 	case 414:
@@ -1387,23 +1464,73 @@ void FMapEditorApp::TickSelfTest()
 	case 416:
 	{
 		TArray<Object*> Samples;
-		for(auto* Obj:Doc->GetObjects()) if(!strcmp(Obj->GetObjName(),"Smooth Metal") || !strcmp(Obj->GetObjName(),"Rough Metal") || !strcmp(Obj->GetObjName(),"Textured Normal") || !strcmp(Obj->GetObjName(),"Masked Material") || !strcmp(Obj->GetObjName(),"Translucent Material")) Samples.push_back(Obj);
-		if(Samples.size()==5) { Doc->SetSelection(Samples); Commands.ExecuteAction(*Shell->Cmd.FrameSelection); Doc->ClearSelection(); }
-		Report(Samples.size()==5?"material preview scene framed":"FAILED: material preview scene");
+		for(auto* Obj:Doc->GetObjects()) if(!strcmp(Obj->GetObjName(),"Smooth Metal") || !strcmp(Obj->GetObjName(),"Rough Metal") || !strcmp(Obj->GetObjName(),"Textured Normal") || !strcmp(Obj->GetObjName(),"Masked Material") || !strcmp(Obj->GetObjName(),"Translucent Material") || !strcmp(Obj->GetObjName(),"Material Slots")) Samples.push_back(Obj);
+		if(Samples.size()==6) { Doc->SetSelection(Samples); Commands.ExecuteAction(*Shell->Cmd.FrameSelection); Doc->ClearSelection(); }
+		Report(Samples.size()==6?"material preview scene framed":"FAILED: material preview scene");
 		break;
 	}
 	case 418: if(FProjectContext::GetActive() && Shell->GetViewportLayout()) Shell->GetViewportLayout()->ToggleMaximize(1); break;
 	case 420: if(FProjectContext::GetActive()) Capture("mesh_materials"); break;
-	case 424: App->RequestQuit(); break;
-	default: break;
+	case 422:
+		for(auto* Obj:Doc->GetObjects()) if(!strcmp(Obj->GetObjName(),"Material Slots")) { Doc->SetSelection({Obj}); Commands.ExecuteAction(*Shell->Cmd.FrameSelection); break; }
+		break;
+	case 424: if(FProjectContext::GetActive()) Capture("mesh_slots"); break;
+	case 426:
+		if(const auto Registry=FMapAssetLibrary::GetRegistry()) if(const auto* Asset=Registry->FindByPath("/Game/PreviewSlots")) if(const auto Browser=Shell->GetContentBrowser(0)) {
+			FContentBrowserItem Item; Item.Name="PreviewSlots"; Item.Type=EContentAssetType::StaticMesh; Item.PackageId=Asset->Metadata.Id; Item.PackagePath=Asset->PackagePath; Item.Path=Asset->FilePath; Item.Schema=Asset->Metadata.Schema;
+			Browser->Activate(Item); MaterialWindowOpenedAt=FPlatformTime::Seconds();
+		}
+		break;
+	case 428:
+		if(MaterialWindowOpenedAt>0 && FPlatformTime::Seconds()-MaterialWindowOpenedAt<0.5) { --SelfTestFrame; break; }
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Static Mesh:")) Capture("mesh_asset_editor",Window.ToSharedPtr());
+		break;
+	case 429:
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Static Mesh:")) PointAtText("Save Mesh Asset",true,Window.ToSharedPtr());
+		break;
+	case 430:
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Static Mesh:")) Capture("mesh_asset_saved",Window.ToSharedPtr());
+		break;
+	case 432: {
+		TArray<TSharedRef<SWindow>> Close; for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Static Mesh:")) Close.push_back(Window);
+		for(const auto& Window:Close) App->RequestDestroyWindow(Window);
+		break;
+	}
+	case 434:
+		if(const auto Registry=FMapAssetLibrary::GetRegistry()) if(const auto* Asset=Registry->FindByPath("/Game/MaterialPattern")) if(const auto Browser=Shell->GetContentBrowser(0)) {
+			FContentBrowserItem Item; Item.Name="MaterialPattern"; Item.Type=EContentAssetType::Texture; Item.PackageId=Asset->Metadata.Id; Item.PackagePath=Asset->PackagePath; Item.Path=Asset->FilePath; Item.Schema=Asset->Metadata.Schema;
+			Browser->Activate(Item); MaterialWindowOpenedAt=FPlatformTime::Seconds();
+		}
+		break;
+	case 436:
+		if(MaterialWindowOpenedAt>0 && FPlatformTime::Seconds()-MaterialWindowOpenedAt<0.5) { --SelfTestFrame; break; }
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Texture:")) Capture("texture_asset_editor",Window.ToSharedPtr());
+		break;
+	case 437:
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Texture:")) PointAtText("sRGB Color Texture",true,Window.ToSharedPtr());
+		break;
+	case 438:
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Texture:")) PointAtText("Save Texture Asset",true,Window.ToSharedPtr());
+		break;
+	case 440:
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Texture:")) Capture("texture_asset_saved",Window.ToSharedPtr());
+		break;
+	case 442: {
+		TArray<TSharedRef<SWindow>> Close; for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Texture:")) Close.push_back(Window);
+		for(const auto& Window:Close) App->RequestDestroyWindow(Window); break;
+	}
+	case 446:
+		App->RequestQuit();
+		break;
+	default:
+		break;
 	}
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
 	// An exception nothing caught: say what it was before the process ends.
-	std::set_terminate([]
-	{
+	std::set_terminate([] {
 		FString What = "unknown";
 		try
 		{

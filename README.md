@@ -290,3 +290,22 @@ mask cutoff, then save and apply it to selected native mesh actors. Texture
 alpha participates in masking and translucency. Existing materials retain opaque
 rendering. Transparent triangles render after opaque geometry and foliage; their
 centroid sorting has the usual limitations for intersecting surfaces.
+
+Native static meshes support up to 64 named material slots. OBJ `usemtl` groups
+become slots; assign materials per slot in Details, or use **Apply to Slot** in
+the material editor. **Use Mesh Default** clears an actor override. Assignments
+support undo, native worlds and prefabs. Mesh schema v2 and world/prefab schema
+v3 keep older assets readable. MTL material definitions are not imported.
+
+Double-click a native mesh tile to edit its material defaults in a live preview.
+The mesh editor supports Lit/Unlit/wireframe display and staged OBJ reimport.
+Save retains the asset UUID and refreshes placed instances while preserving
+transforms and material overrides. Reimport keeps named slot indices stable;
+removed slots are retained. Unsaved drafts are discarded on close. Drag a mesh
+into the viewport or use **Place in Level** to place it.
+
+Native texture assets now have an editor with image/channel previews, sRGB
+controls, zoom/pan and staged image reimport. Save preserves the texture UUID
+and refreshes level texture dependencies. Open a texture and choose **Use for
+Selected Landscape Layer** to assign it to terrain. Preview is limited to
+2048 pixels per side; original image resolution is retained in saved assets.

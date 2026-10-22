@@ -36,6 +36,7 @@ class StaticMesh {
   struct Triangle {
     int v[3];          // vertex indices, counterclockwise seen from outside
     Vector3d norm[3];  // corner normals (unit)
+    unsigned int MaterialSlot = 0;
     float uv[3][2] = {}; // optional per-corner texture coordinates
   };
 
@@ -66,6 +67,7 @@ class StaticMesh {
   void SetTriangleUVs(int triangle, const float coords[3][2]) {
     for (int i=0; i<3; ++i) for(int j=0; j<2; ++j) triangles[triangle].uv[i][j]=coords[i][j];
   }
+  void SetTriangleMaterial(int triangle, unsigned int slot) { triangles[triangle].MaterialSlot = slot; }
   void Finish(void); // bounds
 
   //===== Bounds and hits (in the mesh's own space) =====

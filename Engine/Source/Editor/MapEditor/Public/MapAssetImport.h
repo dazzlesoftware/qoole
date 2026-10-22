@@ -6,7 +6,11 @@ class FMapAssetImport
   public:
 	// Geometry-only OBJ: triangle/convex polygon faces, normals and UVs.
 	// Materials are assigned as native assets; OBJ/MTL materials are not imported.
-	static bool ReadObj(const FString &File, FStaticMeshAsset &, FString &Error);
-	static bool ImportTexture(const FString &File, const FString &Target, FString &Error);
-	static bool ImportMesh(const FString &File, const FString &Target, FString &Error);
+	static bool ReadObj(const FString& File, FStaticMeshAsset&, FString& Error);
+	static bool ImportTexture(const FString& File, const FString& Target, FString& Error);
+	static FString GetImportSource(const FAssetPackage&, const FString& Target);
+	static void SetImportSource(FAssetPackage&, const FString& Target, const FString& File);
+	static FString GetMeshImportSource(const FAssetPackage&, const FString& Target);
+	static void SetMeshImportSource(FAssetPackage&, const FString& Target, const FString& File);
+	static bool ImportMesh(const FString& File, const FString& Target, FString& Error);
 };

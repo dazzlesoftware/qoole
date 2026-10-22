@@ -16,14 +16,41 @@ namespace
 	TArray<FAssetReference> AssetReferences(const char* Key, const J& Payload)
 	{
 		TArray<FAssetReference> Refs;
-		if(std::string_view(Key)=="Mesh" && Payload.IsObject()) for(const char* Field:{"Asset","MaterialOverride"}) {
-			FString Error; const auto Ref=FAssetReference::FromJson(Payload.Get(Field),Error); Require(Ref.has_value(),"Invalid mesh asset reference.");
-			if(!Ref->IsNull()) Refs.push_back(*Ref);
+		if (std::string_view(Key) == "Mesh" && Payload.IsObject())
+			for (const char* Field : {"Asset", "MaterialOverride"})
+			{
+				FString Error;
+				const auto Ref = FAssetReference::FromJson(Payload.Get(Field), Error);
+				Require(Ref.has_value(), "Invalid mesh asset reference.");
+				if (!Ref->IsNull())
+					Refs.push_back(*Ref);
+			}
+		if (std::string_view(Key) == "Mesh" && Payload.IsObject())
+		{
+			const auto& Values = Payload.Get("AdditionalOverrides");
+			Require(Values.IsNull() || (Values.IsArray() && Values.Num() <= 63), "Invalid material overrides.");
+			for (const auto& V : Values.GetItems())
+			{
+				FString Error;
+				const auto Ref = FAssetReference::FromJson(V, Error);
+				Require(Ref.has_value(), "Invalid slot override.");
+				if (!Ref->IsNull())
+					Refs.push_back(*Ref);
+			}
 		}
-		if(std::string_view(Key)=="Landscape") for(const auto& Layer:Payload.Get("Layers").GetItems()) {
-			const auto Token=Layer.Get("Texture").AsString();
-			if(Token.View().substr(0,6)=="asset:") { FAssetReference Ref; FString Error; Require(FMapAssetLibrary::ParseTextureToken(Token,Ref,Error),"Invalid landscape texture reference."); Refs.push_back(Ref); }
-		}
+		if (std::string_view(Key) == "Landscape")
+			for (const auto& Layer : Payload.Get("Layers").GetItems())
+			{
+				const auto Token = Layer.Get("Texture").AsString();
+				if (Token.View().substr(0, 6) == "asset:")
+				{
+					FAssetReference Ref;
+					FString Error;
+					Require(FMapAssetLibrary::ParseTextureToken(Token, Ref, Error),
+							"Invalid landscape texture reference.");
+					Refs.push_back(Ref);
+				}
+			}
 		return Refs;
 	}
 	void Capture(const J& Node, const FString& Parent, J& Actors, int Depth)

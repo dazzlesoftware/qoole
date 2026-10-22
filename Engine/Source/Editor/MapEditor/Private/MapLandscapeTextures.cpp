@@ -288,11 +288,31 @@ const FLandscapeTexture* FLandscapeTextureLibrary::Find(const std::string& Textu
 	{
 		FLandscapeImage Image;
 		FString Error;
-		bool Loaded=false;
-		if(Texture.rfind("asset:",0)==0) {
-			FTextureAsset Asset; Loaded=FMapAssetLibrary::LoadTexture(FString(Texture),Asset,Error);
-			if(Loaded) { Image.Width=Asset.Width; Image.Height=Asset.Height; Image.Pixels=std::move(Asset.Pixels); }
-		} else Loaded=LoadImageFile(FString(Texture),Image,Error);
+		bool Loaded = false;
+		if (Texture.rfind("asset:", 0) == 0)
+		{
+			FTextureAsset Asset;
+			Loaded = FMapAssetLibrary::LoadTexture(FString(Texture), Asset, Error);
+			if (Loaded)
+			{
+				Image.Width = Asset.Width;
+				Image.Height = Asset.Height;
+				Image.Pixels = std::move(Asset.Pixels);
+				// The transitional landscape layer renderer consumes display-encoded RGB.
+				if (!Asset.bSRGB)
+				{
+					uint8 Encoded[256];
+					for (int I = 0; I < 256; ++I)
+						Encoded[I] = static_cast<uint8>(
+							FMath::Clamp(FLinearColor::LinearToSRGB(I / 255.0f) * 255.0f + 0.5f, 0.0f, 255.0f));
+					for (size_t I = 0; I < Image.Pixels.size(); I += 4)
+						for (int C = 0; C < 3; ++C)
+							Image.Pixels[I + C] = Encoded[Image.Pixels[I + C]];
+				}
+			}
+		}
+		else
+			Loaded = LoadImageFile(FString(Texture), Image, Error);
 		if (!Loaded)
 		{
 			UE_LOG(LogMapEditor, Warning, "Landscape texture: {}", Error);
