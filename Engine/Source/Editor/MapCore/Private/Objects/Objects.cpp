@@ -29,10 +29,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <ctype.h>
 #include <math.h>
 #include "objects.h"
+#include "Assets/RenderAssets.h"
 
 //==================== Object ====================
 
-Object::Object(const char *className) {
+Object::Object(const char *className) : identity(FActorIdentity::New()) {
   parent = NULL;
   boundRadius = 0.0f;
   iterChildrenPtr = new IterLinkList<Object>(children);
@@ -76,6 +77,7 @@ Object::operator=(const Object &src) {
 
   // ElmNode::operator=(src);
   TransSpace::operator=(src);
+  identity = src.identity;
 
   DelObj(true);
 
@@ -84,6 +86,7 @@ Object::operator=(const Object &src) {
 
   brush = (src.brush == NULL ? NULL : new Geometry(*src.brush));
   mesh = src.mesh;
+  meshAsset = src.meshAsset;
   landscape = src.landscape;
   foliage = src.foliage;
 
@@ -111,6 +114,11 @@ Object::operator=(const Object &src) {
   return *this;
 }
 
+void Object::RegenerateIdentity(bool recursive) {
+  identity = FActorIdentity::New();
+  if (recursive) for (int i = 0; i < GetNumChildren(); ++i) GetChild(i).RegenerateIdentity(true);
+}
+
 void
 Object::DelObj(bool rmFrmPrnt, bool resetBound) {
   // Remove from parent.
@@ -127,6 +135,7 @@ Object::DelObj(bool rmFrmPrnt, bool resetBound) {
     delete brush;
   brush = NULL;
   mesh.reset();
+  meshAsset.reset();
   landscape.reset();
   foliage.reset();
 
@@ -440,9 +449,16 @@ Object::SetMesh(std::shared_ptr<const StaticMesh> meshPtr) {
 
   std::shared_ptr<const StaticMesh> rtnVal = mesh;
   mesh = std::move(meshPtr);
+  meshAsset.reset();
   landscape.reset();
   SetBoundRadius();
   return rtnVal;
+}
+
+void Object::SetMeshAsset(std::shared_ptr<const FLoadedMeshAsset> asset) {
+  check(asset && asset->DisplayMesh);
+  SetMesh(asset->DisplayMesh);
+  meshAsset = std::move(asset);
 }
 
 std::shared_ptr<const Foliage>
@@ -461,8 +477,10 @@ Object::SetLandscape(std::shared_ptr<const Landscape> landPtr) {
   std::shared_ptr<const Landscape> rtnVal = landscape;
   // A landscape's mesh is its own (GetMesh), made only when asked for; a
   // static mesh stays when there was and is no landscape.
-  if (landscape != nullptr || landPtr != nullptr)
+  if (landscape != nullptr || landPtr != nullptr) {
     mesh.reset();
+    meshAsset.reset();
+  }
   landscape = std::move(landPtr);
   SetBoundRadius();
   return rtnVal;

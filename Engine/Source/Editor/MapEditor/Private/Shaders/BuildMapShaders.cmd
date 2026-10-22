@@ -24,6 +24,7 @@ call :Compile vert VSMain || exit /b 1
 call :Compile vert VSFoliage || exit /b 1
 call :Compile frag PSTextured || exit /b 1
 call :Compile frag PSLandscape || exit /b 1
+call BuildMeshMaterialShaders.cmd "%GLSLC%" || exit /b 1
 exit /b 0
 
 rem :Compile stage entry -- MapShaders_<entry>_SPIRV.h, an array of words.

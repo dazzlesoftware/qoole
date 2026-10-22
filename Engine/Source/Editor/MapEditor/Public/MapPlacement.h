@@ -7,13 +7,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AssetRegistry.h"
 #include "Input/DragAndDrop.h"
 
 enum class EMapPlaceableKind : uint8
 {
 	Entity, // Id: the entity class ("light")
-	Prefab, // Id: the prefab's .qle file
+	Prefab, // Id: .asset or legacy .qle file; SourceAsset identifies native content
 	Mesh,   // Id: the static mesh (StaticMesh::Find): a static mesh actor
+	MeshAsset,
 };
 
 struct FMapPlaceable
@@ -23,8 +25,13 @@ struct FMapPlaceable
 	FString Label;
 	FString Category; // Place Actors: "Basic", "Lights", "Geometry"...
 	FString ToolTip;
+	FAssetReference SourceAsset; // native prefab; filenames remain for legacy items
 
-	bool operator==(const FMapPlaceable& Other) const { return Kind == Other.Kind && Id == Other.Id; }
+	bool operator==(const FMapPlaceable& Other) const
+	{
+		return Kind == Other.Kind && (!SourceAsset.Id.IsEmpty() && !Other.SourceAsset.Id.IsEmpty()
+			? SourceAsset.Id == Other.SourceAsset.Id : Id == Other.Id);
+	}
 };
 
 class FMapPlaceDragDrop final : public FDragDropOperation

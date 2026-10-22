@@ -40,8 +40,8 @@
       <AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="Private\AssetPackage.cpp" /></ItemGroup>
-  <ItemGroup><ClInclude Include="Public\AssetPackage.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\AssetPackage.cpp" /><ClCompile Include="Private\AssetRegistry.cpp" /></ItemGroup>
+  <ItemGroup><ClInclude Include="Public\AssetPackage.h" /><ClInclude Include="Public\AssetRegistry.h" /></ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Core\Core.vcxproj"><Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project></ProjectReference></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

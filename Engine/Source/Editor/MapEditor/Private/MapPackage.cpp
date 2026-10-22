@@ -2,6 +2,8 @@
 #include "MapPackage.h"
 #include "MapCoreHeaders.h"
 #include "MapEditorEnvironment.h"
+#include "MapWorldAdapter.h"
+#include "MapAssetLibrary.h"
 #include "AssetPackage.h"
 #include <bit>
 #include <cmath>
@@ -119,6 +121,7 @@ namespace
 		Require(Depth < 128, "World hierarchy is too deep.");
 		auto Out = J::MakeObject();
 		Out["Name"] = Ansi(Obj.GetObjName()); Out["Position"] = Vec(Obj.GetPosition()); Out["Scale"] = Vec(Obj.GetScale());
+		Out["Identity"] = Obj.GetIdentity().ToJson();
 		const auto& R = Obj.GetOrientation();
 		Out["Rotation"] = Vec(Vector3d(R.GetYaw(), R.GetPitch(), R.GetRoll()));
 		if (Obj.HasEntity())
@@ -157,6 +160,10 @@ namespace
 			for (const auto& Layer : L.GetLayers())
 			{
 				auto Data = J::MakeObject(); Data["Name"] = Ansi(Layer.name); Data["Texture"] = Ansi(Layer.texture); Data["Tiling"] = Layer.tiling;
+				if(Layer.texture.rfind("asset:",0)==0) {
+					FAssetReference Ref; FString Error; Require(FMapAssetLibrary::ParseTextureToken(FString(Layer.texture),Ref,Error),"Invalid native texture reference.");
+					Data["Texture"]=FString(Layer.texture); if(!Ref.Path.IsEmpty()) Package.Dependencies.push_back(Ref.Path);
+				}
 				Data["Color"] = Vec(Vector3d(Layer.r, Layer.g, Layer.b)); Data["Weights"] = AddFloats(Package, Layer.weights);
 				Land["Layers"].Push(std::move(Data));
 			}
@@ -165,10 +172,17 @@ namespace
 		}
 		else if (Obj.HasMesh())
 		{
+			if (const auto Asset=Obj.GetMeshAsset())
+			{
+				Out["Mesh"]["Asset"]=Asset->Source.ToJson(); Out["Mesh"]["MaterialOverride"]=Asset->MaterialOverride.ToJson();
+				for(const auto& Ref : {Asset->Source,Asset->MaterialOverride}) if(!Ref.Path.IsEmpty()) Package.Dependencies.push_back(Ref.Path);
+			}
+			else {
 			// Today's placed meshes come from the built-in library. Reject custom
 			// geometry rather than silently discarding it during this transition.
 			Require(StaticMesh::Find(Obj.GetMeshName()).get() == Obj.GetMeshPtr().get(), "Custom meshes need an asset serializer before saving.");
 			Out["Mesh"] = Ansi(Obj.GetMeshName());
+			}
 		}
 		if (Obj.HasFoliage())
 		{
@@ -194,6 +208,11 @@ namespace
 	{
 		Require(In.IsObject() && Depth < 128 && ++Total <= 100000, "Invalid or excessive world hierarchy.");
 		auto Obj = MakeUnique<Object>();
+		if (In.Contains("Identity"))
+		{
+			FString Error; const auto Identity = FActorIdentity::FromJson(In.Get("Identity"), Error);
+			Require(Identity.has_value(), "Invalid actor/component identity."); Obj->SetIdentity(*Identity);
+		}
 		Obj->SetObjName(Text(In.Get("Name")).c_str());
 		const Vector3d Position = ReadVec(In.Get("Position")), Scale = ReadVec(In.Get("Scale")), Rotation = ReadVec(In.Get("Rotation"));
 		Require(std::abs(Scale.GetX()) >= 0.000001f && std::abs(Scale.GetY()) >= 0.000001f && std::abs(Scale.GetZ()) >= 0.000001f, "Zero object scale.");
@@ -241,7 +260,13 @@ namespace
 		}
 		if (In.Contains("Mesh"))
 		{
+			if(In.Get("Mesh").IsObject()) {
+				FString Error; const auto Ref=FAssetReference::FromJson(In.Get("Mesh").Get("Asset"),Error), Override=FAssetReference::FromJson(In.Get("Mesh").Get("MaterialOverride"),Error);
+				Require(Ref && !Ref->IsNull() && Override,"Invalid mesh asset reference.");
+				const auto Asset=FMapAssetLibrary::LoadMesh(*Ref,*Override,Error); if(!Asset) throw std::runtime_error(Error.ToStdString()); Obj->SetMeshAsset(Asset);
+			} else {
 			auto Mesh = StaticMesh::Find(Text(In.Get("Mesh")).c_str()); Require(Mesh != nullptr, "Unknown static mesh."); Obj->SetMesh(Mesh);
+			}
 		}
 		if (In.Contains("Landscape"))
 		{
@@ -252,6 +277,10 @@ namespace
 			for (const auto& Data : Array(L.Get("Layers"), 256))
 			{
 				LandscapeLayer Layer; Layer.name = Text(Data.Get("Name")); Layer.texture = Text(Data.Get("Texture")); Layer.tiling = Number(Data.Get("Tiling"));
+				if(Data.Get("Texture").AsString().View().substr(0,6)=="asset:") {
+					Layer.texture=Data.Get("Texture").AsString().ToStdString(); FTextureAsset Texture; FString Error;
+					if(!FMapAssetLibrary::LoadTexture(FString(Layer.texture),Texture,Error)) throw std::runtime_error(Error.ToStdString());
+				}
 				Require(Layer.tiling > 0, "Invalid layer tiling.");
 				const auto& Color = Data.Get("Color"); Require(Array(Color, 3).size() == 3, "Invalid layer color.");
 				Layer.r = static_cast<unsigned char>(Integer(Color[0], 0, 255)); Layer.g = static_cast<unsigned char>(Integer(Color[1], 0, 255)); Layer.b = static_cast<unsigned char>(Integer(Color[2], 0, 255));
@@ -304,34 +333,48 @@ bool FMapPackage::Save(const FString& Path, Object& Root, FString& Id, FString& 
 		FAssetPackage Package; Package.Id = Id;
 		Package.Kind = bPrefab ? EAssetPackageKind::Asset : EAssetPackageKind::Map;
 		Package.Schema = bPrefab ? "Genesis.Prefab" : "Genesis.World";
+		Package.SchemaVersion = 2;
 		if (const auto* Set = FMapEditorEnvironment::GetActiveGameSet())
 		{
 			Package.Exports["GameSet"]["Game"] = Set->Game;
 			Package.Exports["GameSet"]["Entities"] = Set->EntFile;
 		}
-		Package.Exports["Root"] = WriteObject(Root, Package, 0);
+		FWorld World;
+		if (!FMapWorldAdapter::ToRuntime(WriteObject(Root, Package, 0), World, Error)) return false;
+		Package.Exports["Scene"] = World.ToJson();
+		TSet<std::string> Seen; std::erase_if(Package.Dependencies,[&](const FString& Path) { return !Seen.insert(Path.ToStdString()).second; });
 		if (!FAssetPackageStore::Save(Path, Package, Error)) return false;
 		Id = Package.Id; return true;
 	}
 	catch (const std::exception& Exception) { Error = FString::Format("Cannot save world: {}", Exception.what()); return false; }
 }
 
-TUniquePtr<Object> FMapPackage::Load(const FString& Path, FString& Id, FString& Error, bool bPrefab)
+TUniquePtr<Object> FMapPackage::Load(const FString& Path, FString& Id, FString& Error, bool bPrefab, const FString& ExpectedId, bool* bUpgraded)
 {
 	FAssetPackage Package;
 	if (!FAssetPackageStore::Load(Path, Package, Error)) return {};
+	if (!ExpectedId.IsEmpty() && Package.Id != ExpectedId)
+	{ Error = "The prefab identity changed since discovery; refresh content before placing it."; return {}; }
 	if (Package.Kind != (bPrefab ? EAssetPackageKind::Asset : EAssetPackageKind::Map) ||
-		Package.Schema != (bPrefab ? "Genesis.Prefab" : "Genesis.World") || Package.SchemaVersion != 1)
+		Package.Schema != (bPrefab ? "Genesis.Prefab" : "Genesis.World") || (Package.SchemaVersion != 1 && Package.SchemaVersion != 2))
 	{ Error = "Unsupported Genesis world schema."; return {}; }
 	const auto* PreviousSet = FMapEditorEnvironment::GetActiveGameSet();
 	try
 	{
+		FJsonValue LegacyRoot;
+		if (Package.SchemaVersion == 2)
+		{
+			const auto World = FWorld::FromJson(Package.Exports.Get("Scene"), Error);
+			if (!World || !FMapWorldAdapter::ToLegacy(*World, LegacyRoot, Error)) return {};
+		}
+		else LegacyRoot = Package.Exports.Get("Root");
 		const auto& SetData = Package.Exports.Get("GameSet");
 		const auto* Set = FMapEditorEnvironment::FindGameSet(SetData.Get("Game").AsString(), SetData.Get("Entities").AsString());
 		Require(Set != nullptr, "This world's entity definition set is unavailable.");
 		Require(!bPrefab || PreviousSet == Set, "Convert the prefab to this world's entity definition set before placing it.");
 		if (FMapEditorEnvironment::GetActiveGameSet() != Set && !FMapEditorEnvironment::Activate(*Set, &Error)) return {};
-		int Total = 0; auto Root = ReadObject(Package.Exports.Get("Root"), Package, 0, Total);
+		int Total = 0; auto Root = ReadObject(LegacyRoot, Package, 0, Total);
+		if (bUpgraded) *bUpgraded = Package.SchemaVersion == 1;
 		Id = Package.Id; return Root;
 	}
 	catch (const std::exception& Exception)

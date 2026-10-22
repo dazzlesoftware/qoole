@@ -2,6 +2,8 @@
 
 #include "SContentBrowser.h"
 #include "AssetPackage.h"
+#include "AssetRegistry.h"
+#include "MapAssetImport.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "MapEditorIcons.h"
@@ -16,6 +18,7 @@
 #include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/Text/SEditableText.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/SWindow.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -28,6 +31,8 @@ const char* ToString(EContentAssetType Type)
 	{
 	case EContentAssetType::Folder: return "Folder";
 	case EContentAssetType::Prefab: return "Prefab";
+	case EContentAssetType::StaticMesh: return "Static Mesh";
+	case EContentAssetType::Material: return "Material";
 	case EContentAssetType::Map: return "Map";
 	case EContentAssetType::QuakeMap: return "Quake Map";
 	case EContentAssetType::EntityList: return "Entity List";
@@ -35,6 +40,8 @@ const char* ToString(EContentAssetType Type)
 	case EContentAssetType::Font: return "Font";
 	case EContentAssetType::Text: return "Text";
 	case EContentAssetType::File: return "File";
+	case EContentAssetType::Package: return "Asset";
+	case EContentAssetType::InvalidPackage: return "Content Issue";
 	}
 	return "?";
 }
@@ -88,6 +95,7 @@ namespace
 		case EContentAssetType::EntityList: return FColor(120, 200, 110);
 		case EContentAssetType::Texture: return FColor(200, 80, 80);
 		case EContentAssetType::Font: return FColor(180, 120, 220);
+		case EContentAssetType::InvalidPackage: return FColor(240, 60, 60);
 		default: return FColor(120, 126, 138);
 		}
 	}
@@ -132,11 +140,19 @@ namespace
 				];
 			}
 			ChildSlot[SNew(SBox).WidthOverride(Width).MinDesiredHeight(118.0f)[Box]];
-			SetToolTipText(FString::Format("{}\n{}\n{}", Item.Name, ToString(Item.Type), Item.Path));
+			FString Tip = FString::Format("{}\n{}\n{}", Item.Name, ToString(Item.Type), Item.PackagePath.IsEmpty() ? Item.Path : Item.PackagePath);
+			if (!Item.Schema.IsEmpty()) Tip += "\n" + Item.Schema;
+			if (!Item.Error.IsEmpty()) Tip += "\n" + Item.Error;
+			SetToolTipText(Tip);
 		}
 
 		FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent& Event) override
 		{
+			if (Event.GetEffectingButton() == EMouseButton::Right)
+			{
+				OnSelect.ExecuteIfBound();
+				return FReply::Unhandled(); // Bubble to the browser's creation menu.
+			}
 			if (Event.GetEffectingButton() != EMouseButton::Left)
 			{
 				return FReply::Unhandled();
@@ -158,15 +174,16 @@ namespace
 		FReply OnDragDetected(const FGeometry&, const FPointerEvent&) override
 		{
 			// Prefabs drag into the viewports.
-			if (Item.Type != EContentAssetType::Prefab)
+			if (Item.Type != EContentAssetType::Prefab && Item.Type != EContentAssetType::StaticMesh)
 			{
 				return FReply::Unhandled();
 			}
 			FMapPlaceable Placeable;
-			Placeable.Kind = EMapPlaceableKind::Prefab;
+			Placeable.Kind = Item.Type == EContentAssetType::StaticMesh ? EMapPlaceableKind::MeshAsset : EMapPlaceableKind::Prefab;
 			Placeable.Id = Item.Path;
 			Placeable.Label = Item.Name;
 			Placeable.Category = "Geometry";
+			if (!Item.PackagePath.IsEmpty()) Placeable.SourceAsset = { Item.PackageId, Item.PackagePath };
 			return FReply::Handled().BeginDragDrop(FMapPlaceDragDrop::New(Placeable));
 		}
 
@@ -225,9 +242,13 @@ namespace
 void SContentBrowser::Construct(const FArguments& Args)
 {
 	Roots = Args._Roots;
+	Registry = Args._Registry;
+	SetCanTick(Registry != nullptr);
+	RegistryRevision = Registry ? Registry->GetRevision() : 0;
 	PrefabFolders = Args._PrefabFolders;
 	OnAssetActivated = Args._OnAssetActivated;
 	OnSaveAll = Args._OnSaveAll;
+	OnCreateMesh = Args._OnCreateMesh;
 	TreeRoot.Name = "All";
 	TreeRoot.bScanned = true;
 	for (const FContentBrowserRoot& Root : Roots)
@@ -263,7 +284,7 @@ void SContentBrowser::Construct(const FArguments& Args)
 					FFileDialogOptions Options;
 					Options.Title = "Import into this folder";
 					Options.InitialPath = Path;
-					Options.Filters = { { "Maps and prefabs (*.qle, *.map)", "*.qle;*.map" }, { "All files (*.*)", "*.*" } };
+					Options.Filters = { { "Import meshes and textures (*.obj, *.png, *.bmp, *.jpg, *.tif)", "*.obj;*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff" }, { "Genesis packages (*.asset, *.gmap)", "*.asset;*.gmap" }, { "Legacy maps (*.qle, *.map)", "*.qle;*.map" }, { "All files (*.*)", "*.*" } };
 					FString Source;
 					if (FServices::GetFileDialogs().OpenFile(Options, Source))
 					{
@@ -279,6 +300,12 @@ void SContentBrowser::Construct(const FArguments& Args)
 				.IsEnabled([this] { return OnSaveAll.IsBound(); })
 				.OnClicked([this] { OnSaveAll.ExecuteIfBound(); return FReply::Handled(); })
 				[IconLabel(EIcon::Save, "Save All")]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 6.0f, 0.0f))
+			[
+				SNew(SButton).ButtonStyle(&ToolButton()).IsFocusable(false).Text("Refresh")
+				.ToolTipText("Discover content changes in all mounted folders")
+				.OnClicked([this] { Refresh(); return FReply::Handled(); })
 			]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
@@ -339,6 +366,7 @@ void SContentBrowser::Construct(const FArguments& Args)
 				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 4.0f))
 				[
 					SNew(SEditableTextBox)
+					.Text([this] { return SearchText; })
 					.HintText([this] { return FString::Format("Search {}", GetDisplayPath(Path)); })
 					.OnTextChanged([this](const FString& Text) { SetSearchText(Text); })
 				]
@@ -354,7 +382,8 @@ void SContentBrowser::Construct(const FArguments& Args)
 				[
 					SNew(STextBlock).TextStyle(Small).Text([this]
 					{
-						return FString::Format("{} item{}{}", Items.size(), Items.size() == 1 ? "" : "s", SelectedPath.IsEmpty() ? "" : " (1 selected)");
+						return FString::Format("{} item{}{}{}", Items.size(), Items.size() == 1 ? "" : "s", SelectedPath.IsEmpty() ? "" : " (1 selected)",
+							Registry && !Registry->GetIssues().empty() ? FString::Format(" — {} content issues", Registry->GetIssues().size()) : FString());
 					})
 				]
 			]
@@ -369,28 +398,73 @@ SContentBrowser::~SContentBrowser()
 	bAlive = false;
 }
 
+FReply SContentBrowser::OnMouseButtonDown(const FGeometry&, const FPointerEvent& Event)
+{
+	if (Event.GetEffectingButton() != EMouseButton::Right)
+	{
+		return FReply::Unhandled();
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	const TSharedPtr<SWindow> Window = App.FindWindowForWidget(*this);
+	const FVector2 Position = Event.GetAbsolutePosition() / (Window ? Window->GetScale() : 1.0f);
+	App.PushMenu(SharedThis(this), MakeAddMenu(), Position);
+	return FReply::Handled();
+}
+
 EContentAssetType SContentBrowser::GetAssetType(const FString& FilePath) const
 {
+	return DescribeItem(FilePath).Type;
+}
+
+FContentBrowserItem SContentBrowser::DescribeItem(const FString& FilePath) const
+{
+	FContentBrowserItem Item;
+	Item.Path = FilePath;
+	Item.Name = FromPath(ToPath(FilePath).stem());
 	const FString Extension = FromPath(ToPath(FilePath).extension()).ToLower();
-	if (Extension == ".gmap") return EContentAssetType::Map;
-	if (Extension == ".asset") return EContentAssetType::Prefab;
-	if (Extension == ".qle")
+	if (Extension == ".gmap" || Extension == ".asset")
 	{
-		for (const FString& Folder : PrefabFolders)
+		FAssetPackageMetadata Metadata;
+		if (const auto* Data = Registry ? Registry->FindByFile(FilePath) : nullptr)
 		{
-			if (IsUnder(FilePath, Folder))
-			{
-				return EContentAssetType::Prefab;
-			}
+			Metadata = Data->Metadata;
+			Item.PackagePath = Data->PackagePath;
+			Item.Error = Registry->GetConflict(*Data);
 		}
-		return EContentAssetType::Map;
+		else FAssetPackageStore::ReadMetadata(FilePath, Metadata, Item.Error);
+		Item.PackageId = Metadata.Id;
+		Item.Schema = Metadata.Schema;
+		if (!Item.Error.IsEmpty()) Item.Type = EContentAssetType::InvalidPackage;
+		else if (Metadata.Schema == "Genesis.World" && (Metadata.SchemaVersion == 1 || Metadata.SchemaVersion == 2) && Metadata.Kind == EAssetPackageKind::Map) Item.Type = EContentAssetType::Map;
+		else if (Metadata.Schema == "Genesis.Prefab" && (Metadata.SchemaVersion == 1 || Metadata.SchemaVersion == 2) && Metadata.Kind == EAssetPackageKind::Asset) Item.Type = EContentAssetType::Prefab;
+		else if (Metadata.Kind == EAssetPackageKind::Asset && Metadata.SchemaVersion == 1 && Metadata.Schema == "Genesis.StaticMesh") Item.Type = EContentAssetType::StaticMesh;
+		else if (Metadata.Kind == EAssetPackageKind::Asset && Metadata.SchemaVersion == 1 && Metadata.Schema == "Genesis.Texture2D") Item.Type = EContentAssetType::Texture;
+		else if (Metadata.Kind == EAssetPackageKind::Asset && (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) && Metadata.Schema == "Genesis.Material") Item.Type = EContentAssetType::Material;
+		else Item.Type = EContentAssetType::Package;
+		return Item;
 	}
-	if (Extension == ".map") return EContentAssetType::QuakeMap;
-	if (Extension == ".ent" || Extension == ".def" || Extension == ".fgd") return EContentAssetType::EntityList;
-	if (Extension == ".png" || Extension == ".tga" || Extension == ".bmp" || Extension == ".jpg" || Extension == ".dds" || Extension == ".wal") return EContentAssetType::Texture;
-	if (Extension == ".ttf" || Extension == ".otf") return EContentAssetType::Font;
-	if (Extension == ".txt" || Extension == ".md" || Extension == ".json" || Extension == ".ini") return EContentAssetType::Text;
-	return EContentAssetType::File;
+	const auto LooseType = [&]() -> EContentAssetType
+	{
+		if (Extension == ".qle")
+		{
+			for (const FString& Folder : PrefabFolders)
+			{
+				if (IsUnder(FilePath, Folder))
+				{
+					return EContentAssetType::Prefab;
+				}
+			}
+			return EContentAssetType::Map;
+		}
+		if (Extension == ".map") return EContentAssetType::QuakeMap;
+		if (Extension == ".ent" || Extension == ".def" || Extension == ".fgd") return EContentAssetType::EntityList;
+		if (Extension == ".png" || Extension == ".tga" || Extension == ".bmp" || Extension == ".jpg" || Extension == ".dds" || Extension == ".wal") return EContentAssetType::Texture;
+		if (Extension == ".ttf" || Extension == ".otf") return EContentAssetType::Font;
+		if (Extension == ".txt" || Extension == ".md" || Extension == ".json" || Extension == ".ini") return EContentAssetType::Text;
+		return EContentAssetType::File;
+	};
+	Item.Type = LooseType();
+	return Item;
 }
 
 void SContentBrowser::ScanChildren(FFolderNode& Node)
@@ -502,9 +576,9 @@ void SContentBrowser::ScanItems()
 		const bool bFolder = Entry.is_directory(Error);
 		const auto Ext = Entry.path().extension();
 		if (!bFolder && (Ext == L".gexp" || Ext == L".gbulk" || Ext == L".tmp")) return;
-		FContentBrowserItem Item;
+		FContentBrowserItem Item = bFolder ? FContentBrowserItem() : DescribeItem(FromPath(Entry.path()));
 		Item.Path = FromPath(Entry.path());
-		Item.Type = bFolder ? EContentAssetType::Folder : GetAssetType(Item.Path);
+		if (bFolder) Item.Type = EContentAssetType::Folder;
 		Item.Name = FromPath(bFolder ? Entry.path().filename() : Entry.path().stem());
 		if (!Needle.IsEmpty() && !Item.Name.ToLower().Contains(Needle.View()))
 		{
@@ -585,8 +659,18 @@ void SContentBrowser::SetSearchText(const FString& Text)
 	QueueRebuild();
 }
 
-void SContentBrowser::Refresh()
+void SContentBrowser::Refresh(bool bRescanRegistry)
 {
+	if (Registry && bRescanRegistry)
+	{
+		Registry->Scan(); RegistryRevision = Registry->GetRevision();
+		for (size_t I = 0; I < Registry->GetIssues().size() && I < 20; ++I)
+		{
+			const auto& Issue = Registry->GetIssues()[I];
+			UE_LOG(LogMapEditor, Warning, "Content issue in {}: {}", Issue.FilePath, Issue.Message);
+		}
+	}
+	if (Registry) RegistryRevision = Registry->GetRevision();
 	if (FFolderNode* Node = FindNode(Path))
 	{
 		Node->Children.clear();
@@ -596,12 +680,28 @@ void SContentBrowser::Refresh()
 	QueueRebuild();
 }
 
+void SContentBrowser::Tick(const FGeometry&, double, float)
+{
+	if (Registry && RegistryRevision != Registry->GetRevision())
+	{
+		RegistryRevision = Registry->GetRevision();
+		// Another browser or a save refreshed the shared registry. Rebuild the
+		// view on the next frame without recursively rescanning mounted content.
+		Refresh(false);
+	}
+}
+
 void SContentBrowser::Activate(const FContentBrowserItem& Item)
 {
 	if (Item.Type == EContentAssetType::Folder)
 	{
 		SearchText.Empty();
 		SetPath(Item.Path);
+		return;
+	}
+	if (Item.Type == EContentAssetType::InvalidPackage)
+	{
+		UE_LOG(LogMapEditor, Warning, "Cannot open {}: {}", Item.Path, Item.Error);
 		return;
 	}
 	OnAssetActivated.ExecuteIfBound(Item);
@@ -636,14 +736,22 @@ bool SContentBrowser::ImportFile(const FString& Source)
 	}
 	std::error_code Error;
 	const fs::path From = ToPath(Source);
-	fs::path To = ToPath(Path) / From.filename();
+	const FString Extension = FromPath(From.extension()).ToLower();
+	const bool bImage = Extension == ".png" || Extension == ".bmp" || Extension == ".jpg" || Extension == ".jpeg" || Extension == ".tif" || Extension == ".tiff";
+	const bool bMesh = Extension == ".obj";
+	const auto TargetExtension = bImage || bMesh ? fs::path(L".asset") : From.extension();
+	fs::path To = ToPath(Path) / (From.stem().wstring() + TargetExtension.wstring());
 	for (int32 Number = 2; fs::exists(To, Error) && Number < 1000; ++Number)
 	{
-		To = ToPath(Path) / (From.stem().wstring() + std::to_wstring(Number) + From.extension().wstring());
+		To = ToPath(Path) / (From.stem().wstring() + std::to_wstring(Number) + TargetExtension.wstring());
 	}
+	if(fs::exists(To,Error)) { UE_LOG(LogMapEditor,Warning,"No free import filename in {}",Path); return false; }
 	bool bCopied = false;
-	const FString Extension = FromPath(From.extension()).ToLower();
-	if (Extension == ".gmap" || Extension == ".asset")
+	if(bImage || bMesh) {
+		FString ImportError; bCopied = bImage ? FMapAssetImport::ImportTexture(Source,FromPath(To),ImportError) : FMapAssetImport::ImportMesh(Source,FromPath(To),ImportError);
+		if(!bCopied) UE_LOG(LogMapEditor,Warning,"{}",ImportError);
+	}
+	else if (Extension == ".gmap" || Extension == ".asset")
 	{
 		FAssetPackage Package;
 		FString PackageError;
@@ -673,7 +781,35 @@ TSharedRef<SWidget> SContentBrowser::MakeAddMenu()
 		[
 			SNew(SMenuEntry).Text("New Folder").ToolTipText("Make a folder here").IsEnabled([this] { return !Path.IsEmpty(); })
 			.OnSelected([this] { CreateFolder(); })
-		];
+		]
+		+ SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry).Text("Material").IsEnabled([this] { return !Path.IsEmpty(); }).OnSelected([this] { CreateMaterial(); })]
+		+ SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry).Text("Static Mesh from Selection").IsEnabled([this] { return !Path.IsEmpty() && OnCreateMesh.IsBound(); }).OnSelected([this] { CreateMeshFromSelection(); })];
+}
+
+FString SContentBrowser::CreateMaterial()
+{
+	if(Path.IsEmpty()) return {};
+	for(int Number=1; Number<1000; ++Number) {
+		const auto File=FromPath(ToPath(Path)/(L"Material"+(Number==1?std::wstring():std::to_wstring(Number))+L".asset"));
+		if(fs::exists(ToPath(File))) continue;
+		FMaterialAsset Material;
+		for(const auto& Item:Items) if(Item.Path==SelectedPath && Item.Schema=="Genesis.Texture2D" && !Item.PackagePath.IsEmpty()) Material.BaseColorTexture={Item.PackageId,Item.PackagePath};
+		FAssetPackage P; FString Error;
+		if(!FRenderAssetCodec::EncodeMaterial(Material,P,Error) || !FAssetPackageStore::Save(File,P,Error)) { UE_LOG(LogMapEditor,Warning,"{}",Error); return {}; }
+		Refresh(); SelectedPath=File; return File;
+	}
+	return {};
+}
+FString SContentBrowser::CreateMeshFromSelection()
+{
+	if(Path.IsEmpty() || !OnCreateMesh.IsBound()) return {};
+	for(int Number=1; Number<1000; ++Number) {
+		const auto File=FromPath(ToPath(Path)/(L"StaticMesh"+(Number==1?std::wstring():std::to_wstring(Number))+L".asset"));
+		if(fs::exists(ToPath(File))) continue;
+		FString Error; if(!OnCreateMesh.Execute(File,Error)) { UE_LOG(LogMapEditor,Warning,"{}",Error); return {}; }
+		Refresh(); SelectedPath=File; return File;
+	}
+	return {};
 }
 
 void SContentBrowser::QueueRebuild()

@@ -1,7 +1,9 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapEditorShell.h"
+#include "MapAssetLibrary.h"
 #include "ProjectDescriptor.h"
+#include "AssetRegistry.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/MultiBox/MenuRegistry.h"
@@ -103,6 +105,15 @@ FMapEditorShell::FMapEditorShell(FHost InHost)
 		FMapEditorEnvironment::SetUserPrefabFolder(FString::FromWide(Folder.wstring()));
 	}
 	RegisterCommands();
+	AssetRegistry = std::make_shared<FAssetRegistry>();
+	FMapAssetLibrary::SetRegistry(AssetRegistry);
+	TArray<FAssetMount> Mounts;
+	if (const auto* Project = FProjectContext::GetActive()) Mounts.push_back({ "/Game", Project->GetContentDir() });
+	Mounts.push_back({ "/Engine", FPaths::FindContentDir() });
+	if (!FMapEditorEnvironment::GetUserPrefabFolder().IsEmpty()) Mounts.push_back({ "/UserPrefabs", FMapEditorEnvironment::GetUserPrefabFolder() });
+	FString RegistryError;
+	if (!AssetRegistry->SetMounts(std::move(Mounts), RegistryError)) Log(RegistryError);
+	else RefreshAssetRegistry();
 	RegisterMenus();
 	RegisterTabs();
 }
@@ -369,7 +380,19 @@ bool FMapEditorShell::SaveMap(const FString& Path)
 	Log(FString::Format("Saved {}", Path));
 	FServices::GetConfig().SetString("MapEditor", "LastFolder", FString::FromWide(std::filesystem::path(Path.ToWide()).parent_path().wstring()));
 	FServices::GetConfig().SetString("MapEditor", "LastMap", Path);
+	RefreshAssetRegistry();
 	return true;
+}
+
+void FMapEditorShell::RefreshAssetRegistry()
+{
+	if (!AssetRegistry) return;
+	AssetRegistry->Scan();
+	for (size_t I = 0; I < AssetRegistry->GetIssues().size() && I < 20; ++I)
+	{
+		const auto& Issue = AssetRegistry->GetIssues()[I];
+		UE_LOG(LogGenesisEditor, Warning, "Content issue in {}: {}", Issue.FilePath, Issue.Message);
+	}
 }
 
 bool FMapEditorShell::ExportMap(const FString& Path)
@@ -463,14 +486,22 @@ Vector3d FMapEditorShell::SelectionCenter() const
 	return Min.AddVector(Max).MultVector(0.5f);
 }
 
-Object* FMapEditorShell::AddPrefab(const FString& Path)
+Object* FMapEditorShell::AddPrefab(const FString& Path, const FString& ExpectedId)
 {
 	if (!Document)
 	{
 		return nullptr;
 	}
 	FString Error;
-	Object* Added = Document->AddPrefab(Path, SnappedPlacement(), &Error);
+	FString Identity = ExpectedId;
+	if (Identity.IsEmpty())
+		if (const auto* Data = AssetRegistry ? AssetRegistry->FindByFile(Path) : nullptr)
+		{
+			Error = AssetRegistry->GetConflict(*Data);
+			if (!Error.IsEmpty()) { Log(Error); return nullptr; }
+			Identity = Data->Metadata.Id;
+		}
+	Object* Added = Document->AddPrefab(Path, SnappedPlacement(), &Error, Identity);
 	if (!Added)
 	{
 		Log(Error);
@@ -587,6 +618,11 @@ TArray<FMapPlaceable> FMapEditorShell::GetPlaceables() const
 		FMapPlaceable Item;
 		Item.Kind = EMapPlaceableKind::Prefab;
 		Item.Id = Prefab.Path;
+		if (const auto* Data = AssetRegistry ? AssetRegistry->FindByFile(Prefab.Path) : nullptr)
+		{
+			if (!AssetRegistry->GetConflict(*Data).IsEmpty()) continue;
+			Item.SourceAsset = Data->GetReference();
+		}
 		Item.Category = "Geometry";
 		Item.Label = Prefab.bUser ? FString::Format("{} (yours)", Prefab.Name) : Prefab.Name;
 		Item.ToolTip = FString::Format("Brush prefab {}", Prefab.Path);
@@ -622,10 +658,24 @@ Object* FMapEditorShell::Place(const FMapPlaceable& Item, const Vector3d& Point,
 		}
 		Added = Document->AddMesh(Item.Id, At);
 	}
+	else if(Item.Kind == EMapPlaceableKind::MeshAsset)
+	{
+		FString Error; Added=Document->AddMeshAsset(Item.SourceAsset,At,Error);
+		if(!Added) Log(Error);
+		else if(bOnGround) { Vector3d Min,Max; Added->GetMesh().GetBounds(Min,Max); At.SetZ(At.GetZ()-Min.GetZ()); Added->SetPosition(At); }
+	}
 	else
 	{
 		FString Error;
-		Added = Document->AddPrefab(Item.Id, At, &Error);
+		FString Path = Item.Id, ExpectedId;
+		if (!Item.SourceAsset.IsNull())
+		{
+			const auto* Data = AssetRegistry ? AssetRegistry->Resolve(Item.SourceAsset, Error, "Genesis.Prefab") : nullptr;
+			if (!Data) { Log(Error.IsEmpty() ? FString("The asset registry is unavailable.") : Error); return nullptr; }
+			Path = Data->FilePath;
+			ExpectedId = Data->Metadata.Id;
+		}
+		Added = Document->AddPrefab(Path, At, &Error, ExpectedId);
 		if (!Added)
 		{
 			Log(Error);
@@ -671,6 +721,7 @@ void FMapEditorShell::SaveSelectionAsPrefab()
 		return;
 	}
 	FMapEditorEnvironment::RefreshPrefabs();
+	RefreshAssetRegistry();
 	RefreshPlaceables();
 	Log(FString::Format("Saved prefab {}", Path));
 }
@@ -845,6 +896,7 @@ void FMapEditorShell::RegisterCommands()
 		for (const TUniquePtr<Object>& Obj : Clipboard)
 		{
 			Object* Copy = new Object(*Obj);
+			Copy->RegenerateIdentity();
 			Vector3d Position;
 			Copy->GetPosition(Position).AddVector(Vector3d(Step, Step, 0.0f));
 			Copy->SetPosition(Position);

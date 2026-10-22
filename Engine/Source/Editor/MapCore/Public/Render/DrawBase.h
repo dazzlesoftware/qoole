@@ -137,6 +137,8 @@ public:
 	// GPU returns true; otherwise View draws the copy's triangles.
 	virtual void ZBufInstanceLight(const Vector3d &light, const Vector3d &up, float winWidth) { (void)light; (void)up; (void)winWidth; }
 	virtual bool ZBufMeshInstance(const StaticMesh &mesh, const Matrix44 &toView) { (void)mesh; (void)toView; return false; }
+	// Native materials can retain view-space positions for GPU clipping/shading.
+	virtual bool ZBufMaterialMesh(const Object &object, const Matrix44 &toView) { (void)object; (void)toView; return false; }
 
 	void ZBufTextured(bool textured) { zbufTextured = textured; }
 	bool ZBufSetup(Object *obj, FaceTex *faceTex, Vector3d norm);

@@ -28,17 +28,24 @@ adapter. Compatibility include headers remain at the old MapCore locations.
 `RuntimeDataCheck.exe` links just runtime libraries and exercises terrain,
 paint data, raycasts, spline meshes and foliage without initializing MapCore.
 
-`Editor/MapEditor/MapPackage` is a transitional serializer for the existing
-model, not the future engine world implementation. Its exports explicitly
-describe object hierarchy, TRS, brushes with texture settings, entity keys and
+`Runtime/Engine` now also owns the world/actor/component model and persistent
+scene identities. Native world/prefab schema version 2 stores that runtime scene.
+`Editor/MapEditor/MapPackage` uses a transitional adapter for the existing editor
+model. Component payloads explicitly describe brushes with texture settings, entity keys and
 flags, built-in mesh references, landscapes, paint layers, foliage types and
 instances, splines, junctions, and tangents. It does not call the QLE writer or
-embed QLE text. Custom non-library meshes are rejected rather than discarded.
+embed QLE text. Custom meshes can be stored in native mesh assets; unbacked
+custom mesh pointers are still rejected rather than discarded during map saving.
 The legacy entity definition set is recorded while that dependency remains.
 
 Each package has a UUID preserved by normal saves. Save As and Content Browser
-imports allocate a new UUID. Actor-level stable identities and reference fixup
-are still needed before externally referenced actors or streaming are supported.
+imports allocate a new UUID. Scene-local actor/component identities and subtree
+reference fixup are implemented; editor-authored references, external-world
+references and streaming are still pending. See [WorldModel.md](WorldModel.md).
+Updating an existing prefab asset also retains its identity. The runtime
+[asset registry](AssetRegistry.md) now discovers mounted packages by metadata,
+resolves UUID/path references and diagnoses duplicate identities. All four
+Content Browsers share it; native prefab placement verifies the resolved UUID.
 
 Each save writes generation-qualified sidecars, e.g.:
 
@@ -99,8 +106,9 @@ Save/Save As default to `.gmap`; Save Selection as Prefab defaults to `.asset`.
 Opening `.qle` or `.map` chooses a new `.gmap` destination and leaves the source
 intact. Legacy writers remain available to existing tests and compatibility
 code during migration. Built-in brush templates still come from old QLE files.
-Layer texture paths and built-in mesh names still use their existing resolution;
-asset registry references and portable texture import are pending.
+Existing layer image paths and built-in mesh names retain their resolution.
+Native texture import, mesh asset references and material overrides are available;
+see [RenderAssets.md](RenderAssets.md) for the workflow and rendering limits.
 
 ## Remaining landscape work
 
@@ -155,11 +163,16 @@ selection and rendering; its replacement must separate those responsibilities.
 Migration order:
 
 1. Native package/project foundation (implemented here).
-2. Stable asset/actor/component IDs; registry and reference resolution; portable
-   mesh, texture and material asset serializers; project browser.
+2. Package identities, registry and identity-reference resolution (implemented).
+   Runtime actor/component IDs and explicit scene references are implemented;
+   portable mesh/texture/material codecs and references are implemented (see
+   [RenderAssets.md](RenderAssets.md)). Editor-authored actor references,
+   transparency/material slots and a project browser are pending. Opaque mesh
+   textures, normal maps and metallic/roughness preview shading are implemented.
 3. Runtime math/mesh and landscape/foliage data extraction (implemented), then
-   Engine world/actor/component model with adapters; dual-model round-trip
-   tests, then migrate editing operations and undo.
+   Engine world/actor/component model, native schema version 2 adapter and
+   identity round-trip tests (implemented; see [WorldModel.md](WorldModel.md)).
+   Editing operations and undo still use the legacy object model and need migration.
 4. Move runtime rendering out of MapCore; implement the remaining landscape
    features against the new data model.
 5. Move QLE/MAP conversion and game definitions into LegacyQoole. Remove native

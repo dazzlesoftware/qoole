@@ -28,6 +28,8 @@
 #include "Framework/Application/SlateApplication.h"
 #include "CoreMinimal.h"
 #include "ProjectDescriptor.h"
+#include "AssetRegistry.h"
+#include "MapAssetLibrary.h"
 #include "GenericPlatform/PlatformDialogs.h"
 #include "MapCoreHeaders.h"
 #include "MapEditorShell.h"
@@ -52,6 +54,7 @@
 #pragma comment(lib, "dwmapi.lib")
 
 #include <cstdio>
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -596,6 +599,7 @@ Object* FMapEditorApp::FindByClass(const char* ClassName) const
 
 void FMapEditorApp::TickSelfTest()
 {
+	static double MaterialWindowOpenedAt=0;
 	const int32 Frame = SelfTestFrame++;
 	FMapDocument* Doc = Shell->GetDocument();
 	const auto Prefab = [](const char* Name) -> FString
@@ -1262,13 +1266,135 @@ void FMapEditorApp::TickSelfTest()
 	}
 	case 403:
 	{
-		const FString Native = SelfTestDir + "landscape_native.gmap";
+		const auto RootId = Shell->GetDocument()->GetRoot().GetIdentity().Actor;
+		TArray<FString> ActorIds;
+		for (const auto* Obj : Shell->GetDocument()->GetObjects()) ActorIds.push_back(Obj->GetIdentity().Actor);
+		FString Native = SelfTestDir + "landscape_native.gmap";
+		if (const auto* Project = FProjectContext::GetActive())
+		{
+			FString Error;
+			Project->ResolvePackage("/Game/Maps/RegistryWorld", true, Native, Error);
+		}
 		const bool Saved = Shell->SaveMap(Native);
 		const bool Opened = Saved && Shell->OpenMap(Native);
 		Report(Opened ? "native world package saved and reopened" : "FAILED: native world package");
+		TArray<FString> ReloadedIds;
+		for (const auto* Obj : Shell->GetDocument()->GetObjects()) ReloadedIds.push_back(Obj->GetIdentity().Actor);
+		Report(Opened && RootId == Shell->GetDocument()->GetRoot().GetIdentity().Actor && ActorIds == ReloadedIds
+			? "runtime scene actor identities preserved" : "FAILED: runtime scene actor identities");
 		break;
 	}
-	case 404: App->RequestQuit(); break;
+	case 404:
+	{
+		const auto* Project = FProjectContext::GetActive();
+		if (!Project) break;
+		FString File, Error;
+		Project->ResolvePackage("/Game/Prefabs/RegistryPrefab", false, File, Error);
+		Object* Marker = Doc->AddMesh("Cube", Vector3d());
+		const bool Saved = Marker && Doc->SavePrefab({ Marker }, File, Error);
+		if (Marker) Doc->Undo();
+		Shell->RefreshAssetRegistry();
+		const auto* Registry = Shell->GetAssetRegistry();
+		const auto* Asset = Registry->FindByPath("/Game/Prefabs/RegistryPrefab");
+		FAssetPackage Loaded;
+		const bool Resolved = Asset && Registry->Load(Asset->GetReference(), Loaded, Error, "Genesis.Prefab");
+		Report(Saved && Resolved ? "asset registry discovered and resolved prefab" : "FAILED: asset registry prefab");
+		Shell->GetTabManager().TryInvokeTab("ContentBrowserTab1");
+		if (const auto Browser = Shell->GetContentBrowser(0))
+		{
+			Browser->SetPath(Project->GetContentDir());
+			Browser->SetSearchText("Registry");
+		}
+		break;
+	}
+	case 405:
+	{
+		const auto* Project=FProjectContext::GetActive(); if(!Project) break;
+		FString TextureFile,MaterialFile,MeshFile,Error;
+		Project->ResolvePackage("/Game/RegistryTexture",false,TextureFile,Error);
+		Project->ResolvePackage("/Game/RegistryMaterial",false,MaterialFile,Error);
+		Project->ResolvePackage("/Game/RegistryMesh",false,MeshFile,Error);
+		FTextureAsset Texture; Texture.Width=Texture.Height=2; Texture.Pixels={80,140,40,255,120,160,60,255,60,100,30,255,180,170,90,255}; FAssetPackage T,M,S;
+		bool Good=FRenderAssetCodec::EncodeTexture(Texture,T,Error) && FAssetPackageStore::Save(TextureFile,T,Error);
+		FMaterialAsset Material; Material.BaseColor[0]=0.5f; Material.BaseColor[1]=0.8f; Material.BaseColorTexture={T.Id,"/Game/RegistryTexture"};
+		Good=Good && FRenderAssetCodec::EncodeMaterial(Material,M,Error) && FAssetPackageStore::Save(MaterialFile,M,Error);
+		Good=Good && FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Cube"),{M.Id,"/Game/RegistryMaterial"}},S,Error) && FAssetPackageStore::Save(MeshFile,S,Error);
+		Shell->RefreshAssetRegistry();
+		Object* Mesh=Good?Doc->AddMeshAsset({S.Id,"/Game/RegistryMesh"},Vector3d(0,0,300),Error):nullptr;
+		Good=Good && Mesh && Mesh->GetMeshAsset()->Texture.has_value();
+		if(auto* Terrain=Shell->GetLandscapeMode().GetTargetLandscape()) Good=Good && Shell->GetLandscapeMode().SetLayerTexture(*Terrain,0,FMapAssetLibrary::TextureToken({T.Id,"/Game/RegistryTexture"}));
+		const FString NativePath=Doc->GetPath();
+		if(Good) Good=Shell->SaveMap(NativePath) && Shell->OpenMap(NativePath);
+		if(!Good) UE_LOG(LogGenesisEditor,Error,"{}",Error);
+		Report(Good?"native mesh material texture dependencies saved and reopened":"FAILED: native render assets");
+		break;
+	}
+	case 406:
+	{
+		const auto* Project=FProjectContext::GetActive(); if(!Project) break;
+		FString Error, File; FTextureAsset Pattern, Normals;
+		Pattern.Width=Pattern.Height=Normals.Width=Normals.Height=64;
+		Pattern.Pixels.resize(64*64*4); Normals.Pixels.resize(64*64*4); Normals.bSRGB=false;
+		for(int Y=0; Y<64; ++Y) for(int X=0; X<64; ++X) {
+			const size_t I=(Y*64+X)*4; const bool Checker=((X/8+Y/8)&1)!=0;
+			Pattern.Pixels[I]=Checker?210:35; Pattern.Pixels[I+1]=Checker?180:65; Pattern.Pixels[I+2]=Checker?75:155; Pattern.Pixels[I+3]=Checker?255:0;
+			const float NX=0.55f*std::sin(X*6.2831853f/16), NY=0.35f*std::cos(Y*6.2831853f/16), NZ=std::sqrt(1-NX*NX-NY*NY);
+			Normals.Pixels[I]=static_cast<uint8>((NX*0.5f+0.5f)*255); Normals.Pixels[I+1]=static_cast<uint8>((NY*0.5f+0.5f)*255); Normals.Pixels[I+2]=static_cast<uint8>((NZ*0.5f+0.5f)*255); Normals.Pixels[I+3]=255;
+		}
+		FAssetPackage Color,Normal; Project->ResolvePackage("/Game/MaterialPattern",false,File,Error);
+		bool Good=FRenderAssetCodec::EncodeTexture(Pattern,Color,Error) && FAssetPackageStore::Save(File,Color,Error);
+		Project->ResolvePackage("/Game/MaterialNormal",false,File,Error);
+		Good=Good && FRenderAssetCodec::EncodeTexture(Normals,Normal,Error) && FAssetPackageStore::Save(File,Normal,Error);
+		for(int I=0; I<5 && Good; ++I) {
+			FMaterialAsset Material; Material.Roughness=I==0?0.10f:I==1?0.85f:0.4f; Material.Metallic=I>=2?0.0f:1.0f;
+			if(I<2) { Material.BaseColor[0]=0.95f; Material.BaseColor[1]=0.67f; Material.BaseColor[2]=0.27f; }
+			else { Material.BaseColorTexture={Color.Id,"/Game/MaterialPattern"}; Material.NormalTexture={Normal.Id,"/Game/MaterialNormal"}; }
+			if(I==3) { Material.BlendMode=EMaterialBlendMode::Masked; Material.NormalTexture={}; }
+			if(I==4) { Material.BlendMode=EMaterialBlendMode::Translucent; Material.BaseColor[3]=0.4f; Material.NormalTexture={}; }
+			const auto MaterialPath=FString::Format("/Game/PreviewMaterial{}",I), MeshPath=FString::Format("/Game/PreviewSphere{}",I);
+			FAssetPackage M,S; Project->ResolvePackage(MaterialPath,false,File,Error);
+			Good=FRenderAssetCodec::EncodeMaterial(Material,M,Error) && FAssetPackageStore::Save(File,M,Error);
+			Project->ResolvePackage(MeshPath,false,File,Error);
+			Good=Good && FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Sphere"),{M.Id,MaterialPath}},S,Error) && FAssetPackageStore::Save(File,S,Error);
+			Shell->RefreshAssetRegistry();
+			if(auto* Obj=Good?Doc->AddMeshAsset({S.Id,MeshPath},Vector3d(30000+(I-2)*180.0f,0,80),Error):nullptr) Obj->SetObjName(I==0?"Smooth Metal":I==1?"Rough Metal":I==2?"Textured Normal":I==3?"Masked Material":"Translucent Material");
+			else Good=false;
+		}
+		const FString Native=Doc->GetPath(); Good=Good && Shell->SaveMap(Native) && Shell->OpenMap(Native);
+		Report(Good?"PBR and normal map assets saved and reopened":"FAILED: PBR assets");
+		break;
+	}
+	case 407:
+		if (FProjectContext::GetActive()) Capture("content_registry");
+		break;
+	case 408:
+		if(const auto Browser=Shell->GetContentBrowser(0)) {
+			for(const auto& Item:Browser->GetItems()) if(Item.Type==EContentAssetType::Material) { Browser->Activate(Item); MaterialWindowOpenedAt=FPlatformTime::Seconds(); break; }
+		}
+		break;
+	case 412:
+		// Let the OS finish its native window fade-in before capturing pixels.
+		if(MaterialWindowOpenedAt>0 && FPlatformTime::Seconds()-MaterialWindowOpenedAt<0.5) { --SelfTestFrame; break; }
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().View().substr(0,9)=="Material:") Capture("material_asset",Window.ToSharedPtr());
+		break;
+	case 414:
+	{
+		TArray<TSharedRef<SWindow>> Close;
+		for(const auto& Window:App->GetWindows()) if(Window->GetTitle().View().substr(0,9)=="Material:") Close.push_back(Window);
+		for(const auto& Window:Close) App->RequestDestroyWindow(Window);
+		break;
+	}
+	case 416:
+	{
+		TArray<Object*> Samples;
+		for(auto* Obj:Doc->GetObjects()) if(!strcmp(Obj->GetObjName(),"Smooth Metal") || !strcmp(Obj->GetObjName(),"Rough Metal") || !strcmp(Obj->GetObjName(),"Textured Normal") || !strcmp(Obj->GetObjName(),"Masked Material") || !strcmp(Obj->GetObjName(),"Translucent Material")) Samples.push_back(Obj);
+		if(Samples.size()==5) { Doc->SetSelection(Samples); Commands.ExecuteAction(*Shell->Cmd.FrameSelection); Doc->ClearSelection(); }
+		Report(Samples.size()==5?"material preview scene framed":"FAILED: material preview scene");
+		break;
+	}
+	case 418: if(FProjectContext::GetActive() && Shell->GetViewportLayout()) Shell->GetViewportLayout()->ToggleMaximize(1); break;
+	case 420: if(FProjectContext::GetActive()) Capture("mesh_materials"); break;
+	case 424: App->RequestQuit(); break;
 	default: break;
 	}
 }

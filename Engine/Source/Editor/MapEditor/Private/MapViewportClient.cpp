@@ -3,6 +3,7 @@
 #include "MapViewportClient.h"
 
 #include "MapDraw.h"
+#include "MapMaterialTextures.h"
 #include "MapLandscapeMode.h"
 #include "MapEditorPrivate.h"
 
@@ -18,6 +19,10 @@
 #include "Shaders/MapShaders_PSTextured_SPIRV.h"
 #include "Shaders/MapShaders_VSFoliage_SPIRV.h"
 #include "Shaders/MapShaders_VSMain_SPIRV.h"
+#include "MeshMaterial_VSMaterial_DXIL.h"
+#include "MeshMaterial_PSMaterial_DXIL.h"
+#include "Shaders/MeshMaterial_VSMaterial_SPIRV.h"
+#include "Shaders/MeshMaterial_PSMaterial_SPIRV.h"
 
 #include <algorithm>
 #include <cmath>
@@ -229,6 +234,100 @@ FRHIGraphicsPipeline* FMapRenderResources::GetSolidPipeline(EPixelFormat TargetF
 	return SolidPipeline.get();
 }
 
+FRHIGraphicsPipeline* FMapRenderResources::GetMaterialPipeline(EPixelFormat TargetFormat, bool Translucent)
+{
+	if (Translucent)
+	{
+		const auto* Opaque = GetMaterialPipeline(TargetFormat);
+		if (!Opaque)
+			return nullptr;
+		if (!TranslucentMaterialPipeline)
+		{
+			auto Desc = Opaque->GetDesc();
+			Desc.BlendMode = EBlendMode::AlphaBlend;
+			Desc.bDepthWrite = false;
+			Desc.DebugName = "Translucent mesh materials";
+			TranslucentMaterialPipeline = Device.CreateGraphicsPipeline(Desc);
+		}
+		return TranslucentMaterialPipeline.get();
+	}
+	if (MaterialPipeline && MaterialFormat == TargetFormat)
+		return MaterialPipeline.get();
+	const auto* Solid = GetSolidPipeline(TargetFormat);
+	if (!Solid)
+		return nullptr;
+	auto Desc = Solid->GetDesc();
+	const bool Vulkan = Device.GetBackend() == ERHIBackend::Vulkan;
+	Desc.VertexShader =
+		Vulkan ? FRHIShaderBytecode{g_MeshMaterial_VSMaterial_SPIRV, sizeof(g_MeshMaterial_VSMaterial_SPIRV)}
+			   : FRHIShaderBytecode{g_MeshMaterial_VSMaterial_DXIL, sizeof(g_MeshMaterial_VSMaterial_DXIL)};
+	Desc.PixelShader =
+		Vulkan ? FRHIShaderBytecode{g_MeshMaterial_PSMaterial_SPIRV, sizeof(g_MeshMaterial_PSMaterial_SPIRV)}
+			   : FRHIShaderBytecode{g_MeshMaterial_PSMaterial_DXIL, sizeof(g_MeshMaterial_PSMaterial_DXIL)};
+	Desc.VertexAttributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FMapMaterialVertex, Position)},
+							 {"NORMAL", 0, EVertexFormat::Float3, offsetof(FMapMaterialVertex, Normal)},
+							 {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FMapMaterialVertex, UV)},
+							 {"COLOR", 0, EVertexFormat::UByte4N, offsetof(FMapMaterialVertex, Color)}};
+	Desc.VertexStride = sizeof(FMapMaterialVertex);
+	Desc.NumTextures = 2;
+	Desc.SamplerAddress = ESamplerAddress::Wrap;
+	Desc.DebugName = "Native mesh materials";
+	TranslucentMaterialPipeline.reset();
+	MaterialPipeline = Device.CreateGraphicsPipeline(Desc);
+	MaterialFormat = TargetFormat;
+	return MaterialPipeline.get();
+}
+
+bool FMapRenderResources::GetMaterialTextures(const std::shared_ptr<const FLoadedMeshAsset>& Asset, FRHITexture*& Color,
+											  FRHITexture*& Normal)
+{
+	Color = Normal = &GetWhiteTexture();
+	if (!Asset)
+		return false;
+	if (auto It = Materials.find(Asset.get()); It != Materials.end())
+	{
+		It->second.LastUsed = Frame;
+		if (It->second.Color)
+			Color = It->second.Color.get();
+		if (It->second.Normal)
+			Normal = It->second.Normal.get();
+		return true;
+	}
+	FMaterialEntry Entry;
+	Entry.Asset = Asset;
+	Entry.LastUsed = Frame;
+	const auto Upload = [&](const FTextureAsset& Image, bool IsNormal, TSharedPtr<FRHITexture>& Out) {
+		FMapMaterialMipChain Mips;
+		FString Error;
+		if (!FMapMaterialMipChain::Build(Image, IsNormal, Mips, Error))
+			return false;
+		FRHITextureDesc Desc;
+		Desc.Width = Image.Width;
+		Desc.Height = Image.Height;
+		Desc.MipLevels = Mips.Levels;
+		Desc.Format = !IsNormal && Image.bSRGB ? EPixelFormat::R8G8B8A8_SRGB : EPixelFormat::R8G8B8A8_UNORM;
+		Desc.InitialData = Mips.Pixels.data();
+		Desc.DebugName = IsNormal ? "Mesh normal map" : "Mesh base color";
+		Out = Device.CreateTexture(Desc);
+		return Out != nullptr;
+	};
+	if ((Asset->Texture && !Upload(*Asset->Texture, false, Entry.Color)) ||
+		(Asset->NormalTexture && !Upload(*Asset->NormalTexture, true, Entry.Normal)))
+	{
+		if (Entry.Color)
+			Device.DeferRelease(Entry.Color);
+		if (Entry.Normal)
+			Device.DeferRelease(Entry.Normal);
+		return false;
+	}
+	if (Entry.Color)
+		Color = Entry.Color.get();
+	if (Entry.Normal)
+		Normal = Entry.Normal.get();
+	Materials[Asset.get()] = std::move(Entry);
+	return true;
+}
+
 FRHIGraphicsPipeline* FMapRenderResources::GetLandscapePipeline(EPixelFormat TargetFormat)
 {
 	if (LandscapePipeline && LandscapeFormat == TargetFormat)
@@ -353,6 +452,7 @@ const FMapRenderResources::FMeshBuffers* FMapRenderResources::GetMeshBuffers(con
 
 FMapRenderResources::~FMapRenderResources()
 {
+	for(auto& [Asset,Entry]:Materials) { if(Entry.Color) Device.DeferRelease(Entry.Color); if(Entry.Normal) Device.DeferRelease(Entry.Normal); }
 	for (auto& [Mesh, Buffers] : MeshBuffers)
 	{
 		Device.DeferRelease(Buffers.Vertices);
@@ -485,6 +585,10 @@ void FMapRenderResources::Trim()
 	// Several views draw each frame; a landscape none drew for a few
 	// seconds (deleted, or its layers cleared) goes.
 	++Frame;
+	for(auto It=Materials.begin(); It!=Materials.end();) {
+		if(Frame-It->second.LastUsed>300) { if(It->second.Color) Device.DeferRelease(It->second.Color); if(It->second.Normal) Device.DeferRelease(It->second.Normal); It=Materials.erase(It); }
+		else ++It;
+	}
 	for (auto It = Landscapes.begin(); It != Landscapes.end();)
 	{
 		if (Frame - It->second->LastUsed > 300)
@@ -1880,6 +1984,7 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	if (bSolid)
 	{
 		MapDraw->SetShaded(Mode == EMapViewMode::Lit);
+		MapDraw->bMaterials = Resources.bMeshMaterials && Resources.GetMaterialPipeline(RenderTarget.GetTexture().GetFormat()) != nullptr;
 		MapDraw->ZBufTextured(false);
 		MapView->RenderSolid(false);
 		if (bGrid)
@@ -1910,8 +2015,10 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	DrawOverlay(Elements, PixelSize);
 
 	const TArray<FMapVertex>& Triangles = MapDraw->GetTriangles();
+	const auto& MaterialVertices = MapDraw->GetMaterialVertices();
+	const auto& MaterialBatches = MapDraw->GetMaterialBatches();
 	const TArray<FMapInstanceBatch>& InstanceBatches = MapDraw->GetInstanceBatches();
-	FRHIGraphicsPipeline* Pipeline = bSolid && (!Triangles.empty() || !InstanceBatches.empty())
+	FRHIGraphicsPipeline* Pipeline = bSolid && (!Triangles.empty() || !InstanceBatches.empty() || !MaterialVertices.empty())
 		? Resources.GetSolidPipeline(RenderTarget.GetTexture().GetFormat()) : nullptr;
 	Resources.Trim();
 	if (!Pipeline)
@@ -1941,7 +2048,7 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	VertexDesc.Usage = EBufferUsage::Vertex;
 	VertexDesc.DebugName = "Map faces";
 	TSharedPtr<FRHIBuffer> Vertices = Device.CreateBuffer(VertexDesc);
-	TArray<uint32> IndexData(FMath::Max<SIZE_T>(Triangles.size(), 1), 0);
+	TArray<uint32> IndexData(FMath::Max<SIZE_T>(FMath::Max(Triangles.size(),MaterialVertices.size()), 1), 0);
 	for (SIZE_T Index = 0; Index < IndexData.size(); ++Index)
 	{
 		IndexData[Index] = static_cast<uint32>(Index);
@@ -1958,6 +2065,20 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	}
 	std::memcpy(Vertices->GetMappedData(), Triangles.data(), Triangles.size() * sizeof(FMapVertex));
 	std::memcpy(Indices->GetMappedData(), IndexData.data(), IndexDesc.Size);
+
+	TSharedPtr<FRHIBuffer> MaterialBuffer;
+	FRHIGraphicsPipeline* MaterialPipeline=MaterialVertices.empty()?nullptr:Resources.GetMaterialPipeline(RenderTarget.GetTexture().GetFormat());
+	struct FMaterialDraw { FRHITexture* Color=nullptr; FRHITexture* Normal=nullptr; bool Valid=false; };
+	TArray<FMaterialDraw> MaterialDraws(MaterialBatches.size());
+	FRHIGraphicsPipeline* TransparentPipeline = MaterialPipeline ? Resources.GetMaterialPipeline(RenderTarget.GetTexture().GetFormat(), true) : nullptr;
+	if(MaterialPipeline) {
+		FRHIBufferDesc Desc; Desc.Size=MaterialVertices.size()*sizeof(FMapMaterialVertex); Desc.Usage=EBufferUsage::Vertex; Desc.DebugName="Native material vertices";
+		MaterialBuffer=Device.CreateBuffer(Desc);
+		if(MaterialBuffer) {
+			std::memcpy(MaterialBuffer->GetMappedData(),MaterialVertices.data(),Desc.Size);
+			for(size_t I=0; I<MaterialBatches.size(); ++I) MaterialDraws[I].Valid=Resources.GetMaterialTextures(MaterialBatches[I].Mesh->GetMeshAsset(),MaterialDraws[I].Color,MaterialDraws[I].Normal);
+		}
+	}
 
 	// Instanced meshes: each copy's rows in one buffer, a mesh's together;
 	// the meshes' own buffers made (once) before the pass.
@@ -2060,16 +2181,83 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 		}
 		CommandList.DrawIndexed(Batches[Index].NumVertices, Batches[Index].FirstVertex, 0);
 	}
+	auto DrawMaterials = [&](bool Transparent) {
+		if (MaterialBuffer && MaterialPipeline)
+		{
+			if (Transparent && !TransparentPipeline)
+				return;
+			CommandList.SetPipeline(Transparent ? *TransparentPipeline : *MaterialPipeline);
+			CommandList.SetVertexBuffer(*MaterialBuffer, 0, sizeof(FMapMaterialVertex));
+			CommandList.SetIndexBuffer(*Indices, 0, EIndexFormat::UInt32);
+			const auto& Light = MapDraw->GetInstanceLight();
+			const auto& Up = MapDraw->GetInstanceUp();
+			TArray<size_t> Order;
+			for (size_t I = 0; I < MaterialBatches.size(); ++I)
+			{
+				const auto M = MaterialBatches[I].Mesh->GetMeshAsset()->Material;
+				if ((M && M->BlendMode == EMaterialBlendMode::Translucent) == Transparent)
+					Order.push_back(I);
+			}
+			if (Transparent)
+				std::stable_sort(Order.begin(), Order.end(), [&](size_t A, size_t B) {
+					return MaterialBatches[A].Depth > MaterialBatches[B].Depth;
+				});
+			for (size_t I : Order)
+			{
+				const auto& Draw = MaterialDraws[I];
+				if (!Draw.Valid)
+					continue;
+				const auto Asset = MaterialBatches[I].Mesh->GetMeshAsset();
+				const FMaterialAsset Material = Asset->Material.value_or(FMaterialAsset{});
+				const int Flags = (MapDraw->IsShaded() ? 1 : 0) | (Asset->NormalTexture ? 4 : 0) |
+								  (Material.BlendMode == EMaterialBlendMode::Masked ? 8 : 0) | (Transparent ? 16 : 0) |
+								  (static_cast<int>(Material.OpacityMaskClip * 65535.0f + 0.5f) << 5);
+				const float Params[16] = {Constants[0],
+										  Constants[1],
+										  MapDraw->GetInstanceWinWidth(),
+										  static_cast<float>(Flags),
+										  Material.BaseColor[0],
+										  Material.BaseColor[1],
+										  Material.BaseColor[2],
+										  Material.BaseColor[3],
+										  Light.GetX(),
+										  Light.GetY(),
+										  Light.GetZ(),
+										  Material.Roughness,
+										  Up.GetX(),
+										  Up.GetY(),
+										  Up.GetZ(),
+										  Material.Metallic};
+				CommandList.SetPushConstants(Params, sizeof(Params));
+				CommandList.SetTexture(*Draw.Color, 0);
+				CommandList.SetTexture(*Draw.Normal, 1);
+				CommandList.DrawIndexed(MaterialBatches[I].NumVertices, MaterialBatches[I].FirstVertex, 0);
+			}
+		}
+	};
+	DrawMaterials(false);
 	if (!InstanceDraws.empty())
 	{
 		// Projected and lit as View would (MapDraw has View's numbers).
 		const FVector2 Origin = MapDraw->GetOrigin();
 		const Vector3d& Light = MapDraw->GetInstanceLight();
 		const Vector3d& Up = MapDraw->GetInstanceUp();
-		const float InstanceConstants[16] = { Constants[0], Constants[1], 0.0f, 0.0f,
-			Origin.X, Origin.Y, MapDraw->GetInstanceWinWidth(), MapDraw->IsShaded() ? 1.0f : 0.0f,
-			Light.GetX(), Light.GetY(), Light.GetZ(), 0.0f,
-			Up.GetX(), Up.GetY(), Up.GetZ(), 0.0f };
+		const float InstanceConstants[16] = {Constants[0],
+											 Constants[1],
+											 0.0f,
+											 0.0f,
+											 Origin.X,
+											 Origin.Y,
+											 MapDraw->GetInstanceWinWidth(),
+											 MapDraw->IsShaded() ? 1.0f : 0.0f,
+											 Light.GetX(),
+											 Light.GetY(),
+											 Light.GetZ(),
+											 0.0f,
+											 Up.GetX(),
+											 Up.GetY(),
+											 Up.GetZ(),
+											 0.0f};
 		CommandList.SetPipeline(*InstancedPipeline);
 		CommandList.SetPushConstants(InstanceConstants, sizeof(InstanceConstants));
 		CommandList.SetTexture(White);
@@ -2082,7 +2270,9 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 		}
 		Device.DeferRelease(InstanceRows);
 	}
+	DrawMaterials(true);
 	CommandList.EndRenderPass();
+	if(MaterialBuffer) Device.DeferRelease(MaterialBuffer);
 	Device.DeferRelease(Vertices);
 	Device.DeferRelease(Indices);
 

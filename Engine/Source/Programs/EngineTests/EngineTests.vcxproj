@@ -46,6 +46,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AtlasPackerTests.cpp" />
+    <ClCompile Include="AssetRegistryTests.cpp" /><ClCompile Include="WorldTests.cpp" /><ClCompile Include="RenderAssetTests.cpp" />
     <ClCompile Include="BatcherTests.cpp" />
     <ClCompile Include="ClipStackTests.cpp" />
     <ClCompile Include="CoreTests.cpp" /><ClCompile Include="ProjectPackageTests.cpp" />

@@ -448,15 +448,46 @@ namespace {
     return out.Done();
   }
 
+  // Per-corner UVs let seams share positions without sharing their UVs.
+  std::shared_ptr<StaticMesh> WithShapeUVs(std::shared_ptr<StaticMesh> mesh) {
+    const bool sphere = !strcmp(mesh->GetName(), "Sphere");
+    const bool round = !strcmp(mesh->GetName(), "Cylinder") || !strcmp(mesh->GetName(), "Cone");
+    for (int i=0; i<(int)mesh->GetTriangles().size(); ++i) {
+      const auto &t=mesh->GetTriangles()[i]; float uv[3][2];
+      const bool cylindrical = round && fabsf(t.norm[0].GetZ()) < 0.9f;
+      for (int k=0; k<3; ++k) {
+        const auto &p=mesh->GetVertex(t.v[k]); const auto &n=t.norm[0];
+        if (sphere || cylindrical) {
+          uv[k][0]=atan2f(p.GetY(),p.GetX())/(2*Pi)+0.5f;
+          uv[k][1]=sphere?acosf(Max(-1.0f,Min(1.0f,p.GetZ()/64.0f)))/Pi:0.5f-p.GetZ()/128.0f;
+        } else if (fabsf(n.GetZ())>=fabsf(n.GetX()) && fabsf(n.GetZ())>=fabsf(n.GetY())) {
+          uv[k][0]=p.GetX()/128.0f+0.5f; uv[k][1]=0.5f-p.GetY()/128.0f;
+        } else if (fabsf(n.GetX())>=fabsf(n.GetY())) {
+          uv[k][0]=p.GetY()/128.0f+0.5f; uv[k][1]=0.5f-p.GetZ()/128.0f;
+        } else {
+          uv[k][0]=p.GetX()/128.0f+0.5f; uv[k][1]=0.5f-p.GetZ()/128.0f;
+        }
+      }
+      if (sphere || cylindrical) {
+        const float lo=Min(uv[0][0],Min(uv[1][0],uv[2][0])), hi=Max(uv[0][0],Max(uv[1][0],uv[2][0]));
+        if (hi-lo>0.5f) for(int k=0; k<3; ++k) if(uv[k][0]<0.5f) uv[k][0]+=1;
+        for(int k=0; k<3; ++k) if(fabsf(mesh->GetVertex(t.v[k]).GetX())+fabsf(mesh->GetVertex(t.v[k]).GetY())<1e-4f)
+          uv[k][0]=(uv[(k+1)%3][0]+uv[(k+2)%3][0])*0.5f;
+      }
+      mesh->SetTriangleUVs(i,uv);
+    }
+    return mesh;
+  }
+
   struct Library {
     std::vector<std::shared_ptr<const StaticMesh>> meshes;
     std::vector<std::string> names, foliageNames, splineNames;
     Library(void) {
-      meshes.push_back(MakeCube());
-      meshes.push_back(MakeSphere());
-      meshes.push_back(MakeRound("Cylinder", StaticMesh::BasicShapeSize * 0.5f));
-      meshes.push_back(MakeRound("Cone", 0.0f));
-      meshes.push_back(MakePlane());
+      meshes.push_back(WithShapeUVs(MakeCube()));
+      meshes.push_back(WithShapeUVs(MakeSphere()));
+      meshes.push_back(WithShapeUVs(MakeRound("Cylinder", StaticMesh::BasicShapeSize * 0.5f)));
+      meshes.push_back(WithShapeUVs(MakeRound("Cone", 0.0f)));
+      meshes.push_back(WithShapeUVs(MakePlane()));
       for (const auto &mesh : meshes)
         names.push_back(mesh->GetName());
       for (const auto &mesh : { MakeGrass(), MakeBush(), MakeTree(), MakePine(), MakeRock() }) {

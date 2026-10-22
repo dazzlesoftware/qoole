@@ -31,6 +31,7 @@ class FSlateRHIRenderer;
 class SPlaceActors;
 class SPropertyGrid;
 class SWindow;
+class FAssetRegistry;
 
 // Unreal's editor modes, for the ones this editor has. A mode picks the
 // tools (and the panel at the left): Selection has Select, Rotate and Scale
@@ -89,7 +90,7 @@ public:
 	TSharedPtr<SPropertyGrid> GetPropertyGrid() const { return Properties; }
 
 	// Adds a prefab or an entity where the active view looks.
-	Object* AddPrefab(const FString& Path);
+	Object* AddPrefab(const FString& Path, const FString& ExpectedId = {});
 	Object* AddEntity(const FString& ClassName);
 	// Adds a placeable item (Place Actors, Add, a content browser) at a map
 	// point (snapped to the grid when snapping), or where the active view looks.
@@ -148,6 +149,8 @@ public:
 	} Cmd;
 
 	static TSharedRef<FDockLayout> MakeDefaultLayout();
+	const FAssetRegistry* GetAssetRegistry() const { return AssetRegistry.get(); }
+	void RefreshAssetRegistry();
 
 private:
 	void RegisterCommands();
@@ -200,6 +203,7 @@ private:
 	// After prefabs were saved: Place Actors and the content browsers.
 	void RefreshPlaceables();
 	void OnAssetActivated(const FContentBrowserItem& Item);
+	void OpenMaterialAsset(const FContentBrowserItem& Item);
 	void ShowModeTab();
 	bool bShowingModeTab = false;
 
@@ -232,6 +236,7 @@ private:
 
 	TSharedPtr<SPlaceActors> PlaceActors;
 	TWeakPtr<SContentBrowser> ContentBrowsers[MaxContentBrowsers];
+	TSharedPtr<FAssetRegistry> AssetRegistry;
 	FString ContentBrowserPaths[MaxContentBrowsers]; // kept while closed, and saved
 	EMapEditorMode Mode = EMapEditorMode::Selection;
 	FMapLandscapeMode LandscapeMode;

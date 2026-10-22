@@ -44,6 +44,7 @@ enum class EPixelFormat : uint8
 	R8G8B8A8_UNORM,
 	B8G8R8A8_UNORM,
 	D32_FLOAT, // depth buffers only (see FRHITextureDesc)
+	R8G8B8A8_SRGB, // color texture sampling decodes to linear before filtering
 };
 
 uint32 GetBytesPerPixel(EPixelFormat Format);

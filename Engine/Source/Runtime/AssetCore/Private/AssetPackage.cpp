@@ -126,43 +126,97 @@ bool FAssetPackageStore::Save(const FString& Path, FAssetPackage& Package, FStri
 	return true;
 }
 
+FString FAssetId::New() { return NewId(); }
+bool FAssetId::IsValid(const FString& Id) { return IsId(Id); }
+
+namespace
+{
+	struct FManifest
+	{
+		FAssetPackageMetadata Metadata;
+		FJsonValue Json;
+		FString Stem;
+	};
+
+	bool ReadManifest(const FString& Path, FManifest& Manifest, FString& Error)
+	{
+		Error.Empty();
+		const auto Fail = [&Error](const char* Text) { Error = Text; return false; };
+		const std::filesystem::path File(Path.ToWide());
+		TArray<uint8> Bytes;
+		if (!ReadLimited(File, MaxManifest, Bytes)) return Fail("Cannot read package manifest (limit 1 MiB).");
+		const auto Json = FJsonValue::Parse(std::string_view(reinterpret_cast<const char*>(Bytes.data()), Bytes.size()), &Error);
+		if (!Json) return false;
+		if (!Json->IsObject() || Json->Get("Magic").AsString() != "GenesisPackage" ||
+			Json->Get("FormatVersion").GetType() != EJsonType::Number || Json->Get("FormatVersion").AsNumber() != FAssetPackageStore::FormatVersion)
+			return Fail("Unsupported Genesis package format.");
+		FAssetPackageMetadata Result;
+		const FString Kind = Json->Get("Kind").AsString();
+		if (Kind != "Asset" && Kind != "Map") return Fail("Unknown package kind.");
+		Result.Kind = Kind == "Map" ? EAssetPackageKind::Map : EAssetPackageKind::Asset;
+		if (!ValidPath(File, Result.Kind)) return Fail("Package kind and extension do not match.");
+		Result.Id = Json->Get("Id").AsString();
+		const FString Generation = Json->Get("Generation").AsString();
+		Result.Schema = Json->Get("Schema").AsString();
+		const double Version = Json->Get("SchemaVersion").AsNumber();
+		if (!IsId(Result.Id) || !IsId(Generation) || Result.Schema.IsEmpty() ||
+			!std::isfinite(Version) || Version < 1 || Version > INT32_MAX || std::floor(Version) != Version)
+			return Fail("Invalid package identity or schema.");
+		Result.SchemaVersion = static_cast<int32>(Version);
+		if (!Json->Get("Dependencies").IsArray()) return Fail("Invalid package dependencies.");
+		for (const auto& Dependency : Json->Get("Dependencies").GetItems())
+		{
+			if (Dependency.GetType() != EJsonType::String) return Fail("Invalid package dependency.");
+			Result.Dependencies.push_back(Dependency.AsString());
+		}
+		const FString Stem = ToPath(File.stem()) + "." + Generation;
+		const auto ValidateSidecar = [&](const char* Key, const char* Extension, uint64& Size)
+		{
+			const auto& SidecarJson = Json->Get(Key);
+			if (!SidecarJson.IsObject() || SidecarJson.Get("File").AsString() != Stem + Extension ||
+				SidecarJson.Get("Size").GetType() != EJsonType::Number) return false;
+			const double Number = SidecarJson.Get("Size").AsNumber();
+			if (!std::isfinite(Number) || Number < 0 || Number > MaxPayload || std::floor(Number) != Number) return false;
+			const FString Hash = SidecarJson.Get("Checksum").AsString();
+			if (Hash.Len() != 16) return false;
+			for (const char C : Hash.View()) if (!((C >= '0' && C <= '9') || (C >= 'a' && C <= 'f'))) return false;
+			Size = static_cast<uint64>(Number);
+			return true;
+		};
+		if (!ValidateSidecar("Exports", ".gexp", Result.ExportBytes) || !ValidateSidecar("Bulk", ".gbulk", Result.BulkBytes))
+			return Fail("Invalid package sidecar declaration.");
+		Manifest.Metadata = std::move(Result);
+		Manifest.Json = *Json;
+		Manifest.Stem = Stem;
+		return true;
+	}
+}
+
+bool FAssetPackageStore::ReadMetadata(const FString& Path, FAssetPackageMetadata& Metadata, FString& Error)
+{
+	FManifest Manifest;
+	if (!ReadManifest(Path, Manifest, Error)) return false;
+	Metadata = std::move(Manifest.Metadata);
+	return true;
+}
+
 bool FAssetPackageStore::Load(const FString& Path, FAssetPackage& Package, FString& Error)
 {
-	Error.Empty();
-	const auto Fail = [&Error](const char* Text) { Error = Text; return false; };
+	FManifest Manifest;
+	if (!ReadManifest(Path, Manifest, Error)) return false;
 	const std::filesystem::path File(Path.ToWide());
 	TArray<uint8> Bytes;
-	if (!ReadLimited(File, MaxManifest, Bytes)) return Fail("Cannot read package manifest (limit 1 MiB).");
-	const auto Json = FJsonValue::Parse(std::string_view(reinterpret_cast<const char*>(Bytes.data()), Bytes.size()), &Error);
-	if (!Json) return false;
-	if (!Json->IsObject() || Json->Get("Magic").AsString() != "GenesisPackage" ||
-		Json->Get("FormatVersion").GetType() != EJsonType::Number || Json->Get("FormatVersion").AsNumber() != FormatVersion)
-		return Fail("Unsupported Genesis package format.");
 	FAssetPackage Result;
-	const FString Kind = Json->Get("Kind").AsString();
-	if (Kind != "Asset" && Kind != "Map") return Fail("Unknown package kind.");
-	Result.Kind = Kind == "Map" ? EAssetPackageKind::Map : EAssetPackageKind::Asset;
-	if (!ValidPath(File, Result.Kind)) return Fail("Package kind and extension do not match.");
-	Result.Id = Json->Get("Id").AsString();
-	const FString Generation = Json->Get("Generation").AsString();
-	Result.Schema = Json->Get("Schema").AsString();
-	const double Version = Json->Get("SchemaVersion").AsNumber();
-	if (!IsId(Result.Id) || !IsId(Generation) || Result.Schema.IsEmpty() ||
-		!std::isfinite(Version) || Version < 1 || Version > INT32_MAX || std::floor(Version) != Version)
-		return Fail("Invalid package identity or schema.");
-	Result.SchemaVersion = static_cast<int32>(Version);
-	if (!Json->Get("Dependencies").IsArray()) return Fail("Invalid package dependencies.");
-	for (const auto& Dependency : Json->Get("Dependencies").GetItems())
-	{
-		if (Dependency.GetType() != EJsonType::String) return Fail("Invalid package dependency.");
-		Result.Dependencies.push_back(Dependency.AsString());
-	}
-	const FString Stem = ToPath(File.stem()) + "." + Generation;
-	if (!ReadSidecar(File.parent_path(), Json->Get("Exports"), Stem + ".gexp", Bytes) ||
-		!ReadSidecar(File.parent_path(), Json->Get("Bulk"), Stem + ".gbulk", Result.Bulk))
-		return Fail("Package sidecar is missing, corrupt or has an invalid size.");
+	if (!ReadSidecar(File.parent_path(), Manifest.Json.Get("Exports"), Manifest.Stem + ".gexp", Bytes) ||
+		!ReadSidecar(File.parent_path(), Manifest.Json.Get("Bulk"), Manifest.Stem + ".gbulk", Result.Bulk))
+	{ Error = "Package sidecar is missing, corrupt or has an invalid size."; return false; }
 	const auto Exports = FJsonValue::Parse(std::string_view(reinterpret_cast<const char*>(Bytes.data()), Bytes.size()), &Error);
 	if (!Exports || !Exports->IsObject()) { if (Error.IsEmpty()) Error = "Invalid package exports."; return false; }
+	Result.Id = std::move(Manifest.Metadata.Id);
+	Result.Kind = Manifest.Metadata.Kind;
+	Result.Schema = std::move(Manifest.Metadata.Schema);
+	Result.SchemaVersion = Manifest.Metadata.SchemaVersion;
+	Result.Dependencies = std::move(Manifest.Metadata.Dependencies);
 	Result.Exports = *Exports;
 	Package = std::move(Result);
 	return true;

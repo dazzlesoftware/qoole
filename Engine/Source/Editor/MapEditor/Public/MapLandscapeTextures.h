@@ -69,6 +69,7 @@ public:
 
 private:
 	std::map<std::string, std::unique_ptr<FLandscapeTexture>> Textures;
+	std::string NativeRevision;
 	std::map<std::string, bool> Failed;
 };
 
@@ -95,6 +96,7 @@ private:
 	void Bake(const Landscape& Land, const FIntRect& Texels);
 
 	std::shared_ptr<const Landscape> Baked;
+	std::string NativeRevision;
 	FLandscapeImage Image;
 };
 

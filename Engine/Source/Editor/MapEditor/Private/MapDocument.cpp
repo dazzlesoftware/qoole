@@ -5,6 +5,7 @@
 
 #include "MapDocument.h"
 #include "MapPackage.h"
+#include "MapAssetLibrary.h"
 
 #include "MapEdits.h"
 
@@ -67,6 +68,7 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	std::shared_ptr<const Landscape> LandB = B.SetLandscape(nullptr);
 	std::shared_ptr<const Foliage> FoliageA = A.SetFoliage(nullptr);
 	std::shared_ptr<const Foliage> FoliageB = B.SetFoliage(nullptr);
+	const auto AssetA = A.GetMeshAsset(), AssetB = B.GetMeshAsset();
 	std::shared_ptr<const StaticMesh> MeshA = A.SetMesh(nullptr);
 	std::shared_ptr<const StaticMesh> MeshB = B.SetMesh(nullptr);
 
@@ -76,6 +78,8 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	B.SetMesh(MeshA);
 	A.SetLandscape(LandB); // with its own mesh
 	B.SetLandscape(LandA);
+	if (AssetB) A.SetMeshAsset(AssetB);
+	if (AssetA) B.SetMeshAsset(AssetA);
 	A.SetFoliage(FoliageB);
 	B.SetFoliage(FoliageA);
 	A.SetEntity(EntityB, false);
@@ -211,13 +215,15 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 	if (HasExtension(InPath, "gmap"))
 	{
 		FString Id;
-		auto Loaded = FMapPackage::Load(InPath, Id, OutError);
+		bool Upgraded = false;
+		auto Loaded = FMapPackage::Load(InPath, Id, OutError, false, {}, &Upgraded);
 		if (!Loaded) return nullptr;
 		const FMapGameSet* Active = FMapEditorEnvironment::GetActiveGameSet();
 		check(Active);
 		TUniquePtr<FMapDocument> Doc(new FMapDocument(Loaded.release(), *Active));
 		Doc->Path = InPath;
 		Doc->PackageId = Id;
+		if (Upgraded) Doc->SavedVersion = -1;
 		return Doc;
 	}
 
@@ -298,6 +304,7 @@ bool FMapDocument::Save(const FString& InPath, FString& OutError)
 		Changed(EMapChange::File);
 		return true;
 	}
+	if(FMapAssetLibrary::HasNativeAssets(*Root)) { OutError="Save as .gmap to preserve native mesh, material and texture references."; return false; }
 	const std::string AnsiPath = InPath.ToAnsi();
 	if (HasExtension(InPath, "map"))
 	{

@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapEditorEnvironment.h"
+#include "AssetPackage.h"
 
 #include "MapEditorPrivate.h"
 
@@ -36,6 +37,13 @@ namespace
 			if (!Entry.is_regular_file() || (Entry.path().extension() != L".qle" && Entry.path().extension() != L".asset"))
 			{
 				continue;
+			}
+			if (Entry.path().extension() == L".asset")
+			{
+				FAssetPackageMetadata Metadata;
+				FString PackageError;
+				if (!FAssetPackageStore::ReadMetadata(FString::FromWide(Entry.path().wstring()), Metadata, PackageError) ||
+					Metadata.Kind != EAssetPackageKind::Asset || Metadata.Schema != "Genesis.Prefab" || (Metadata.SchemaVersion != 1 && Metadata.SchemaVersion != 2)) continue;
 			}
 			FString Name = FString::FromWide(Entry.path().stem().wstring());
 			if (!Name.IsEmpty())

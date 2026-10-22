@@ -10,8 +10,9 @@
 //   right        a search box (it searches the folder and those below it),
 //                the folder's subfolders and assets as tiles, and a count
 //
-// A tile's color says what it is: prefabs (.qle in a prefab folder), maps
-// (.qle and .map), entity lists, textures, fonts and other files.
+// Native package tiles use registry metadata for their type and identity.
+// Legacy .qle files in prefab folders are prefabs; other .qle/.map files
+// are maps. Loose entity lists, textures, fonts and files remain browsable.
 // Double-click a folder to open it, or an asset to use it (OnAssetActivated:
 // the editor places prefabs and opens maps); drag a prefab into a viewport
 // to place it under the cursor.
@@ -24,11 +25,14 @@
 
 class SBox;
 class SWrapBox;
+class FAssetRegistry;
 
 enum class EContentAssetType : uint8
 {
 	Folder,
 	Prefab,
+	StaticMesh,
+	Material,
 	Map,
 	QuakeMap,
 	EntityList,
@@ -36,6 +40,8 @@ enum class EContentAssetType : uint8
 	Font,
 	Text,
 	File,
+	Package,
+	InvalidPackage,
 };
 
 const char* ToString(EContentAssetType Type);
@@ -51,6 +57,10 @@ struct FContentBrowserItem
 	FString Name; // the file name, without the extension for assets
 	FString Path;
 	EContentAssetType Type = EContentAssetType::File;
+	FString PackageId;
+	FString PackagePath;
+	FString Schema;
+	FString Error;
 };
 
 class SContentBrowser final : public SCompoundWidget
@@ -58,16 +68,20 @@ class SContentBrowser final : public SCompoundWidget
 public:
 	SLATE_BEGIN_ARGS(SContentBrowser)
 		SLATE_ARGUMENT(TArray<FContentBrowserRoot>, Roots, {})
+		SLATE_ARGUMENT(TSharedPtr<FAssetRegistry>, Registry, nullptr)
 		// .qle files in these folders (and below) are prefabs.
 		SLATE_ARGUMENT(TArray<FString>, PrefabFolders, {})
 		// The folder shown first; empty: the first root.
 		SLATE_ARGUMENT(FString, InitialPath, FString())
 		SLATE_EVENT(TDelegate<void(const FContentBrowserItem&)>, OnAssetActivated)
 		SLATE_EVENT(FSimpleDelegate, OnSaveAll)
+		SLATE_EVENT(TDelegate<bool(const FString&, FString&)>, OnCreateMesh)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 	~SContentBrowser() override;
+	void Tick(const FGeometry& Geometry, double CurrentTime, float DeltaTime) override;
+	FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
 
 	// The folder shown ("" is All, the roots). The tiles follow next frame.
 	void SetPath(const FString& Path);
@@ -75,8 +89,9 @@ public:
 	void GoBack();
 	void GoForward();
 	void SetSearchText(const FString& Text);
-	// Scans the folder again (after files changed).
-	void Refresh();
+	// Scans the folder again. Pass false after a shared registry scan to avoid
+	// scanning mounted content again for each browser.
+	void Refresh(bool bRescanRegistry = true);
 
 	// What the tiles show (after the search), for tests.
 	const TArray<FContentBrowserItem>& GetItems() const { return Items; }
@@ -89,6 +104,8 @@ public:
 	bool ImportFile(const FString& Source); // copies it into the folder shown
 
 	EContentAssetType GetAssetType(const FString& FilePath) const;
+	FString CreateMaterial();
+	FString CreateMeshFromSelection();
 
 private:
 	struct FFolderNode
@@ -105,6 +122,7 @@ private:
 	// The folder's name as shown, and the path from All down to it (name, folder).
 	FString GetDisplayPath(const FString& FolderPath, TArray<TPair<FString, FString>>* OutParts = nullptr) const;
 	void ScanItems();
+	FContentBrowserItem DescribeItem(const FString& FilePath) const;
 	void QueueRebuild();
 	void RebuildWidgets();
 	TSharedRef<SWidget> MakeBreadcrumbs();
@@ -113,9 +131,12 @@ private:
 	void Navigate(const FString& NewPath, bool bRecord);
 
 	TArray<FContentBrowserRoot> Roots;
+	TSharedPtr<FAssetRegistry> Registry;
+	uint64 RegistryRevision = 0;
 	TArray<FString> PrefabFolders;
 	TDelegate<void(const FContentBrowserItem&)> OnAssetActivated;
 	FSimpleDelegate OnSaveAll;
+	TDelegate<bool(const FString&, FString&)> OnCreateMesh;
 
 	FFolderNode TreeRoot; // "All"
 	TArray<FFolderNode*> TreeRoots;

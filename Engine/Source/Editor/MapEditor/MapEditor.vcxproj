@@ -50,9 +50,9 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Private\MapDocument.cpp" /><ClCompile Include="Private\MapPackage.cpp" />
+    <ClCompile Include="Private\MapDocument.cpp" /><ClCompile Include="Private\MapPackage.cpp" /><ClCompile Include="Private\MapWorldAdapter.cpp" /><ClCompile Include="Private\MapAssetLibrary.cpp" /><ClCompile Include="Private\MapAssetImport.cpp" />
     <ClCompile Include="Private\MapDocumentOps.cpp" />
-    <ClCompile Include="Private\MapDraw.cpp" />
+    <ClCompile Include="Private\MapDraw.cpp" /><ClCompile Include="Private\MapMaterialTextures.cpp" />
     <ClCompile Include="Private\MapEditorEnvironment.cpp" />
     <ClCompile Include="Private\MapFoliageMode.cpp" />
     <ClCompile Include="Private\MapHeightmap.cpp" />
@@ -74,8 +74,8 @@
     <ClInclude Include="Private\Shaders\MapShaders_PSTextured_SPIRV.h" />
     <ClInclude Include="Private\Shaders\MapShaders_VSFoliage_SPIRV.h" />
     <ClInclude Include="Private\Shaders\MapShaders_VSMain_SPIRV.h" />
-    <ClInclude Include="Public\MapDocument.h" /><ClInclude Include="Public\MapPackage.h" />
-    <ClInclude Include="Public\MapDraw.h" />
+    <ClInclude Include="Public\MapDocument.h" /><ClInclude Include="Public\MapPackage.h" /><ClInclude Include="Public\MapWorldAdapter.h" /><ClInclude Include="Public\MapAssetLibrary.h" /><ClInclude Include="Public\MapAssetImport.h" />
+    <ClInclude Include="Public\MapDraw.h" /><ClInclude Include="Public\MapMaterialTextures.h" />
     <ClInclude Include="Public\MapEditorEnvironment.h" />
     <ClInclude Include="Public\MapFoliageMode.h" />
     <ClInclude Include="Public\MapHeightmap.h" />
@@ -91,6 +91,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Private\Shaders\BuildMapShaders.cmd" />
+    <None Include="Private\Shaders\BuildMeshMaterialShaders.cmd" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Private\Shaders\MapShaders.hlsl">
@@ -100,6 +101,12 @@
 &quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSLandscape -Vn g_MapShaders_PSLandscape_DXIL -Fh &quot;$(IntDir)MapShaders_PSLandscape_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
       <Outputs>$(IntDir)MapShaders_VSMain_DXIL.h;$(IntDir)MapShaders_VSFoliage_DXIL.h;$(IntDir)MapShaders_PSTextured_DXIL.h;$(IntDir)MapShaders_PSLandscape_DXIL.h</Outputs>
       <Message>Compiling %(Filename)%(Extension) to DXIL</Message>
+    </CustomBuild>
+    <CustomBuild Include="Private\Shaders\MeshMaterial.hlsl">
+      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSMaterial -Vn g_MeshMaterial_VSMaterial_DXIL -Fh &quot;$(IntDir)MeshMaterial_VSMaterial_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSMaterial -Vn g_MeshMaterial_PSMaterial_DXIL -Fh &quot;$(IntDir)MeshMaterial_PSMaterial_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
+      <Outputs>$(IntDir)MeshMaterial_VSMaterial_DXIL.h;$(IntDir)MeshMaterial_PSMaterial_DXIL.h</Outputs>
+      <Message>Compiling native mesh material shaders to DXIL</Message>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)AssetCore\AssetCore.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C02}</Project></ProjectReference></ItemGroup>

@@ -7,6 +7,7 @@
 
 #include "MapEditorShell.h"
 #include "ProjectDescriptor.h"
+#include "AssetRegistry.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/PropertyGrid/SPropertyGrid.h"
@@ -14,6 +15,7 @@
 #include "MapEditorEnvironment.h"
 #include "MapHeightmap.h"
 #include "MapLandscapeTextures.h"
+#include "MapAssetLibrary.h"
 #include "MapObjectProperties.h"
 #include "Services/FileDialogs.h"
 #include "Services/MessageDialog.h"
@@ -31,6 +33,7 @@
 #include "Widgets/Text/SEditableText.h"
 #include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SViewport.h"
+#include "Widgets/SWindow.h"
 #include "Widgets/Text/STextBlock.h"
 
 #include <filesystem>
@@ -365,7 +368,7 @@ void FMapEditorShell::RefreshPlaceables()
 	{
 		if (const TSharedPtr<SContentBrowser> Browser = Weak.lock())
 		{
-			Browser->Refresh();
+			Browser->Refresh(false);
 		}
 	}
 }
@@ -1573,10 +1576,19 @@ TSharedRef<SDockTab> FMapEditorShell::MakeContentBrowserTab(int32 Index)
 	[
 		SAssignNew(Browser, SContentBrowser)
 		.Roots(Roots)
+		.Registry(AssetRegistry)
 		.PrefabFolders(PrefabFolders)
 		.InitialPath(ContentBrowserPaths[Index])
 		.OnAssetActivated([this](const FContentBrowserItem& Item) { OnAssetActivated(Item); })
 		.OnSaveAll([this] { Commands->ExecuteAction(*Cmd.SaveMap); })
+		.OnCreateMesh([this](const FString& File,FString& Error) {
+			const auto Selected=Document->GetSelection();
+			if(Selected.size()!=1 || !Selected[0]->HasMesh() || Selected[0]->HasLandscape()) { Error="Select one static mesh actor to create a mesh asset."; return false; }
+			FStaticMeshAsset Asset;
+			if(const auto Existing=Selected[0]->GetMeshAsset()) { Asset=Existing->Data; if(!Existing->MaterialOverride.IsNull()) Asset.Material=Existing->MaterialOverride; }
+			else Asset.Mesh=Selected[0]->GetMeshPtr();
+			FAssetPackage P; return FRenderAssetCodec::EncodeMesh(Asset,P,Error) && FAssetPackageStore::Save(File,P,Error);
+		})
 	];
 	ContentBrowsers[Index] = Browser;
 	Tab->SetOnTabClosed(FOnTabClosed::CreateLambda([this, Index](const TSharedRef<SDockTab>&)
@@ -1589,12 +1601,196 @@ TSharedRef<SDockTab> FMapEditorShell::MakeContentBrowserTab(int32 Index)
 	return Tab;
 }
 
+void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem &Item)
+{
+	FString Error;
+	FAssetPackage Package;
+	if (!AssetRegistry->Load({Item.PackageId, Item.PackagePath}, Package, Error, "Genesis.Material"))
+	{
+		Log(Error);
+		return;
+	}
+	auto Material = std::make_shared<FMaterialAsset>();
+	if (!FRenderAssetCodec::DecodeMaterial(Package, *Material, Error))
+	{
+		Log(Error);
+		return;
+	}
+	const auto Content = SNew(SVerticalBox);
+	Content->AddSlot().AutoHeight()[SNew(STextBlock).Text("Base Color")];
+	Content->AddSlot().AutoHeight()[SNew(SColorPicker)
+										.UseAlpha(true)
+										.TargetColor([Material] {
+											return FColor(static_cast<uint8>(Material->BaseColor[0] * 255),
+														  static_cast<uint8>(Material->BaseColor[1] * 255),
+														  static_cast<uint8>(Material->BaseColor[2] * 255),
+														  static_cast<uint8>(Material->BaseColor[3] * 255));
+										})
+										.OnColorChanged([Material](FColor Color) {
+											Material->BaseColor[0] = Color.R / 255.0f;
+											Material->BaseColor[1] = Color.G / 255.0f;
+											Material->BaseColor[2] = Color.B / 255.0f;
+											Material->BaseColor[3] = Color.A / 255.0f;
+										})];
+	for (int I = 0; I < 2; ++I)
+		Content->AddSlot()
+			.AutoHeight()[SNew(SHorizontalBox) +
+						  SHorizontalBox::Slot().FillWidth(
+							  1)[SNew(STextBlock).Text(I == 0 ? "Roughness" : "Metallic")] +
+						  SHorizontalBox::Slot().FillWidth(
+							  1)[SNew(SSpinBox<float>)
+									 .MinValue(0.0f)
+									 .MaxValue(1.0f)
+									 .Delta(0.01f)
+									 .Value([Material, I] { return I == 0 ? Material->Roughness : Material->Metallic; })
+									 .OnValueChanged([Material, I](float Value) {
+										 (I == 0 ? Material->Roughness : Material->Metallic) = Value;
+									 })]];
+	auto BlendModes = std::make_shared<TArray<FString>>(TArray<FString>{"Opaque", "Masked", "Translucent"});
+	Content->AddSlot().AutoHeight()[SNew(STextBlock).Text("Blend Mode")];
+	Content->AddSlot().AutoHeight()[SNew(SComboBox<FString>)
+										.OptionsSource(BlendModes.get())
+										.OnGenerateWidget([](const FString& Label) -> TSharedRef<SWidget> {
+											return SNew(STextBlock).Text(Label);
+										})
+										.OnSelectionChanged([Material, BlendModes](const FString& Label, ESelectInfo) {
+											for (size_t I = 0; I < BlendModes->size(); ++I)
+												if ((*BlendModes)[I] == Label)
+													Material->BlendMode = static_cast<EMaterialBlendMode>(I);
+										})[SNew(STextBlock).Text([Material, BlendModes] {
+											return (*BlendModes)[static_cast<int>(Material->BlendMode)];
+										})]];
+	Content->AddSlot()
+		.AutoHeight()[SNew(SHorizontalBox) +
+					  SHorizontalBox::Slot().FillWidth(1)[SNew(STextBlock).Text("Opacity Mask Cutoff")] +
+					  SHorizontalBox::Slot().FillWidth(
+						  1)[SNew(SSpinBox<float>)
+								 .MinValue(0.0f)
+								 .MaxValue(1.0f)
+								 .Delta(0.01f)
+								 .Value([Material] { return Material->OpacityMaskClip; })
+								 .OnValueChanged([Material](float V) { Material->OpacityMaskClip = V; })]];
+	auto Textures = std::make_shared<TArray<FString>>();
+	auto References = std::make_shared<TArray<FAssetReference>>();
+	Textures->push_back("None");
+	References->push_back({});
+	for (const auto& Asset : AssetRegistry->GetAssets())
+		if (Asset.Metadata.Schema == "Genesis.Texture2D" && Asset.Metadata.SchemaVersion == 1)
+		{
+			Textures->push_back(Asset.PackagePath);
+			References->push_back(Asset.GetReference());
+		}
+	Content->AddSlot().AutoHeight()[SNew(STextBlock).Text("Base Color Texture")];
+	Content->AddSlot()
+		.AutoHeight()[SNew(SComboBox<FString>)
+						  .OptionsSource(Textures.get())
+						  .OnGenerateWidget(
+							  [](const FString& Label) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(Label); })
+						  .OnSelectionChanged([Material, Textures, References](const FString& Label, ESelectInfo) {
+							  for (size_t I = 0; I < Textures->size(); ++I)
+								  if ((*Textures)[I] == Label)
+									  Material->BaseColorTexture = (*References)[I];
+						  })[SNew(STextBlock).Text([Material] {
+							  return Material->BaseColorTexture.IsNull() ? FString("None")
+																		 : Material->BaseColorTexture.Path;
+						  })]];
+	Content->AddSlot().AutoHeight()[SNew(STextBlock).Text("Normal Map (tangent space)")];
+	Content->AddSlot()
+		.AutoHeight()[SNew(SComboBox<FString>)
+						  .OptionsSource(Textures.get())
+						  .OnGenerateWidget(
+							  [](const FString &Label) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(Label); })
+						  .OnSelectionChanged([Material, Textures, References](const FString &Label, ESelectInfo) {
+							  for (size_t I = 0; I < Textures->size(); ++I)
+								  if ((*Textures)[I] == Label)
+									  Material->NormalTexture = (*References)[I];
+						  })[SNew(STextBlock).Text([Material] {
+							  return Material->NormalTexture.IsNull() ? FString("None")
+																		 : Material->NormalTexture.Path;
+						  })]];
+	Content->AddSlot()
+		.AutoHeight()[SNew(STextBlock)
+						  .Text("Lit previews use the editor light. Unlit displays base color without lighting.")
+						  .AutoWrapText(true)];
+	Content->AddSlot()
+		.AutoHeight()[SNew(SButton).Text("Save and Apply to Selected Mesh Assets").OnClicked([this, Item, Material] {
+			FString SaveError;
+			FAssetPackage P;
+			const auto *Current =
+				AssetRegistry->Resolve({Item.PackageId, Item.PackagePath}, SaveError, "Genesis.Material");
+			if (!Current)
+			{
+				Log(SaveError);
+				return FReply::Handled();
+			}
+			const auto Target = Current->FilePath;
+			for (const auto& TextureRef : {Material->BaseColorTexture,Material->NormalTexture}) if (!TextureRef.IsNull())
+			{
+				FTextureAsset Texture;
+				if (!FRenderAssetLoader(*AssetRegistry).LoadTexture(TextureRef, Texture, SaveError))
+				{
+					Log(SaveError);
+					return FReply::Handled();
+				}
+			}
+			if (!AssetRegistry->Load({Item.PackageId, Item.PackagePath}, P, SaveError, "Genesis.Material") ||
+				!FRenderAssetCodec::EncodeMaterial(*Material, P, SaveError) ||
+				!FAssetPackageStore::Save(Target, P, SaveError))
+			{
+				Log(SaveError);
+				return FReply::Handled();
+			}
+			RefreshAssetRegistry();
+			if (Document)
+			{
+				Document->BeginTransaction("Assign Material");
+				for (auto *Obj : Document->GetSelection())
+					if (Obj->HasMesh() && !Obj->HasLandscape())
+					{
+						if (!Document->SetMeshMaterial(*Obj, {Item.PackageId, Item.PackagePath}, SaveError))
+							Log(SaveError);
+					}
+				Document->EndTransaction();
+			}
+			Log(FString::Format("Saved material {}", Item.Name));
+			return FReply::Handled();
+		})];
+	FSlateApplication::Get().AddWindow(SNew(SWindow)
+										   .Title("Material: " + Item.Name)
+										   .BackgroundColor(FSlateColor(FColor(32,35,40)))
+										   .ClientSize(FVector2(460, 640))[SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Panel")).Padding(FMargin(12))[Content]]);
+}
+
 void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
 {
 	switch (Item.Type)
 	{
+	case EContentAssetType::StaticMesh:
+	{
+		FMapPlaceable Placeable; Placeable.Kind=EMapPlaceableKind::MeshAsset; Placeable.SourceAsset={Item.PackageId,Item.PackagePath}; Placeable.Label=Item.Name; Place(Placeable); break;
+	}
+	case EContentAssetType::Material:
+		OpenMaterialAsset(Item); break;
+	case EContentAssetType::Texture:
+	{
+		if(Item.Schema!="Genesis.Texture2D") { Log("Import this image to create a native texture asset first."); break; }
+		auto* Land=LandscapeMode.GetTargetLandscape();
+		if(!Land) { Log("Select a landscape and paint layer to assign this texture."); break; }
+		const auto Token=FMapAssetLibrary::TextureToken({Item.PackageId,Item.PackagePath});
+		FTextureAsset Texture; FString Error;
+		if(!FMapAssetLibrary::LoadTexture(Token,Texture,Error)) Log(Error);
+		else if(!LandscapeMode.SetLayerTexture(*Land,LandscapeMode.SelectedLayer,Token)) Log("Add or select a paint layer first.");
+		break;
+	}
 	case EContentAssetType::Prefab:
-		AddPrefab(Item.Path);
+		if (AssetRegistry && !Item.PackagePath.IsEmpty())
+		{
+			FString Error;
+			const auto* Data = AssetRegistry->Resolve({ Item.PackageId, Item.PackagePath }, Error, "Genesis.Prefab");
+			if (Data) AddPrefab(Data->FilePath, Data->Metadata.Id);
+			else Log(Error);
+		}
+		else AddPrefab(Item.Path);
 		break;
 	case EContentAssetType::Map:
 	case EContentAssetType::QuakeMap:
@@ -1604,7 +1800,8 @@ void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
 		}
 		break;
 	default:
-		Log(FString::Format("Nothing in the editor opens {} files ({})", ToString(Item.Type), Item.Name));
+		Log(Item.Schema.IsEmpty() ? FString::Format("Nothing in the editor opens {} files ({})", ToString(Item.Type), Item.Name)
+			: FString::Format("No asset editor is registered for {} ({})", Item.Schema, Item.Name));
 		break;
 	}
 }

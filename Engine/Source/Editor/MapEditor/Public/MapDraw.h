@@ -50,6 +50,21 @@ struct FMapInstanceBatch
 	uint32 Count() const { return static_cast<uint32>(Rows.size() / 12); }
 };
 
+struct FMapMaterialVertex
+{
+	float Position[3]; // view space: X right, Y depth, Z up
+	float Normal[3];
+	float UV[2];
+	uint32 Color;
+};
+
+struct FMapMaterialBatch
+{
+	const Object* Mesh = nullptr;
+	uint32 FirstVertex = 0, NumVertices = 0;
+	float Depth = 0;
+};
+
 class FMapDraw final : public FDraw
 {
 public:
@@ -79,6 +94,9 @@ public:
 	// light and project them: the light and the sky in view space, the
 	// projection's width, and the window's center (all set by View).
 	bool bInstancing = true;
+	bool bMaterials = true;
+	const TArray<FMapMaterialVertex>& GetMaterialVertices() const { return MaterialVertices; }
+	const TArray<FMapMaterialBatch>& GetMaterialBatches() const { return MaterialBatches; }
 	const TArray<FMapInstanceBatch>& GetInstanceBatches() const { return InstanceBatches; }
 	const Vector3d& GetInstanceLight() const { return InstanceLight; }
 	const Vector3d& GetInstanceUp() const { return InstanceUp; }
@@ -103,6 +121,7 @@ public:
 	void ZBufLandscapeTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3]) override;
 	void ZBufInstanceLight(const Vector3d& Light, const Vector3d& Up, float WinWidth) override;
 	bool ZBufMeshInstance(const StaticMesh& Mesh, const Matrix44& ToView) override;
+	bool ZBufMaterialMesh(const Object& Object, const Matrix44& ToView) override;
 	void ZBufRender() override {}
 
 private:
@@ -117,6 +136,8 @@ private:
 	TArray<FMapVertex> Triangles;
 	TArray<FMapTriangleBatch> Batches;
 	TArray<FMapInstanceBatch> InstanceBatches;
+	TArray<FMapMaterialVertex> MaterialVertices;
+	TArray<FMapMaterialBatch> MaterialBatches;
 	Vector3d InstanceLight;
 	Vector3d InstanceUp;
 	float InstanceWinWidth = 1.0f;

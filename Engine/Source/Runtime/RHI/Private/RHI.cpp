@@ -22,6 +22,7 @@ uint32 GetBytesPerPixel(EPixelFormat Format)
 	{
 	case EPixelFormat::R8_UNORM: return 1;
 	case EPixelFormat::R8G8B8A8_UNORM:
+	case EPixelFormat::R8G8B8A8_SRGB:
 	case EPixelFormat::B8G8R8A8_UNORM:
 	case EPixelFormat::D32_FLOAT: return 4;
 	case EPixelFormat::Unknown: break;

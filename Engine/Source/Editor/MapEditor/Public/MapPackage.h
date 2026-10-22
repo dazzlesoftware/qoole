@@ -9,5 +9,5 @@ class FMapPackage
 {
 public:
 	static bool Save(const FString& Path, Object& Root, FString& Id, FString& Error, bool bPrefab = false);
-	static TUniquePtr<Object> Load(const FString& Path, FString& Id, FString& Error, bool bPrefab = false);
+	static TUniquePtr<Object> Load(const FString& Path, FString& Id, FString& Error, bool bPrefab = false, const FString& ExpectedId = {}, bool* bUpgraded = nullptr);
 };

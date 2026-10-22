@@ -4,6 +4,7 @@
 
 #include "MapEditorPrivate.h"
 #include "MapLandscapeTextures.h"
+#include "Assets/RenderAssets.h"
 
 #include <cmath>
 
@@ -66,6 +67,70 @@ void FMapDraw::Reset()
 	Triangles.clear();
 	Batches.clear();
 	InstanceBatches.clear();
+	MaterialVertices.clear();
+	MaterialBatches.clear();
+}
+
+bool FMapDraw::ZBufMaterialMesh(const Object& Obj, const Matrix44& ToView)
+{
+	const auto Asset = Obj.GetMeshAsset();
+	if (!bMaterials || !Asset)
+		return false;
+	const auto& Mesh = *Asset->Data.Mesh;
+	const bool Translucent = Asset->Material && Asset->Material->BlendMode == EMaterialBlendMode::Translucent;
+	Vector3d Origin, Axis[3], Cofactor[3];
+	ToView.Transform(Origin, Vector3d());
+	for (int I = 0; I < 3; ++I)
+	{
+		Vector3d Unit(I == 0 ? 1.0f : 0.0f, I == 1 ? 1.0f : 0.0f, I == 2 ? 1.0f : 0.0f);
+		ToView.Transform(Axis[I], Unit);
+		Axis[I].SubVector(Origin);
+	}
+	Cofactor[0].CrossVector(Axis[1], Axis[2]);
+	Cofactor[1].CrossVector(Axis[2], Axis[0]);
+	Cofactor[2].CrossVector(Axis[0], Axis[1]);
+	const float Det = Axis[0].DotVector(Cofactor[0]);
+	if (!std::isfinite(Det) || std::abs(Det) < 1e-30f)
+		return false;
+	FMapMaterialBatch Batch;
+	Batch.Mesh = &Obj;
+	Batch.FirstVertex = static_cast<uint32>(MaterialVertices.size());
+	for (const auto& T : Mesh.GetTriangles())
+	{
+		Vector3d P[3], A, B, Face;
+		for (int K = 0; K < 3; ++K)
+			ToView.Transform(P[K], Mesh.GetVertex(T.v[K]));
+		A.SubVector(P[1], P[0]);
+		B.SubVector(P[2], P[0]);
+		Face.CrossVector(A, B);
+		const float Facing = Face.DotVector(P[0]);
+		if (Det < 0 ? Facing <= 0 : Facing >= 0)
+			continue;
+		const uint32 TriangleStart = static_cast<uint32>(MaterialVertices.size());
+		for (int K = 0; K < 3; ++K)
+		{
+			const auto& N = T.norm[K];
+			Vector3d Normal;
+			Normal.NewVector(
+				(Cofactor[0].GetX() * N.GetX() + Cofactor[1].GetX() * N.GetY() + Cofactor[2].GetX() * N.GetZ()) / Det,
+				(Cofactor[0].GetY() * N.GetX() + Cofactor[1].GetY() * N.GetY() + Cofactor[2].GetY() * N.GetZ()) / Det,
+				(Cofactor[0].GetZ() * N.GetX() + Cofactor[1].GetZ() * N.GetY() + Cofactor[2].GetZ() * N.GetZ()) / Det);
+			const float Length = Normal.GetMag();
+			if (Length > 1e-20f)
+				Normal.MultVector(1 / Length);
+			FMapMaterialVertex V = {{P[K].GetX(), P[K].GetY(), P[K].GetZ()},
+									{Normal.GetX(), Normal.GetY(), Normal.GetZ()},
+									{T.uv[K][0], T.uv[K][1]},
+									Mesh.HasVertexColors() ? Mesh.GetVertexColor(T.v[K]) : 0xffffffffu};
+			MaterialVertices.push_back(V);
+		}
+		if (Translucent)
+			MaterialBatches.push_back({&Obj, TriangleStart, 3, (P[0].GetY() + P[1].GetY() + P[2].GetY()) / 3});
+	}
+	Batch.NumVertices = static_cast<uint32>(MaterialVertices.size()) - Batch.FirstVertex;
+	if (Batch.NumVertices && !Translucent)
+		MaterialBatches.push_back(Batch);
+	return true;
 }
 
 FColor FMapDraw::GetPaletteColor(int Index) const

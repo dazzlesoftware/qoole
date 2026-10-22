@@ -156,6 +156,9 @@ public:
 	explicit FMapRenderResources(FRHIDevice& InDevice) : Device(InDevice) {}
 	~FMapRenderResources();
 	FRHIGraphicsPipeline* GetSolidPipeline(EPixelFormat TargetFormat);
+	FRHIGraphicsPipeline* GetMaterialPipeline(EPixelFormat TargetFormat, bool Translucent = false);
+	bool bMeshMaterials = true;
+	bool GetMaterialTextures(const std::shared_ptr<const struct FLoadedMeshAsset>&, FRHITexture*& Color, FRHITexture*& Normal);
 	// Textured landscapes, their layers blended per pixel (PSLandscape).
 	FRHIGraphicsPipeline* GetLandscapePipeline(EPixelFormat TargetFormat);
 	// Meshes drawn instanced (foliage: VSFoliage), and a mesh's triangles
@@ -192,6 +195,13 @@ public:
 	const FLandscapeBake* FindLandscapeBake(const Object& Land) const;
 
 private:
+	struct FMaterialEntry
+	{
+		std::shared_ptr<const struct FLoadedMeshAsset> Asset;
+		TSharedPtr<FRHITexture> Color, Normal;
+		uint64 LastUsed = 0;
+	};
+	std::map<const struct FLoadedMeshAsset*, FMaterialEntry> Materials;
 	struct FLandscapeEntry
 	{
 		FLandscapeBake Bake;
@@ -207,6 +217,9 @@ private:
 	FRHIDevice& Device;
 	TSharedPtr<FRHITexture> WhiteTexture;
 	TSharedPtr<FRHIGraphicsPipeline> SolidPipeline;
+	TSharedPtr<FRHIGraphicsPipeline> MaterialPipeline;
+	TSharedPtr<FRHIGraphicsPipeline> TranslucentMaterialPipeline;
+	EPixelFormat MaterialFormat = EPixelFormat::Unknown;
 	EPixelFormat SolidFormat = EPixelFormat::Unknown;
 	TSharedPtr<FRHIGraphicsPipeline> LandscapePipeline;
 	EPixelFormat LandscapeFormat = EPixelFormat::Unknown;

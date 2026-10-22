@@ -22,6 +22,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+struct FAssetReference;
 #include "MapEditorEnvironment.h"
 
 class Foliage;
@@ -129,12 +130,14 @@ public:
 	TArray<Object*> DuplicateObjects(const TArray<Object*>& Objects, const Vector3d& Delta);
 	// Loads a prefab (.qle) as one object centered on Position. Null with a
 	// reason on failure.
-	Object* AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError = nullptr);
+	Object* AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError = nullptr, const FString& ExpectedId = {});
 	// A point entity of the given class at Position.
 	Object* AddEntity(const FString& ClassName, const Vector3d& Position);
 	// A static mesh actor (StaticMesh::Find) with its pivot at Position; null
 	// if there is no such mesh.
 	Object* AddMesh(const FString& MeshName, const Vector3d& Position);
+	Object* AddMeshAsset(const FAssetReference&, const Vector3d& Position, FString& Error);
+	bool SetMeshMaterial(Object&, const FAssetReference&, FString& Error);
 	// A flat landscape of QuadsX x QuadsY quads centered on Position.
 	Object* AddLandscape(int32 QuadsX, int32 QuadsY, float QuadSize, const Vector3d& Position);
 	// This landscape (an imported one) centered on Position.

@@ -21,6 +21,31 @@ and prefab assets as `.asset`; the manifests reference `.gexp` exports and
 files still import, choosing a separate `.gmap` destination. Standalone editing
 without a project remains available.
 
+The Content Browsers now share a runtime asset registry: Refresh discovers
+native packages by schema and UUID without loading their bulk payloads. Unknown
+asset types appear as generic assets, and duplicate/malformed packages show
+content issues. Prefab updates retain their identity; imported copies get a new
+one. See [AssetRegistry.md](Engine/Documentation/Source/AssetRegistry.md).
+
+Runtime worlds now own actors and components with persistent IDs, hierarchy,
+transforms and validated references. Native world/prefab schema version 2 stores
+this scene model; older native files upgrade on save. Existing editing tools
+use a transitional adapter. See [WorldModel.md](Engine/Documentation/Source/WorldModel.md)
+for identity rules and the remaining migration boundary.
+
+Native mesh, texture and material assets are now available in the Content Browser.
+Right-click the browser to open its creation menu, including **New Folder**.
+Import OBJ geometry or images, create a mesh from selection, and create/edit a
+material from **Add**. Mesh assets place by double-click or drag; native textures
+can be assigned to landscape paint layers. Maps retain asset UUID references.
+Native meshes now render UV textures and tangent-space normal maps on DirectX 12
+and Vulkan, with metallic/roughness shading in Lit mode and base color in Unlit.
+The preview uses the editor's light; transparency and multiple material slots
+remain pending. See [RenderAssets.md](Engine/Documentation/Source/RenderAssets.md).
+
+The planned node-based material editor and full material feature roadmap are in
+[MaterialSystemPlan.md](Engine/Documentation/Source/MaterialSystemPlan.md).
+
 ## Layout
 
 The tree follows Unreal Engine's:
@@ -42,7 +67,7 @@ The tree follows Unreal Engine's:
 `Geometry` owns the 3D math and static mesh data; `Engine` owns landscape,
 spline and foliage data. These runtime libraries have no Editor dependencies.
 `RuntimeDataCheck.exe` exercises them without MapCore, UI or graphics startup.
-MapCore still supplies the legacy world tree, brushes, entity definitions and
+MapCore still supplies the editor's legacy object tree, brushes, entity definitions and
 viewport renderer while their replacements are migrated.
 
 ## Building
@@ -258,3 +283,10 @@ The text below is the readme of the original Qoole 99 source release.
 >
 > Pablo "^Fishman" Zurita.
 > Ex-Qoole programmer.
+
+Native mesh material assets now support Opaque, Masked and Translucent modes.
+Open a material in the Content Browser to edit base-color alpha, blend mode and
+mask cutoff, then save and apply it to selected native mesh actors. Texture
+alpha participates in masking and translucency. Existing materials retain opaque
+rendering. Transparent triangles render after opaque geometry and foliage; their
+centroid sorting has the usual limitations for intersecting surfaces.

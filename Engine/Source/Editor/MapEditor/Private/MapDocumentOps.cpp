@@ -5,6 +5,8 @@
 
 #include "MapDocument.h"
 #include "MapPackage.h"
+#include "MapAssetLibrary.h"
+#include "AssetPackage.h"
 
 #include "MapEdits.h"
 
@@ -77,6 +79,19 @@ void FMapDocument::AddObjects(const TArray<Object*>& NewObjects)
 	{
 		return;
 	}
+	// Copies used by undo preserve IDs. A caller inserting such a copy must
+	// not introduce aliases into the live world (including nested children).
+	TSet<std::string> Ids;
+	const auto Visit = [&](auto&& Self, Object& Obj, bool bIncoming) -> void
+	{
+		auto Id = Obj.GetIdentity();
+		const auto Conflicts = [&]() { return !Id.IsValid() || Ids.contains(Id.Actor.ToStdString()) || Ids.contains(Id.Transform.ToStdString()) || Ids.contains(Id.Payload.ToStdString()) || Ids.contains(Id.Entity.ToStdString()); };
+		if (bIncoming && Conflicts()) { Obj.RegenerateIdentity(false); Id = Obj.GetIdentity(); }
+		for (const auto* Value : { &Id.Actor, &Id.Transform, &Id.Payload, &Id.Entity }) Ids.insert(Value->ToStdString());
+		for (int I = 0; I < Obj.GetNumChildren(); ++I) Self(Self, Obj.GetChild(I), bIncoming);
+	};
+	Visit(Visit, *Root, false);
+	for (Object* Obj : NewObjects) Visit(Visit, *Obj, true);
 	const bool bOwn = BeginOwnTransaction(NewObjects.size() == 1 ? "Add Object" : "Add Objects");
 	auto Edit = std::make_unique<FAddEdit>();
 	Edit->Objects = NewObjects;
@@ -138,6 +153,7 @@ TArray<Object*> FMapDocument::DuplicateObjects(const TArray<Object*>& Objects, c
 	for (Object* Obj : InScope(Objects, *Scope))
 	{
 		Object* Copy = new Object(*Obj);
+		Copy->RegenerateIdentity();
 		Vector3d Position;
 		Copy->GetPosition(Position).AddVector(Delta);
 		Copy->SetPosition(Position);
@@ -152,14 +168,14 @@ TArray<Object*> FMapDocument::DuplicateObjects(const TArray<Object*>& Objects, c
 	return Copies;
 }
 
-Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError)
+Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError, const FString& ExpectedId)
 {
 	Object* Prefab = nullptr;
 	FString Error;
 	if (PrefabPath.EndsWith(".asset", ESearchCase::IgnoreCase))
 	{
 		FString Id;
-		Prefab = FMapPackage::Load(PrefabPath, Id, Error, true).release();
+		Prefab = FMapPackage::Load(PrefabPath, Id, Error, true, ExpectedId).release();
 	}
 	else
 	{
@@ -175,6 +191,7 @@ Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Posit
 		return nullptr;
 	}
 	Vector3d Offset;
+	Prefab->RegenerateIdentity();
 	Prefab->GetPosition(Offset).AddVector(Position);
 	Prefab->SetPosition(Offset);
 	const FString Name = FPaths::GetCleanFilename(PrefabPath);
@@ -205,6 +222,21 @@ Object* FMapDocument::AddMesh(const FString& MeshName, const Vector3d& Position)
 		EndTransaction();
 	}
 	return Obj;
+}
+
+Object* FMapDocument::AddMeshAsset(const FAssetReference& Ref, const Vector3d& Position, FString& Error)
+{
+	const auto Asset=FMapAssetLibrary::LoadMesh(Ref,{},Error); if(!Asset) return nullptr;
+	auto* Obj=new Object; Obj->SetMeshAsset(Asset); Obj->SetObjName(Asset->Data.Mesh->GetName()); Obj->SetPosition(Position);
+	AddObjects({Obj}); return Obj;
+}
+
+bool FMapDocument::SetMeshMaterial(Object& Obj, const FAssetReference& Ref, FString& Error)
+{
+	if(!Obj.GetMeshAsset()) { Error="Save this mesh as a native mesh asset and place it before assigning a material."; return false; }
+	const auto Asset=FMapAssetLibrary::LoadMesh(Obj.GetMeshAsset()->Source,Ref,Error); if(!Asset) return false;
+	const bool Own=BeginOwnTransaction("Assign Material"); CaptureObjects({&Obj}); Obj.SetMeshAsset(Asset); Changed(EMapChange::Geometry);
+	if(Own) EndTransaction(); return true;
 }
 
 Object* FMapDocument::AddLandscape(int32 QuadsX, int32 QuadsY, float QuadSize, const Vector3d& Position)
@@ -348,8 +380,17 @@ bool FMapDocument::SavePrefab(const TArray<Object*>& Objects, const FString& Pre
 	if (PrefabPath.EndsWith(".asset", ESearchCase::IgnoreCase))
 	{
 		FString Id;
+		if (FFileHelper::FileExists(PrefabPath))
+		{
+			FAssetPackageMetadata Existing;
+			if (!FAssetPackageStore::ReadMetadata(PrefabPath, Existing, OutError)) return false;
+			if (Existing.Kind != EAssetPackageKind::Asset || Existing.Schema != "Genesis.Prefab" || (Existing.SchemaVersion != 1 && Existing.SchemaVersion != 2))
+			{ OutError = "Choose a different filename: the existing package is not a supported prefab asset."; return false; }
+			Id = Existing.Id;
+		}
 		return FMapPackage::Save(PrefabPath, Prefab, Id, OutError, true);
 	}
+	if(FMapAssetLibrary::HasNativeAssets(Prefab)) { OutError="Save as .asset to preserve native asset references."; return false; }
 	if (!Prefab.SaveObjFile(PrefabPath.ToAnsi().c_str()))
 	{
 		OutError = FString::Format("{} could not be written.", PrefabPath);
@@ -576,6 +617,7 @@ bool FMapDocument::ClipObjects(const TArray<Object*>& Objects, const Plane& Clip
 	for (Object* Obj : Targets)
 	{
 		Object* Other = Mode == EMapClip::Split ? new Object(*Obj) : nullptr;
+		if (Other) Other->RegenerateIdentity();
 		CaptureObjects({ Obj });
 		const bool bClipped = Obj->PlaneClip(Keep);
 		if (!bClipped)

@@ -36,6 +36,7 @@ class StaticMesh {
   struct Triangle {
     int v[3];          // vertex indices, counterclockwise seen from outside
     Vector3d norm[3];  // corner normals (unit)
+    float uv[3][2] = {}; // optional per-corner texture coordinates
   };
 
   explicit StaticMesh(const char *meshName);
@@ -53,6 +54,7 @@ class StaticMesh {
   // Optional colors per vertex (RGBA, red in the low byte): a painted
   // landscape. Without them the renderer picks the object's color.
   bool HasVertexColors(void) const { return !colors.empty(); }
+  const std::vector<unsigned int> &GetVertexColors(void) const { return colors; }
   unsigned int GetVertexColor(int index) const { return colors[index]; }
   void SetVertexColors(std::vector<unsigned int> newColors) { colors = std::move(newColors); }
 
@@ -61,6 +63,9 @@ class StaticMesh {
   void AddTriangle(int a, int b, int c, const Vector3d &na, const Vector3d &nb, const Vector3d &nc);
   void AddFlatTriangle(int a, int b, int c); // the face's own normal at every corner
   void AddEdge(int a, int b);
+  void SetTriangleUVs(int triangle, const float coords[3][2]) {
+    for (int i=0; i<3; ++i) for(int j=0; j<2; ++j) triangles[triangle].uv[i][j]=coords[i][j];
+  }
   void Finish(void); // bounds
 
   //===== Bounds and hits (in the mesh's own space) =====

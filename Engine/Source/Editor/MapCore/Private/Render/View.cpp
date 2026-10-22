@@ -983,6 +983,24 @@ View::RenderSolid(bool tmap) const {
   CalTransSpaceMatrix(viewTrans.SetIdentity());
   svTrans.Multiply(viewTrans);
 
+  // For a renderer drawing the copies itself: the light (as RenderMeshSolid
+  // lights meshes, from map space) and the sky in view space, through the
+  // view's rotation (svTrans: view to map) turned back.
+  const auto toView = [](const Vector3d &mapDir) {
+    float v[3];
+    for (int c = 0; c < 3; c++)
+      v[c] = svTrans.GetMatrix(0, c) * mapDir.GetX() + svTrans.GetMatrix(1, c) * mapDir.GetY() + svTrans.GetMatrix(2, c) * mapDir.GetZ();
+    Vector3d out(v[0], v[1], v[2]);
+    const float len = out.GetMag();
+    if (len > 1e-8f)
+      out.MultVector(1.0f / len);
+    return out;
+  };
+  Vector3d light(0.35f, -0.5f, 0.79f);
+  light.MultVector(1.0f / light.GetMag());
+  renderDraw->ZBufInstanceLight(toView(light), toView(Vector3d(0.0f, 0.0f, 1.0f)), renderView->winWidth);
+
+
   viewObj->PreOrderCondApply(RenderObjSolid);
   
   qdraw->ZBufRender();
@@ -1218,6 +1236,7 @@ View::RenderObjSolid(Object &objNode) {
 
 void
 View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip, const StaticMesh *meshOverride, const Vector3d *scaleOverride) {
+	if (!meshOverride && renderDraw->ZBufMaterialMesh(objNode, trans)) return;
   const StaticMesh &mesh = meshOverride ? *meshOverride : objNode.GetMesh();
   FMeshVertexBufferAdapter::Transform(mesh, trans, vBuffer);
 
@@ -1815,23 +1834,6 @@ View::RenderFoliageSolid(Object &objNode, const Matrix44 &trans) {
   Vector3d objectScale;
   objNode.GetScale(objectScale);
   const float scale = ObjectScale(objNode);
-
-  // For a renderer drawing the copies itself: the light (as RenderMeshSolid
-  // lights meshes, from map space) and the sky in view space, through the
-  // view's rotation (svTrans: view to map) turned back.
-  const auto toView = [](const Vector3d &mapDir) {
-    float v[3];
-    for (int c = 0; c < 3; c++)
-      v[c] = svTrans.GetMatrix(0, c) * mapDir.GetX() + svTrans.GetMatrix(1, c) * mapDir.GetY() + svTrans.GetMatrix(2, c) * mapDir.GetZ();
-    Vector3d out(v[0], v[1], v[2]);
-    const float len = out.GetMag();
-    if (len > 1e-8f)
-      out.MultVector(1.0f / len);
-    return out;
-  };
-  Vector3d light(0.35f, -0.5f, 0.79f);
-  light.MultVector(1.0f / light.GetMag());
-  renderDraw->ZBufInstanceLight(toView(light), toView(Vector3d(0.0f, 0.0f, 1.0f)), renderView->winWidth);
 
   Matrix44 placed;
   for (const FoliageInstance &instance : foliage.GetInstances()) {

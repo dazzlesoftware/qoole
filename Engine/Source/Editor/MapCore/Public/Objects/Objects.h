@@ -35,6 +35,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "StaticMesh.h"
 #include "Landscape.h"
 #include "Foliage.h"
+#include "World/WorldIdentity.h"
+struct FLoadedMeshAsset;
 
 //==================== Object ====================
 
@@ -84,6 +86,9 @@ class Object : public ElmNode, public TransSpace {
   //===== Object Name =====
   const char *GetObjName(void) const;
   void SetObjName(const char *name);
+  const FActorIdentity &GetIdentity() const { return identity; }
+  void SetIdentity(const FActorIdentity &value) { identity = value; }
+  void RegenerateIdentity(bool recursive = true);
   bool IsTreeAttribSet(void) const { return treeAttrib; };
   void SetTreeAttrib(bool tv) { treeAttrib = tv; };
 
@@ -105,6 +110,8 @@ class Object : public ElmNode, public TransSpace {
   const char *GetMeshName(void) const { return landscape ? "Landscape" : (mesh ? mesh->GetName() : ""); };
   // Returns the mesh it held. A landscape's leaf stops being one.
   std::shared_ptr<const StaticMesh> SetMesh(std::shared_ptr<const StaticMesh> meshPtr);
+  const std::shared_ptr<const FLoadedMeshAsset> &GetMeshAsset() const { return meshAsset; }
+  void SetMeshAsset(std::shared_ptr<const FLoadedMeshAsset> asset);
 
   //===== Landscape (Genesis) =====
   // A landscape leaf holds the heightfield; it draws, picks and bounds from
@@ -220,6 +227,8 @@ class Object : public ElmNode, public TransSpace {
                     bool (*ProgressFunc)(int percent));
 
   Object *parent;
+  FActorIdentity identity;
+  std::shared_ptr<const FLoadedMeshAsset> meshAsset;
   LinkList<Object> children;
   IterLinkList<Object> *iterChildrenPtr;
   float boundRadius;

@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapLandscapeTextures.h"
+#include "MapAssetLibrary.h"
 
 #include "HAL/File.h"
 #include "MapEditorPrivate.h"
@@ -24,6 +25,11 @@ namespace
 {
 	constexpr float Pi = 3.14159265f;
 	constexpr int32 BuiltInSize = 256;
+	std::string NativeTextureRevision(const Landscape& Land)
+	{
+		for(const auto& Layer:Land.GetLayers()) if(Layer.texture.rfind("asset:",0)==0) return FMapAssetLibrary::RevisionKey();
+		return {};
+	}
 
 	// 0 to 1, fixed per lattice point and seed.
 	float Hash01(int32 X, int32 Y, uint32 Seed)
@@ -232,6 +238,7 @@ FString FLandscapeTextureLibrary::DisplayName(const std::string& Texture)
 	{
 		return FString(Texture.substr(8));
 	}
+	if(Texture.rfind("asset:",0)==0) { FAssetReference Ref; FString Error; return FMapAssetLibrary::ParseTextureToken(FString(Texture),Ref,Error)?Ref.Path:FString("Invalid texture asset"); }
 	return FString::FromWide(std::filesystem::path(FString(Texture).ToWide()).filename().wstring());
 }
 
@@ -249,6 +256,13 @@ bool FLandscapeTextureLibrary::IsTextured(const Landscape& Land)
 
 const FLandscapeTexture* FLandscapeTextureLibrary::Find(const std::string& Texture)
 {
+	if(Texture.rfind("asset:",0)==0) {
+		const auto Revision=FMapAssetLibrary::RevisionKey();
+		if(Revision!=NativeRevision) {
+			std::erase_if(Textures,[](const auto& Entry) { return Entry.first.rfind("asset:",0)==0; });
+			std::erase_if(Failed,[](const auto& Entry) { return Entry.first.rfind("asset:",0)==0; }); NativeRevision=Revision;
+		}
+	}
 	if (Texture.empty() || Failed.count(Texture))
 	{
 		return nullptr;
@@ -274,7 +288,12 @@ const FLandscapeTexture* FLandscapeTextureLibrary::Find(const std::string& Textu
 	{
 		FLandscapeImage Image;
 		FString Error;
-		if (!LoadImageFile(FString(Texture), Image, Error))
+		bool Loaded=false;
+		if(Texture.rfind("asset:",0)==0) {
+			FTextureAsset Asset; Loaded=FMapAssetLibrary::LoadTexture(FString(Texture),Asset,Error);
+			if(Loaded) { Image.Width=Asset.Width; Image.Height=Asset.Height; Image.Pixels=std::move(Asset.Pixels); }
+		} else Loaded=LoadImageFile(FString(Texture),Image,Error);
+		if (!Loaded)
 		{
 			UE_LOG(LogMapEditor, Warning, "Landscape texture: {}", Error);
 			Failed[Texture] = true;
@@ -358,6 +377,8 @@ FIntRect FLandscapeBake::Update(const std::shared_ptr<const Landscape>& Land)
 	{
 		return FIntRect();
 	}
+	const auto Revision=NativeTextureRevision(*Land);
+	if(Revision!=NativeRevision) { Baked.reset(); NativeRevision=Revision; }
 	if (Land == Baked)
 	{
 		return FIntRect();
@@ -597,7 +618,7 @@ bool FLandscapeLayerImages::UpdateTextures(const Landscape& Land)
 {
 	FLandscapeTextureLibrary& Library = FLandscapeTextureLibrary::Get();
 	const int32 Count = FMath::Max(FMath::Min(Land.GetNumLayers(), MaxLayers), 1);
-	std::string NewLook;
+	std::string NewLook=NativeTextureRevision(Land);
 	TArray<const FLandscapeTexture*> Sources;
 	int32 Size = 16;
 	for (int32 Index = 0; Index < Count; ++Index)
