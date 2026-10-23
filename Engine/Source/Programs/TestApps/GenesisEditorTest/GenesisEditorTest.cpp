@@ -3,6 +3,8 @@
 #include "Containers/ContainerAliases.h"
 #include "Templates/SharedPointer.h"
 #include "Screenshot.h"
+#include "World/WorldComposition.h"
+#include <filesystem>
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
 
@@ -75,6 +77,7 @@ private:
 	bool PointAtText(std::string_view Text, bool bClick, TSharedPtr<SWindow> Target = nullptr);
 	void SimulateDpiChange(float NewScale);
 	Object* FindByClass(const char* ClassName) const;
+	TSharedPtr<SWindow> FindWorldCompositionWindow() const;
 
 	FString SelfTestDir;
 	float LandscapePaintBefore = 0.0f;
@@ -87,6 +90,7 @@ private:
 	Object* TestColumn = nullptr;
 	Object* TestSphere = nullptr;
 	Object* TestPyramid = nullptr;
+	FString WorldCompositionFile, WorldRegionFile;
 };
 
 void FGenesisEditorTestApp::OnInitialize(const TArray<FString>& Args)
@@ -264,6 +268,15 @@ Object* FGenesisEditorTestApp::FindByClass(const char* ClassName) const
 			return Obj;
 		}
 	}
+	return nullptr;
+}
+
+TSharedPtr<SWindow> FGenesisEditorTestApp::FindWorldCompositionWindow() const
+{
+	const FString Prefix = FTextLocalization::Format("World Composition: {}", "");
+	for (const TSharedRef<SWindow>& Window : App->GetWindows())
+		if (Window->GetTitle().StartsWith(Prefix.View()))
+			return Window.ToSharedPtr();
 	return nullptr;
 }
 
@@ -1474,6 +1487,111 @@ void FGenesisEditorTestApp::TickSelfTest()
 				Capture("material_instance", Window.ToSharedPtr());
 		break;
 	case 448:
+	{
+		// World composition: made in the content browser and opened as a double-click does.
+		const FProjectContext* const Project = FProjectContext::GetActive();
+		const TSharedPtr<SContentBrowser> Browser = Shell->GetContentBrowser(0);
+		if (!Project || !Browser)
+			break;
+		Browser->SetPath(Project->GetContentDir());
+		Browser->SetSearchText("");
+		WorldCompositionFile = Browser->CreateWorldComposition();
+		Shell->RefreshAssetRegistry();
+		Browser->Refresh();
+		bool bOpened = false;
+		for (const FContentBrowserItem& Item : Browser->GetItems())
+			if (Item.Type == EContentAssetType::WorldComposition && !WorldCompositionFile.IsEmpty() &&
+			    std::filesystem::path(Item.Path.ToWide()) == std::filesystem::path(WorldCompositionFile.ToWide()))
+			{
+				Browser->Activate(Item);
+				bOpened = true;
+				MaterialWindowOpenedAt = FPlatformTime::Seconds();
+			}
+		bOpened = bOpened && FindWorldCompositionWindow() != nullptr;
+		Report(bOpened ? "world composition created and its editor opened from the content browser"
+		               : "FAILED: world composition editor did not open");
+		break;
+	}
+	case 450:
+	{
+		const TSharedPtr<SWindow> Window = FindWorldCompositionWindow();
+		if (!Window)
+			break;
+		if (FPlatformTime::Seconds() - MaterialWindowOpenedAt < .5)
+		{
+			--SelfTestFrame;
+			break;
+		}
+		// The host writes the region's level through its own document.
+		const bool bClicked = PointAtText(GENESIS_TEXT("New Region").View(), true, Window);
+		Report(bClicked ? "world composition New Region clicked" : "FAILED: no New Region button");
+		break;
+	}
+	case 452:
+	{
+		const TSharedPtr<SWindow> Window = FindWorldCompositionWindow();
+		if (!Window)
+			break;
+		const bool bSaved = PointAtText(GENESIS_TEXT("Save").View(), true, Window);
+		const FAssetRegistry* Registry = Shell->GetAssetRegistry();
+		const FAssetData* Composition = Registry ? Registry->FindByFile(WorldCompositionFile) : nullptr;
+		FAssetPackage Package;
+		FWorldComposition World;
+		FString Error;
+		bool Good = bSaved && Composition &&
+		    Registry->Load(Composition->GetReference(), Package, Error, "Genesis.WorldComposition") &&
+		    FWorldComposition::FromPackage(Package, World, Error) && World.GetTiles().size() == 1;
+		const FAssetData* Region = nullptr;
+		if (Good)
+		{
+			Region = Registry->Resolve(World.GetTiles()[0].Map, Error, "Genesis.World");
+			Good = Region && World.GetTiles()[0].Name == "Region 1" && Region->PackagePath.EndsWith("Regions/Region 1");
+		}
+		if (Good)
+			WorldRegionFile = Region->FilePath;
+		const FString Result = Good ? FString("new region map written by the host, registered and saved")
+		                            : "FAILED: world composition region " + Error;
+		Report(*Result);
+		break;
+	}
+	case 454:
+		if (const TSharedPtr<SWindow> Window = FindWorldCompositionWindow())
+			Capture("world_composition", Window);
+		break;
+	case 456:
+	{
+		const TSharedPtr<SWindow> Window = FindWorldCompositionWindow();
+		if (!Window || WorldRegionFile.IsEmpty())
+			break;
+		// Opening a region replaces the level; keep the current one so no save prompt blocks the run.
+		if (Doc->IsModified() && !Doc->GetPath().IsEmpty())
+			Shell->SaveMap(Doc->GetPath());
+		if (Shell->GetDocument()->IsModified())
+		{
+			Report("FAILED: the current level could not be saved before opening a region");
+			break;
+		}
+		PointAtText(GENESIS_TEXT("Open Region Map").View(), true, Window);
+		FMapDocument* Opened = Shell->GetDocument();
+		int32 Landscapes = 0;
+		for (Object* Obj : Opened->GetObjects())
+			Landscapes += Obj->HasLandscape() ? 1 : 0;
+		const bool Good = std::filesystem::equivalent(std::filesystem::path(Opened->GetPath().ToWide()),
+		                      std::filesystem::path(WorldRegionFile.ToWide())) &&
+		    Landscapes == 1;
+		Report(Good ? "region map opened in the level editor with its landscape"
+		            : "FAILED: region map did not open in the level editor");
+		break;
+	}
+	case 458:
+		if (!WorldRegionFile.IsEmpty())
+			Capture("world_region");
+		break;
+	case 460:
+		if (const TSharedPtr<SWindow> Window = FindWorldCompositionWindow())
+			App->RequestDestroyWindow(ToSharedRef(Window));
+		break;
+	case 462:
 		GENESIS_LOG(LogGenesisEditor, Display, "GenesisEditorTest: {} checks, {} failed", Checks, Failures);
 		App->RequestQuit();
 		break;

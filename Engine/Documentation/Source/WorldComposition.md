@@ -146,6 +146,22 @@ callers. Still to come:
 - Grid dragging, refused drops, selection and Delete, driven through real
   mouse and key input.
 
+The editor automation program (`Programs/TestApps/GenesisEditorTest`) runs the
+same workflow in the real editor when started with a project, for example
+`GenesisEditorTest.exe -d3d12 -selftest=<dir> -newproject=<dir>/World.gproject`
+or with `-vulkan`. It:
+
+1. Creates a composition through the content browser and opens it as a
+   double-click does.
+2. Clicks **New Region**, so the host writes the region's level.
+3. Clicks **Save** and reloads the saved registry to check the region and its
+   map.
+4. Captures `world_composition`.
+5. Clicks **Open Region Map** and checks that the level editor opened that map
+   with its landscape.
+6. Captures `world_region`.
+
+
 `WorldComposition` tests (`Programs/EngineTests/WorldCompositionTests.cpp`)
 cover:
 
