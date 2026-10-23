@@ -88,7 +88,8 @@ are implemented. Runtime/Renderer now owns native mesh/material rendering.
 Runtime terrain/foliage preparation, GPU rendering and native scene traversal are
 also implemented. Remaining work includes migrating selection, transactions and
 the editor's live document/operations to runtime actors. MapCore retirement, gameplay component lifecycle, cross-world actor
-references, streaming, and plugin loading remain later stages.
+references, and plugin loading remain later stages. Regions registered on a world grid
+and streamed by distance are described in [WorldComposition.md](WorldComposition.md).
 
 ## Validation
 

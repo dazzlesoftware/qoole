@@ -57,6 +57,15 @@ features, compatibility and budgets are documented in [MaterialGraph.md](Materia
 
 Coverage and acceptance are tracked in [ScriptingAPICoverage.md](ScriptingAPICoverage.md).
 
+## World composition
+
+- [x] Region registry: independently saved maps registered on a world grid, with overlap checks.
+- [x] Distance streaming of nearby regions through a replaceable tile source.
+- [ ] Editor tools for registering and arranging regions.
+- [ ] Region servers, boundary handoff, ownership/access and edge matching.
+
+Design and limits are in [WorldComposition.md](WorldComposition.md).
+
 ## Progress
 
 2026-10-23 material authoring completion: reusable typed functions (eight inputs,
