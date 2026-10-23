@@ -1,6 +1,6 @@
 # Native mesh, texture and material assets
 
-Genesis now has runtime codecs and loaders for three `.asset` types. All use
+Genesis has runtime codecs and loaders for native rendering `.asset` types. All use
 the existing package UUIDs, `.gexp` metadata, `.gbulk` payloads and asset registry.
 No codec depends on MapCore, Slate, image decoders or a graphics API.
 
@@ -10,6 +10,12 @@ No codec depends on MapCore, Slate, image decoders or a graphics API.
 | `Genesis.Texture2D` v1 | Width, height, RGBA8 pixels, sRGB metadata |
 | `Genesis.Material` v3 | RGBA base color, roughness, metallic, blend mode, mask cutoff, optional base color and tangent-space normal texture references |
 | `Genesis.Material` v4 | Material graph, editor node positions and cooked DXIL/SPIR-V programs; retains v3 property data for migration |
+| `Genesis.MaterialFunction` v1 | Typed graph with one result, eight input slots and embedded function dependencies |
+| `Genesis.MaterialParameterCollection` v1 | Shared named scalar/float4 defaults |
+| `Genesis.MaterialInstance` v1/v2/v3 | Parent and overrides; v2 adds textures, v3 adds cooked static/quality permutations |
+
+Material v4 currently stores graph v6 (graph versions 1-6 remain readable). See
+[MaterialGraph.md](MaterialGraph.md) for authoring, dependency updates and budgets.
 
 The runtime API is `Runtime/Engine/Public/Assets/RenderAssets.h`.
 `FRenderAssetCodec` encodes/decodes package payloads. `FRenderAssetLoader` resolves

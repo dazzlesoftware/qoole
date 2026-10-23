@@ -1,5 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "Materials/Material.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "Assets/RenderAssetCodecPrivate.h"
 #include <set>
 #include <functional>
@@ -35,6 +36,7 @@ bool FRenderAssetCodec::EncodeMaterial(const FMaterialAsset& In, FAssetPackage& 
 			Dependency(P, In.NormalTexture);
 		if (In.Graph)
 		{
+			Need(!In.Graph->bFunction, "Save function graphs as material function assets.");
 			FMaterialGraphProgram Program;
 			if (!FMaterialGraphCompiler::Compile(*In.Graph, Program, Error))
 				return false;
@@ -57,6 +59,17 @@ bool FRenderAssetCodec::EncodeMaterial(const FMaterialAsset& In, FAssetPackage& 
 			P.Exports["GraphSPIRVBytes"] = static_cast<int>(In.GraphSPIRV.size());
 			P.Bulk = In.GraphDXIL;
 			P.Bulk.insert(P.Bulk.end(), In.GraphSPIRV.begin(), In.GraphSPIRV.end());
+			std::function<void(const FMaterialGraph&)> FunctionDependencies = [&](const auto& G) {
+				for (const auto& N : G.Nodes)
+				{
+					Dependency(P, N.Function);
+					Dependency(P, N.Collection);
+				}
+				for (const auto& F : G.Functions)
+					if (F.Graph)
+						FunctionDependencies(*F.Graph);
+			};
+			FunctionDependencies(*In.Graph);
 			for (const auto& T : Program.Textures)
 				Dependency(P, T.Reference);
 		}
@@ -104,6 +117,7 @@ bool FRenderAssetCodec::DecodeMaterial(const FAssetPackage& P, FMaterialAsset& O
 			if (!FMaterialGraphCompiler::Decode(P.Exports.Get("Graph"), Graph, Error) ||
 				!FMaterialGraphCompiler::Compile(Graph, Program, Error))
 				return false;
+			Need(!Graph.bFunction, "A surface material cannot contain a function graph root.");
 			Need(P.Exports.Get("GraphSource").AsString() == Program.PixelShaderSource,
 				 "Material graph cook is stale; recompile in the editor.");
 			const auto D = Count(P.Exports.Get("GraphDXILBytes"), 4 * 1024 * 1024),
@@ -161,6 +175,12 @@ bool FRenderAssetLoader::LoadMaterial(const FAssetReference& R, FMaterialAsset& 
 	FMaterialAsset Result;
 	if (!Load(R, Result, 0))
 		return false;
+	if (Result.Graph)
+	{
+		bool Changed = false;
+		if (!FMaterialParameterCollectionCodec::Refresh(*Result.Graph, Registry, Changed, Error))
+			return false;
+	}
 	Out = std::move(Result);
 	Error.Empty();
 	return true;
@@ -207,5 +227,5 @@ bool IsMaterialAsset(const FAssetPackageMetadata& M)
 {
 	return M.Kind == EAssetPackageKind::Asset &&
 		   ((M.Schema == "Genesis.Material" && M.SchemaVersion >= 1 && M.SchemaVersion <= 4) ||
-			(M.Schema == "Genesis.MaterialInstance" && M.SchemaVersion >= 1 && M.SchemaVersion <= 2));
+			(M.Schema == "Genesis.MaterialInstance" && M.SchemaVersion >= 1 && M.SchemaVersion <= 3));
 }

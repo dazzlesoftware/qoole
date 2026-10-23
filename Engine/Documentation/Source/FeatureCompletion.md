@@ -9,13 +9,18 @@ platform-specific deployment.
 ## Material authoring
 
 - [x] Typed graph, desktop shader cooking, asset save/load and mesh preview.
-- [ ] Multi-selection, marquee selection, clipboard, duplication and comments.
+- [x] Multi-selection, marquee selection, clipboard, duplication and comments.
 - [x] Expanded math/vector/UV/utility expression library and reroutes.
-- [ ] Background compilation, live preview, stale result suppression and diagnostics.
+- [x] Background compilation, live preview, stale result suppression and diagnostics.
 - [x] Scalar/vector/texture parameters and material instances, with uniform updates.
-- [ ] Reusable material functions, dependencies and recursion validation.
-- [ ] Parameter collections, static switches and quality/platform permutations.
-- [ ] Complete editor workflows, tests and documented compatibility/limits.
+- [x] Reusable material functions, dependencies and recursion validation.
+- [x] Parameter collections, static switches and quality/platform permutations.
+- [x] Complete editor workflows, tests and documented compatibility/limits.
+
+Authoring completion applies to the current six-channel desktop surface contract,
+including material-attribute bundles/layers. It does not close the advanced
+rendering checklist or claim the full Unreal expression inventory. Supported
+features, compatibility and budgets are documented in [MaterialGraph.md](MaterialGraph.md).
 
 ## Advanced material rendering
 
@@ -53,6 +58,23 @@ platform-specific deployment.
 Coverage and acceptance are tracked in [ScriptingAPICoverage.md](ScriptingAPICoverage.md).
 
 ## Progress
+
+2026-10-23 material authoring completion: reusable typed functions (eight inputs,
+one result), transitive dependency refresh/affected-only recooking, collections
+with runtime uniform snapshots, static/quality instance permutations, platform
+branches, bounded shader cache and six-channel attribute layers implemented.
+Editor workflows include asset drops, selection/clipboard/history, background
+revision suppression, selected-node preview, save-target validation, preview
+mesh/view controls and single-draft windows. MaterialEditor remains independent
+of MapEditor/MapCore; shared drag data belongs to EditorFramework.
+
+Release x64 solution build succeeds, including runtime-only validation tools.
+Full EngineTests: 293 tests / 58,405 assertions, zero failures/skips. Focused
+MaterialGraph/EditorScripting: 36 tests / 1,466 assertions. MaterialAuthoring
+projects pass all six Lua/Python/C# and D3D12/Vulkan CLI runs; native tests verify
+their saved scenes, transactions and rendered pixels on both RHIs. D3D12 editor
+captures inspected under Engine/Saved/MaterialGraph/FinalQA. Advanced rendering
+and the broader scripting/API checklist remain open.
 
 2026-10-22: baseline audited. The first implementation and module refactor pass
 255 tests. Work is starting with material editor usability and expression coverage;

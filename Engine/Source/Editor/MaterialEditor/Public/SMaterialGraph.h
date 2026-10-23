@@ -8,6 +8,7 @@ class SMaterialGraph final : public SLeafWidget
   public:
 	SLATE_BEGIN_ARGS(SMaterialGraph)
 	SLATE_ARGUMENT(std::shared_ptr<FMaterialAsset>, Material, nullptr)
+	SLATE_ARGUMENT(std::shared_ptr<FAssetRegistry>, Registry, nullptr)
 	SLATE_EVENT(FSimpleDelegate, OnChanged)
 	SLATE_EVENT(FSimpleDelegate, OnSelectionChanged)
 	SLATE_EVENT(TDelegate<void(const FString&)>, OnError)
@@ -16,6 +17,9 @@ class SMaterialGraph final : public SLeafWidget
 	uint32 AddNode(EMaterialExpression, FVector2 Position);
 	bool Connect(uint32 From, uint32 To, int Input, FString& Error); // To=0: material output
 	void Disconnect(uint32 To, int Input);
+	bool DropAsset(const FAssetReference&, const FString& Schema, FVector2, FString&);
+	FReply OnDragOver(const FGeometry&, const FDragDropEvent&) override;
+	FReply OnDrop(const FGeometry&, const FDragDropEvent&) override;
 	void DeleteSelected();
 	void SetNodeSelection(const TArray<uint32>& Nodes);
 	const TArray<uint32>& GetSelectedNodes() const
@@ -28,6 +32,9 @@ class SMaterialGraph final : public SLeafWidget
 	void Undo();
 	void Redo();
 	void FrameAll();
+	void SetQualityLevel(uint8);
+	void SetUseMaterialAttributes(bool);
+	void SetMaterialSettings(EMaterialBlendMode, float MaskCutoff);
 	void EditNode(const TFunction<void(FMaterialNode&)>&);
 	uint32 GetSelectedNode() const
 	{
@@ -71,10 +78,17 @@ class SMaterialGraph final : public SLeafWidget
 	{
 		return (P - Pan) / Zoom;
 	}
+	std::shared_ptr<FAssetRegistry> Registry;
 	std::shared_ptr<FMaterialAsset> Material;
 	FSimpleDelegate OnChanged, OnSelectionChanged;
 	TDelegate<void(const FString&)> OnError;
-	TArray<FMaterialGraph> UndoStack, RedoStack;
+	struct FHistoryEntry
+	{
+		FMaterialGraph Graph;
+		EMaterialBlendMode Blend;
+		float MaskCutoff;
+	};
+	TArray<FHistoryEntry> UndoStack, RedoStack;
 	TArray<uint32> Selection;
 	FVector2 Pan{30, 30}, Last, Cursor, MenuPosition;
 	FVector2 MarqueeStart;

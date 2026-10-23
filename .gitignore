@@ -14,3 +14,6 @@ Engine/Saved/
 
 /Samples/Features/**/Content/Maps/Main.*.gexp
 /Samples/Features/**/Content/Maps/Main.*.gbulk
+
+# Material authoring regression projects are generated from Scenario.json.
+/Samples/Features/MaterialAuthoring/*/Content/

@@ -1,5 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "Renderer/NativeMeshRenderer.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "Renderer/RenderTextureMips.h"
 #include "MeshMaterial_VSMaterial_DXIL.h"
 #include "MeshMaterial_PSMaterial_DXIL.h"
@@ -292,8 +293,21 @@ TUniquePtr<FNativeMeshFrame> FNativeMeshRenderer::Prepare(const FNativeMeshDrawL
 			{
 				TArray<float> Values;
 				for (const auto& P : Program.Parameters)
-					for (float V : P.Value)
+				{
+					float Value[4];
+					std::copy(std::begin(P.Value), std::end(P.Value), Value);
+					if (!P.Collection.IsNull())
+						for (const auto& Instance : Collections)
+						{
+							const auto& Ref = Instance->GetReference();
+							const bool Match = P.Collection.Id.IsEmpty() ? Ref.Path == P.Collection.Path
+																		 : Ref.Id == P.Collection.Id;
+							if (Match && !Instance->GetValue(P.CollectionParameter, P.Width, Value, Error))
+								return {};
+						}
+					for (float V : Value)
 						Values.push_back(V);
+				}
 				FRHIBufferDesc BD;
 				BD.Size = Values.size() * sizeof(float);
 				BD.Usage = EBufferUsage::Uniform;
@@ -415,4 +429,22 @@ void FNativeMeshRenderer::Draw(FRHICommandList& Cmd, const FNativeMeshFrame& Pre
 		}
 		Cmd.DrawIndexed(Draw.Batch.NumVertices, Draw.Batch.FirstVertex, 0);
 	}
+}
+
+void FNativeMeshRenderer::SetParameterCollectionInstance(
+	std::shared_ptr<FMaterialParameterCollectionInstance> Instance)
+{
+	if (!Instance)
+		return;
+	const auto& Ref = Instance->GetReference();
+	for (auto& Current : Collections)
+	{
+		const auto& Other = Current->GetReference();
+		if (Ref.Id.IsEmpty() ? Ref.Path == Other.Path : Ref.Id == Other.Id)
+		{
+			Current = std::move(Instance);
+			return;
+		}
+	}
+	Collections.push_back(std::move(Instance));
 }

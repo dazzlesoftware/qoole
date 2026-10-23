@@ -1,5 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "EditorScriptExecution.h"
+#include "EditorAssetScriptBindings.h"
 #include "Scripting/WorldScriptBindings.h"
 #include "HAL/File.h"
 #include "MaterialScriptBindings.h"
@@ -23,7 +24,10 @@ bool ExecuteEditorScript(const FEditorScriptRequest& Request, std::shared_ptr<FE
 	auto Host = std::make_shared<FScriptBindingRegistry>(EScriptPurpose::Editor, Request.Capabilities);
 	FScriptRuntimeRegistry Providers;
 	if (!RegisterBuiltinScriptProviders(Providers, Error) || !RegisterCoreScriptBindings(*Host, Error) ||
-		!RegisterEditorScriptBindings(*Host, Context, Error) || !RegisterMaterialScriptBindings(*Host, Error) || !RegisterAssetScriptBindings(*Host, Context->Assets, Error))
+		!RegisterEditorScriptBindings(*Host, Context, Error) ||
+		!RegisterMaterialScriptBindings(*Host, Error, Context->Assets) ||
+		!RegisterAssetScriptBindings(*Host, Context->Assets, Error) ||
+		!RegisterEditorAssetScriptBindings(*Host, Context, Error))
 		return false;
 	auto Runtime = Providers.Create({Request.Language, "Win64", EScriptPurpose::Editor}, Host, Error);
 	if (!Runtime)

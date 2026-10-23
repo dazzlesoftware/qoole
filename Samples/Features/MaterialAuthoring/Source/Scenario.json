@@ -1,0 +1,667 @@
+{
+  "Content": "",
+  "Map": "",
+  "Steps": [
+    {
+      "API": "Material.SaveCollection",
+      "Arguments": {
+        "Path": "${Args.Content}/Shared.asset",
+        "Parameters": [
+          {
+            "Name": "Tint",
+            "Width": 4,
+            "Value": [
+              0.15,
+              0.6,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      "Capture": "Shared"
+    },
+    {
+      "API": "Material.SaveFunction",
+      "Arguments": {
+        "Path": "${Args.Content}/ColorFunction.asset",
+        "Graph": {
+          "Version": 5,
+          "FunctionGraph": true,
+          "Functions": [],
+          "QualityLevel": 2,
+          "Nodes": [
+            {
+              "Id": 1,
+              "Expression": "FunctionInput",
+              "Inputs": [
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 3,
+              "X": 0,
+              "Y": 0
+            },
+            {
+              "Id": 2,
+              "Expression": "Constant",
+              "Inputs": [
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                0.8,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 230,
+              "Y": 0
+            },
+            {
+              "Id": 3,
+              "Expression": "Multiply",
+              "Inputs": [
+                1,
+                2,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 460,
+              "Y": 0
+            }
+          ],
+          "Outputs": [
+            3,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "Capture": "Function"
+    },
+    {
+      "API": "Material.SaveFunction",
+      "Arguments": {
+        "Path": "${Args.Content}/LayerFunction.asset",
+        "Graph": {
+          "Version": 6,
+          "FunctionGraph": true,
+          "Functions": [],
+          "QualityLevel": 2,
+          "Nodes": [
+            {
+              "Id": 1,
+              "Expression": "FunctionInput",
+              "Inputs": [
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                1,
+                1,
+                1,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 8,
+              "X": 0,
+              "Y": 0
+            }
+          ],
+          "Outputs": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "Capture": "LayerFunction"
+    },
+    {
+      "API": "Assets.CreateTexture",
+      "Arguments": {
+        "Path": "${Args.Content}/White.asset",
+        "Width": 1,
+        "Height": 1,
+        "Pixels": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "SRGB": true
+      },
+      "Capture": "Texture"
+    },
+    {
+      "API": "Material.CookGraph",
+      "Arguments": {
+        "Path": "${Args.Content}/Master.asset",
+        "Graph": {
+          "Version": 6,
+          "FunctionGraph": false,
+          "Functions": [],
+          "QualityLevel": 2,
+          "Nodes": [
+            {
+              "Id": 1,
+              "Expression": "VectorCollectionParameter",
+              "Inputs": [
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": "$Shared.Reference",
+              "InputIndex": 0,
+              "ParameterName": "Tint",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 0,
+              "Y": 0
+            },
+            {
+              "Id": 2,
+              "Expression": "ComponentMask",
+              "Inputs": [
+                1,
+                0,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 230,
+              "Y": 0
+            },
+            {
+              "Id": 3,
+              "Expression": "MaterialFunctionCall",
+              "Inputs": [
+                2,
+                0,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": "$Function.Reference",
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 460,
+              "Y": 0
+            },
+            {
+              "Id": 4,
+              "Expression": "TextureSampleParameter2D",
+              "Inputs": [
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": "$Texture.Reference",
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "Albedo",
+              "ParameterGroup": "Surface",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 690,
+              "Y": 0
+            },
+            {
+              "Id": 5,
+              "Expression": "ComponentMask",
+              "Inputs": [
+                4,
+                0,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 920,
+              "Y": 0
+            },
+            {
+              "Id": 6,
+              "Expression": "Multiply",
+              "Inputs": [
+                3,
+                5,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 1150,
+              "Y": 0
+            },
+            {
+              "Id": 7,
+              "Expression": "Constant3Vector",
+              "Inputs": [
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                1,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 1380,
+              "Y": 0
+            },
+            {
+              "Id": 8,
+              "Expression": "StaticSwitchParameter",
+              "Inputs": [
+                6,
+                7,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "UseTint",
+              "ParameterGroup": "Features",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 1610,
+              "Y": 0
+            },
+            {
+              "Id": 9,
+              "Expression": "QualitySwitch",
+              "Inputs": [
+                7,
+                6,
+                8
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 1840,
+              "Y": 0
+            },
+            {
+              "Id": 10,
+              "Expression": "ScalarParameter",
+              "Inputs": [
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                0.4,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "Roughness",
+              "ParameterGroup": "Surface",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 2070,
+              "Y": 0
+            },
+            {
+              "Id": 11,
+              "Expression": "MakeMaterialAttributes",
+              "Inputs": [
+                9,
+                10,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": {},
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 2300,
+              "Y": 0
+            },
+            {
+              "Id": 12,
+              "Expression": "MaterialFunctionCall",
+              "Inputs": [
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Value": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "Texture": {},
+              "Function": "$LayerFunction.Reference",
+              "Collection": {},
+              "InputIndex": 0,
+              "ParameterName": "",
+              "ParameterGroup": "",
+              "Description": "",
+              "NormalTexture": false,
+              "Mask": 7,
+              "X": 2530,
+              "Y": 0
+            }
+          ],
+          "Outputs": [
+            12,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "UseMaterialAttributes": true
+        }
+      },
+      "Positive": [
+        "DXILBytes",
+        "SPIRVBytes"
+      ],
+      "Capture": "Master"
+    },
+    {
+      "API": "Material.SaveInstance",
+      "Arguments": {
+        "Path": "${Args.Content}/RedInstance.asset",
+        "Parent": "$Master.Reference",
+        "Parameters": [
+          {
+            "Name": "Roughness",
+            "Width": 1,
+            "Value": [
+              0.8,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "StaticParameters": [
+          {
+            "Name": "UseTint",
+            "Value": false
+          }
+        ],
+        "QualityLevel": 2
+      },
+      "Capture": "Instance"
+    },
+    {
+      "API": "Assets.CreateBasicMesh",
+      "Arguments": {
+        "Path": "${Args.Content}/PreviewCube.asset",
+        "Shape": "Cube",
+        "Material": "$Master.Reference"
+      },
+      "Capture": "Mesh"
+    },
+    {
+      "API": "Editor.BeginTransaction",
+      "Arguments": {
+        "Description": "Material authoring example"
+      }
+    },
+    {
+      "API": "Editor.AddMeshAsset",
+      "Arguments": {
+        "Reference": "$Mesh.Reference",
+        "Position": [
+          -90,
+          0,
+          0
+        ]
+      },
+      "Capture": "MasterActor"
+    },
+    {
+      "API": "Editor.AddMeshAsset",
+      "Arguments": {
+        "Reference": "$Mesh.Reference",
+        "Position": [
+          90,
+          0,
+          0
+        ]
+      },
+      "Capture": "InstanceActor"
+    },
+    {
+      "API": "Editor.SetMeshMaterial",
+      "Arguments": {
+        "ActorId": "$InstanceActor.ActorId",
+        "Reference": "$Instance.Reference",
+        "Slot": 0
+      }
+    },
+    {
+      "API": "Editor.EndTransaction",
+      "Arguments": {}
+    },
+    {
+      "API": "Editor.Save",
+      "Arguments": {
+        "Path": "${Args.Map}"
+      }
+    },
+    {
+      "API": "Material.LoadGraph",
+      "Arguments": {
+        "Path": "${Args.Content}/Master.asset"
+      },
+      "Expect": [
+        {
+          "Path": "Id",
+          "Value": "$Master.Id"
+        }
+      ],
+      "Capture": "ReloadedMaster"
+    },
+    {
+      "API": "Material.LoadInstance",
+      "Arguments": {
+        "Path": "${Args.Content}/RedInstance.asset"
+      },
+      "Expect": [
+        {
+          "Path": "StaticParameters.0.Value",
+          "Value": false
+        },
+        {
+          "Path": "QualityLevel",
+          "Value": 2
+        },
+        {
+          "Path": "Id",
+          "Value": "$Instance.Id"
+        }
+      ],
+      "Capture": "ReloadedInstance"
+    }
+  ],
+  "Return": {
+    "Complete": true,
+    "Master": "$Master.Reference",
+    "Instance": "$Instance.Reference",
+    "Function": "$Function.Reference",
+    "Collection": "$Shared.Reference",
+    "Mesh": "$Mesh.Reference"
+  }
+}

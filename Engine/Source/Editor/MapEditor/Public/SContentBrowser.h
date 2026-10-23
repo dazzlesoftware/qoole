@@ -42,6 +42,8 @@ enum class EContentAssetType : uint8
 	File,
 	Package,
 	InvalidPackage,
+	MaterialFunction,
+	MaterialParameterCollection,
 };
 
 const char* ToString(EContentAssetType Type);
@@ -65,17 +67,17 @@ struct FContentBrowserItem
 
 class SContentBrowser final : public SCompoundWidget
 {
-public:
+  public:
 	SLATE_BEGIN_ARGS(SContentBrowser)
-		SLATE_ARGUMENT(TArray<FContentBrowserRoot>, Roots, {})
-		SLATE_ARGUMENT(TSharedPtr<FAssetRegistry>, Registry, nullptr)
-		// .qle files in these folders (and below) are prefabs.
-		SLATE_ARGUMENT(TArray<FString>, PrefabFolders, {})
-		// The folder shown first; empty: the first root.
-		SLATE_ARGUMENT(FString, InitialPath, FString())
-		SLATE_EVENT(TDelegate<void(const FContentBrowserItem&)>, OnAssetActivated)
-		SLATE_EVENT(FSimpleDelegate, OnSaveAll)
-		SLATE_EVENT(TDelegate<bool(const FString&, FString&)>, OnCreateMesh)
+	SLATE_ARGUMENT(TArray<FContentBrowserRoot>, Roots, {})
+	SLATE_ARGUMENT(TSharedPtr<FAssetRegistry>, Registry, nullptr)
+	// .qle files in these folders (and below) are prefabs.
+	SLATE_ARGUMENT(TArray<FString>, PrefabFolders, {})
+	// The folder shown first; empty: the first root.
+	SLATE_ARGUMENT(FString, InitialPath, FString())
+	SLATE_EVENT(TDelegate<void(const FContentBrowserItem&)>, OnAssetActivated)
+	SLATE_EVENT(FSimpleDelegate, OnSaveAll)
+	SLATE_EVENT(TDelegate<bool(const FString&, FString&)>, OnCreateMesh)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
@@ -85,7 +87,10 @@ public:
 
 	// The folder shown ("" is All, the roots). The tiles follow next frame.
 	void SetPath(const FString& Path);
-	const FString& GetPath() const { return Path; }
+	const FString& GetPath() const
+	{
+		return Path;
+	}
 	void GoBack();
 	void GoForward();
 	void SetSearchText(const FString& Text);
@@ -94,9 +99,18 @@ public:
 	void Refresh(bool bRescanRegistry = true);
 
 	// What the tiles show (after the search), for tests.
-	const TArray<FContentBrowserItem>& GetItems() const { return Items; }
-	const FString& GetSelectedPath() const { return SelectedPath; }
-	void SetSelectedPath(const FString& InPath) { SelectedPath = InPath; }
+	const TArray<FContentBrowserItem>& GetItems() const
+	{
+		return Items;
+	}
+	const FString& GetSelectedPath() const
+	{
+		return SelectedPath;
+	}
+	void SetSelectedPath(const FString& InPath)
+	{
+		SelectedPath = InPath;
+	}
 	// Opens a folder or uses an asset, as a double-click does.
 	void Activate(const FContentBrowserItem& Item);
 
@@ -105,10 +119,12 @@ public:
 
 	EContentAssetType GetAssetType(const FString& FilePath) const;
 	FString CreateMaterial();
+	FString CreateMaterialFunction();
+	FString CreateMaterialParameterCollection();
 	FString CreateMaterialInstance();
 	FString CreateMeshFromSelection();
 
-private:
+  private:
 	struct FFolderNode
 	{
 		FString Name;
@@ -121,7 +137,8 @@ private:
 	void ScanChildren(FFolderNode& Node);
 	FFolderNode* FindNode(const FString& FolderPath);
 	// The folder's name as shown, and the path from All down to it (name, folder).
-	FString GetDisplayPath(const FString& FolderPath, TArray<TPair<FString, FString>>* OutParts = nullptr) const;
+	FString GetDisplayPath(const FString& FolderPath,
+						   TArray<TPair<FString, FString>>* OutParts = nullptr) const;
 	void ScanItems();
 	FContentBrowserItem DescribeItem(const FString& FilePath) const;
 	void QueueRebuild();

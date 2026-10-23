@@ -12,6 +12,8 @@
 #include "Scripting/PythonScriptRuntime.h"
 #include "Scripting/DotNetScriptRuntime.h"
 #include "HAL/File.h"
+#include "MapAssetLibrary.h"
+#include "Renderer/NativeMeshRenderer.h"
 namespace
 {
 using J = FJsonValue;
@@ -22,6 +24,39 @@ void Startup()
 	if (!FMapEditorEnvironment::IsStarted())
 		REQUIRE(FMapEditorEnvironment::Startup(Options));
 	REQUIRE(FMapEditorEnvironment::Activate(FMapEditorEnvironment::GetBuiltInGameSet()));
+}
+
+TArray<uint8> RenderScriptMaterial(FRHIDevice& Device, std::shared_ptr<const FLoadedMeshAsset> Asset)
+{
+	FString Error;
+	FNativeMeshRenderer Renderer(Device);
+	FNativeMeshDrawList List;
+	Matrix44 Transform;
+	Transform.SetTranslation(Vector3d(0, 220, 0));
+	REQUIRE(List.Append(Asset, Transform, Error));
+	FRHITextureDesc TD;
+	TD.Width = TD.Height = 64;
+	TD.bRenderTarget = true;
+	auto Target = Device.CreateTexture(TD);
+	TD.Format = EPixelFormat::D32_FLOAT;
+	auto Depth = Device.CreateTexture(TD);
+	REQUIRE(Target);
+	REQUIRE(Depth);
+	auto& Cmd = Device.BeginFrame();
+	auto Frame = Renderer.Prepare(List, Target->GetFormat(), Error);
+	REQUIRE_MESSAGE(Frame, *Error);
+	Cmd.BeginRenderPass(*Target, *Depth, FLinearColor(0, 0, 0, 1), 1.f);
+	FNativeMeshView View;
+	View.Width = View.Height = 64;
+	View.ProjectionScale = 64;
+	View.bLit = false;
+	Renderer.Draw(Cmd, *Frame, View, false);
+	Cmd.EndRenderPass();
+	Device.EndFrame();
+	TArray<uint8> Pixels;
+	REQUIRE(Device.ReadbackTexture(*Target, Pixels));
+	Device.WaitIdle();
+	return Pixels;
 }
 J Args(const char* Text)
 {
@@ -323,6 +358,94 @@ TEST_SUITE("EditorScripting")
 			CHECK(Result.Get("Id").AsString() == Id);
 			REQUIRE(Invoke("Material.CookGraph", A));
 			CHECK(Result.Get("Id").AsString() == Id);
+		}
+	}
+
+	TEST_CASE("Material authoring projects execute in every language save native scenes and render both "
+			  "permutations")
+	{
+		Startup();
+		const auto Previous = FMapAssetLibrary::GetRegistry();
+		struct FRestore
+		{
+			std::shared_ptr<FAssetRegistry> Previous;
+			~FRestore()
+			{
+				FMapAssetLibrary::SetRegistry(Previous);
+			}
+		} Restore{Previous};
+		for (const FString Language : {FString("Lua"), FString("Python"), FString("DotNet")})
+		{
+			FString Error;
+			const auto Folder = FPaths::Combine(
+				FPaths::ExecutableDir(), FString::Format("../../Saved/MaterialAuthoring/{}", Language));
+			std::filesystem::create_directories(std::filesystem::path(Folder.ToWide()));
+			auto Registry = std::make_shared<FAssetRegistry>();
+			REQUIRE(Registry->SetMounts({{"/Game", Folder}}, Error));
+			REQUIRE(Registry->Scan());
+			FMapAssetLibrary::SetRegistry(Registry);
+			auto Doc = FMapDocument::CreateNew();
+			auto Context = std::make_shared<FEditorScriptContext>();
+			Context->GetDocument = [&] { return Doc.get(); };
+			Context->Assets = Registry;
+			FEditorScriptRequest Request;
+			Request.Language = Language;
+			Request.Function = "RunScenario";
+			Request.Capabilities.push_back("Editor.Files");
+			const auto Source = Language == "Lua" ? "../../../Samples/Scripting/Lua/Source/Main.lua"
+								: Language == "Python"
+									? "../../../Samples/Scripting/Python/Source/Main.py"
+									: "../ThirdParty/DotNet/Examples/Genesis.ScriptExample.dll";
+			Request.ModulePath = FPaths::Combine(FPaths::ExecutableDir(), Source);
+			FString Text;
+			REQUIRE(FFile::ReadAllText(
+				FPaths::Combine(FPaths::ExecutableDir(),
+								"../../../Samples/Features/MaterialAuthoring/Source/Scenario.json"),
+				Text));
+			auto Scenario = FJsonValue::Parse(Text.View(), &Error);
+			REQUIRE(Scenario);
+			Request.Arguments = *Scenario;
+			Request.Arguments["Content"] = Folder;
+			const auto Map = FPaths::Combine(Folder, "Main.gmap");
+			Request.Arguments["Map"] = Map;
+			FJsonValue Result;
+			REQUIRE_MESSAGE(ExecuteEditorScript(Request, Context, Result, Error), *Error);
+			CHECK(Result.Get("Complete").AsBool());
+			CHECK(Doc->GetObjects().size() == 2);
+			CHECK_FALSE(Doc->IsInTransaction());
+			Doc->Undo();
+			CHECK(Doc->GetObjects().empty());
+			Doc->Redo();
+			CHECK(Doc->GetObjects().size() == 2);
+			auto Reloaded = FMapDocument::Open(Map, Error);
+			REQUIRE_MESSAGE(Reloaded, *Error);
+			REQUIRE(Reloaded->GetObjects().size() == 2);
+			auto Master = Reloaded->GetObjects()[0]->GetMeshAsset(),
+				 Instance = Reloaded->GetObjects()[1]->GetMeshAsset();
+			REQUIRE(Master);
+			REQUIRE(Instance);
+			REQUIRE(Master->Material);
+			REQUIRE(Instance->Material);
+			CHECK(Master->Material->Graph->Functions.size() == 2);
+			CHECK(Master->GraphTextures.size() == 1);
+			CHECK(Instance->GraphTextures.empty());
+			CHECK(Master->Material->GraphDXIL != Instance->Material->GraphDXIL);
+			for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+			{
+				FRHIDeviceDesc DD;
+				DD.Backend = Backend;
+				DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
+				auto Device = FRHIDevice::Create(DD);
+				REQUIRE(Device);
+				const auto A = RenderScriptMaterial(*Device, Master),
+						   B = RenderScriptMaterial(*Device, Instance);
+				const int Center = (32 * 64 + 32) * 4;
+				CHECK(A[Center + 2] > A[Center + 1]);
+				CHECK(A[Center + 1] > A[Center]);
+				CHECK(B[Center] > 200);
+				CHECK(B[Center + 1] < 5);
+				CHECK(B[Center + 2] < 5);
+			}
 		}
 	}
 }

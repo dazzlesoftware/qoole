@@ -1,6 +1,42 @@
 -- Shared host API; this module runs without native engine pointers.
 local ticks = 0
+local function RunScenario(args)
+    local variables={Args=args}
+    local expressions={}
+    for _,e in ipairs(Genesis.invoke('Material.Describe',{}).Expressions) do expressions[e.Name]=e.Id end
+    local function get(path)
+        local value=variables
+        for key in path:gmatch('[^.]+') do local number=tonumber(key);value=value[number and number+1 or key] end
+        return value
+    end
+    local resolve
+    resolve=function(value)
+        if type(value)=='table' then
+            for key,v in pairs(value) do
+                if key=='Expression' and type(v)=='string' then value[key]=assert(expressions[v],'Unknown material expression') else value[key]=resolve(v) end
+            end
+            return value
+        end
+        if type(value)=='string' then
+            if value:sub(1,1)=='$' and value:sub(1,2)~='${' then return get(value:sub(2)) end
+            return (value:gsub('%${([%w_.]+)}',function(path) return tostring(get(path)) end))
+        end
+        return value
+    end
+    for _,step in ipairs(args.Steps) do
+        local result=Genesis.invoke(step.API,resolve(step.Arguments or {}))
+        if step.Capture then variables[step.Capture]=result end
+        for _,key in ipairs(step.Positive or {}) do assert(result[key]>0,step.API..': '..key..' was not positive') end
+        for _,check in ipairs(step.Expect or {}) do
+            local actual=result
+            for key in check.Path:gmatch('[^.]+') do local number=tonumber(key);actual=actual[number and number+1 or key] end
+            assert(actual==resolve(check.Value),step.API..': '..check.Path..' mismatch')
+        end
+    end
+    return resolve(args.Return)
+end
 return {
+    RunScenario=RunScenario,
     BuildTerrain = function(args)
         local call = Genesis.invoke
         call('Editor.BeginTransaction', {Description='Build Terrain Feature Project'})

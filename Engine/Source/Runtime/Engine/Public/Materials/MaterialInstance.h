@@ -12,15 +12,26 @@ struct FMaterialTextureParameterOverride
 	FString Name;
 	FAssetReference Texture;
 };
+struct FMaterialStaticParameterOverride
+{
+	FString Name;
+	bool Value = false;
+};
 struct FMaterialInstanceAsset
 {
 	FAssetReference Parent;
+	TArray<FMaterialStaticParameterOverride> StaticParameters;
+	bool bOverrideQuality = false;
+	uint8 QualityLevel = 2;
+	TOptional<FMaterialAsset> StaticPermutation;
 	TArray<FMaterialParameterOverride> Parameters;
 	TArray<FMaterialTextureParameterOverride> Textures;
 };
 class FMaterialInstance
 {
   public:
+	static bool BuildStaticPermutation(const FMaterialAsset&, const FMaterialInstanceAsset&, FMaterialAsset&,
+									   FString& Error);
 	// Resolves named overrides into a copy; never alters the parent or its cooked shaders.
 	static bool Resolve(const FMaterialAsset& Parent, const FMaterialInstanceAsset&, FMaterialAsset& Out,
 						FString& Error);

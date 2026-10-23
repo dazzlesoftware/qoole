@@ -1,6 +1,9 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "SContentBrowser.h"
+#include "DragAndDrop/AssetDragDropOp.h"
+#include "Materials/MaterialFunction.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "AssetPackage.h"
 #include "AssetRegistry.h"
 #include "MapAssetImport.h"
@@ -29,213 +32,284 @@ const char* ToString(EContentAssetType Type)
 {
 	switch (Type)
 	{
-	case EContentAssetType::Folder: return "Folder";
-	case EContentAssetType::Prefab: return "Prefab";
-	case EContentAssetType::StaticMesh: return "Static Mesh";
-	case EContentAssetType::Material: return "Material";
-	case EContentAssetType::Map: return "Map";
-	case EContentAssetType::QuakeMap: return "Quake Map";
-	case EContentAssetType::EntityList: return "Entity List";
-	case EContentAssetType::Texture: return "Texture";
-	case EContentAssetType::Font: return "Font";
-	case EContentAssetType::Text: return "Text";
-	case EContentAssetType::File: return "File";
-	case EContentAssetType::Package: return "Asset";
-	case EContentAssetType::InvalidPackage: return "Content Issue";
+	case EContentAssetType::Folder:
+		return "Folder";
+	case EContentAssetType::Prefab:
+		return "Prefab";
+	case EContentAssetType::StaticMesh:
+		return "Static Mesh";
+	case EContentAssetType::Material:
+		return "Material";
+	case EContentAssetType::MaterialFunction:
+		return "Material Function";
+	case EContentAssetType::MaterialParameterCollection:
+		return "Parameter Collection";
+	case EContentAssetType::Map:
+		return "Map";
+	case EContentAssetType::QuakeMap:
+		return "Quake Map";
+	case EContentAssetType::EntityList:
+		return "Entity List";
+	case EContentAssetType::Texture:
+		return "Texture";
+	case EContentAssetType::Font:
+		return "Font";
+	case EContentAssetType::Text:
+		return "Text";
+	case EContentAssetType::File:
+		return "File";
+	case EContentAssetType::Package:
+		return "Asset";
+	case EContentAssetType::InvalidPackage:
+		return "Content Issue";
 	}
 	return "?";
 }
 
 namespace
 {
-	namespace fs = std::filesystem;
+namespace fs = std::filesystem;
 
-	fs::path ToPath(const FString& Path) { return fs::path(Path.ToWide()); }
-	FString FromPath(const fs::path& Path) { return FString::FromWide(Path.wstring()); }
+fs::path ToPath(const FString& Path)
+{
+	return fs::path(Path.ToWide());
+}
+FString FromPath(const fs::path& Path)
+{
+	return FString::FromWide(Path.wstring());
+}
 
-	// The same folder, ignoring case and the kind of slash.
-	FString Normalized(const FString& Path)
+// The same folder, ignoring case and the kind of slash.
+FString Normalized(const FString& Path)
+{
+	FString Result = FromPath(ToPath(Path).lexically_normal()).ToLower();
+	while (Result.EndsWith("\\") || Result.EndsWith("/"))
 	{
-		FString Result = FromPath(ToPath(Path).lexically_normal()).ToLower();
-		while (Result.EndsWith("\\") || Result.EndsWith("/"))
-		{
-			Result = Result.Left(Result.Len() - 1);
-		}
-		return Result;
+		Result = Result.Left(Result.Len() - 1);
 	}
+	return Result;
+}
 
-	bool IsUnder(const FString& Path, const FString& Folder)
+bool IsUnder(const FString& Path, const FString& Folder)
+{
+	const FString P = Normalized(Path);
+	const FString F = Normalized(Folder);
+	return !F.IsEmpty() &&
+		   (P == F || (P.StartsWith(F.View()) && (P.View()[static_cast<SIZE_T>(F.Len())] == '\\' ||
+												  P.View()[static_cast<SIZE_T>(F.Len())] == '/')));
+}
+
+EIcon AssetIcon(EContentAssetType Type)
+{
+	switch (Type)
 	{
-		const FString P = Normalized(Path);
-		const FString F = Normalized(Folder);
-		return !F.IsEmpty() && (P == F || (P.StartsWith(F.View()) && (P.View()[static_cast<SIZE_T>(F.Len())] == '\\' || P.View()[static_cast<SIZE_T>(F.Len())] == '/')));
-	}
-
-	EIcon AssetIcon(EContentAssetType Type)
-	{
-		switch (Type)
-		{
-		case EContentAssetType::Folder: return EIcon::Folder;
-		case EContentAssetType::Prefab: return EIcon::Prefab;
-		case EContentAssetType::Map:
-		case EContentAssetType::QuakeMap: return EIcon::Map;
-		case EContentAssetType::EntityList: return EIcon::Entity;
-		default: return EIcon::File;
-		}
-	}
-
-	// The strip along an asset tile's foot (Unreal's asset type colors).
-	FColor TypeColor(EContentAssetType Type)
-	{
-		switch (Type)
-		{
-		case EContentAssetType::Prefab: return FColor(96, 168, 255);
-		case EContentAssetType::Map:
-		case EContentAssetType::QuakeMap: return FColor(232, 150, 60);
-		case EContentAssetType::EntityList: return FColor(120, 200, 110);
-		case EContentAssetType::Texture: return FColor(200, 80, 80);
-		case EContentAssetType::Font: return FColor(180, 120, 220);
-		case EContentAssetType::InvalidPackage: return FColor(240, 60, 60);
-		default: return FColor(120, 126, 138);
-		}
-	}
-
-	// One asset or folder: a picture, its name and, for assets, its type.
-	class SAssetTile final : public SCompoundWidget
-	{
-	public:
-		SLATE_BEGIN_ARGS(SAssetTile)
-			SLATE_ATTRIBUTE(bool, IsSelected, false)
-			SLATE_EVENT(FSimpleDelegate, OnSelect)
-			SLATE_EVENT(FSimpleDelegate, OnActivate)
-		SLATE_END_ARGS()
-
-		static constexpr float Width = 96.0f;
-
-		void Construct(const FArguments& Args, const FContentBrowserItem& InItem)
-		{
-			Item = InItem;
-			IsSelected.Assign(Args._IsSelected);
-			OnSelect = Args._OnSelect;
-			OnActivate = Args._OnActivate;
-			const bool bFolder = Item.Type == EContentAssetType::Folder;
-			const TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(0.0f, 6.0f, 0.0f, 4.0f))
-				[
-					SNew(SMapViewportIcon).Icon(AssetIcon(Item.Type)).Size(64.0f)
-				]
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(4.0f, 0.0f))
-				[
-					SNew(SBox).MaxDesiredWidth(Width - 8.0f)
-					[
-						SNew(STextBlock).Text(Item.Name).AutoWrapText(true).Clipping(EWidgetClipping::ClipToBounds)
-						.TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText")).ColorAndOpacity(FSlateColor(EStyleColor::Foreground))
-					]
-				];
-			if (!bFolder)
-			{
-				Box->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(0.0f, 2.0f, 0.0f, 4.0f))
-				[
-					SNew(STextBlock).Text(ToString(Item.Type)).TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"))
-				];
-			}
-			ChildSlot[SNew(SBox).WidthOverride(Width).MinDesiredHeight(118.0f)[Box]];
-			FString Tip = FString::Format("{}\n{}\n{}", Item.Name, ToString(Item.Type), Item.PackagePath.IsEmpty() ? Item.Path : Item.PackagePath);
-			if (!Item.Schema.IsEmpty()) Tip += "\n" + Item.Schema;
-			if (!Item.Error.IsEmpty()) Tip += "\n" + Item.Error;
-			SetToolTipText(Tip);
-		}
-
-		FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent& Event) override
-		{
-			if (Event.GetEffectingButton() == EMouseButton::Right)
-			{
-				OnSelect.ExecuteIfBound();
-				return FReply::Unhandled(); // Bubble to the browser's creation menu.
-			}
-			if (Event.GetEffectingButton() != EMouseButton::Left)
-			{
-				return FReply::Unhandled();
-			}
-			OnSelect.ExecuteIfBound();
-			return FReply::Handled().DetectDrag(SharedThis(this), EMouseButton::Left);
-		}
-
-		FReply OnMouseButtonDoubleClick(const FGeometry&, const FPointerEvent& Event) override
-		{
-			if (Event.GetEffectingButton() != EMouseButton::Left)
-			{
-				return FReply::Unhandled();
-			}
-			OnActivate.ExecuteIfBound();
-			return FReply::Handled();
-		}
-
-		FReply OnDragDetected(const FGeometry&, const FPointerEvent&) override
-		{
-			// Prefabs drag into the viewports.
-			if (Item.Type != EContentAssetType::Prefab && Item.Type != EContentAssetType::StaticMesh)
-			{
-				return FReply::Unhandled();
-			}
-			FMapPlaceable Placeable;
-			Placeable.Kind = Item.Type == EContentAssetType::StaticMesh ? EMapPlaceableKind::MeshAsset : EMapPlaceableKind::Prefab;
-			Placeable.Id = Item.Path;
-			Placeable.Label = Item.Name;
-			Placeable.Category = "Geometry";
-			if (!Item.PackagePath.IsEmpty()) Placeable.SourceAsset = { Item.PackageId, Item.PackagePath };
-			return FReply::Handled().BeginDragDrop(FMapPlaceDragDrop::New(Placeable));
-		}
-
-	protected:
-		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& Out, int32 LayerId,
-			const FWidgetStyle& Style) const override
-		{
-			const bool bSelected = IsSelected.Get();
-			if (Item.Type != EContentAssetType::Folder)
-			{
-				// Assets sit on a card with their type's color at the foot.
-				Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), FSlateColor(EStyleColor::Recessed).Resolve(), 4.0f);
-				Out.AddSolidBox(LayerId, Geometry.ToPaintGeometry(FRect(0.0f, Geometry.Size.Y - 3.0f, Geometry.Size.X, Geometry.Size.Y)), TypeColor(Item.Type));
-			}
-			if (bSelected || IsHovered())
-			{
-				Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), FColor(0, 0, 0, 0), 4.0f,
-					FSlateColor(bSelected ? EStyleColor::Primary : EStyleColor::Border).Resolve(), bSelected ? 2.0f : 1.0f);
-			}
-			return SCompoundWidget::OnPaint(Args, Geometry, CullingRect, Out, LayerId + 1, Style);
-		}
-
-	private:
-		FContentBrowserItem Item;
-		TWidgetAttribute<bool, EInvalidateWidgetReason::Paint> IsSelected{ *this, false };
-		FSimpleDelegate OnSelect;
-		FSimpleDelegate OnActivate;
-	};
-
-	const FButtonStyle& ToolButton()
-	{
-		static const FButtonStyle Style = []
-		{
-			FButtonStyle S = FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button");
-			S.NormalPadding = FMargin(8.0f, 3.0f);
-			S.PressedPadding = FMargin(8.0f, 4.0f, 8.0f, 2.0f);
-			return S;
-		}();
-		return Style;
-	}
-
-	TSharedRef<SWidget> IconLabel(EIcon Icon, const FString& Label)
-	{
-		const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SMapViewportIcon).Icon(Icon)];
-		if (!Label.IsEmpty())
-		{
-			Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(5.0f, 0.0f, 0.0f, 0.0f))[SNew(STextBlock).Text(Label)];
-		}
-		return Row;
+	case EContentAssetType::Folder:
+		return EIcon::Folder;
+	case EContentAssetType::Prefab:
+		return EIcon::Prefab;
+	case EContentAssetType::Map:
+	case EContentAssetType::QuakeMap:
+		return EIcon::Map;
+	case EContentAssetType::EntityList:
+		return EIcon::Entity;
+	default:
+		return EIcon::File;
 	}
 }
+
+// The strip along an asset tile's foot (Unreal's asset type colors).
+FColor TypeColor(EContentAssetType Type)
+{
+	switch (Type)
+	{
+	case EContentAssetType::Prefab:
+		return FColor(96, 168, 255);
+	case EContentAssetType::Map:
+	case EContentAssetType::QuakeMap:
+		return FColor(232, 150, 60);
+	case EContentAssetType::EntityList:
+		return FColor(120, 200, 110);
+	case EContentAssetType::Texture:
+		return FColor(200, 80, 80);
+	case EContentAssetType::Material:
+		return FColor(80, 180, 100);
+	case EContentAssetType::MaterialFunction:
+		return FColor(120, 100, 210);
+	case EContentAssetType::MaterialParameterCollection:
+		return FColor(80, 170, 190);
+	case EContentAssetType::Font:
+		return FColor(180, 120, 220);
+	case EContentAssetType::InvalidPackage:
+		return FColor(240, 60, 60);
+	default:
+		return FColor(120, 126, 138);
+	}
+}
+
+// One asset or folder: a picture, its name and, for assets, its type.
+class SAssetTile final : public SCompoundWidget
+{
+  public:
+	SLATE_BEGIN_ARGS(SAssetTile)
+	SLATE_ATTRIBUTE(bool, IsSelected, false)
+	SLATE_EVENT(FSimpleDelegate, OnSelect)
+	SLATE_EVENT(FSimpleDelegate, OnActivate)
+	SLATE_END_ARGS()
+
+	static constexpr float Width = 96.0f;
+
+	void Construct(const FArguments& Args, const FContentBrowserItem& InItem)
+	{
+		Item = InItem;
+		IsSelected.Assign(Args._IsSelected);
+		OnSelect = Args._OnSelect;
+		OnActivate = Args._OnActivate;
+		const bool bFolder = Item.Type == EContentAssetType::Folder;
+		const TSharedRef<SVerticalBox> Box =
+			SNew(SVerticalBox) +
+			SVerticalBox::Slot()
+				.AutoHeight()
+				.HAlign(HAlign_Center)
+				.Padding(FMargin(0.0f, 6.0f, 0.0f,
+								 4.0f))[SNew(SMapViewportIcon).Icon(AssetIcon(Item.Type)).Size(64.0f)] +
+			SVerticalBox::Slot()
+				.AutoHeight()
+				.HAlign(HAlign_Center)
+				.Padding(FMargin(4.0f, 0.0f))[SNew(SBox).MaxDesiredWidth(
+					Width -
+					8.0f)[SNew(STextBlock)
+							  .Text(Item.Name)
+							  .AutoWrapText(true)
+							  .Clipping(EWidgetClipping::ClipToBounds)
+							  .TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"))
+							  .ColorAndOpacity(FSlateColor(EStyleColor::Foreground))]];
+		if (!bFolder)
+		{
+			Box->AddSlot()
+				.AutoHeight()
+				.HAlign(HAlign_Center)
+				.Padding(FMargin(
+					0.0f, 2.0f, 0.0f,
+					4.0f))[SNew(STextBlock)
+							   .Text(Item.Schema == "Genesis.MaterialInstance" ? "Material Instance"
+																			   : ToString(Item.Type))
+							   .TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"))];
+		}
+		ChildSlot[SNew(SBox).WidthOverride(Width).MinDesiredHeight(118.0f)[Box]];
+		FString Tip = FString::Format("{}\n{}\n{}", Item.Name, ToString(Item.Type),
+									  Item.PackagePath.IsEmpty() ? Item.Path : Item.PackagePath);
+		if (!Item.Schema.IsEmpty())
+			Tip += "\n" + Item.Schema;
+		if (!Item.Error.IsEmpty())
+			Tip += "\n" + Item.Error;
+		SetToolTipText(Tip);
+	}
+
+	FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent& Event) override
+	{
+		if (Event.GetEffectingButton() == EMouseButton::Right)
+		{
+			OnSelect.ExecuteIfBound();
+			return FReply::Unhandled(); // Bubble to the browser's creation menu.
+		}
+		if (Event.GetEffectingButton() != EMouseButton::Left)
+		{
+			return FReply::Unhandled();
+		}
+		OnSelect.ExecuteIfBound();
+		return FReply::Handled().DetectDrag(SharedThis(this), EMouseButton::Left);
+	}
+
+	FReply OnMouseButtonDoubleClick(const FGeometry&, const FPointerEvent& Event) override
+	{
+		if (Event.GetEffectingButton() != EMouseButton::Left)
+		{
+			return FReply::Unhandled();
+		}
+		OnActivate.ExecuteIfBound();
+		return FReply::Handled();
+	}
+
+	FReply OnDragDetected(const FGeometry&, const FPointerEvent&) override
+	{
+		if (!Item.PackageId.IsEmpty() &&
+			(Item.Schema == "Genesis.Texture2D" || Item.Schema == "Genesis.MaterialFunction" ||
+			 Item.Schema == "Genesis.MaterialParameterCollection"))
+			return FReply::Handled().BeginDragDrop(
+				FAssetDragDropOp::New({Item.PackageId, Item.PackagePath}, Item.Schema, Item.Name));
+		// Prefabs drag into the viewports.
+		if (Item.Type != EContentAssetType::Prefab && Item.Type != EContentAssetType::StaticMesh)
+		{
+			return FReply::Unhandled();
+		}
+		FMapPlaceable Placeable;
+		Placeable.Kind = Item.Type == EContentAssetType::StaticMesh ? EMapPlaceableKind::MeshAsset
+																	: EMapPlaceableKind::Prefab;
+		Placeable.Id = Item.Path;
+		Placeable.Label = Item.Name;
+		Placeable.Category = "Geometry";
+		if (!Item.PackagePath.IsEmpty())
+			Placeable.SourceAsset = {Item.PackageId, Item.PackagePath};
+		return FReply::Handled().BeginDragDrop(FMapPlaceDragDrop::New(Placeable));
+	}
+
+  protected:
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+				  FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+	{
+		const bool bSelected = IsSelected.Get();
+		if (Item.Type != EContentAssetType::Folder)
+		{
+			// Assets sit on a card with their type's color at the foot.
+			Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(),
+							  FSlateColor(EStyleColor::Recessed).Resolve(), 4.0f);
+			Out.AddSolidBox(LayerId,
+							Geometry.ToPaintGeometry(
+								FRect(0.0f, Geometry.Size.Y - 3.0f, Geometry.Size.X, Geometry.Size.Y)),
+							TypeColor(Item.Type));
+		}
+		if (bSelected || IsHovered())
+		{
+			Out.AddRoundedBox(LayerId, Geometry.ToPaintGeometry(), FColor(0, 0, 0, 0), 4.0f,
+							  FSlateColor(bSelected ? EStyleColor::Primary : EStyleColor::Border).Resolve(),
+							  bSelected ? 2.0f : 1.0f);
+		}
+		return SCompoundWidget::OnPaint(Args, Geometry, CullingRect, Out, LayerId + 1, Style);
+	}
+
+  private:
+	FContentBrowserItem Item;
+	TWidgetAttribute<bool, EInvalidateWidgetReason::Paint> IsSelected{*this, false};
+	FSimpleDelegate OnSelect;
+	FSimpleDelegate OnActivate;
+};
+
+const FButtonStyle& ToolButton()
+{
+	static const FButtonStyle Style = [] {
+		FButtonStyle S = FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button");
+		S.NormalPadding = FMargin(8.0f, 3.0f);
+		S.PressedPadding = FMargin(8.0f, 4.0f, 8.0f, 2.0f);
+		return S;
+	}();
+	return Style;
+}
+
+TSharedRef<SWidget> IconLabel(EIcon Icon, const FString& Label)
+{
+	const TSharedRef<SHorizontalBox> Row =
+		SNew(SHorizontalBox) +
+		SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SMapViewportIcon).Icon(Icon)];
+	if (!Label.IsEmpty())
+	{
+		Row->AddSlot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(FMargin(5.0f, 0.0f, 0.0f, 0.0f))[SNew(STextBlock).Text(Label)];
+	}
+	return Row;
+}
+} // namespace
 
 // ---------------------------------------------------------------------------
 
@@ -259,136 +333,145 @@ void SContentBrowser::Construct(const FArguments& Args)
 		Node->Parent = &TreeRoot;
 		TreeRoot.Children.push_back(std::move(Node));
 	}
-	TreeRoots = { &TreeRoot };
+	TreeRoots = {&TreeRoot};
 
 	const FTextBlockStyle* Small = &FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText");
 	ChildSlot
-	[
-		SNew(SVerticalBox)
-		// Toolbar.
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 4.0f))
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 4.0f, 0.0f))
-			[
-				SNew(SComboButton).ButtonStyle(&ToolButton()).IsFocusable(false).ToolTipText("Add a folder")
-				.OnGetMenuContent([this] { return MakeAddMenu(); })
-				.ButtonContent()[IconLabel(EIcon::Add, "Add")]
-			]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 4.0f, 0.0f))
-			[
-				SNew(SButton).ButtonStyle(&ToolButton()).IsFocusable(false).ToolTipText("Copy a file into this folder")
-				.IsEnabled([this] { return !Path.IsEmpty(); })
-				.OnClicked([this]
-				{
-					FFileDialogOptions Options;
-					Options.Title = "Import into this folder";
-					Options.InitialPath = Path;
-					Options.Filters = { { "Import meshes and textures (*.obj, *.png, *.bmp, *.jpg, *.tif)", "*.obj;*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff" }, { "Genesis packages (*.asset, *.gmap)", "*.asset;*.gmap" }, { "Legacy maps (*.qle, *.map)", "*.qle;*.map" }, { "All files (*.*)", "*.*" } };
-					FString Source;
-					if (FServices::GetFileDialogs().OpenFile(Options, Source))
-					{
-						ImportFile(Source);
-					}
-					return FReply::Handled();
-				})
-				[IconLabel(EIcon::Import, "Import")]
-			]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))
-			[
-				SNew(SButton).ButtonStyle(&ToolButton()).IsFocusable(false).ToolTipText("Save the map")
-				.IsEnabled([this] { return OnSaveAll.IsBound(); })
-				.OnClicked([this] { OnSaveAll.ExecuteIfBound(); return FReply::Handled(); })
-				[IconLabel(EIcon::Save, "Save All")]
-			]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 6.0f, 0.0f))
-			[
-				SNew(SButton).ButtonStyle(&ToolButton()).IsFocusable(false).Text("Refresh")
-				.ToolTipText("Discover content changes in all mounted folders")
-				.OnClicked([this] { Refresh(); return FReply::Handled(); })
-			]
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton).ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton")).IsFocusable(false).ToolTipText("Back")
-				.IsEnabled([this] { return !BackStack.empty(); }).OnClicked([this] { GoBack(); return FReply::Handled(); })
-				[SNew(SMapViewportIcon).Icon(EIcon::Back)]
-			]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))
-			[
-				SNew(SButton).ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton")).IsFocusable(false).ToolTipText("Forward")
-				.IsEnabled([this] { return !ForwardStack.empty(); }).OnClicked([this] { GoForward(); return FReply::Handled(); })
-				[SNew(SMapViewportIcon).Icon(EIcon::Forward)]
-			]
-			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-			[
-				SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Recessed")).Padding(FMargin(6.0f, 2.0f)).Clipping(EWidgetClipping::ClipToBounds)
-				[
-					SAssignNew(BreadcrumbHost, SBox)
-				]
-			]
-		]
-		+ SVerticalBox::Slot().FillHeight(1.0f)
-		[
-			SNew(SSplitter).Orientation(EOrientation::Horizontal)
-			+ SSplitter::Slot().Value(0.22f).MinSize(80.0f)
-			[
-				SAssignNew(Tree, STreeView<FFolderNode*>)
-				.TreeItemsSource(&TreeRoots)
-				.SelectionMode(ESelectionMode::Single)
-				.OnGetChildren([this](FFolderNode* Node, TArray<FFolderNode*>& Out)
-				{
-					ScanChildren(*Node);
-					for (const TUniquePtr<FFolderNode>& Child : Node->Children)
-					{
-						Out.push_back(Child.get());
-					}
-				})
-				.OnGenerateRow([](FFolderNode* Node, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
-				{
-					return SNew(STableRow<FFolderNode*>, Owner).Padding(FMargin(2.0f, 1.0f))
-					[
-						SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 5.0f, 0.0f))[SNew(SMapViewportIcon).Icon(EIcon::Folder)]
-						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(Node->Name).Clipping(EWidgetClipping::ClipToBounds)]
-					];
-				})
-				.OnSelectionChanged([this](FFolderNode* Node, ESelectInfo)
-				{
-					if (Node && !bSyncingTree)
-					{
-						Navigate(Node->Path, true);
-					}
-				})
-			]
-			+ SSplitter::Slot().Value(0.78f).MinSize(160.0f)
-			[
-				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 4.0f))
-				[
-					SNew(SEditableTextBox)
-					.Text([this] { return SearchText; })
-					.HintText([this] { return FString::Format("Search {}", GetDisplayPath(Path)); })
-					.OnTextChanged([this](const FString& Text) { SetSearchText(Text); })
-				]
-				+ SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(6.0f, 2.0f))
-				[
-					SNew(SScrollBox)
-					+ SScrollBox::Slot()
-					[
-						SAssignNew(Tiles, SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2(8.0f, 8.0f))
-					]
-				]
-				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(8.0f, 3.0f))
-				[
-					SNew(STextBlock).TextStyle(Small).Text([this]
-					{
-						return FString::Format("{} item{}{}{}", Items.size(), Items.size() == 1 ? "" : "s", SelectedPath.IsEmpty() ? "" : " (1 selected)",
-							Registry && !Registry->GetIssues().empty() ? FString::Format(" — {} content issues", Registry->GetIssues().size()) : FString());
-					})
-				]
-			]
-		]
-	];
+		[SNew(SVerticalBox)
+		 // Toolbar.
+		 + SVerticalBox::Slot().AutoHeight().Padding(FMargin(
+			   6.0f,
+			   4.0f))[SNew(SHorizontalBox) +
+					  SHorizontalBox::Slot().AutoWidth().Padding(FMargin(
+						  0.0f, 0.0f, 4.0f, 0.0f))[SNew(SComboButton)
+													   .ButtonStyle(&ToolButton())
+													   .IsFocusable(false)
+													   .ToolTipText("Add a folder")
+													   .OnGetMenuContent([this] { return MakeAddMenu(); })
+													   .ButtonContent()[IconLabel(EIcon::Add, "Add")]] +
+					  SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 4.0f, 0.0f))
+						  [SNew(SButton)
+							   .ButtonStyle(&ToolButton())
+							   .IsFocusable(false)
+							   .ToolTipText("Copy a file into this folder")
+							   .IsEnabled([this] { return !Path.IsEmpty(); })
+							   .OnClicked([this] {
+								   FFileDialogOptions Options;
+								   Options.Title = "Import into this folder";
+								   Options.InitialPath = Path;
+								   Options.Filters = {
+									   {"Import meshes and textures (*.obj, *.png, *.bmp, *.jpg, *.tif)",
+										"*.obj;*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff"},
+									   {"Genesis packages (*.asset, *.gmap)", "*.asset;*.gmap"},
+									   {"Legacy maps (*.qle, *.map)", "*.qle;*.map"},
+									   {"All files (*.*)", "*.*"}};
+								   FString Source;
+								   if (FServices::GetFileDialogs().OpenFile(Options, Source))
+								   {
+									   ImportFile(Source);
+								   }
+								   return FReply::Handled();
+							   })[IconLabel(EIcon::Import, "Import")]] +
+					  SHorizontalBox::Slot().AutoWidth().Padding(FMargin(
+						  0.0f, 0.0f, 10.0f, 0.0f))[SNew(SButton)
+														.ButtonStyle(&ToolButton())
+														.IsFocusable(false)
+														.ToolTipText("Save the map")
+														.IsEnabled([this] { return OnSaveAll.IsBound(); })
+														.OnClicked([this] {
+															OnSaveAll.ExecuteIfBound();
+															return FReply::Handled();
+														})[IconLabel(EIcon::Save, "Save All")]] +
+					  SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 6.0f, 0.0f))
+						  [SNew(SButton)
+							   .ButtonStyle(&ToolButton())
+							   .IsFocusable(false)
+							   .Text("Refresh")
+							   .ToolTipText("Discover content changes in all mounted folders")
+							   .OnClicked([this] {
+								   Refresh();
+								   return FReply::Handled();
+							   })] +
+					  SHorizontalBox::Slot().AutoWidth()
+						  [SNew(SButton)
+							   .ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton"))
+							   .IsFocusable(false)
+							   .ToolTipText("Back")
+							   .IsEnabled([this] { return !BackStack.empty(); })
+							   .OnClicked([this] {
+								   GoBack();
+								   return FReply::Handled();
+							   })[SNew(SMapViewportIcon).Icon(EIcon::Back)]] +
+					  SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))
+						  [SNew(SButton)
+							   .ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton"))
+							   .IsFocusable(false)
+							   .ToolTipText("Forward")
+							   .IsEnabled([this] { return !ForwardStack.empty(); })
+							   .OnClicked([this] {
+								   GoForward();
+								   return FReply::Handled();
+							   })[SNew(SMapViewportIcon).Icon(EIcon::Forward)]] +
+					  SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						  [SNew(SBorder)
+							   .BorderImage(&FAppStyle::Get().GetBrush("Recessed"))
+							   .Padding(FMargin(6.0f, 2.0f))
+							   .Clipping(EWidgetClipping::ClipToBounds)[SAssignNew(BreadcrumbHost, SBox)]]] +
+		 SVerticalBox::Slot().FillHeight(1.0f)
+			 [SNew(SSplitter).Orientation(EOrientation::Horizontal) +
+			  SSplitter::Slot().Value(0.22f).MinSize(
+				  80.0f)[SAssignNew(Tree, STreeView<FFolderNode*>)
+							 .TreeItemsSource(&TreeRoots)
+							 .SelectionMode(ESelectionMode::Single)
+							 .OnGetChildren([this](FFolderNode* Node, TArray<FFolderNode*>& Out) {
+								 ScanChildren(*Node);
+								 for (const TUniquePtr<FFolderNode>& Child : Node->Children)
+								 {
+									 Out.push_back(Child.get());
+								 }
+							 })
+							 .OnGenerateRow([](FFolderNode* Node, const TSharedRef<STableViewBase>& Owner)
+												-> TSharedRef<ITableRow> {
+								 return SNew(STableRow<FFolderNode*>, Owner)
+									 .Padding(FMargin(2.0f, 1.0f))
+										 [SNew(SHorizontalBox) +
+										  SHorizontalBox::Slot()
+											  .AutoWidth()
+											  .VAlign(VAlign_Center)
+											  .Padding(
+												  FMargin(0.0f, 0.0f, 5.0f,
+														  0.0f))[SNew(SMapViewportIcon).Icon(EIcon::Folder)] +
+										  SHorizontalBox::Slot().FillWidth(1.0f).VAlign(
+											  VAlign_Center)[SNew(STextBlock)
+																 .Text(Node->Name)
+																 .Clipping(EWidgetClipping::ClipToBounds)]];
+							 })
+							 .OnSelectionChanged([this](FFolderNode* Node, ESelectInfo) {
+								 if (Node && !bSyncingTree)
+								 {
+									 Navigate(Node->Path, true);
+								 }
+							 })] +
+			  SSplitter::Slot().Value(0.78f).MinSize(160.0f)
+				  [SNew(SVerticalBox) +
+				   SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 4.0f))
+					   [SNew(SEditableTextBox)
+							.Text([this] { return SearchText; })
+							.HintText([this] { return FString::Format("Search {}", GetDisplayPath(Path)); })
+							.OnTextChanged([this](const FString& Text) { SetSearchText(Text); })] +
+				   SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(6.0f, 2.0f))
+					   [SNew(SScrollBox) + SScrollBox::Slot()[SAssignNew(Tiles, SWrapBox)
+																  .UseAllottedSize(true)
+																  .InnerSlotPadding(FVector2(8.0f, 8.0f))]] +
+				   SVerticalBox::Slot().AutoHeight().Padding(
+					   FMargin(8.0f, 3.0f))[SNew(STextBlock).TextStyle(Small).Text([this] {
+					   return FString::Format(
+						   "{} item{}{}{}", Items.size(), Items.size() == 1 ? "" : "s",
+						   SelectedPath.IsEmpty() ? "" : " (1 selected)",
+						   Registry && !Registry->GetIssues().empty()
+							   ? FString::Format(" — {} content issues", Registry->GetIssues().size())
+							   : FString());
+				   })]]]];
 	Tree->SetItemExpansion(&TreeRoot, true);
 	Navigate(Args._InitialPath.IsEmpty() && !Roots.empty() ? Roots.front().Path : Args._InitialPath, false);
 }
@@ -431,20 +514,38 @@ FContentBrowserItem SContentBrowser::DescribeItem(const FString& FilePath) const
 			Item.PackagePath = Data->PackagePath;
 			Item.Error = Registry->GetConflict(*Data);
 		}
-		else FAssetPackageStore::ReadMetadata(FilePath, Metadata, Item.Error);
+		else
+			FAssetPackageStore::ReadMetadata(FilePath, Metadata, Item.Error);
 		Item.PackageId = Metadata.Id;
 		Item.Schema = Metadata.Schema;
-		if (!Item.Error.IsEmpty()) Item.Type = EContentAssetType::InvalidPackage;
-		else if (Metadata.Schema == "Genesis.World" && (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) && Metadata.Kind == EAssetPackageKind::Map) Item.Type = EContentAssetType::Map;
-		else if (Metadata.Schema == "Genesis.Prefab" && (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) && Metadata.Kind == EAssetPackageKind::Asset) Item.Type = EContentAssetType::Prefab;
-		else if (Metadata.Kind == EAssetPackageKind::Asset && (Metadata.SchemaVersion == 1 || Metadata.SchemaVersion == 2) && Metadata.Schema == "Genesis.StaticMesh") Item.Type = EContentAssetType::StaticMesh;
-		else if (Metadata.Kind == EAssetPackageKind::Asset && Metadata.SchemaVersion == 1 && Metadata.Schema == "Genesis.Texture2D") Item.Type = EContentAssetType::Texture;
-		else if (IsMaterialAsset(Metadata)) Item.Type = EContentAssetType::Material;
-		else Item.Type = EContentAssetType::Package;
+		if (!Item.Error.IsEmpty())
+			Item.Type = EContentAssetType::InvalidPackage;
+		else if (Metadata.Schema == "Genesis.World" &&
+				 (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) &&
+				 Metadata.Kind == EAssetPackageKind::Map)
+			Item.Type = EContentAssetType::Map;
+		else if (Metadata.Schema == "Genesis.Prefab" &&
+				 (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) &&
+				 Metadata.Kind == EAssetPackageKind::Asset)
+			Item.Type = EContentAssetType::Prefab;
+		else if (Metadata.Kind == EAssetPackageKind::Asset &&
+				 (Metadata.SchemaVersion == 1 || Metadata.SchemaVersion == 2) &&
+				 Metadata.Schema == "Genesis.StaticMesh")
+			Item.Type = EContentAssetType::StaticMesh;
+		else if (Metadata.Kind == EAssetPackageKind::Asset && Metadata.SchemaVersion == 1 &&
+				 Metadata.Schema == "Genesis.Texture2D")
+			Item.Type = EContentAssetType::Texture;
+		else if (IsMaterialAsset(Metadata))
+			Item.Type = EContentAssetType::Material;
+		else if (Metadata.Schema == "Genesis.MaterialFunction")
+			Item.Type = EContentAssetType::MaterialFunction;
+		else if (Metadata.Schema == "Genesis.MaterialParameterCollection")
+			Item.Type = EContentAssetType::MaterialParameterCollection;
+		else
+			Item.Type = EContentAssetType::Package;
 		return Item;
 	}
-	const auto LooseType = [&]() -> EContentAssetType
-	{
+	const auto LooseType = [&]() -> EContentAssetType {
 		if (Extension == ".qle")
 		{
 			for (const FString& Folder : PrefabFolders)
@@ -456,11 +557,17 @@ FContentBrowserItem SContentBrowser::DescribeItem(const FString& FilePath) const
 			}
 			return EContentAssetType::Map;
 		}
-		if (Extension == ".map") return EContentAssetType::QuakeMap;
-		if (Extension == ".ent" || Extension == ".def" || Extension == ".fgd") return EContentAssetType::EntityList;
-		if (Extension == ".png" || Extension == ".tga" || Extension == ".bmp" || Extension == ".jpg" || Extension == ".dds" || Extension == ".wal") return EContentAssetType::Texture;
-		if (Extension == ".ttf" || Extension == ".otf") return EContentAssetType::Font;
-		if (Extension == ".txt" || Extension == ".md" || Extension == ".json" || Extension == ".ini") return EContentAssetType::Text;
+		if (Extension == ".map")
+			return EContentAssetType::QuakeMap;
+		if (Extension == ".ent" || Extension == ".def" || Extension == ".fgd")
+			return EContentAssetType::EntityList;
+		if (Extension == ".png" || Extension == ".tga" || Extension == ".bmp" || Extension == ".jpg" ||
+			Extension == ".dds" || Extension == ".wal")
+			return EContentAssetType::Texture;
+		if (Extension == ".ttf" || Extension == ".otf")
+			return EContentAssetType::Font;
+		if (Extension == ".txt" || Extension == ".md" || Extension == ".json" || Extension == ".ini")
+			return EContentAssetType::Text;
 		return EContentAssetType::File;
 	};
 	Item.Type = LooseType();
@@ -527,15 +634,18 @@ SContentBrowser::FFolderNode* SContentBrowser::FindNode(const FString& FolderPat
 	return nullptr;
 }
 
-FString SContentBrowser::GetDisplayPath(const FString& FolderPath, TArray<TPair<FString, FString>>* OutParts) const
+FString SContentBrowser::GetDisplayPath(const FString& FolderPath,
+										TArray<TPair<FString, FString>>* OutParts) const
 {
-	TArray<TPair<FString, FString>> Parts = { { "All", FString() } };
+	TArray<TPair<FString, FString>> Parts = {{"All", FString()}};
 	for (const FContentBrowserRoot& Root : Roots)
 	{
 		if (!FolderPath.IsEmpty() && IsUnder(FolderPath, Root.Path))
 		{
-			Parts.push_back({ Root.Name, Root.Path });
-			const fs::path Relative = ToPath(FolderPath).lexically_normal().lexically_relative(ToPath(Root.Path).lexically_normal());
+			Parts.push_back({Root.Name, Root.Path});
+			const fs::path Relative = ToPath(FolderPath)
+										  .lexically_normal()
+										  .lexically_relative(ToPath(Root.Path).lexically_normal());
 			fs::path Walk = ToPath(Root.Path);
 			for (const fs::path& Part : Relative)
 			{
@@ -544,7 +654,7 @@ FString SContentBrowser::GetDisplayPath(const FString& FolderPath, TArray<TPair<
 					continue;
 				}
 				Walk /= Part;
-				Parts.push_back({ FromPath(Part), FromPath(Walk) });
+				Parts.push_back({FromPath(Part), FromPath(Walk)});
 			}
 			break;
 		}
@@ -565,20 +675,21 @@ void SContentBrowser::ScanItems()
 	{
 		for (const FContentBrowserRoot& Root : Roots)
 		{
-			Items.push_back({ Root.Name, Root.Path, EContentAssetType::Folder });
+			Items.push_back({Root.Name, Root.Path, EContentAssetType::Folder});
 		}
 		return;
 	}
 	std::error_code Error;
 	const FString Needle = SearchText.ToLower();
-	const auto Consider = [&](const fs::directory_entry& Entry)
-	{
+	const auto Consider = [&](const fs::directory_entry& Entry) {
 		const bool bFolder = Entry.is_directory(Error);
 		const auto Ext = Entry.path().extension();
-		if (!bFolder && (Ext == L".gexp" || Ext == L".gbulk" || Ext == L".tmp")) return;
+		if (!bFolder && (Ext == L".gexp" || Ext == L".gbulk" || Ext == L".tmp"))
+			return;
 		FContentBrowserItem Item = bFolder ? FContentBrowserItem() : DescribeItem(FromPath(Entry.path()));
 		Item.Path = FromPath(Entry.path());
-		if (bFolder) Item.Type = EContentAssetType::Folder;
+		if (bFolder)
+			Item.Type = EContentAssetType::Folder;
 		Item.Name = FromPath(bFolder ? Entry.path().filename() : Entry.path().stem());
 		if (!Needle.IsEmpty() && !Item.Name.ToLower().Contains(Needle.View()))
 		{
@@ -596,14 +707,14 @@ void SContentBrowser::ScanItems()
 	else
 	{
 		// A search looks below the folder too, up to a limit.
-		for (fs::recursive_directory_iterator It(ToPath(Path), Error), End; !Error && It != End && Items.size() < 2000; It.increment(Error))
+		for (fs::recursive_directory_iterator It(ToPath(Path), Error), End;
+			 !Error && It != End && Items.size() < 2000; It.increment(Error))
 		{
 			Consider(*It);
 		}
 	}
 	// Folders first, then by name.
-	std::sort(Items.begin(), Items.end(), [](const FContentBrowserItem& A, const FContentBrowserItem& B)
-	{
+	std::sort(Items.begin(), Items.end(), [](const FContentBrowserItem& A, const FContentBrowserItem& B) {
 		const bool AFolder = A.Type == EContentAssetType::Folder;
 		const bool BFolder = B.Type == EContentAssetType::Folder;
 		return AFolder != BFolder ? AFolder : A.Name.ToLower().View() < B.Name.ToLower().View();
@@ -663,14 +774,16 @@ void SContentBrowser::Refresh(bool bRescanRegistry)
 {
 	if (Registry && bRescanRegistry)
 	{
-		Registry->Scan(); RegistryRevision = Registry->GetRevision();
+		Registry->Scan();
+		RegistryRevision = Registry->GetRevision();
 		for (size_t I = 0; I < Registry->GetIssues().size() && I < 20; ++I)
 		{
 			const auto& Issue = Registry->GetIssues()[I];
 			UE_LOG(LogMapEditor, Warning, "Content issue in {}: {}", Issue.FilePath, Issue.Message);
 		}
 	}
-	if (Registry) RegistryRevision = Registry->GetRevision();
+	if (Registry)
+		RegistryRevision = Registry->GetRevision();
 	if (FFolderNode* Node = FindNode(Path))
 	{
 		Node->Children.clear();
@@ -716,7 +829,9 @@ FString SContentBrowser::CreateFolder()
 	std::error_code Error;
 	for (int32 Number = 1; Number < 1000; ++Number)
 	{
-		const fs::path Folder = ToPath(Path) / (Number == 1 ? fs::path(L"NewFolder") : fs::path(L"NewFolder" + std::to_wstring(Number)));
+		const fs::path Folder =
+			ToPath(Path) /
+			(Number == 1 ? fs::path(L"NewFolder") : fs::path(L"NewFolder" + std::to_wstring(Number)));
 		if (!fs::exists(Folder, Error) && fs::create_directory(Folder, Error))
 		{
 			Refresh();
@@ -737,7 +852,8 @@ bool SContentBrowser::ImportFile(const FString& Source)
 	std::error_code Error;
 	const fs::path From = ToPath(Source);
 	const FString Extension = FromPath(From.extension()).ToLower();
-	const bool bImage = Extension == ".png" || Extension == ".bmp" || Extension == ".jpg" || Extension == ".jpeg" || Extension == ".tif" || Extension == ".tiff";
+	const bool bImage = Extension == ".png" || Extension == ".bmp" || Extension == ".jpg" ||
+						Extension == ".jpeg" || Extension == ".tif" || Extension == ".tiff";
 	const bool bMesh = Extension == ".obj";
 	const auto TargetExtension = bImage || bMesh ? fs::path(L".asset") : From.extension();
 	fs::path To = ToPath(Path) / (From.stem().wstring() + TargetExtension.wstring());
@@ -745,11 +861,19 @@ bool SContentBrowser::ImportFile(const FString& Source)
 	{
 		To = ToPath(Path) / (From.stem().wstring() + std::to_wstring(Number) + TargetExtension.wstring());
 	}
-	if(fs::exists(To,Error)) { UE_LOG(LogMapEditor,Warning,"No free import filename in {}",Path); return false; }
+	if (fs::exists(To, Error))
+	{
+		UE_LOG(LogMapEditor, Warning, "No free import filename in {}", Path);
+		return false;
+	}
 	bool bCopied = false;
-	if(bImage || bMesh) {
-		FString ImportError; bCopied = bImage ? FMapAssetImport::ImportTexture(Source,FromPath(To),ImportError) : FMapAssetImport::ImportMesh(Source,FromPath(To),ImportError);
-		if(!bCopied) UE_LOG(LogMapEditor,Warning,"{}",ImportError);
+	if (bImage || bMesh)
+	{
+		FString ImportError;
+		bCopied = bImage ? FMapAssetImport::ImportTexture(Source, FromPath(To), ImportError)
+						 : FMapAssetImport::ImportMesh(Source, FromPath(To), ImportError);
+		if (!bCopied)
+			UE_LOG(LogMapEditor, Warning, "{}", ImportError);
 	}
 	else if (Extension == ".gmap" || Extension == ".asset")
 	{
@@ -760,9 +884,11 @@ bool SContentBrowser::ImportFile(const FString& Source)
 			Package.Id.Empty(); // imported copy is a new asset
 			bCopied = FAssetPackageStore::Save(FromPath(To), Package, PackageError);
 		}
-		if (!bCopied) UE_LOG(LogMapEditor, Warning, "{}", PackageError);
+		if (!bCopied)
+			UE_LOG(LogMapEditor, Warning, "{}", PackageError);
 	}
-	else bCopied = fs::copy_file(From, To, Error);
+	else
+		bCopied = fs::copy_file(From, To, Error);
 	if (!bCopied)
 	{
 		UE_LOG(LogMapEditor, Warning, "Could not import {}: {}", Source, Error.message());
@@ -776,54 +902,130 @@ bool SContentBrowser::ImportFile(const FString& Source)
 
 TSharedRef<SWidget> SContentBrowser::MakeAddMenu()
 {
-	return SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight()
-		[
-			SNew(SMenuEntry).Text("New Folder").ToolTipText("Make a folder here").IsEnabled([this] { return !Path.IsEmpty(); })
-			.OnSelected([this] { CreateFolder(); })
-		]
-		+ SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry).Text("Material").IsEnabled([this] { return !Path.IsEmpty(); }).OnSelected([this] { CreateMaterial(); })]
-		+ SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry).Text("Material Instance from Selection").ToolTipText("Select a saved graph material or instance as the parent").IsEnabled([this]{return !Path.IsEmpty()&&GetAssetType(SelectedPath)==EContentAssetType::Material;}).OnSelected([this]{CreateMaterialInstance();})]
-		+ SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry).Text("Static Mesh from Selection").IsEnabled([this] { return !Path.IsEmpty() && OnCreateMesh.IsBound(); }).OnSelected([this] { CreateMeshFromSelection(); })];
+	return SNew(SVerticalBox) +
+		   SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry)
+												 .Text("New Folder")
+												 .ToolTipText("Make a folder here")
+												 .IsEnabled([this] { return !Path.IsEmpty(); })
+												 .OnSelected([this] { CreateFolder(); })] +
+		   SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry)
+												 .Text("Material")
+												 .IsEnabled([this] { return !Path.IsEmpty(); })
+												 .OnSelected([this] { CreateMaterial(); })] +
+		   SVerticalBox::Slot()
+			   .AutoHeight()[SNew(SMenuEntry)
+								 .Text("Material Parameter Collection")
+								 .IsEnabled([this] { return !Path.IsEmpty(); })
+								 .OnSelected([this] { CreateMaterialParameterCollection(); })] +
+		   SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry)
+												 .Text("Material Function")
+												 .IsEnabled([this] { return !Path.IsEmpty(); })
+												 .OnSelected([this] { CreateMaterialFunction(); })] +
+		   SVerticalBox::Slot()
+			   .AutoHeight()[SNew(SMenuEntry)
+								 .Text("Material Instance from Selection")
+								 .ToolTipText("Select a saved graph material or instance as the parent")
+								 .IsEnabled([this] {
+									 return !Path.IsEmpty() &&
+											GetAssetType(SelectedPath) == EContentAssetType::Material;
+								 })
+								 .OnSelected([this] { CreateMaterialInstance(); })] +
+		   SVerticalBox::Slot()
+			   .AutoHeight()[SNew(SMenuEntry)
+								 .Text("Static Mesh from Selection")
+								 .IsEnabled([this] { return !Path.IsEmpty() && OnCreateMesh.IsBound(); })
+								 .OnSelected([this] { CreateMeshFromSelection(); })];
 }
 
 FString SContentBrowser::CreateMaterial()
 {
-	if(Path.IsEmpty()) return {};
-	for(int Number=1; Number<1000; ++Number) {
-		const auto File=FromPath(ToPath(Path)/(L"Material"+(Number==1?std::wstring():std::to_wstring(Number))+L".asset"));
-		if(fs::exists(ToPath(File))) continue;
+	if (Path.IsEmpty())
+		return {};
+	for (int Number = 1; Number < 1000; ++Number)
+	{
+		const auto File =
+			FromPath(ToPath(Path) /
+					 (L"Material" + (Number == 1 ? std::wstring() : std::to_wstring(Number)) + L".asset"));
+		if (fs::exists(ToPath(File)))
+			continue;
 		FMaterialAsset Material;
-		for(const auto& Item:Items) if(Item.Path==SelectedPath && Item.Schema=="Genesis.Texture2D" && !Item.PackagePath.IsEmpty()) Material.BaseColorTexture={Item.PackageId,Item.PackagePath};
-		FAssetPackage P; FString Error;
-		if(!FRenderAssetCodec::EncodeMaterial(Material,P,Error) || !FAssetPackageStore::Save(File,P,Error)) { UE_LOG(LogMapEditor,Warning,"{}",Error); return {}; }
-		Refresh(); SelectedPath=File; return File;
+		for (const auto& Item : Items)
+			if (Item.Path == SelectedPath && Item.Schema == "Genesis.Texture2D" &&
+				!Item.PackagePath.IsEmpty())
+				Material.BaseColorTexture = {Item.PackageId, Item.PackagePath};
+		FAssetPackage P;
+		FString Error;
+		if (!FRenderAssetCodec::EncodeMaterial(Material, P, Error) ||
+			!FAssetPackageStore::Save(File, P, Error))
+		{
+			UE_LOG(LogMapEditor, Warning, "{}", Error);
+			return {};
+		}
+		Refresh();
+		SelectedPath = File;
+		return File;
 	}
 	return {};
 }
 FString SContentBrowser::CreateMaterialInstance()
 {
-    if(Path.IsEmpty())return {};
-    FMaterialInstanceAsset Instance;
-    for(const auto& Item:Items)if(Item.Path==SelectedPath&&Item.Type==EContentAssetType::Material)Instance.Parent={Item.PackageId,Item.PackagePath};
-    if(Instance.Parent.IsNull())return {};
-    FString Error;FMaterialAsset Parent;
-    if(!Registry||!FRenderAssetLoader(*Registry).LoadMaterial(Instance.Parent,Parent,Error)||!Parent.Graph){UE_LOG(LogMapEditor,Warning,"Save the parent in the graph material editor before creating an instance. {}",Error);return {};}
-    for(int Number=1;Number<1000;++Number){
-        const auto File=FromPath(ToPath(Path)/(L"MaterialInstance"+(Number==1?std::wstring():std::to_wstring(Number))+L".asset"));if(fs::exists(ToPath(File)))continue;
-        FAssetPackage P;if(!FRenderAssetCodec::EncodeMaterialInstance(Instance,P,Error)||!FAssetPackageStore::Save(File,P,Error)){UE_LOG(LogMapEditor,Warning,"{}",Error);return {};}
-        Refresh();SelectedPath=File;return File;
-    }
-    return {};
+	if (Path.IsEmpty())
+		return {};
+	FMaterialInstanceAsset Instance;
+	for (const auto& Item : Items)
+		if (Item.Path == SelectedPath && Item.Type == EContentAssetType::Material)
+			Instance.Parent = {Item.PackageId, Item.PackagePath};
+	if (Instance.Parent.IsNull())
+		return {};
+	FString Error;
+	FMaterialAsset Parent;
+	if (!Registry || !FRenderAssetLoader(*Registry).LoadMaterial(Instance.Parent, Parent, Error) ||
+		!Parent.Graph)
+	{
+		UE_LOG(LogMapEditor, Warning,
+			   "Save the parent in the graph material editor before creating an instance. {}", Error);
+		return {};
+	}
+	for (int Number = 1; Number < 1000; ++Number)
+	{
+		const auto File =
+			FromPath(ToPath(Path) / (L"MaterialInstance" +
+									 (Number == 1 ? std::wstring() : std::to_wstring(Number)) + L".asset"));
+		if (fs::exists(ToPath(File)))
+			continue;
+		FAssetPackage P;
+		if (!FRenderAssetCodec::EncodeMaterialInstance(Instance, P, Error) ||
+			!FAssetPackageStore::Save(File, P, Error))
+		{
+			UE_LOG(LogMapEditor, Warning, "{}", Error);
+			return {};
+		}
+		Refresh();
+		SelectedPath = File;
+		return File;
+	}
+	return {};
 }
 FString SContentBrowser::CreateMeshFromSelection()
 {
-	if(Path.IsEmpty() || !OnCreateMesh.IsBound()) return {};
-	for(int Number=1; Number<1000; ++Number) {
-		const auto File=FromPath(ToPath(Path)/(L"StaticMesh"+(Number==1?std::wstring():std::to_wstring(Number))+L".asset"));
-		if(fs::exists(ToPath(File))) continue;
-		FString Error; if(!OnCreateMesh.Execute(File,Error)) { UE_LOG(LogMapEditor,Warning,"{}",Error); return {}; }
-		Refresh(); SelectedPath=File; return File;
+	if (Path.IsEmpty() || !OnCreateMesh.IsBound())
+		return {};
+	for (int Number = 1; Number < 1000; ++Number)
+	{
+		const auto File =
+			FromPath(ToPath(Path) /
+					 (L"StaticMesh" + (Number == 1 ? std::wstring() : std::to_wstring(Number)) + L".asset"));
+		if (fs::exists(ToPath(File)))
+			continue;
+		FString Error;
+		if (!OnCreateMesh.Execute(File, Error))
+		{
+			UE_LOG(LogMapEditor, Warning, "{}", Error);
+			return {};
+		}
+		Refresh();
+		SelectedPath = File;
+		return File;
 	}
 	return {};
 }
@@ -837,8 +1039,7 @@ void SContentBrowser::QueueRebuild()
 		return;
 	}
 	bRebuildQueued = true;
-	RegisterActiveTimer(0.0f, [this](double, float)
-	{
+	RegisterActiveTimer(0.0f, [this](double, float) {
 		bRebuildQueued = false;
 		RebuildWidgets();
 		return EActiveTimerReturn::Stop;
@@ -855,14 +1056,20 @@ TSharedRef<SWidget> SContentBrowser::MakeBreadcrumbs()
 		const FString PartPath = Parts[Index].second;
 		if (Index > 0)
 		{
-			Row->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SMapViewportIcon).Icon(EIcon::Forward).Size(12.0f)];
+			Row->AddSlot().AutoWidth().VAlign(
+				VAlign_Center)[SNew(SMapViewportIcon).Icon(EIcon::Forward).Size(12.0f)];
 		}
-		Row->AddSlot().AutoWidth().VAlign(VAlign_Center)
-		[
-			SNew(SButton).ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton")).IsFocusable(false)
-			.ContentPadding(FMargin(5.0f, 1.0f)).Text(Parts[Index].first)
-			.OnClicked([this, PartPath] { SearchText.Empty(); SetPath(PartPath); return FReply::Handled(); })
-		];
+		Row->AddSlot().AutoWidth().VAlign(
+			VAlign_Center)[SNew(SButton)
+							   .ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton"))
+							   .IsFocusable(false)
+							   .ContentPadding(FMargin(5.0f, 1.0f))
+							   .Text(Parts[Index].first)
+							   .OnClicked([this, PartPath] {
+								   SearchText.Empty();
+								   SetPath(PartPath);
+								   return FReply::Handled();
+							   })];
 	}
 	return Row;
 }
@@ -899,4 +1106,61 @@ void SContentBrowser::RebuildWidgets()
 		Tree->ClearSelection();
 	}
 	bSyncingTree = false;
+}
+
+FString SContentBrowser::CreateMaterialFunction()
+{
+	if (Path.IsEmpty())
+		return {};
+	for (int Number = 1; Number < 1000; ++Number)
+	{
+		const auto File =
+			FromPath(ToPath(Path) / (L"MaterialFunction" +
+									 (Number == 1 ? std::wstring() : std::to_wstring(Number)) + L".asset"));
+		if (fs::exists(ToPath(File)))
+			continue;
+		FMaterialGraph G;
+		G.bFunction = true;
+		G.Outputs[0] = G.Add(EMaterialExpression::FunctionInput);
+		G.Find(G.Outputs[0])->Value[0] = 0.5f;
+		FAssetPackage P;
+		FString Error;
+		if (!FMaterialFunctionCodec::Encode(G, P, Error) || !FAssetPackageStore::Save(File, P, Error))
+		{
+			UE_LOG(LogMapEditor, Warning, "{}", Error);
+			return {};
+		}
+		Refresh();
+		SelectedPath = File;
+		return File;
+	}
+	return {};
+}
+
+FString SContentBrowser::CreateMaterialParameterCollection()
+{
+	if (Path.IsEmpty())
+		return {};
+	for (int Number = 1; Number < 1000; ++Number)
+	{
+		const auto File =
+			FromPath(ToPath(Path) / (L"MaterialParameterCollection" +
+									 (Number == 1 ? std::wstring() : std::to_wstring(Number)) + L".asset"));
+		if (fs::exists(ToPath(File)))
+			continue;
+		FMaterialParameterCollection C;
+		C.Parameters = {{"Scalar", 1, {0, 0, 0, 0}}, {"Vector", 4, {1, 1, 1, 1}}};
+		FAssetPackage P;
+		FString Error;
+		if (!FMaterialParameterCollectionCodec::Encode(C, P, Error) ||
+			!FAssetPackageStore::Save(File, P, Error))
+		{
+			UE_LOG(LogMapEditor, Warning, "{}", Error);
+			return {};
+		}
+		Refresh();
+		SelectedPath = File;
+		return File;
+	}
+	return {};
 }

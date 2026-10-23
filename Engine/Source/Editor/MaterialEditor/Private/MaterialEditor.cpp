@@ -1,5 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "MaterialEditor.h"
+#include "MaterialParameterCollectionEditor.h"
+#include "Materials/MaterialParameterCollection.h"
+#include "Materials/MaterialFunction.h"
 #include "MaterialInstanceEditor.h"
 #include "MaterialCompilationManager.h"
 #include "SMaterialGraph.h"
@@ -20,6 +23,7 @@
 #include "Widgets/Text/SEditableText.h"
 #include "Services/Services.h"
 #include "Services/MessageDialog.h"
+#include <map>
 
 namespace
 {
@@ -30,11 +34,13 @@ class SMaterialEditorPanel final : public SCompoundWidget
 	SLATE_ARGUMENT(std::shared_ptr<FMaterialAsset>, Material, nullptr)
 	SLATE_ARGUMENT(std::shared_ptr<FAssetRegistry>, Registry, nullptr)
 	SLATE_ARGUMENT(TSharedPtr<FMaterialEditorViewportClient>, Preview, nullptr)
+	SLATE_ARGUMENT(FString, OwnerId, "")
 	SLATE_END_ARGS()
 	void Construct(const FArguments& A)
 	{
 		Material = A._Material;
 		Registry = A._Registry;
+		OwnerId = A._OwnerId;
 		Preview = A._Preview;
 		const bool WasGraph = Material->Graph.has_value();
 		Material->Graph = FMaterialEditingLibrary::CreateGraph(*Material);
@@ -43,22 +49,8 @@ class SMaterialEditorPanel final : public SCompoundWidget
 		if (Preview)
 		{
 			Left->AddSlot().FillHeight(.5f)[SNew(SViewport).ViewportClient(Preview)];
-			Left->AddSlot().AutoHeight()
-				[SNew(SHorizontalBox) +
-				 SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Sphere").OnClicked([this] {
-					 Preview->SetShape("Sphere");
-					 RequestCompile();
-					 return FReply::Handled();
-				 })] +
-				 SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Cube").OnClicked([this] {
-					 Preview->SetShape("Cube");
-					 RequestCompile();
-					 return FReply::Handled();
-				 })] +
-				 SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Lit / Unlit").OnClicked([this] {
-					 Preview->ToggleLit();
-					 return FReply::Handled();
-				 })]];
+			Left->AddSlot().AutoHeight()[MakeMaterialPreviewControls(ToSharedRef(Preview), Registry,
+																	 [this] { RequestCompile(); })];
 		}
 		Left->AddSlot().AutoHeight()[SNew(STextBlock).Text("Selected Node")];
 		Left->AddSlot().FillHeight(
@@ -83,6 +75,24 @@ class SMaterialEditorPanel final : public SCompoundWidget
 			})];
 		Toolbar->AddSlot().AutoWidth()[SNew(SButton)
 										   .Text([this] {
+											   return bNodePreview ? FString("Preview: Selected Node")
+																   : FString("Preview: Material");
+										   })
+										   .IsEnabled([this] {
+											   const auto* N = Material->Graph->Find(
+												   Canvas ? Canvas->GetSelectedNode() : 0);
+											   return !PendingSave && N &&
+													  N->Expression != EMaterialExpression::Comment;
+										   })
+										   .OnClicked([this] {
+											   bNodePreview = !bNodePreview;
+											   ++Revision;
+											   CompiledRevision = 0;
+											   RequestCompile();
+											   return FReply::Handled();
+										   })];
+		Toolbar->AddSlot().AutoWidth()[SNew(SButton)
+										   .Text([this] {
 											   return bLive ? FString("Live Preview: On")
 															: FString("Live Preview: Off");
 										   })
@@ -95,13 +105,27 @@ class SMaterialEditorPanel final : public SCompoundWidget
 											   return FReply::Handled();
 										   })];
 		ChildSlot[SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Toolbar] +
-				  SVerticalBox::Slot().FillHeight(1)
-					  [SNew(SSplitter) + SSplitter::Slot().Value(.24f).MinSize(240)[Left] +
-					   SSplitter::Slot().Value(.76f)[SAssignNew(Canvas, SMaterialGraph)
-														 .Material(Material)
-														 .OnChanged([this] { Edited(); })
-														 .OnError([this](const FString& E) { Status = E; })
-														 .OnSelectionChanged([this] { RebuildDetails(); })]] +
+				  SVerticalBox::Slot().FillHeight(
+					  1)[SNew(SSplitter) + SSplitter::Slot().Value(.24f).MinSize(240)[Left] +
+						 SSplitter::Slot().Value(.76f)[SAssignNew(Canvas, SMaterialGraph)
+														   .Material(Material)
+														   .Registry(Registry)
+														   .OnChanged([this] { Edited(); })
+														   .OnError([this](const FString& E) { Status = E; })
+														   .OnSelectionChanged([this] {
+															   RebuildDetails();
+															   if (bNodePreview)
+															   {
+																   const auto* N = Material->Graph->Find(
+																	   Canvas->GetSelectedNode());
+																   if (!N || N->Expression ==
+																				 EMaterialExpression::Comment)
+																	   bNodePreview = false;
+																   ++Revision;
+																   CompiledRevision = 0;
+																   RequestCompile();
+															   }
+														   })]] +
 				  SVerticalBox::Slot().AutoHeight()
 					  [SNew(STextBlock)
 						   .Text("Right-click: add node | Drag output pin to input | Alt-click input: "
@@ -113,21 +137,92 @@ class SMaterialEditorPanel final : public SCompoundWidget
 		RebuildDetails();
 		RequestCompile();
 	}
+	void SetBlendMode(EMaterialBlendMode Mode)
+	{
+		Canvas->SetMaterialSettings(Mode, Material->OpacityMaskClip);
+	}
+	void SetMaskCutoff(float V)
+	{
+		Canvas->SetMaterialSettings(Material->BlendMode, V);
+	}
+	void ToggleMaterialAttributes()
+	{
+		Canvas->SetUseMaterialAttributes(!Material->Graph->bUseMaterialAttributes);
+	}
 	void RequestCompile()
 	{
+		bool Changed = false;
+		if (!FMaterialFunctionCodec::Refresh(*Material->Graph, *Registry, Changed, Status, OwnerId))
+		{
+			CompileAt = 0;
+			PendingSave = {};
+			CompiledRevision = 0;
+			++Revision;
+			Status += " - preview remains at the last successful compile";
+			return;
+		}
+		RegistryRevision = Registry->GetRevision();
+		if (Changed)
+		{
+			++Revision;
+			bDirty = true;
+		}
 		CompileAt = 0;
 		if (CompiledRevision == Revision)
 		{
 			PublishPreview();
 			return;
 		}
-		Compiler.Submit(*Material, Revision);
+		SubmitCompile();
 		Status = "Compiling in background...";
 		EnsureCompileTimer();
+	}
+	void Tick(const FGeometry& G, double T, float D) override
+	{
+		SCompoundWidget::Tick(G, T, D);
+		if (Registry && RegistryRevision != Registry->GetRevision())
+		{
+			RegistryRevision = Registry->GetRevision();
+			bool Changed = false;
+			FString DependencyError;
+			if (!FMaterialFunctionCodec::Refresh(*Material->Graph, *Registry, Changed, DependencyError,
+												 OwnerId))
+			{
+				CompileAt = 0;
+				PendingSave = {};
+				CompiledRevision = 0;
+				++Revision;
+				Status = DependencyError + " - preview remains at the last successful compile";
+				return;
+			}
+			if (Changed)
+				Edited();
+			if (bLive && (Changed || CompiledRevision != Revision))
+				RequestCompile();
+		}
+	}
+	void SubmitCompile()
+	{
+		auto Snapshot = *Material;
+		if (bNodePreview)
+		{
+			for (auto& Output : Snapshot.Graph->Outputs)
+				Output = 0;
+			Snapshot.Graph->Outputs[0] = Canvas->GetSelectedNode();
+			Snapshot.Graph->bFunction = true;
+			Snapshot.Graph->bUseMaterialAttributes = false;
+		}
+		Compiler.Submit(Snapshot, Revision);
 	}
 	void SaveWhenReady(TFunction<void()> Save)
 	{
 		PendingSave = std::move(Save);
+		if (bNodePreview)
+		{
+			bNodePreview = false;
+			++Revision;
+			CompiledRevision = 0;
+		}
 		if (CompiledRevision == Revision)
 		{
 			if (PublishPreview())
@@ -155,12 +250,14 @@ class SMaterialEditorPanel final : public SCompoundWidget
 	}
 	bool PublishPreview()
 	{
+		const auto& Display = bNodePreview && CompiledPreview ? *CompiledPreview : *Material;
 		FLoadedMaterialSlot Resources;
-		if (!FRenderAssetLoader(*Registry).LoadMaterialResources(*Material, Resources, Status))
+		if (!FRenderAssetLoader(*Registry).LoadMaterialResources(Display, Resources, Status))
 			return false;
-		if (Preview && !Preview->Update(*Material, *Registry, Status))
+		if (Preview && !Preview->Update(Display, *Registry, Status))
 			return false;
-		Status = "Compiled for DirectX 12 and Vulkan";
+		Status = bNodePreview ? "Node preview compiled for DirectX 12 and Vulkan"
+							  : "Compiled for DirectX 12 and Vulkan";
 		return true;
 	}
 	void EnsureCompileTimer()
@@ -174,9 +271,14 @@ class SMaterialEditorPanel final : public SCompoundWidget
 				{
 					if (Result->bSuccess)
 					{
-						Material->GraphDXIL = std::move(Result->Material.GraphDXIL);
-						Material->GraphSPIRV = std::move(Result->Material.GraphSPIRV);
-						Material->CookedGraphSource = std::move(Result->Material.CookedGraphSource);
+						if (bNodePreview)
+							CompiledPreview = std::move(Result->Material);
+						else
+						{
+							Material->GraphDXIL = std::move(Result->Material.GraphDXIL);
+							Material->GraphSPIRV = std::move(Result->Material.GraphSPIRV);
+							Material->CookedGraphSource = std::move(Result->Material.CookedGraphSource);
+						}
 						if (PublishPreview())
 						{
 							CompiledRevision = Revision;
@@ -192,14 +294,14 @@ class SMaterialEditorPanel final : public SCompoundWidget
 					}
 					else
 					{
-						Status = Result->Error;
+						Status = Result->Error + " - preview remains at the last successful compile";
 						PendingSave = {};
 					}
 				}
 			if (CompileAt > 0 && FPlatformTime::Seconds() >= CompileAt)
 			{
 				CompileAt = 0;
-				Compiler.Submit(*Material, Revision);
+				SubmitCompile();
 				Status = "Compiling in background...";
 			}
 			if (Compiler.IsBusy() || CompileAt > 0)
@@ -241,7 +343,9 @@ class SMaterialEditorPanel final : public SCompoundWidget
 
 		if (N->Expression == EMaterialExpression::ScalarParameter ||
 			N->Expression == EMaterialExpression::VectorParameter ||
-			N->Expression == EMaterialExpression::TextureSampleParameter2D)
+			N->Expression == EMaterialExpression::TextureSampleParameter2D ||
+			N->Expression == EMaterialExpression::StaticSwitchParameter ||
+			N->Expression == EMaterialExpression::FunctionInput)
 		{
 			Details->AddSlot().AutoHeight()[SNew(STextBlock).Text("Parameter Name")];
 			Details->AddSlot().AutoHeight()
@@ -249,13 +353,77 @@ class SMaterialEditorPanel final : public SCompoundWidget
 					Canvas->EditNode([&](auto& Node) { Node.ParameterName = Text; });
 				})];
 		}
-		const int Values = N->Expression == EMaterialExpression::VectorParameter   ? 4
+		if (N->Expression == EMaterialExpression::StaticSwitchParameter)
+		{
+			Details->AddSlot().AutoHeight()[SNew(SButton)
+												.Text([this, Id] {
+													const auto* V = Material->Graph->Find(Id);
+													return V && V->Value[2] != 0
+															   ? FString("Static Value: True")
+															   : FString("Static Value: False");
+												})
+												.OnClicked([this] {
+													Canvas->EditNode([](auto& Node) {
+														Node.Value[2] = Node.Value[2] == 0 ? 1.f : 0.f;
+													});
+													return FReply::Handled();
+												})];
+		}
+		if (N->Expression == EMaterialExpression::QualitySwitch)
+		{
+			Details->AddSlot().AutoHeight()[SNew(STextBlock).Text("Cook quality (0 Low, 1 Medium, 2 High)")];
+			Details->AddSlot()
+				.AutoHeight()[SNew(SSpinBox<int>)
+								  .MinValue(0)
+								  .MaxValue(2)
+								  .Value([this] { return static_cast<int>(Material->Graph->QualityLevel); })
+								  .OnValueChanged(
+									  [this](int V) { Canvas->SetQualityLevel(static_cast<uint8>(V)); })];
+		}
+		if (N->Expression == EMaterialExpression::ScalarParameter ||
+			N->Expression == EMaterialExpression::VectorParameter ||
+			N->Expression == EMaterialExpression::TextureSampleParameter2D ||
+			N->Expression == EMaterialExpression::StaticSwitchParameter)
+		{
+			Details->AddSlot().AutoHeight()[SNew(STextBlock).Text("Parameter Group (empty = General)")];
+			Details->AddSlot().AutoHeight()
+				[SNew(SEditableTextBox).Text(N->ParameterGroup).OnTextChanged([this](const FString& S) {
+					Canvas->EditNode([&](auto& Node) { Node.ParameterGroup = S; });
+				})];
+		}
+		if (N->Expression == EMaterialExpression::BreakMaterialAttributes)
+		{
+			Details->AddSlot().AutoHeight()[SNew(STextBlock)
+												.Text("Attribute: 0 Base Color, 1 Roughness, 2 Metallic, 3 "
+													  "Opacity, 4 Normal, 5 Emissive")];
+			Details->AddSlot().AutoHeight()[SNew(SSpinBox<int>)
+												.MinValue(0)
+												.MaxValue(5)
+												.Value([this, Id] {
+													const auto* V = Material->Graph->Find(Id);
+													return V ? int(V->Mask) : 0;
+												})
+												.OnValueChanged([this](int V) {
+													Canvas->EditNode([&](auto& Node) {
+														Node.Mask = static_cast<uint8>(V);
+													});
+												})];
+		}
+		const int Values = N->Expression == EMaterialExpression::MaterialFunctionCall ||
+								   N->Expression == EMaterialExpression::MakeMaterialAttributes ||
+								   N->Expression == EMaterialExpression::BreakMaterialAttributes
+							   ? 0
+						   : N->Expression == EMaterialExpression::FunctionInput
+							   ? (N->Mask == 8 ? 0 : N->Mask)
+						   : N->Expression == EMaterialExpression::VectorParameter ? 4
 						   : N->Expression == EMaterialExpression::ScalarParameter ? 1
 						   : N->Expression == EMaterialExpression::Comment		   ? 2
 						   : static_cast<int>(N->Expression) <= 3 ? static_cast<int>(N->Expression) + 1
 																  : MaterialInputCount(N->Expression);
 		for (int I = 0; I < Values; ++I)
 		{
+			if (N->Expression == EMaterialExpression::BlendMaterialAttributes && I < 2)
+				continue;
 			Details->AddSlot()
 				.AutoHeight()[SNew(STextBlock)
 								  .Text(FString::Format(
@@ -272,6 +440,101 @@ class SMaterialEditorPanel final : public SCompoundWidget
 												.OnValueChanged([this, I](float V) {
 													Canvas->EditNode([&](auto& Node) { Node.Value[I] = V; });
 												})];
+		}
+		if (N->Expression == EMaterialExpression::FunctionInput)
+		{
+			Details->AddSlot().AutoHeight()[SNew(STextBlock).Text("Function input index (0..7) and type")];
+			Details->AddSlot().AutoHeight()[SNew(SSpinBox<int>)
+												.MinValue(0)
+												.MaxValue(7)
+												.Value([this, Id] {
+													auto* V = Material->Graph->Find(Id);
+													return V ? int(V->InputIndex) : 0;
+												})
+												.OnValueChanged([this](int V) {
+													Canvas->EditNode([&](auto& Node) {
+														Node.InputIndex = static_cast<uint8>(V);
+													});
+												})];
+			Details->AddSlot()
+				.AutoHeight()[SNew(SComboButton)
+								  .Text(N->Mask == 8 ? "Type: Material Attributes"
+													 : FString::Format("Type: float{}", N->Mask))
+								  .OnGetMenuContent([this] {
+									  const auto Choices = SNew(SVerticalBox);
+									  for (int Width : {1, 2, 3, 4, 8})
+										  Choices->AddSlot()
+											  .AutoHeight()[SNew(SMenuEntry)
+																.Text(Width == 8
+																		  ? FString("Material Attributes")
+																		  : FString::Format("float{}", Width))
+																.OnSelected([this, Width] {
+																	Canvas->EditNode([&](auto& Node) {
+																		Node.Mask = static_cast<uint8>(Width);
+																	});
+																	RebuildDetails();
+																})];
+									  return Choices;
+								  })];
+		}
+		if (N->Expression == EMaterialExpression::ScalarCollectionParameter ||
+			N->Expression == EMaterialExpression::VectorCollectionParameter)
+		{
+			const auto Width = N->Expression == EMaterialExpression::ScalarCollectionParameter ? 1 : 4;
+			const auto Menu =
+				SNew(SComboButton).Text("Choose Collection Parameter").OnGetMenuContent([this, Width] {
+					const auto List = SNew(SVerticalBox);
+					for (const auto& Asset : Registry->GetAssets())
+						if (Asset.Metadata.Schema == "Genesis.MaterialParameterCollection")
+						{
+							FAssetPackage P;
+							FMaterialParameterCollection C;
+							FString E;
+							if (!Registry->Load(Asset.GetReference(), P, E) ||
+								!FMaterialParameterCollectionCodec::Decode(P, C, E))
+								continue;
+							for (const auto& Parameter : C.Parameters)
+								if (Parameter.Width == Width)
+								{
+									const auto Ref = Asset.GetReference();
+									const auto Name = Parameter.Name;
+									List->AddSlot().AutoHeight()[SNew(SMenuEntry)
+																	 .Text(Asset.PackagePath + " / " + Name)
+																	 .OnSelected([this, Ref, Name] {
+																		 Canvas->EditNode([&](auto& Node) {
+																			 Node.Collection = Ref;
+																			 Node.ParameterName = Name;
+																		 });
+																		 RequestCompile();
+																		 RebuildDetails();
+																	 })];
+								}
+						}
+					return SNew(SScrollBox) + SScrollBox::Slot()[List];
+				});
+			Details->AddSlot().AutoHeight()[Menu];
+			Details->AddSlot()
+				.AutoHeight()[SNew(STextBlock).Text(N->Collection.Path + " / " + N->ParameterName)];
+		}
+		if (N->Expression == EMaterialExpression::MaterialFunctionCall)
+		{
+			const auto Menu = SNew(SComboButton).Text("Choose Material Function").OnGetMenuContent([this] {
+				const auto List = SNew(SVerticalBox);
+				for (const auto& Asset : Registry->GetAssets())
+					if (Asset.Metadata.Schema == "Genesis.MaterialFunction")
+					{
+						const auto Ref = Asset.GetReference();
+						List->AddSlot()
+							.AutoHeight()[SNew(SMenuEntry).Text(Asset.PackagePath).OnSelected([this, Ref] {
+								Canvas->EditNode([&](auto& Node) { Node.Function = Ref; });
+								RequestCompile();
+								RebuildDetails();
+							})];
+					}
+				return SNew(SScrollBox) + SScrollBox::Slot()[List];
+			});
+			Details->AddSlot().AutoHeight()[Menu];
+			Details->AddSlot().AutoHeight()[SNew(STextBlock).Text(N->Function.Path)];
 		}
 		if (N->Expression == EMaterialExpression::ComponentMask)
 		{
@@ -322,13 +585,16 @@ class SMaterialEditorPanel final : public SCompoundWidget
 	TSharedPtr<FMaterialEditorViewportClient> Preview;
 	TSharedPtr<SMaterialGraph> Canvas;
 	TSharedPtr<SVerticalBox> Details;
-	FString Status;
+	FString Status, OwnerId;
+	uint64 RegistryRevision = 0;
 	FMaterialCompilationManager Compiler;
 	uint64 Revision = 1, CompiledRevision = 0;
 	double CompileAt = 0;
 	bool bCompileTimer = false, bLive = true;
 	TFunction<void()> PendingSave;
 	bool bDirty = false;
+	bool bNodePreview = false;
+	TOptional<FMaterialAsset> CompiledPreview;
 };
 } // namespace
 TSharedPtr<SWindow> FMaterialEditor::Open(const FMaterialEditorArgs& Args, FString& Error)
@@ -343,10 +609,44 @@ TSharedPtr<SWindow> FMaterialEditor::Open(const FMaterialEditorArgs& Args, FStri
 	{
 		return {};
 	}
-	if (Package.Schema == "Genesis.MaterialInstance")
-		return FMaterialInstanceEditor::Open(Args, Error);
+	using FEditorKey = std::pair<const FAssetRegistry*, FString>;
+	static std::map<FEditorKey, TWeakPtr<SWindow>> OpenEditors;
+	for (auto It = OpenEditors.begin(); It != OpenEditors.end();)
+	{
+		auto Window = It->second.lock();
+		if (!Window || Window->IsClosed())
+			It = OpenEditors.erase(It);
+		else
+			++It;
+	}
+	const FEditorKey Key{Args.Registry.get(), Package.Id};
+	if (auto It = OpenEditors.find(Key); It != OpenEditors.end())
+		if (auto Window = It->second.lock())
+		{
+			if (Window->GetNativeWindow())
+				Window->GetNativeWindow()->BringToFront();
+			Error.Empty();
+			return Window;
+		}
+	if (Package.Schema == "Genesis.MaterialParameterCollection" ||
+		Package.Schema == "Genesis.MaterialInstance")
+	{
+		auto Window = Package.Schema == "Genesis.MaterialInstance"
+						  ? FMaterialInstanceEditor::Open(Args, Error)
+						  : FMaterialParameterCollectionEditor::Open(Args, Error);
+		if (Window)
+			OpenEditors[Key] = Window;
+		return Window;
+	}
 	auto Material = std::make_shared<FMaterialAsset>();
-	if (!FRenderAssetCodec::DecodeMaterial(Package, *Material, Error))
+	if (Package.Schema == "Genesis.MaterialFunction")
+	{
+		FMaterialGraph Graph;
+		if (!FMaterialFunctionCodec::Decode(Package, Graph, Error))
+			return {};
+		Material->Graph = std::move(Graph);
+	}
+	else if (!FRenderAssetCodec::DecodeMaterial(Package, *Material, Error))
 	{
 		return {};
 	}
@@ -356,61 +656,92 @@ TSharedPtr<SWindow> FMaterialEditor::Open(const FMaterialEditorArgs& Args, FStri
 		Preview = MakeShared<FMaterialEditorViewportClient>(*Args.Device, *Args.Renderer);
 		Args.WindowRenderer->AddViewportClient(ToSharedRef(Preview));
 	}
-	const auto Panel = SNew(SMaterialEditorPanel).Material(Material).Registry(Args.Registry).Preview(Preview);
+	const auto Panel = SNew(SMaterialEditorPanel)
+						   .Material(Material)
+						   .Registry(Args.Registry)
+						   .Preview(Preview)
+						   .OwnerId(Package.Id);
 	auto ApplySlot = std::make_shared<int32>(0);
 	const auto Settings = SNew(SHorizontalBox);
-	auto BlendModes = std::make_shared<TArray<FString>>(TArray<FString>{"Opaque", "Masked", "Translucent"});
-	Settings->AddSlot()
-		.AutoWidth()[SNew(SComboBox<FString>)
-						 .OptionsSource(BlendModes.get())
-						 .OnGenerateWidget(
-							 [](const FString& S) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(S); })
-						 .OnSelectionChanged([Material, BlendModes, Panel](const FString& S, ESelectInfo) {
-							 Panel->Edited();
-							 for (int I = 0; I < 3; ++I)
-								 if ((*BlendModes)[I] == S)
-									 Material->BlendMode = static_cast<EMaterialBlendMode>(I);
-						 })[SNew(STextBlock).Text([Material, BlendModes] {
-							 return (*BlendModes)[static_cast<int>(Material->BlendMode)];
-						 })]];
-	Settings->AddSlot().AutoWidth()[SNew(STextBlock).Text("Mask cutoff")];
-	Settings->AddSlot().AutoWidth()[SNew(SSpinBox<float>)
-										.MinValue(0.f)
-										.MaxValue(1.f)
-										.Delta(.01f)
-										.Value([Material] { return Material->OpacityMaskClip; })
-										.OnValueChanged([Material, Panel](float V) {
-											Material->OpacityMaskClip = V;
-											Panel->Edited();
-										})];
-	Settings->AddSlot().AutoWidth()[SNew(STextBlock).Text("Apply slot")];
-	Settings->AddSlot().AutoWidth()[SNew(SSpinBox<int32>)
-										.MinValue(0)
-										.MaxValue(63)
-										.Value([ApplySlot] { return *ApplySlot; })
-										.OnValueChanged([ApplySlot](int V) { *ApplySlot = V; })];
+	if (!Material->Graph->bFunction)
+	{
+		Settings->AddSlot().AutoWidth()[SNew(SButton)
+											.Text([Material] {
+												return Material->Graph->bUseMaterialAttributes
+														   ? FString("Outputs: Attributes")
+														   : FString("Outputs: Individual");
+											})
+											.OnClicked([Panel] {
+												Panel->ToggleMaterialAttributes();
+												return FReply::Handled();
+											})];
+		auto BlendModes =
+			std::make_shared<TArray<FString>>(TArray<FString>{"Opaque", "Masked", "Translucent"});
+		Settings->AddSlot().AutoWidth()[SNew(SComboBox<FString>)
+											.OptionsSource(BlendModes.get())
+											.OnGenerateWidget([](const FString& S) -> TSharedRef<SWidget> {
+												return SNew(STextBlock).Text(S);
+											})
+											.OnSelectionChanged(
+												[Material, BlendModes, Panel](const FString& S, ESelectInfo) {
+													for (int I = 0; I < 3; ++I)
+														if ((*BlendModes)[I] == S)
+															Panel->SetBlendMode(
+																static_cast<EMaterialBlendMode>(I));
+												})[SNew(STextBlock).Text([Material, BlendModes] {
+												return (*BlendModes)[static_cast<int>(Material->BlendMode)];
+											})]];
+		Settings->AddSlot().AutoWidth()[SNew(STextBlock).Text("Mask cutoff")];
+		Settings->AddSlot()
+			.AutoWidth()[SNew(SSpinBox<float>)
+							 .MinValue(0.f)
+							 .MaxValue(1.f)
+							 .Delta(.01f)
+							 .Value([Material] { return Material->OpacityMaskClip; })
+							 .OnValueChanged([Material, Panel](float V) { Panel->SetMaskCutoff(V); })];
+		Settings->AddSlot().AutoWidth()[SNew(STextBlock).Text("Apply slot")];
+		Settings->AddSlot().AutoWidth()[SNew(SSpinBox<int32>)
+											.MinValue(0)
+											.MaxValue(63)
+											.Value([ApplySlot] { return *ApplySlot; })
+											.OnValueChanged([ApplySlot](int V) { *ApplySlot = V; })];
+	}
 	const TWeakPtr<SMaterialEditorPanel> WeakPanel = Panel.ToSharedPtr();
 	auto Save = [Args, Material, WeakPanel, ApplySlot](bool Apply) {
 		if (auto Panel = WeakPanel.lock())
 			Panel->SaveWhenReady([Args, Material, WeakPanel, ApplySlot, Apply] {
 				FString E;
 				FAssetPackage P;
-				const auto* Current =
-					Args.Registry->Resolve({Args.Material.Id, Args.Material.Path}, E, "Genesis.Material");
+				const auto* Current = Args.Registry->Resolve(
+					{Args.Material.Id, Args.Material.Path}, E,
+					Material->Graph->bFunction ? "Genesis.MaterialFunction" : "Genesis.Material");
 				if (!Current)
 				{
 					Args.OnLog.ExecuteIfBound(E);
 					return;
 				}
 				const auto File = Current->FilePath;
-				if (!Args.Registry->Load({Args.Material.Id, Args.Material.Path}, P, E, "Genesis.Material") ||
-					!FRenderAssetCodec::EncodeMaterial(*Material, P, E) ||
+				if (!Args.Registry->Load({Args.Material.Id, Args.Material.Path}, P, E,
+										 Material->Graph->bFunction ? "Genesis.MaterialFunction"
+																	: "Genesis.Material") ||
+					!(Material->Graph->bFunction ? FMaterialFunctionCodec::Encode(*Material->Graph, P, E)
+												 : FRenderAssetCodec::EncodeMaterial(*Material, P, E)) ||
 					!FAssetPackageStore::Save(File, P, E))
 				{
 					Args.OnLog.ExecuteIfBound(E);
 					return;
 				}
 				Args.Registry->Scan();
+				{
+					int32 Updated = 0;
+					FString DependencyError;
+					if (!FMaterialEditingLibrary::RecompileDependents(*Args.Registry, Args.Material, Updated,
+																	  DependencyError))
+						Args.OnLog.ExecuteIfBound("Saved; dependent recook failures: " + DependencyError);
+					else
+						Args.OnLog.ExecuteIfBound(
+							FString::Format("Updated {} dependent material assets.", Updated));
+				}
 				Args.OnSaved.ExecuteIfBound();
 				if (auto Panel = WeakPanel.lock())
 					Panel->Saved();
@@ -423,11 +754,12 @@ TSharedPtr<SWindow> FMaterialEditor::Open(const FMaterialEditorArgs& Args, FStri
 	Settings->AddSlot().AutoWidth()[SNew(SButton).Text("Save").OnClicked([Save] { return Save(false); })];
 	Settings->AddSlot().AutoWidth()[SNew(SButton)
 										.Text("Save and Apply to Selection")
-										.IsEnabled(Args.OnApply.IsBound())
+										.IsEnabled(Args.OnApply.IsBound() && !Material->Graph->bFunction)
 										.OnClicked([Save] { return Save(true); })];
 	const auto Window =
 		SNew(SWindow)
-			.Title("Material: " + Args.Name)
+			.Title((Material->Graph->bFunction ? FString("Material Function: ") : FString("Material: ")) +
+				   Args.Name)
 			.ClientSize(FVector2(1380, 860))
 			.OnRequestClose([Panel] {
 				return !Panel->IsDirty() ||
@@ -438,5 +770,6 @@ TSharedPtr<SWindow> FMaterialEditor::Open(const FMaterialEditorArgs& Args, FStri
 			   SVerticalBox::Slot().AutoHeight()[Settings]];
 	FSlateApplication::Get().AddWindow(Window);
 	Error.Empty();
+	OpenEditors[Key] = Window.ToSharedPtr();
 	return Window.ToSharedPtr();
 }

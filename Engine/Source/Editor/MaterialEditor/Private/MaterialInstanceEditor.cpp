@@ -1,5 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "MaterialInstanceEditor.h"
+#include "MaterialEditingLibrary.h"
+#include <set>
+#include <functional>
 #include "MaterialEditorViewportClient.h"
 #include "SlateRHIRenderer.h"
 #include "Framework/Application/SlateApplication.h"
@@ -26,24 +29,15 @@ class SMaterialInstanceEditorPanel final : public SCompoundWidget
 	void Construct(const FArguments& A)
 	{
 		Args = A._EditorArgs;
+		RegistryRevision = Args.Registry->GetRevision();
 		Instance = A._Instance;
 		Preview = A._Preview;
 		const auto Main = SNew(SVerticalBox);
 		if (Preview)
 		{
 			Main->AddSlot().FillHeight(1)[SNew(SViewport).ViewportClient(Preview)];
-			Main->AddSlot().AutoHeight()
-				[SNew(SHorizontalBox) +
-				 SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Sphere / Cube").OnClicked([this] {
-					 bCube = !bCube;
-					 Preview->SetShape(bCube ? "Cube" : "Sphere");
-					 Update();
-					 return FReply::Handled();
-				 })] +
-				 SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Lit / Unlit").OnClicked([this] {
-					 Preview->ToggleLit();
-					 return FReply::Handled();
-				 })]];
+			Main->AddSlot().AutoHeight()[MakeMaterialPreviewControls(ToSharedRef(Preview), Args.Registry,
+																	 [this] { Update(); })];
 		}
 		const auto Controls = SNew(SVerticalBox);
 		Controls->AddSlot().AutoHeight()[SNew(STextBlock).Text("Parent Material")];
@@ -101,6 +95,24 @@ class SMaterialInstanceEditorPanel final : public SCompoundWidget
 				  SSplitter::Slot().Value(.5f)[Controls]];
 		Rebuild();
 	}
+	void Tick(const FGeometry& G, double T, float D) override
+	{
+		SCompoundWidget::Tick(G, T, D);
+		if (Args.Registry && RegistryRevision != Args.Registry->GetRevision())
+		{
+			RegistryRevision = Args.Registry->GetRevision();
+			if (!bDirty)
+			{
+				FAssetPackage P;
+				FMaterialInstanceAsset Current;
+				FString Error;
+				if (Args.Registry->Load(Args.Material, P, Error, "Genesis.MaterialInstance") &&
+					FRenderAssetCodec::DecodeMaterialInstance(P, Current, Error))
+					Instance = std::move(Current);
+			}
+			Rebuild();
+		}
+	}
 	bool IsDirty() const
 	{
 		return bDirty;
@@ -134,12 +146,15 @@ class SMaterialInstanceEditorPanel final : public SCompoundWidget
 	bool Update()
 	{
 		FMaterialAsset Resolved;
-		if (!LoadParent() || !FMaterialInstance::Resolve(Parent, Instance, Resolved, Status))
+		if (!LoadParent() || !FMaterialEditingLibrary::CompileMaterialInstance(Parent, Instance, Status) ||
+			!FMaterialInstance::Resolve(Parent, Instance, Resolved, Status))
 			return false;
 		if (Preview && !Preview->Update(Resolved, *Args.Registry, Status))
 			return false;
-		Status =
-			bDirty ? "Modified instance - shader compilation not required" : "Inherited material preview";
+		Status = bDirty ? (Instance.StaticParameters.empty() && !Instance.bOverrideQuality
+							   ? "Modified uniforms - shader compilation not required"
+							   : "Modified static/quality permutation - cooked for both backends")
+						: "Inherited material preview";
 		return true;
 	}
 	void Remember()
@@ -184,15 +199,119 @@ class SMaterialInstanceEditorPanel final : public SCompoundWidget
 				return &T;
 		return nullptr;
 	}
+	FMaterialStaticParameterOverride* FindStatic(const FString& Name)
+	{
+		for (auto& P : Instance.StaticParameters)
+			if (P.Name == Name)
+				return &P;
+		return nullptr;
+	}
 	void Rebuild()
 	{
 		Parameters->ClearChildren();
 		if (!LoadParent())
 			return;
 		FMaterialGraphProgram Program;
-		if (!Parent.Graph) { Status="Save the parent as a graph material before authoring an instance."; return; }
-		if (!FMaterialGraphCompiler::Compile(*Parent.Graph, Program, Status))
+		if (!Parent.Graph)
+		{
+			Status = "Save the parent as a graph material before authoring an instance.";
 			return;
+		}
+		FMaterialAsset Variant;
+		if (!FMaterialInstance::BuildStaticPermutation(Parent, Instance, Variant, Status))
+			Variant = Parent;
+		if (!FMaterialGraphCompiler::Compile(*Variant.Graph, Program, Status))
+			return;
+		Parameters->AddSlot()
+			.AutoHeight()[SNew(SComboButton)
+							  .Text([this] {
+								  return Instance.bOverrideQuality
+											 ? FString::Format("Quality: {}",
+															   Instance.QualityLevel == 0	? "Low"
+															   : Instance.QualityLevel == 1 ? "Medium"
+																							: "High")
+											 : FString("Quality: Inherit");
+							  })
+							  .OnGetMenuContent([this] {
+								  const auto Choices = SNew(SVerticalBox);
+								  for (int I = -1; I < 3; ++I)
+									  Choices->AddSlot().AutoHeight()[SNew(SMenuEntry)
+																		  .Text(I < 0	 ? "Inherit"
+																				: I == 0 ? "Low"
+																				: I == 1 ? "Medium"
+																						 : "High")
+																		  .OnSelected([this, I] {
+																			  Remember();
+																			  Instance.bOverrideQuality =
+																				  I >= 0;
+																			  if (I >= 0)
+																				  Instance.QualityLevel =
+																					  static_cast<uint8>(I);
+																			  Rebuild();
+																		  })];
+								  return Choices;
+							  })];
+		std::set<FString> StaticNames;
+		std::function<void(const FMaterialGraph&)> StaticControls = [&](const auto& Graph) {
+			for (const auto& Node : Graph.Nodes)
+				if (Node.Expression == EMaterialExpression::StaticSwitchParameter &&
+					StaticNames.insert(Node.ParameterName).second)
+				{
+					const auto Name = Node.ParameterName;
+					const bool Default = Node.Value[2] != 0;
+					Parameters->AddSlot().AutoHeight()[SNew(STextBlock).Text(Name + " (Static Switch)")];
+					Parameters->AddSlot().AutoHeight()[SNew(SButton)
+														   .Text(FindStatic(Name) ? "Reset Static to Parent"
+																				  : "Override Static")
+														   .OnClicked([this, Name, Default] {
+															   Remember();
+															   if (FindStatic(Name))
+																   std::erase_if(Instance.StaticParameters,
+																				 [&](const auto& P) {
+																					 return P.Name == Name;
+																				 });
+															   else
+																   Instance.StaticParameters.push_back(
+																	   {Name, Default});
+															   Rebuild();
+															   return FReply::Handled();
+														   })];
+					Parameters->AddSlot().AutoHeight()[SNew(SButton)
+														   .IsEnabled(FindStatic(Name) != nullptr)
+														   .Text([this, Name, Default] {
+															   const auto* P = FindStatic(Name);
+															   return (P ? P->Value : Default)
+																		  ? FString("Static: True")
+																		  : FString("Static: False");
+														   })
+														   .OnClicked([this, Name] {
+															   if (auto* P = FindStatic(Name))
+															   {
+																   Remember();
+																   FindStatic(Name)->Value = !P->Value;
+																   Rebuild();
+															   }
+															   return FReply::Handled();
+														   })];
+				}
+			for (const auto& F : Graph.Functions)
+				if (F.Graph)
+					StaticControls(*F.Graph);
+		};
+		StaticControls(*Parent.Graph);
+		for (const auto& P : Instance.StaticParameters)
+			if (!StaticNames.contains(P.Name))
+				Parameters->AddSlot().AutoHeight()[SNew(SButton)
+													   .Text("Remove missing static parameter: " + P.Name)
+													   .OnClicked([this, Name = P.Name] {
+														   Remember();
+														   std::erase_if(
+															   Instance.StaticParameters,
+															   [&](const auto& V) { return V.Name == Name; });
+														   Rebuild();
+														   return FReply::Handled();
+													   })];
+
 		// All overrides remain visible, including stale entries after a parent edit.
 		// Removing those entries lets an instance recover without external file edits.
 		for (const auto& P : Instance.Parameters)
@@ -218,8 +337,21 @@ class SMaterialInstanceEditorPanel final : public SCompoundWidget
 						Rebuild();
 						return FReply::Handled();
 					})];
+		std::stable_sort(Program.Parameters.begin(), Program.Parameters.end(),
+						 [](const auto& A, const auto& B) {
+							 return A.Group == B.Group ? A.Name < B.Name : A.Group < B.Group;
+						 });
+		FString CurrentGroup;
 		for (const auto& P : Program.Parameters)
 		{
+			if (!P.Collection.IsNull())
+				continue;
+			const auto Group = P.Group.IsEmpty() ? FString("General") : P.Group;
+			if (CurrentGroup != Group)
+			{
+				CurrentGroup = Group;
+				Parameters->AddSlot().AutoHeight()[SNew(STextBlock).Text("Group: " + Group)];
+			}
 			Parameters->AddSlot()
 				.AutoHeight()[SNew(STextBlock).Text(P.Name + (P.Width == 1 ? " (Scalar)" : " (Vector)"))];
 			Parameters->AddSlot().AutoHeight()
@@ -330,6 +462,7 @@ class SMaterialInstanceEditorPanel final : public SCompoundWidget
 			Args.OnApply.ExecuteIfBound(ApplySlot);
 		Args.OnLog.ExecuteIfBound(Status);
 	}
+	uint64 RegistryRevision = 0;
 	FMaterialEditorArgs Args;
 	FMaterialInstanceAsset Instance;
 	FMaterialAsset Parent;

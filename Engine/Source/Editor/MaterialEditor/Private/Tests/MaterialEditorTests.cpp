@@ -5,11 +5,14 @@
 #include "UITestHelpers.h"
 
 #include "MaterialEditingLibrary.h"
+#include "HAL/File.h"
 
 #include "SMaterialGraph.h"
 #include "MaterialCompilationManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "MaterialEditor.h"
+#include "Materials/MaterialFunction.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "SContentBrowser.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SSpinBox.h"
@@ -89,13 +92,16 @@ FMaterialAsset ColorGraph(float R, float G, float B)
 }
 
 TArray<uint8> DrawMaterial(FRHIDevice& D, FMaterialAsset M, bool Textured = false,
-						   const FLoadedMaterialSlot* Resources = nullptr)
+						   const FLoadedMaterialSlot* Resources = nullptr,
+						   std::shared_ptr<FMaterialParameterCollectionInstance> Collection = nullptr)
 
 {
 
 	FString Error;
 
 	FNativeMeshRenderer Renderer(D);
+	if (Collection)
+		Renderer.SetParameterCollectionInstance(Collection);
 
 	auto Asset = std::make_shared<FLoadedMeshAsset>();
 
@@ -448,7 +454,13 @@ TEST_SUITE("MaterialGraph")
 			auto Type = static_cast<EMaterialExpression>(I);
 			if (Type == EMaterialExpression::Comment || Type == EMaterialExpression::ScalarParameter ||
 				Type == EMaterialExpression::VectorParameter ||
-				Type == EMaterialExpression::TextureSampleParameter2D)
+				Type == EMaterialExpression::TextureSampleParameter2D ||
+				Type == EMaterialExpression::MaterialFunctionCall ||
+				Type == EMaterialExpression::ScalarCollectionParameter ||
+				Type == EMaterialExpression::VectorCollectionParameter ||
+				Type == EMaterialExpression::MakeMaterialAttributes ||
+				Type == EMaterialExpression::BreakMaterialAttributes ||
+				Type == EMaterialExpression::BlendMaterialAttributes)
 				continue;
 			FMaterialAsset M;
 			M.Graph = FMaterialGraph{};
@@ -1039,5 +1051,910 @@ TEST_SUITE("MaterialGraph")
 		D->WaitIdle();
 
 		CHECK(Log.Problems.empty());
+	}
+
+	TEST_CASE("Static quality and platform choices cook render and reuse cached permutations")
+	{
+		FMaterialEditingLibrary::ClearShaderCache();
+		FMaterialAsset Material;
+		Material.Graph = FMaterialGraph{};
+		auto& G = *Material.Graph;
+		const auto Red = G.Add(EMaterialExpression::Constant3Vector),
+				   Green = G.Add(EMaterialExpression::Constant3Vector),
+				   Blue = G.Add(EMaterialExpression::Constant3Vector);
+		G.Find(Red)->Value[0] = 1;
+		G.Find(Green)->Value[1] = 1;
+		G.Find(Blue)->Value[2] = 1;
+		const auto Static = G.Add(EMaterialExpression::StaticSwitchParameter);
+		G.Find(Static)->ParameterName = "UseRed";
+		G.Find(Static)->Inputs[0] = Red;
+		G.Find(Static)->Inputs[1] = Green;
+		G.Find(Static)->Value[2] = 1;
+		G.Outputs[0] = Static;
+		FString Error;
+		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Material, Error), *Error);
+		const auto RedShader = Material.GraphDXIL;
+		auto GreenMaterial = Material;
+		GreenMaterial.Graph->Find(Static)->Value[2] = 0;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(GreenMaterial, Error));
+		CHECK(GreenMaterial.GraphDXIL != RedShader);
+		auto Again = GreenMaterial;
+		Again.Graph->Find(Static)->Value[2] = 1;
+		const auto Hits = FMaterialEditingLibrary::GetShaderCacheStats().Hits;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Again, Error));
+		CHECK(Again.GraphDXIL == RedShader);
+		CHECK(FMaterialEditingLibrary::GetShaderCacheStats().Hits == Hits + 1);
+		const auto Quality = G.Add(EMaterialExpression::QualitySwitch);
+		G.Find(Quality)->Inputs[0] = Red;
+		G.Find(Quality)->Inputs[1] = Green;
+		G.Find(Quality)->Inputs[2] = Blue;
+		G.Outputs[0] = Quality;
+		auto Low = Material;
+		Low.Graph->QualityLevel = 0;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Low, Error));
+		auto High = Material;
+		High.Graph->QualityLevel = 2;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(High, Error));
+		CHECK(Low.GraphDXIL != High.GraphDXIL);
+		const auto Platform = G.Add(EMaterialExpression::PlatformSwitch);
+		G.Find(Platform)->Inputs[0] = Red;
+		G.Find(Platform)->Inputs[1] = Green;
+		G.Outputs[0] = Platform;
+		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Material, Error), *Error);
+		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		{
+			FRHIDeviceDesc DD;
+			DD.Backend = Backend;
+			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
+			auto Device = FRHIDevice::Create(DD);
+			REQUIRE(Device);
+			auto R = DrawMaterial(*Device, Again), V = DrawMaterial(*Device, GreenMaterial),
+				 L = DrawMaterial(*Device, Low), H = DrawMaterial(*Device, High),
+				 P = DrawMaterial(*Device, Material);
+			const int Center = (32 * 64 + 32) * 4;
+			CHECK(R[Center] > 200);
+			CHECK(R[Center + 1] < 5);
+			CHECK(V[Center] < 5);
+			CHECK(V[Center + 1] > 200);
+			CHECK(L[Center] > 200);
+			CHECK(H[Center + 2] > 200);
+			CHECK(P[Center + (Backend == ERHIBackend::D3D12 ? 0 : 1)] > 200);
+			CHECK(P[Center + (Backend == ERHIBackend::D3D12 ? 1 : 0)] < 5);
+		}
+		FAssetPackage Package;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, Package, Error));
+		FMaterialAsset Loaded;
+		REQUIRE(FRenderAssetCodec::DecodeMaterial(Package, Loaded, Error));
+		CHECK(Loaded.Graph->QualityLevel == 2);
+		auto Canvas = SNew(SMaterialGraph).Material(std::make_shared<FMaterialAsset>(Loaded));
+		Canvas->SetQualityLevel(0);
+		Canvas->Undo();
+		Canvas->Redo();
+		auto Bad = *Material.Graph;
+		Bad.Find(Static)->Value[2] = 0.5f;
+		FMaterialGraphProgram Program;
+		CHECK_FALSE(FMaterialGraphCompiler::Compile(Bad, Program, Error));
+		CHECK(Error.Contains("Static switch"));
+		Bad = *Material.Graph;
+		Bad.QualityLevel = 3;
+		CHECK_FALSE(FMaterialGraphCompiler::Compile(Bad, Program, Error));
+	}
+
+	TEST_CASE("Reusable material functions refresh atomically and cook self-contained snapshots")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FMaterialGraph Function;
+		Function.bFunction = true;
+		const auto Input = Function.Add(EMaterialExpression::FunctionInput);
+		const auto Multiplier = Function.Add(EMaterialExpression::Constant);
+		Function.Find(Multiplier)->Value[0] = 2;
+		const auto Product = Function.Add(EMaterialExpression::Multiply);
+		Function.Find(Product)->Inputs[0] = Input;
+		Function.Find(Product)->Inputs[1] = Multiplier;
+		Function.Outputs[0] = Product;
+		FAssetPackage Definition;
+		REQUIRE(FMaterialFunctionCodec::Encode(Function, Definition, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Double.asset"), Definition, Error));
+		FAssetRegistry Registry;
+		REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry.Scan());
+		FMaterialAsset Material;
+		Material.Graph = FMaterialGraph{};
+		auto& G = *Material.Graph;
+		const auto Value = G.Add(EMaterialExpression::Constant);
+		G.Find(Value)->Value[0] = .2f;
+		const auto Call = G.Add(EMaterialExpression::MaterialFunctionCall);
+		G.Find(Call)->Function = {"", "/Game/Double"};
+		G.Find(Call)->Inputs[0] = Value;
+		G.Outputs[0] = Call;
+		bool Changed = false;
+		REQUIRE_MESSAGE(FMaterialFunctionCodec::Refresh(G, Registry, Changed, Error), *Error);
+		CHECK(Changed);
+		CHECK(G.Find(Call)->Function.Id == Definition.Id);
+		REQUIRE(G.Functions.size() == 1);
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
+		FAssetPackage Cooked;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, Cooked, Error));
+		CHECK(std::find(Cooked.Dependencies.begin(), Cooked.Dependencies.end(), "/Game/Double") !=
+			  Cooked.Dependencies.end());
+		FMaterialAsset Loaded;
+		REQUIRE_MESSAGE(FRenderAssetCodec::DecodeMaterial(Cooked, Loaded, Error), *Error);
+		CHECK(Loaded.Graph->Functions.size() == 1);
+		FMaterialAsset Flat;
+		Flat.Graph = FMaterialGraph{};
+		const auto C = Flat.Graph->Add(EMaterialExpression::Constant);
+		Flat.Graph->Find(C)->Value[0] = .4f;
+		Flat.Graph->Outputs[0] = C;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Flat, Error));
+		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		{
+			FRHIDeviceDesc DD;
+			DD.Backend = Backend;
+			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
+			auto Device = FRHIDevice::Create(DD);
+			REQUIRE(Device);
+			const auto A = DrawMaterial(*Device, Loaded), B = DrawMaterial(*Device, Flat);
+			CHECK(A == B);
+		}
+		REQUIRE(FMaterialFunctionCodec::Refresh(G, Registry, Changed, Error));
+		CHECK_FALSE(Changed);
+		Function.Find(Multiplier)->Value[0] = 3;
+		REQUIRE(FMaterialFunctionCodec::Encode(Function, Definition, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Double.asset"), Definition, Error));
+		REQUIRE(Registry.Scan());
+		REQUIRE(FMaterialFunctionCodec::Refresh(G, Registry, Changed, Error));
+		CHECK(Changed);
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
+		CHECK(Material.GraphDXIL != Loaded.GraphDXIL);
+		auto Before = FMaterialGraphCompiler::Encode(G);
+		auto Bad = G;
+		Bad.Find(Call)->Function.Id = FAssetId::New();
+		CHECK_FALSE(FMaterialFunctionCodec::Refresh(Bad, Registry, Changed, Error));
+		CHECK(Bad.Functions.size() == G.Functions.size());
+		CHECK_FALSE(FMaterialFunctionCodec::Refresh(G, Registry, Changed, Error, Definition.Id));
+		CHECK(Error.Contains("recursion"));
+		CHECK(FMaterialGraphCompiler::Encode(G) == Before);
+		auto Wrong = G;
+		Wrong.Find(Value)->Expression = EMaterialExpression::Constant3Vector;
+		FMaterialGraphProgram Program;
+		CHECK_FALSE(FMaterialGraphCompiler::Compile(Wrong, Program, Error));
+		CHECK(Error.Contains("Function input type"));
+		auto Default = G;
+		Default.Find(Call)->Inputs[0] = 0;
+		REQUIRE(FMaterialGraphCompiler::Compile(Default, Program, Error));
+	}
+	TEST_CASE("Material function assets are created and reopened in the graph editor")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FUITestApp App;
+		const auto Registry = MakeShared<FAssetRegistry>();
+		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry->Scan());
+		const auto Browser =
+			SNew(SContentBrowser)
+				.Registry(Registry)
+				.Roots(TArray<FContentBrowserRoot>{{"Content", FString::FromWide(Temp.Path.wstring())}})
+				.InitialPath(FString::FromWide(Temp.Path.wstring()));
+		App.AddWindow(Browser);
+		App.Tick();
+		const auto File = Browser->CreateMaterialFunction();
+		REQUIRE(!File.IsEmpty());
+		CHECK(Browser->GetAssetType(File) == EContentAssetType::MaterialFunction);
+		const auto* Asset = Registry->FindByFile(File);
+		REQUIRE(Asset);
+		CHECK(Asset->Metadata.Schema == "Genesis.MaterialFunction");
+		FMaterialEditorArgs Args;
+		Args.Registry = Registry;
+		Args.Material = Asset->GetReference();
+		Args.Name = "Reusable";
+		auto Window = FMaterialEditor::Open(Args, Error);
+		REQUIRE_MESSAGE(Window, *Error);
+		App.Tick();
+		CHECK(Window->GetTitle().Contains("Material Function"));
+		Window->RequestClose();
+	}
+
+	TEST_CASE("Shared parameter collections update uniform snapshots without recooking material shaders")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FMaterialParameterCollection Collection;
+		Collection.Parameters = {{"Color", 4, {1, 0, 0, 1}}, {"Roughness", 1, {.5f, 0, 0, 0}}};
+		FAssetPackage Package;
+		REQUIRE(FMaterialParameterCollectionCodec::Encode(Collection, Package, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Shared.asset"), Package, Error));
+		FAssetRegistry Registry;
+		REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry.Scan());
+		FMaterialAsset Material;
+		Material.Graph = FMaterialGraph{};
+		auto& G = *Material.Graph;
+		const auto Color = G.Add(EMaterialExpression::VectorCollectionParameter);
+		G.Find(Color)->Collection = {Package.Id, "/Game/Shared"};
+		G.Find(Color)->ParameterName = "Color";
+		const auto Mask = G.Add(EMaterialExpression::ComponentMask);
+		G.Find(Mask)->Inputs[0] = Color;
+		G.Outputs[0] = Mask;
+		const auto Roughness = G.Add(EMaterialExpression::ScalarCollectionParameter);
+		G.Find(Roughness)->Collection = {Package.Id, "/Game/Shared"};
+		G.Find(Roughness)->ParameterName = "Roughness";
+		G.Outputs[1] = Roughness;
+		bool Changed = false;
+		REQUIRE_MESSAGE(FMaterialFunctionCodec::Refresh(G, Registry, Changed, Error), *Error);
+		CHECK(Changed);
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
+		FAssetPackage MaterialPackage;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, MaterialPackage, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Material.asset"), MaterialPackage, Error));
+		CHECK(std::find(MaterialPackage.Dependencies.begin(), MaterialPackage.Dependencies.end(),
+						"/Game/Shared") != MaterialPackage.Dependencies.end());
+		auto Instance = std::make_shared<FMaterialParameterCollectionInstance>(
+			FAssetReference{Package.Id, "/Game/Shared"}, Collection);
+		const auto Shader = Material.GraphDXIL;
+		const float Green[4] = {0, 1, 0, 1};
+		const float Red[4] = {1, 0, 0, 1};
+		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		{
+			FRHIDeviceDesc DD;
+			DD.Backend = Backend;
+			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
+			auto Device = FRHIDevice::Create(DD);
+			REQUIRE(Device);
+			REQUIRE(Instance->SetVector("Color", Red, Error));
+			auto R = DrawMaterial(*Device, Material, false, nullptr, Instance);
+			REQUIRE(Instance->SetVector("Color", Green, Error));
+			auto V = DrawMaterial(*Device, Material, false, nullptr, Instance);
+			const int Center = (32 * 64 + 32) * 4;
+			CHECK(R[Center] > 200);
+			CHECK(R[Center + 1] < 5);
+			CHECK(V[Center] < 5);
+			CHECK(V[Center + 1] > 200);
+			CHECK(Material.GraphDXIL == Shader);
+		}
+		CHECK_FALSE(Instance->SetScalar("Color", 1, Error));
+		CHECK_FALSE(Instance->SetScalar("Roughness", std::numeric_limits<float>::quiet_NaN(), Error));
+		Collection.Parameters[0].Value[0] = 0;
+		Collection.Parameters[0].Value[2] = 1;
+		REQUIRE(FMaterialParameterCollectionCodec::Encode(Collection, Package, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Shared.asset"), Package, Error));
+		REQUIRE(Registry.Scan());
+		FMaterialAsset Reloaded;
+		REQUIRE(FRenderAssetLoader(Registry).LoadMaterial({MaterialPackage.Id, "/Game/Material"}, Reloaded,
+														  Error));
+		CHECK(Reloaded.Graph->Find(Color)->Value[2] == 1);
+		CHECK(Reloaded.GraphDXIL == Shader);
+		CHECK(Reloaded.CookedGraphSource == Material.CookedGraphSource);
+		auto Bad = Collection;
+		Bad.Parameters.push_back(Bad.Parameters[0]);
+		CHECK_FALSE(FMaterialParameterCollectionCodec::Encode(Bad, Package, Error));
+		Collection.Parameters[0].Width = 1;
+		REQUIRE(FMaterialParameterCollectionCodec::Encode(Collection, Package, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Shared.asset"), Package, Error));
+		REQUIRE(Registry.Scan());
+		CHECK_FALSE(FRenderAssetLoader(Registry).LoadMaterial({MaterialPackage.Id, "/Game/Material"},
+															  Reloaded, Error));
+		CHECK(Reloaded.Graph->Find(Color)->Value[2] == 1);
+	}
+	TEST_CASE("Collection editor creates shared assets and supports history and persistence")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FUITestApp App;
+		const auto Registry = MakeShared<FAssetRegistry>();
+		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry->Scan());
+		const auto Browser =
+			SNew(SContentBrowser)
+				.Registry(Registry)
+				.Roots(TArray<FContentBrowserRoot>{{"Content", FString::FromWide(Temp.Path.wstring())}})
+				.InitialPath(FString::FromWide(Temp.Path.wstring()));
+		App.AddWindow(Browser);
+		App.Tick();
+		const auto File = Browser->CreateMaterialParameterCollection();
+		REQUIRE(!File.IsEmpty());
+		const auto* Asset = Registry->FindByFile(File);
+		REQUIRE(Asset);
+		FMaterialEditorArgs Args;
+		Args.Registry = Registry;
+		Args.Material = Asset->GetReference();
+		Args.Name = "Shared";
+		auto Window = FMaterialEditor::Open(Args, Error);
+		REQUIRE(Window);
+		App.Tick();
+		const auto Click = [&](const FString& Text) {
+			std::function<SWidget*(SWidget&)> Find = [&](SWidget& W) -> SWidget* {
+				if (auto* T = dynamic_cast<STextBlock*>(&W); T && T->GetText() == Text)
+					return T;
+				for (const auto& C : W.GetArrangedChildren())
+					if (auto* R = Find(C.Widget.Get()))
+						return R;
+				return nullptr;
+			};
+			auto* Widget = Find(*Window);
+			REQUIRE_MESSAGE(Widget, *Text);
+			App.ClickWidget(*Widget);
+			App.Tick();
+		};
+		Click("Add Scalar");
+		Click("Undo");
+		Click("Redo");
+		Click("Save");
+		FAssetPackage P;
+		FMaterialParameterCollection C;
+		REQUIRE(FAssetPackageStore::Load(File, P, Error));
+		REQUIRE(FMaterialParameterCollectionCodec::Decode(P, C, Error));
+		CHECK(C.Parameters.size() == 3);
+		Click("Undo");
+		Click("Save");
+		REQUIRE(FAssetPackageStore::Load(File, P, Error));
+		REQUIRE(FMaterialParameterCollectionCodec::Decode(P, C, Error));
+		CHECK(C.Parameters.size() == 2);
+		Window->RequestClose();
+	}
+
+	TEST_CASE("Static and quality instance overrides are cooked portable and reject stale permutations")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FMaterialAsset Parent;
+		Parent.Graph = FMaterialGraph{};
+		auto& G = *Parent.Graph;
+		const auto Red = G.Add(EMaterialExpression::Constant3Vector),
+				   Green = G.Add(EMaterialExpression::Constant3Vector);
+		G.Find(Red)->Value[0] = 1;
+		G.Find(Green)->Value[1] = 1;
+		const auto Switch = G.Add(EMaterialExpression::StaticSwitchParameter);
+		G.Find(Switch)->ParameterName = "UseRed";
+		G.Find(Switch)->Value[2] = 1;
+		G.Find(Switch)->Inputs[0] = Red;
+		G.Find(Switch)->Inputs[1] = Green;
+		const auto Quality = G.Add(EMaterialExpression::QualitySwitch);
+		G.Find(Quality)->Inputs[0] = Red;
+		G.Find(Quality)->Inputs[1] = Green;
+		G.Find(Quality)->Inputs[2] = Switch;
+		G.Outputs[0] = Quality;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Parent, Error));
+		FAssetPackage Base;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Parent, Base, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Base.asset"), Base, Error));
+		FMaterialInstanceAsset Instance;
+		Instance.Parent = {Base.Id, "/Game/Base"};
+		Instance.StaticParameters = {{"UseRed", false}};
+		FAssetPackage Package;
+		CHECK_FALSE(FRenderAssetCodec::EncodeMaterialInstance(Instance, Package, Error));
+		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterialInstance(Parent, Instance, Error), *Error);
+		REQUIRE(FRenderAssetCodec::EncodeMaterialInstance(Instance, Package, Error));
+		CHECK(Package.SchemaVersion == 3);
+		CHECK(!Package.Bulk.empty());
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Instance.asset"), Package, Error));
+		FMaterialInstanceAsset Decoded;
+		REQUIRE(FRenderAssetCodec::DecodeMaterialInstance(Package, Decoded, Error));
+		CHECK(Decoded.StaticParameters.size() == 1);
+		FMaterialAsset Resolved;
+		REQUIRE(FMaterialInstance::Resolve(Parent, Decoded, Resolved, Error));
+		CHECK(Resolved.CookedGraphSource != Parent.CookedGraphSource);
+		auto Low = Instance;
+		Low.bOverrideQuality = true;
+		Low.QualityLevel = 0;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterialInstance(Parent, Low, Error));
+		FMaterialAsset LowMaterial;
+		REQUIRE(FMaterialInstance::Resolve(Parent, Low, LowMaterial, Error));
+		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		{
+			FRHIDeviceDesc DD;
+			DD.Backend = Backend;
+			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
+			auto Device = FRHIDevice::Create(DD);
+			REQUIRE(Device);
+			const auto R = DrawMaterial(*Device, Parent), V = DrawMaterial(*Device, Resolved),
+					   L = DrawMaterial(*Device, LowMaterial);
+			const int Center = (32 * 64 + 32) * 4;
+			CHECK(R[Center] > 200);
+			CHECK(V[Center + 1] > 200);
+			CHECK(V[Center] < 5);
+			CHECK(L[Center] > 200);
+		}
+		G.Find(Green)->Value[1] = .5f;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Parent, Error));
+		CHECK_FALSE(FMaterialInstance::Resolve(Parent, Decoded, Resolved, Error));
+		CHECK(Error.Contains("stale"));
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Parent, Base, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Base.asset"), Base, Error));
+		FAssetRegistry Registry;
+		REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry.Scan());
+		int32 Updated = 0;
+		REQUIRE_MESSAGE(
+			FMaterialEditingLibrary::RecompileDependents(Registry, {Base.Id, "/Game/Base"}, Updated, Error),
+			*Error);
+		CHECK(Updated == 1);
+		REQUIRE(FRenderAssetLoader(Registry).LoadMaterial({Package.Id, "/Game/Instance"}, Resolved, Error));
+		CHECK(Resolved.Graph->Find(Green)->Value[1] == .5f);
+		auto Invalid = Instance;
+		Invalid.StaticPermutation = Parent;
+		CHECK_FALSE(FRenderAssetCodec::EncodeMaterialInstance(Invalid, Package, Error));
+	}
+
+	TEST_CASE("Material canvas input supports marquee multi-drag wire editing and history at multiple DPIs")
+	{
+		for (float DPI : {1.f, 1.5f})
+		{
+			FUITestApp App(DPI);
+			auto Material = std::make_shared<FMaterialAsset>();
+			Material->Graph = FMaterialGraph{};
+			auto& G = *Material->Graph;
+			const auto A = G.Add(EMaterialExpression::Constant, 0, 0),
+					   B = G.Add(EMaterialExpression::Constant, 300, 0),
+					   C = G.Add(EMaterialExpression::Multiply, 600, 0);
+			G.Find(C)->Inputs[0] = A;
+			G.Find(C)->Inputs[1] = B;
+			G.Outputs[0] = C;
+			const auto Canvas = SNew(SMaterialGraph).Material(Material);
+			const auto Window = App.AddWindow(Canvas, FVector2(1400, 800));
+			App.Tick();
+			Canvas->FrameAll();
+			App.Tick();
+			auto Body = [&](uint32 Id) { return Canvas->GetPinPosition(Id, 0, true) - FVector2(60, 15); };
+			App.Click(Window, Body(A));
+			App.Tick();
+			App.SetModifiers(false, true);
+			App.Click(Window, Body(B));
+			App.Tick();
+			App.SetModifiers(false, false);
+			REQUIRE(Canvas->GetSelectedNodes().size() == 2);
+			const auto AX = G.Find(A)->X, BX = G.Find(B)->X;
+			auto Start = Body(A);
+			App.MouseDown(Window, Start);
+			App.Tick();
+			App.MouseMove(Window, Start + FVector2(48, 32));
+			App.Tick();
+			App.MouseUp(Window, Start + FVector2(48, 32));
+			App.Tick();
+			CHECK(G.Find(A)->X > AX);
+			CHECK(G.Find(A)->X - AX == doctest::Approx(G.Find(B)->X - BX));
+			App.Key(EKey::Z, false, true);
+			App.Tick();
+			CHECK(G.Find(A)->X == AX);
+			CHECK(G.Find(B)->X == BX);
+			App.Key(EKey::Y, false, true);
+			App.Tick();
+			CHECK(G.Find(A)->X > AX);
+			App.SetModifiers(false, false, true);
+			App.Click(Window, Canvas->GetPinPosition(C, 0, false));
+			App.Tick();
+			App.SetModifiers(false, false);
+			CHECK(G.Find(C)->Inputs[0] == 0);
+			const auto From = Canvas->GetPinPosition(A, 0, true), To = Canvas->GetPinPosition(C, 0, false);
+			App.MouseDown(Window, From);
+			App.Tick();
+			App.MouseMove(Window, To);
+			App.Tick();
+			App.MouseUp(Window, To);
+			App.Tick();
+			CHECK(G.Find(C)->Inputs[0] == A);
+			App.MouseDown(Window, FVector2(2, 2));
+			App.Tick();
+			App.MouseMove(Window, FVector2(1398, 798));
+			App.Tick();
+			App.MouseUp(Window, FVector2(1398, 798));
+			App.Tick();
+			CHECK(Canvas->GetSelectedNodes().size() == 3);
+			App.Key(EKey::D, false, true);
+			App.Tick();
+			CHECK(G.Nodes.size() == 6);
+			App.Key(EKey::Z, false, true);
+			App.Tick();
+			CHECK(G.Nodes.size() == 3);
+		}
+	}
+	TEST_CASE("Function and collection drops preserve shared dependencies across clipboard and undo")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FUITestApp App;
+		const auto Registry = MakeShared<FAssetRegistry>();
+		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		FMaterialGraph Function;
+		Function.bFunction = true;
+		Function.Outputs[0] = Function.Add(EMaterialExpression::FunctionInput);
+		FAssetPackage P;
+		REQUIRE(FMaterialFunctionCodec::Encode(Function, P, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Function.asset"), P, Error));
+		FMaterialParameterCollection Collection;
+		Collection.Parameters = {{"Global", 1, {.5f, 0, 0, 0}}};
+		FAssetPackage CP;
+		REQUIRE(FMaterialParameterCollectionCodec::Encode(Collection, CP, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Collection.asset"), CP, Error));
+		REQUIRE(Registry->Scan());
+		auto Material = std::make_shared<FMaterialAsset>();
+		Material->Graph = FMaterialGraph{};
+		const auto Canvas = SNew(SMaterialGraph).Material(Material).Registry(Registry);
+		App.AddWindow(Canvas);
+		App.Tick();
+		REQUIRE_MESSAGE(
+			Canvas->DropAsset({P.Id, "/Game/Function"}, "Genesis.MaterialFunction", FVector2(0, 0), Error),
+			*Error);
+		const auto Call = Canvas->GetSelectedNode();
+		Canvas->SetNodeSelection({Call});
+		const auto Clipboard = Canvas->CopySelection();
+		auto Other = std::make_shared<FMaterialAsset>();
+		Other->Graph = FMaterialGraph{};
+		const auto Destination = SNew(SMaterialGraph).Material(Other).Registry(Registry);
+		REQUIRE_MESSAGE(Destination->PasteNodes(Clipboard, FVector2(100, 100), Error), *Error);
+		CHECK(Other->Graph->Functions.size() == 1);
+		CHECK(Other->Graph->Nodes[0].Function.Id == P.Id);
+		REQUIRE(Canvas->DropAsset({CP.Id, "/Game/Collection"}, "Genesis.MaterialParameterCollection",
+								  FVector2(200, 0), Error));
+		CHECK(Material->Graph->Nodes.size() == 2);
+		Canvas->Undo();
+		CHECK(Material->Graph->Nodes.size() == 1);
+		Canvas->Redo();
+		CHECK(Material->Graph->Nodes.size() == 2);
+		const auto Before = FMaterialGraphCompiler::Encode(*Material->Graph);
+		CHECK_FALSE(
+			Canvas->DropAsset({FAssetId::New(), "/Game/Function"}, "Genesis.MaterialFunction", {}, Error));
+		CHECK(FMaterialGraphCompiler::Encode(*Material->Graph) == Before);
+	}
+
+	TEST_CASE("Material editor saves only the latest valid revision while live compilation is on or off")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FUITestApp App;
+		auto Initial = ColorGraph(.1f, .2f, .3f);
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Initial, Error));
+		FAssetPackage Package;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Initial, Package, Error));
+		const auto File = Temp.File("Editing.asset");
+		REQUIRE(FAssetPackageStore::Save(File, Package, Error));
+		const auto Registry = MakeShared<FAssetRegistry>();
+		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry->Scan());
+		FMaterialEditorArgs Args;
+		Args.Registry = Registry;
+		Args.Material = {Package.Id, "/Game/Editing"};
+		Args.Name = "Revision workflow";
+		int Saves = 0;
+		Args.OnSaved = FSimpleDelegate::CreateLambda([&] { ++Saves; });
+		const auto Window = FMaterialEditor::Open(Args, Error);
+		REQUIRE(Window);
+		App.Tick();
+		std::function<SWidget*(SWidget&, const FString&)> FindText = [&](SWidget& W,
+																		 const FString& Text) -> SWidget* {
+			if (auto* T = dynamic_cast<STextBlock*>(&W); T && T->GetText() == Text)
+				return T;
+			for (const auto& C : W.GetArrangedChildren())
+				if (auto* R = FindText(C.Widget.Get(), Text))
+					return R;
+			return nullptr;
+		};
+		const auto Click = [&](const FString& Text) {
+			auto* W = FindText(*Window, Text);
+			REQUIRE_MESSAGE(W, *Text);
+			App.ClickWidget(*W);
+			App.Tick();
+		};
+		const auto Wait = [&](auto Predicate) {
+			for (int I = 0; I < 300 && !Predicate(); ++I)
+			{
+				App.Tick();
+				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+			}
+			REQUIRE(Predicate());
+		};
+		Wait([&] { return FindText(*Window, "Compiled for DirectX 12 and Vulkan") != nullptr; });
+		SMaterialGraph* Canvas = nullptr;
+		std::function<void(SWidget&)> FindCanvas = [&](SWidget& W) {
+			if (auto* C = dynamic_cast<SMaterialGraph*>(&W))
+				Canvas = C;
+			for (const auto& C : W.GetArrangedChildren())
+				FindCanvas(C.Widget.Get());
+		};
+		FindCanvas(*Window);
+		REQUIRE(Canvas);
+		Canvas->SetNodeSelection({1});
+		App.Tick();
+		Click("Preview: Material");
+		Wait([&] { return FindText(*Window, "Node preview compiled for DirectX 12 and Vulkan") != nullptr; });
+		Click("Save");
+		Wait([&] { return Saves == 1; });
+		Saves = 0;
+		Canvas->EditNode([](auto& N) { N.Value[0] = std::numeric_limits<float>::quiet_NaN(); });
+		Click("Save");
+		CHECK(Saves == 0);
+		FAssetPackage Read;
+		FMaterialAsset Material;
+		REQUIRE(FAssetPackageStore::Load(File, Read, Error));
+		REQUIRE(FRenderAssetCodec::DecodeMaterial(Read, Material, Error));
+		CHECK(Material.Graph->Find(1)->Value[0] == .1f);
+		Canvas->EditNode([](auto& N) { N.Value[0] = .4f; });
+		Click("Compile / Preview");
+		Click("Save");
+		Canvas->EditNode([](auto& N) { N.Value[0] = .6f; });
+		Wait([&] { return Saves == 1; });
+		REQUIRE(FAssetPackageStore::Load(File, Read, Error));
+		REQUIRE(FRenderAssetCodec::DecodeMaterial(Read, Material, Error));
+		CHECK(Material.Graph->Find(1)->Value[0] == .6f);
+		Click("Live Preview: On");
+		Canvas->EditNode([](auto& N) { N.Value[0] = .7f; });
+		Click("Save");
+		Canvas->EditNode([](auto& N) { N.Value[0] = .8f; });
+		Wait([&] { return Saves == 2; });
+		REQUIRE(FAssetPackageStore::Load(File, Read, Error));
+		REQUIRE(FRenderAssetCodec::DecodeMaterial(Read, Material, Error));
+		CHECK(Material.Graph->Find(1)->Value[0] == .8f);
+		CHECK(Read.Id == Package.Id);
+		Window->RequestClose();
+	}
+	TEST_CASE("Dependent recooking updates only affected assets and preserves files on function errors")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FMaterialGraph Function;
+		Function.bFunction = true;
+		Function.Outputs[0] = Function.Add(EMaterialExpression::FunctionInput);
+		Function.Find(Function.Outputs[0])->Value[0] = .25f;
+		FAssetPackage Source;
+		REQUIRE(FMaterialFunctionCodec::Encode(Function, Source, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Function.asset"), Source, Error));
+		FAssetRegistry Registry;
+		REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry.Scan());
+		FMaterialAsset Material;
+		Material.Graph = FMaterialGraph{};
+		const auto C = Material.Graph->Add(EMaterialExpression::Constant);
+		Material.Graph->Find(C)->Value[0] = .2f;
+		const auto F = Material.Graph->Add(EMaterialExpression::MaterialFunctionCall);
+		Material.Graph->Find(F)->Inputs[0] = C;
+		Material.Graph->Find(F)->Function = {Source.Id, "/Game/Function"};
+		Material.Graph->Outputs[0] = F;
+		bool Changed = false;
+		REQUIRE(FMaterialFunctionCodec::Refresh(*Material.Graph, Registry, Changed, Error));
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
+		FAssetPackage Target;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, Target, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Target.asset"), Target, Error));
+		auto Unrelated = ColorGraph(1, 0, 0);
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Unrelated, Error));
+		FAssetPackage Other;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Unrelated, Other, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Unrelated.asset"), Other, Error));
+		FString Original;
+		REQUIRE(FFile::ReadAllText(Temp.File("Unrelated.asset"), Original));
+		Function.Find(Function.Outputs[0])->Value[0] = .75f;
+		REQUIRE(FMaterialFunctionCodec::Encode(Function, Source, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Function.asset"), Source, Error));
+		REQUIRE(Registry.Scan());
+		int32 Updated = 0;
+		REQUIRE(FMaterialEditingLibrary::RecompileDependents(Registry, {Source.Id, "/Game/Function"}, Updated,
+															 Error));
+		CHECK(Updated == 1);
+		FString Still;
+		REQUIRE(FFile::ReadAllText(Temp.File("Unrelated.asset"), Still));
+		CHECK(Still == Original);
+		FString Before;
+		REQUIRE(FFile::ReadAllText(Temp.File("Target.asset"), Before));
+		Function.Find(Function.Outputs[0])->Mask = 3;
+		REQUIRE(FMaterialFunctionCodec::Encode(Function, Source, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Function.asset"), Source, Error));
+		REQUIRE(Registry.Scan());
+		CHECK_FALSE(FMaterialEditingLibrary::RecompileDependents(Registry, {Source.Id, "/Game/Function"},
+																 Updated, Error));
+		CHECK(Updated == 0);
+		CHECK(Error.Contains("type mismatch"));
+		REQUIRE(FFile::ReadAllText(Temp.File("Target.asset"), Still));
+		CHECK(Still == Before);
+	}
+
+	TEST_CASE("Nested material functions recook transitively and reject indirect recursion")
+	{
+		FTempFolder Temp;
+		FString Error;
+		FMaterialGraph Inner;
+		Inner.bFunction = true;
+		Inner.Outputs[0] = Inner.Add(EMaterialExpression::Constant);
+		Inner.Find(Inner.Outputs[0])->Value[0] = .2f;
+		FAssetPackage A;
+		REQUIRE(FMaterialFunctionCodec::Encode(Inner, A, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Inner.asset"), A, Error));
+		FAssetRegistry Registry;
+		REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry.Scan());
+		FMaterialGraph Outer;
+		Outer.bFunction = true;
+		Outer.Outputs[0] = Outer.Add(EMaterialExpression::MaterialFunctionCall);
+		Outer.Find(Outer.Outputs[0])->Function = {A.Id, "/Game/Inner"};
+		bool Changed = false;
+		REQUIRE(FMaterialFunctionCodec::Refresh(Outer, Registry, Changed, Error));
+		FAssetPackage B;
+		REQUIRE(FMaterialFunctionCodec::Encode(Outer, B, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Outer.asset"), B, Error));
+		REQUIRE(Registry.Scan());
+		FMaterialAsset Material;
+		Material.Graph = FMaterialGraph{};
+		Material.Graph->Outputs[0] = Material.Graph->Add(EMaterialExpression::MaterialFunctionCall);
+		Material.Graph->Find(Material.Graph->Outputs[0])->Function = {B.Id, "/Game/Outer"};
+		REQUIRE(FMaterialFunctionCodec::Refresh(*Material.Graph, Registry, Changed, Error));
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
+		const auto OldSource = Material.CookedGraphSource;
+		FAssetPackage P;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, P, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Material.asset"), P, Error));
+		Inner.Find(Inner.Outputs[0])->Value[0] = .8f;
+		REQUIRE(FMaterialFunctionCodec::Encode(Inner, A, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Inner.asset"), A, Error));
+		REQUIRE(Registry.Scan());
+		int32 Count = 0;
+		REQUIRE_MESSAGE(
+			FMaterialEditingLibrary::RecompileDependents(Registry, {A.Id, "/Game/Inner"}, Count, Error),
+			*Error);
+		CHECK(Count == 2);
+		REQUIRE(FRenderAssetLoader(Registry).LoadMaterial({P.Id, "/Game/Material"}, Material, Error));
+		CHECK(Material.CookedGraphSource != OldSource);
+		auto Recursive = Inner;
+		Recursive.Nodes.clear();
+		Recursive.Outputs[0] = Recursive.Add(EMaterialExpression::MaterialFunctionCall);
+		Recursive.Find(Recursive.Outputs[0])->Function = {B.Id, "/Game/Outer"};
+		const auto Before = FMaterialGraphCompiler::Encode(Recursive);
+		CHECK_FALSE(FMaterialFunctionCodec::Refresh(Recursive, Registry, Changed, Error, A.Id));
+		CHECK(Error.Contains("recursion"));
+		CHECK(FMaterialGraphCompiler::Encode(Recursive) == Before);
+	}
+	TEST_CASE("Parameter grouping preserves shader compatibility and material windows preserve one draft")
+	{
+		FTempFolder Temp;
+		FString Error;
+		auto Material = ColorGraph(1, 1, 1);
+		const auto P = Material.Graph->Add(EMaterialExpression::ScalarParameter);
+		Material.Graph->Find(P)->ParameterName = "Roughness";
+		Material.Graph->Find(P)->ParameterGroup = "Surface";
+		Material.Graph->Outputs[1] = P;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
+		const auto Shader = Material.GraphDXIL;
+		const auto Source = Material.CookedGraphSource;
+		Material.Graph->Find(P)->ParameterGroup = "Surface Controls";
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
+		CHECK(Material.GraphDXIL == Shader);
+		CHECK(Material.CookedGraphSource == Source);
+		FAssetPackage Package;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, Package, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Grouped.asset"), Package, Error));
+		FMaterialAsset Loaded;
+		REQUIRE(FRenderAssetCodec::DecodeMaterial(Package, Loaded, Error));
+		CHECK(Loaded.Graph->Find(P)->ParameterGroup == "Surface Controls");
+		FUITestApp App;
+		const auto Registry = MakeShared<FAssetRegistry>();
+		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		REQUIRE(Registry->Scan());
+		FMaterialEditorArgs Args;
+		Args.Registry = Registry;
+		Args.Material = {Package.Id, "/Game/Grouped"};
+		Args.Name = "Grouped";
+		auto First = FMaterialEditor::Open(Args, Error), Second = FMaterialEditor::Open(Args, Error);
+		REQUIRE(First);
+		CHECK(First == Second);
+		First->RequestClose();
+		App.Tick();
+		auto Reopened = FMaterialEditor::Open(Args, Error);
+		REQUIRE(Reopened);
+		CHECK(Reopened != First);
+		Reopened->RequestClose();
+	}
+
+	TEST_CASE("Material attribute layers compose six channels through reusable typed functions")
+	{
+		FMaterialAsset Material;
+		Material.Graph = FMaterialGraph{};
+		auto& G = *Material.Graph;
+		G.bUseMaterialAttributes = true;
+		const auto Red = G.Add(EMaterialExpression::Constant3Vector),
+				   Blue = G.Add(EMaterialExpression::Constant3Vector);
+		G.Find(Red)->Value[0] = 1;
+		G.Find(Blue)->Value[2] = 1;
+		const auto A = G.Add(EMaterialExpression::MakeMaterialAttributes),
+				   B = G.Add(EMaterialExpression::MakeMaterialAttributes);
+		G.Find(A)->Inputs[0] = Red;
+		G.Find(B)->Inputs[0] = Blue;
+		const auto Blend = G.Add(EMaterialExpression::BlendMaterialAttributes);
+		G.Find(Blend)->Inputs[0] = A;
+		G.Find(Blend)->Inputs[1] = B;
+		G.Find(Blend)->Value[2] = .25f;
+		FMaterialGraph Function;
+		Function.bFunction = true;
+		const auto Input = Function.Add(EMaterialExpression::FunctionInput);
+		Function.Find(Input)->Mask = 8;
+		Function.Outputs[0] = Input;
+		FAssetReference Ref{FAssetId::New(), "/Game/Layer"};
+		G.Functions.push_back({Ref, std::make_shared<const FMaterialGraph>(Function)});
+		const auto Call = G.Add(EMaterialExpression::MaterialFunctionCall);
+		G.Find(Call)->Function = Ref;
+		G.Find(Call)->Inputs[0] = Blend;
+		G.Outputs[0] = Call;
+		FString Error;
+		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Material, Error), *Error);
+		auto Flat = ColorGraph(.75f, 0, .25f);
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Flat, Error));
+		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		{
+			FRHIDeviceDesc DD;
+			DD.Backend = Backend;
+			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
+			auto Device = FRHIDevice::Create(DD);
+			REQUIRE(Device);
+			const auto Actual = DrawMaterial(*Device, Material), Expected = DrawMaterial(*Device, Flat);
+			CHECK(Actual == Expected);
+		}
+		FAssetPackage Package;
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, Package, Error));
+		FMaterialAsset Loaded;
+		REQUIRE(FRenderAssetCodec::DecodeMaterial(Package, Loaded, Error));
+		CHECK(Loaded.Graph->bUseMaterialAttributes);
+		CHECK(Loaded.Graph->Find(Call)->Function.Id == Ref.Id);
+		auto Broken = G;
+		Broken.Find(Call)->Inputs[0] = Red;
+		FMaterialGraphProgram Program;
+		CHECK_FALSE(FMaterialGraphCompiler::Compile(Broken, Program, Error));
+		CHECK(Error.Contains("Function input type mismatch"));
+		CHECK(Error.Contains(FString::Format("Node {}:", Call).View()));
+		auto Break = Material;
+		Break.Graph->bUseMaterialAttributes = false;
+		const auto Field = Break.Graph->Add(EMaterialExpression::BreakMaterialAttributes);
+		Break.Graph->Find(Field)->Inputs[0] = Call;
+		Break.Graph->Find(Field)->Mask = 0;
+		Break.Graph->Outputs[0] = Field;
+		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Break, Error));
+		auto View = std::make_shared<FMaterialAsset>(Material);
+		const auto Canvas = SNew(SMaterialGraph).Material(View);
+		Canvas->SetUseMaterialAttributes(false);
+		CHECK_FALSE(View->Graph->bUseMaterialAttributes);
+		Canvas->Undo();
+		CHECK(View->Graph->bUseMaterialAttributes);
+		Canvas->Redo();
+		CHECK_FALSE(View->Graph->bUseMaterialAttributes);
+	}
+
+	TEST_CASE("Function interfaces expose named sparse inputs and settings participate in graph undo")
+	{
+		FMaterialGraph Function;
+		Function.bFunction = true;
+		const auto Input = Function.Add(EMaterialExpression::FunctionInput);
+		Function.Find(Input)->InputIndex = 7;
+		Function.Find(Input)->ParameterName = "Layer Color";
+		Function.Find(Input)->Mask = 3;
+		Function.Outputs[0] = Input;
+		FAssetReference Ref{FAssetId::New(), "/Game/Function"};
+		auto Material = std::make_shared<FMaterialAsset>();
+		Material->Graph = FMaterialGraph{};
+		auto& G = *Material->Graph;
+		G.Functions.push_back({Ref, std::make_shared<const FMaterialGraph>(Function)});
+		const auto Color = G.Add(EMaterialExpression::Constant3Vector);
+		G.Find(Color)->Value[1] = 1;
+		const auto Call = G.Add(EMaterialExpression::MaterialFunctionCall);
+		G.Find(Call)->Function = Ref;
+		G.Find(Call)->Inputs[7] = Color;
+		G.Outputs[0] = Call;
+		CHECK(MaterialNodeInputCount(G, *G.Find(Call)) == 8);
+		CHECK(MaterialNodeHasInput(G, *G.Find(Call), 7));
+		CHECK_FALSE(MaterialNodeHasInput(G, *G.Find(Call), 0));
+		CHECK(MaterialNodeInputName(G, *G.Find(Call), 7) == "Layer Color");
+		FString Error;
+		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(*Material, Error), *Error);
+		auto Bad = G;
+		Bad.Find(Call)->Inputs[0] = Color;
+		FMaterialGraphProgram Program;
+		CHECK_FALSE(FMaterialGraphCompiler::Compile(Bad, Program, Error));
+		CHECK(Error.Contains("undeclared input"));
+		const auto Canvas = SNew(SMaterialGraph).Material(Material);
+		Canvas->SetMaterialSettings(EMaterialBlendMode::Masked, .6f);
+		CHECK(Material->BlendMode == EMaterialBlendMode::Masked);
+		CHECK(Material->OpacityMaskClip == .6f);
+		Canvas->Undo();
+		CHECK(Material->BlendMode == EMaterialBlendMode::Opaque);
+		CHECK(Material->OpacityMaskClip == .333f);
+		Canvas->Redo();
+		CHECK(Material->BlendMode == EMaterialBlendMode::Masked);
+		CHECK(Material->OpacityMaskClip == .6f);
 	}
 }

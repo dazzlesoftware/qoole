@@ -1,6 +1,8 @@
 # Material system roadmap
 
-Status: initial compiler/editor/rendering slice implemented, 2026-10-22.
+Status: material authoring for the current six-channel desktop renderer completed,
+2026-10-23. Functions, collections, static/quality/platform choices, instances,
+attribute layers and the editor workflow are implemented and regression tested.
 See [MaterialGraph.md](MaterialGraph.md) for the actual supported subset and
 remaining limitations. Later stages below remain a roadmap.
 The requested destination is Unreal-style material authoring and broad material
@@ -32,7 +34,14 @@ each relevant documentation category into an itemized checklist. These pages
 are a starting inventory, not proof that every Unreal expression is listed here.
 Record additions, aliases, platform limits and unsupported features explicitly.
 
-## Current Genesis baseline
+## Historical baseline (before graph implementation)
+
+The following records the initial planning audit. For current formats, authoring
+features and limits use [MaterialGraph.md](MaterialGraph.md). Stages 1–3 now have
+the everyday authoring foundation; the complete expression inventory and later
+renderer stages remain open. Attribute layers blend six existing channels, not
+BSDF closures. Shader caching is bounded and in-memory; no distributed/persistent
+shader build service is claimed.
 
 Code inspected: `RenderAssets.h/.cpp`, `SContentBrowser.cpp`,
 `MapEditorPanels.cpp`, `MapDraw.cpp`, `MapMaterialTextures.cpp`,

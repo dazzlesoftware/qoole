@@ -19,6 +19,7 @@
   </Folder>
   <Folder Name="/Editor/">
     <Project Path="Engine/Source/Editor/ScriptEditorPlugin/ScriptEditorPlugin.vcxproj" Id="a1b70f21-53e2-41e8-9592-210df1deda25" />
+    <Project Path="Engine/Source/Editor/EditorFramework/EditorFramework.vcxproj" Id="42ce52ba-ceab-45cf-8b3e-170e89f80122" />
     <Project Path="Engine/Source/Editor/MaterialEditor/MaterialEditor.vcxproj" Id="b872ef2a-5cd5-5124-a061-95c744523123" />
     <Project Path="Engine/Source/Editor/LandscapeEditorUtilities/LandscapeEditorUtilities.vcxproj" Id="80e5d3df-869e-4e9a-9f5c-25fc68b36a36" />
     <Project Path="Engine/Source/Editor/LandscapeEditor/LandscapeEditor.vcxproj" Id="072aca67-77b1-4e56-b304-c5192afa8c6a" />

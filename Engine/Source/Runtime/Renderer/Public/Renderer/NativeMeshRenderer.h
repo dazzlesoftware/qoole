@@ -10,6 +10,7 @@ struct FNativeMeshView
 	bool bLit = true;
 	float Light[3] = {0, -1, 1}, Up[3] = {0, 0, 1};
 };
+class FMaterialParameterCollectionInstance;
 class FNativeMeshRenderer;
 class FNativeMeshFrame
 {
@@ -51,10 +52,12 @@ class FNativeMeshRenderer
 	// Inside a color + D32 depth pass. Draw transparency after all opaque content.
 	void Draw(FRHICommandList&, const FNativeMeshFrame&, const FNativeMeshView&, bool Translucent);
 	void Trim();
+	void SetParameterCollectionInstance(std::shared_ptr<FMaterialParameterCollectionInstance>);
 
   private:
 	bool GetTextures(const std::shared_ptr<const FLoadedMeshAsset>&, uint32, TSharedPtr<FRHITexture>&,
 					 TSharedPtr<FRHITexture>&);
+	TArray<std::shared_ptr<FMaterialParameterCollectionInstance>> Collections;
 	FRHIDevice& Device;
 	struct FEntry
 	{

@@ -1,5 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "SMaterialGraph.h"
+#include "DragAndDrop/AssetDragDropOp.h"
+#include "Materials/MaterialFunction.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
 #include "Widgets/Input/SMenuAnchor.h"
@@ -15,9 +18,13 @@
 namespace
 {
 constexpr float Width = 210, OutputX = 1020, OutputY = 40;
-float Height(EMaterialExpression E)
+float Height(const FMaterialGraph& G, const FMaterialNode& N)
 {
-	return 62.f + 32.f * std::max(1, MaterialInputCount(E));
+	int Count = 0;
+	for (int I = 0; I < MaterialNodeInputCount(G, N); ++I)
+		if (MaterialNodeHasInput(G, N, I))
+			++Count;
+	return 62.f + 32.f * std::max(1, Count);
 }
 bool Near(FVector2 A, FVector2 B)
 {
@@ -28,6 +35,7 @@ bool Near(FVector2 A, FVector2 B)
 void SMaterialGraph::Construct(const FArguments& A)
 {
 	Material = A._Material;
+	Registry = A._Registry;
 	check(Material);
 	if (!Material->Graph)
 		Material->Graph = FMaterialEditingLibrary::CreateGraph(*Material);
@@ -40,7 +48,7 @@ void SMaterialGraph::Remember()
 {
 	if (UndoStack.size() >= 100)
 		UndoStack.erase(UndoStack.begin());
-	UndoStack.push_back(Graph());
+	UndoStack.push_back({Graph(), Material->BlendMode, Material->OpacityMaskClip});
 	RedoStack.clear();
 }
 void SMaterialGraph::Changed()
@@ -61,8 +69,8 @@ uint32 SMaterialGraph::AddNode(EMaterialExpression E, FVector2 P)
 bool SMaterialGraph::Connect(uint32 From, uint32 To, int Input, FString& Error)
 {
 	if (!Graph().Find(From) || Input < 0 ||
-		(To == 0 ? Input >= 6
-				 : !Graph().Find(To) || Input >= MaterialInputCount(Graph().Find(To)->Expression)))
+		(To == 0 ? Input >= ((Graph().bFunction || Graph().bUseMaterialAttributes) ? 1 : 6)
+				 : !Graph().Find(To) || !MaterialNodeHasInput(Graph(), *Graph().Find(To), Input)))
 	{
 		Error = "Invalid graph pin.";
 		return false;
@@ -78,7 +86,7 @@ bool SMaterialGraph::Connect(uint32 From, uint32 To, int Input, FString& Error)
 	}
 	if (UndoStack.size() >= 100)
 		UndoStack.erase(UndoStack.begin());
-	UndoStack.push_back(std::move(Previous));
+	UndoStack.push_back({std::move(Previous), Material->BlendMode, Material->OpacityMaskClip});
 	RedoStack.clear();
 	Changed();
 	return true;
@@ -86,8 +94,8 @@ bool SMaterialGraph::Connect(uint32 From, uint32 To, int Input, FString& Error)
 void SMaterialGraph::Disconnect(uint32 To, int Input)
 {
 	if (Input < 0 ||
-		(To == 0 ? Input >= 6
-				 : !Graph().Find(To) || Input >= MaterialInputCount(Graph().Find(To)->Expression)))
+		(To == 0 ? Input >= ((Graph().bFunction || Graph().bUseMaterialAttributes) ? 1 : 6)
+				 : !Graph().Find(To) || !MaterialNodeHasInput(Graph(), *Graph().Find(To), Input)))
 		return;
 	Remember();
 	(To ? Graph().Find(To)->Inputs[Input] : Graph().Outputs[Input]) = 0;
@@ -110,6 +118,8 @@ void SMaterialGraph::SetNodeSelection(const TArray<uint32>& Nodes)
 FString SMaterialGraph::CopySelection() const
 {
 	FMaterialGraph Fragment;
+	Fragment.Functions = Graph().Functions;
+	Fragment.QualityLevel = Graph().QualityLevel;
 	for (const auto& N : Graph().Nodes)
 		if (IsNodeSelected(N.Id))
 		{
@@ -151,6 +161,11 @@ bool SMaterialGraph::PasteNodes(const FString& Text, FVector2 Position, FString&
 		return false;
 	}
 	auto Next = Graph();
+	for (const auto& F : Fragment.Functions)
+		if (std::none_of(Next.Functions.begin(), Next.Functions.end(), [&](const auto& Existing) {
+				return Existing.Reference.Id == F.Reference.Id && Existing.Reference.Path == F.Reference.Path;
+			}))
+			Next.Functions.push_back(F);
 	std::map<uint32, uint32> Remap;
 	TArray<uint32> Added;
 	FVector2 Low(Fragment.Nodes[0].X, Fragment.Nodes[0].Y);
@@ -227,8 +242,10 @@ void SMaterialGraph::Undo()
 {
 	if (UndoStack.empty())
 		return;
-	RedoStack.push_back(Graph());
-	Graph() = UndoStack.back();
+	RedoStack.push_back({Graph(), Material->BlendMode, Material->OpacityMaskClip});
+	Graph() = UndoStack.back().Graph;
+	Material->BlendMode = UndoStack.back().Blend;
+	Material->OpacityMaskClip = UndoStack.back().MaskCutoff;
 	UndoStack.pop_back();
 	Selected = 0;
 	Selection.clear();
@@ -239,8 +256,10 @@ void SMaterialGraph::Redo()
 {
 	if (RedoStack.empty())
 		return;
-	UndoStack.push_back(Graph());
-	Graph() = RedoStack.back();
+	UndoStack.push_back({Graph(), Material->BlendMode, Material->OpacityMaskClip});
+	Graph() = RedoStack.back().Graph;
+	Material->BlendMode = RedoStack.back().Blend;
+	Material->OpacityMaskClip = RedoStack.back().MaskCutoff;
 	RedoStack.pop_back();
 	Selected = 0;
 	Selection.clear();
@@ -268,7 +287,7 @@ void SMaterialGraph::FrameAll()
 											 : Width));
 		High.Y = std::max(High.Y, N.Y + (N.Expression == EMaterialExpression::Comment
 											 ? FMath::Clamp(N.Value[1], 60.f, 2000.f)
-											 : Height(N.Expression)));
+											 : Height(Graph(), N)));
 	}
 	const auto Size = GetCachedGeometry().GetLocalSize();
 	Zoom = FMath::Clamp(std::min((Size.X - 60) / (High.X - Low.X), (Size.Y - 60) / (High.Y - Low.Y)), .25f,
@@ -294,12 +313,21 @@ FVector2 SMaterialGraph::GetPinPosition(uint32 Id, int Input, bool Output) const
 			return {};
 		P = FVector2(N->X, N->Y);
 	}
-	P += FVector2(Output ? Width : 0, 52 + 32.f * Input);
+	int Row = Input;
+	if (Id && !Output)
+		if (const auto* N = Graph().Find(Id); N && N->Expression == EMaterialExpression::MaterialFunctionCall)
+		{
+			Row = 0;
+			for (int I = 0; I < Input; ++I)
+				if (MaterialNodeHasInput(Graph(), *N, I))
+					++Row;
+		}
+	P += FVector2(Output ? Width : 0, 52 + 32.f * Row);
 	return P * Zoom + Pan;
 }
 bool SMaterialGraph::HitPin(FVector2 P, uint32& Id, int& Pin, bool& Output) const
 {
-	for (int I = 0; I < 6; ++I)
+	for (int I = 0; I < ((Graph().bFunction || Graph().bUseMaterialAttributes) ? 1 : 6); ++I)
 		if (Near(P, GetPinPosition(0, I, false)))
 		{
 			Id = 0;
@@ -318,8 +346,8 @@ bool SMaterialGraph::HitPin(FVector2 P, uint32& Id, int& Pin, bool& Output) cons
 			Output = true;
 			return true;
 		}
-		for (int I = 0; I < MaterialInputCount(It->Expression); ++I)
-			if (Near(P, GetPinPosition(It->Id, I, false)))
+		for (int I = 0; I < MaterialNodeInputCount(Graph(), *It); ++I)
+			if (MaterialNodeHasInput(Graph(), *It, I) && Near(P, GetPinPosition(It->Id, I, false)))
 			{
 				Id = It->Id;
 				Pin = I;
@@ -388,7 +416,7 @@ FReply SMaterialGraph::OnMouseButtonDown(const FGeometry& G, const FPointerEvent
 	auto P = ToCanvas(Last);
 	for (auto It = Graph().Nodes.rbegin(); It != Graph().Nodes.rend(); ++It)
 		if (P.X >= It->X && P.X <= It->X + Width && P.Y >= It->Y &&
-			P.Y <= It->Y + (It->Expression == EMaterialExpression::Comment ? 30 : Height(It->Expression)))
+			P.Y <= It->Y + (It->Expression == EMaterialExpression::Comment ? 30 : Height(Graph(), *It)))
 		{
 			Hit = It->Id;
 			break;
@@ -460,7 +488,7 @@ FReply SMaterialGraph::OnMouseButtonUp(const FGeometry& G, const FPointerEvent& 
 					Y1 = std::max(A.Y, B.Y);
 		if (X1 - X0 > 2 || Y1 - Y0 > 2)
 			for (const auto& N : Graph().Nodes)
-				if (N.X <= X1 && N.X + Width >= X0 && N.Y <= Y1 && N.Y + Height(N.Expression) >= Y0 &&
+				if (N.X <= X1 && N.X + Width >= X0 && N.Y <= Y1 && N.Y + Height(Graph(), N) >= Y0 &&
 					!IsNodeSelected(N.Id))
 					Selection.push_back(N.Id);
 		Selected = Selection.empty() ? 0 : Selection.back();
@@ -589,10 +617,10 @@ int32 SMaterialGraph::OnPaint(const FPaintArgs&, const FGeometry& G, const FRect
 		Out.AddLines(L + 2, G.ToPaintGeometry(), std::move(Points), FColor(180, 190, 205), 2);
 	};
 	for (const auto& N : Graph().Nodes)
-		for (int I = 0; I < MaterialInputCount(N.Expression); ++I)
+		for (int I = 0; I < MaterialNodeInputCount(Graph(), N); ++I)
 			if (N.Inputs[I])
 				Wire(GetPinPosition(N.Inputs[I], 0, true), GetPinPosition(N.Id, I, false));
-	for (int I = 0; I < 6; ++I)
+	for (int I = 0; I < ((Graph().bFunction || Graph().bUseMaterialAttributes) ? 1 : 6); ++I)
 		if (Graph().Outputs[I])
 			Wire(GetPinPosition(Graph().Outputs[I], 0, true), GetPinPosition(0, I, false));
 	if (WireSource)
@@ -616,12 +644,16 @@ int32 SMaterialGraph::OnPaint(const FPaintArgs&, const FGeometry& G, const FRect
 		Text(P + FVector2(10, 6) * Zoom, Name, FColor::White());
 		for (int I = 0; I < Inputs; ++I)
 		{
+			if (Id && !MaterialNodeHasInput(Graph(), *Graph().Find(Id), I))
+				continue;
 			const auto Pin = GetPinPosition(Id, I, false);
 			Out.AddRoundedBox(L + 5, G.ToPaintGeometry(Pin - FVector2(5, 5), FVector2(10, 10)),
 							  FColor(180, 190, 210), 5);
 			Text(Pin + FVector2(12, -8) * Zoom,
-				 Id ? MaterialInputName(Graph().Find(Id)->Expression, I)
-					: MaterialOutputName(static_cast<EMaterialOutput>(I)),
+				 Id								  ? MaterialNodeInputName(Graph(), *Graph().Find(Id), I)
+				 : Graph().bFunction			  ? "Function Result"
+				 : Graph().bUseMaterialAttributes ? "Material Attributes"
+												  : MaterialOutputName(static_cast<EMaterialOutput>(I)),
 				 FColor(220, 225, 235));
 		}
 		if (Id)
@@ -634,7 +666,7 @@ int32 SMaterialGraph::OnPaint(const FPaintArgs&, const FGeometry& G, const FRect
 	for (const auto& N : Graph().Nodes)
 		if (N.Expression != EMaterialExpression::Comment)
 			Node(N.Id, FVector2(N.X, N.Y), MaterialExpressionName(N.Expression),
-				 MaterialInputCount(N.Expression), Height(N.Expression));
+				 MaterialNodeInputCount(Graph(), N), Height(Graph(), N));
 	for (const auto& N : Graph().Nodes)
 		if (static_cast<int>(N.Expression) <= 3)
 		{
@@ -659,6 +691,126 @@ int32 SMaterialGraph::OnPaint(const FPaintArgs&, const FGeometry& G, const FRect
 		Out.AddRoundedBox(L + 6, G.ToPaintGeometry(A, B - A), FColor(80, 150, 230, 35), 0,
 						  FColor(100, 170, 240), 1);
 	}
-	Node(0, FVector2(OutputX, OutputY), "Material", 6, 260);
+	Node(0, FVector2(OutputX, OutputY),
+		 Graph().bFunction				  ? "Function Result"
+		 : Graph().bUseMaterialAttributes ? "Material Attributes"
+										  : "Material",
+		 (Graph().bFunction || Graph().bUseMaterialAttributes) ? 1 : 6,
+		 (Graph().bFunction || Graph().bUseMaterialAttributes) ? 94.f : 260.f);
 	return L + 6;
+}
+
+void SMaterialGraph::SetQualityLevel(uint8 Quality)
+{
+	if (Quality > 2 || Graph().QualityLevel == Quality)
+		return;
+	Remember();
+	Graph().QualityLevel = Quality;
+	Changed();
+}
+
+bool SMaterialGraph::DropAsset(const FAssetReference& Ref, const FString& Schema, FVector2 Position,
+							   FString& Error)
+{
+	if (!Registry)
+	{
+		Error = "Asset drops require an asset registry.";
+		return false;
+	}
+	if (!Registry->Resolve(Ref, Error, Schema.View()))
+		return false;
+	auto Candidate = Graph();
+	EMaterialExpression Type;
+	if (Schema == "Genesis.Texture2D")
+		Type = EMaterialExpression::TextureSample;
+	else if (Schema == "Genesis.MaterialFunction")
+		Type = EMaterialExpression::MaterialFunctionCall;
+	else if (Schema == "Genesis.MaterialParameterCollection")
+		Type = EMaterialExpression::ScalarCollectionParameter;
+	else
+	{
+		Error = "This asset is not a material graph input.";
+		return false;
+	}
+	const auto Id = Candidate.Add(Type, Position.X, Position.Y);
+	if (!Id)
+	{
+		Error = "Material node limit reached.";
+		return false;
+	}
+	auto* Node = Candidate.Find(Id);
+	if (Type == EMaterialExpression::TextureSample)
+		Node->Texture = Ref;
+	else if (Type == EMaterialExpression::MaterialFunctionCall)
+		Node->Function = Ref;
+	else
+	{
+		FAssetPackage P;
+		FMaterialParameterCollection C;
+		if (!Registry->Load(Ref, P, Error) || !FMaterialParameterCollectionCodec::Decode(P, C, Error))
+			return false;
+		if (C.Parameters.empty())
+		{
+			Error = "Choose a collection with a parameter.";
+			return false;
+		}
+		Node->Collection = Ref;
+		Node->ParameterName = C.Parameters[0].Name;
+		if (C.Parameters[0].Width == 4)
+			Node->Expression = EMaterialExpression::VectorCollectionParameter;
+	}
+	bool DependenciesChanged = false;
+	if (!FMaterialFunctionCodec::Refresh(Candidate, *Registry, DependenciesChanged, Error))
+		return false;
+	Remember();
+	Graph() = std::move(Candidate);
+	SetNodeSelection({Id});
+	Changed();
+	Error.Empty();
+	return true;
+}
+FReply SMaterialGraph::OnDragOver(const FGeometry&, const FDragDropEvent& Event)
+{
+	auto Op = Event.GetOperationAs<FAssetDragDropOp>();
+	return Op && (Op->Schema == "Genesis.Texture2D" || Op->Schema == "Genesis.MaterialFunction" ||
+				  Op->Schema == "Genesis.MaterialParameterCollection")
+			   ? FReply::Handled()
+			   : FReply::Unhandled();
+}
+FReply SMaterialGraph::OnDrop(const FGeometry& G, const FDragDropEvent& Event)
+{
+	auto Op = Event.GetOperationAs<FAssetDragDropOp>();
+	if (!Op)
+		return FReply::Unhandled();
+	FString Error;
+	if (!DropAsset(Op->Asset, Op->Schema, ToCanvas(G.AbsoluteToLocal(Event.GetAbsolutePosition())), Error))
+	{
+		OnError.ExecuteIfBound(Error);
+		return FReply::Unhandled();
+	}
+	return FReply::Handled();
+}
+
+void SMaterialGraph::SetUseMaterialAttributes(bool Use)
+{
+	if (Graph().bUseMaterialAttributes == Use)
+		return;
+	Remember();
+	Graph().bUseMaterialAttributes = Use;
+	for (auto& Output : Graph().Outputs)
+		Output = 0;
+	Changed();
+}
+
+void SMaterialGraph::SetMaterialSettings(EMaterialBlendMode Mode, float Clip)
+{
+	if (static_cast<int>(Mode) < 0 || static_cast<int>(Mode) > 2 || !std::isfinite(Clip) || Clip < 0 ||
+		Clip > 1)
+		return;
+	if (Material->BlendMode == Mode && Material->OpacityMaskClip == Clip)
+		return;
+	Remember();
+	Material->BlendMode = Mode;
+	Material->OpacityMaskClip = Clip;
+	Changed();
 }

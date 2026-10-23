@@ -1,0 +1,21 @@
+{
+  "FileVersion": 1,
+  "Name": "MaterialAuthoringDotNet",
+  "EngineAssociation": "Genesis",
+  "Description": "Functions, collections, parameters, static/quality instances, cooking and native scene regression.",
+  "DefaultMap": "/Game/Maps/Main",
+  "Scripting": {
+    "GameplayLanguage": "None",
+    "EditorLanguages": [
+      "DotNet"
+    ],
+    "Modules": [
+      {
+        "Name": "main",
+        "Source": "../../../Scripting/DotNet/Source/Main.cs",
+        "EditorFunction": "RunScenario",
+        "Runtime": "../../../../Engine/Binaries/ThirdParty/DotNet/Examples/Genesis.ScriptExample.dll"
+      }
+    ]
+  }
+}

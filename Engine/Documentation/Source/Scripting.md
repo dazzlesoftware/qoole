@@ -1,5 +1,12 @@
 # Project scripting
 
+For the completed current-renderer material authoring scenario, use
+`Samples/Features/MaterialAuthoring/Run.ps1`. Lua, Python and C# create native
+functions, collections, attribute layers, master/static-instance materials,
+textures and meshes, then transact and save/reload a scene. Both desktop backend
+runs pass; native acceptance tests also verify pixels. See
+[MaterialGraph.md](MaterialGraph.md) for authoring APIs and supported scope.
+
 Status: executable Lua, Python and .NET providers plus shared core/world
 bindings, 2026-10-22. All three execute real modules and pass conformance tests.
 Project settings alone do not start gameplay scripts: lifecycle, editor execution

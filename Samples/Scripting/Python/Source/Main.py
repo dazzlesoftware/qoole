@@ -49,3 +49,40 @@ def OnEvent(args):
 
 def OnEndPlay(args):
     genesis.invoke('Log.Write', {'Message':args['Reason']})
+
+
+def RunScenario(args):
+    """Execute the checked-in material authoring regression with the public API."""
+    import re
+    variables = {'Args': args}
+    expressions = {e['Name']: e['Id'] for e in genesis.invoke('Material.Describe', {})['Expressions']}
+
+    def get(path):
+        value = variables
+        for key in path.split('.'):
+            value = value[int(key)] if isinstance(value, list) else value[key]
+        return value
+
+    def resolve(value):
+        if isinstance(value, dict):
+            return {k: expressions[v] if k == 'Expression' and isinstance(v, str) else resolve(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [resolve(v) for v in value]
+        if isinstance(value, str):
+            if value.startswith('$') and not value.startswith('${'):
+                return get(value[1:])
+            return re.sub(r'\$\{([\w.]+)\}', lambda m: str(get(m.group(1))), value)
+        return value
+
+    for step in args['Steps']:
+        result = genesis.invoke(step['API'], resolve(step.get('Arguments', {})))
+        if step.get('Capture'):
+            variables[step['Capture']] = result
+        for key in step.get('Positive', []):
+            assert result[key] > 0, f"{step['API']}: {key} was not positive"
+        for check in step.get('Expect', []):
+            actual = result
+            for key in check['Path'].split('.'):
+                actual = actual[int(key)] if isinstance(actual, list) else actual[key]
+            assert actual == resolve(check['Value']), f"{step['API']}: {check['Path']} mismatch"
+    return resolve(args['Return'])

@@ -1,5 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Genesis.Scripting;
 public sealed class Main : IScriptModule
 {
@@ -10,6 +12,7 @@ public sealed class Main : IScriptModule
         "OnTick" => SetName(arguments,host,$"Script Tick {++count}"),
         "OnEvent" => arguments.GetProperty("Name").GetString()=="Rename" ? SetName(arguments,host,arguments.GetProperty("Payload").GetProperty("Name").GetString()!) : JsonSerializer.SerializeToElement<object?>(null),
         "OnEndPlay" => host.Invoke("Log.Write",JsonSerializer.SerializeToElement(new {Message=arguments.GetProperty("Reason").GetString()})),
+        "RunScenario" => RunScenario(arguments,host),
         "BuildTerrain" => BuildTerrain(arguments, host),
         "Echo" => host.Invoke("Echo", arguments),
         "BuildWorld" => host.Invoke("World.SpawnActor",JsonSerializer.SerializeToElement(new {Name="C# Example Actor"})).GetProperty("Id").Clone(),
@@ -36,4 +39,25 @@ public sealed class Main : IScriptModule
     }
     private JsonElement Begin(JsonElement args, IScriptHost host) {count=0;return SetName(args,host,"Script Begin");}
     private static JsonElement SetName(JsonElement args,IScriptHost host,string name) => host.Invoke("World.SetActorName",JsonSerializer.SerializeToElement(new {ActorId=args.GetProperty("ActorId").GetString(),Name=name}));
+
+    private static JsonElement RunScenario(JsonElement arguments,IScriptHost host)
+    {
+        var args=JsonNode.Parse(arguments.GetRawText())!;
+        var variables=new Dictionary<string,JsonNode?>{{"Args",args}};
+        var types=host.Invoke("Material.Describe",JsonSerializer.SerializeToElement(new {})).GetProperty("Expressions").EnumerateArray().ToDictionary(e=>e.GetProperty("Name").GetString()!,e=>e.GetProperty("Id").GetInt32());
+        JsonNode? Get(string path) {var parts=path.Split('.');var current=variables[parts[0]];foreach(var key in parts.Skip(1))current=current is JsonArray array?array[int.Parse(key)]:current![key];return current;}
+        JsonNode? Resolve(JsonNode? value) {
+            if(value is JsonObject obj){var result=new JsonObject();foreach(var item in obj)result[item.Key]=item.Key=="Expression"&&item.Value is JsonValue v&&v.TryGetValue<string>(out var type)?JsonValue.Create(types[type]):Resolve(item.Value);return result;}
+            if(value is JsonArray array){var result=new JsonArray();foreach(var item in array)result.Add(Resolve(item));return result;}
+            if(value is JsonValue text&&text.TryGetValue<string>(out var str)){if(str.StartsWith('$')&&!str.StartsWith("${"))return Get(str[1..])?.DeepClone();return JsonValue.Create(Regex.Replace(str,@"\$\{([\w.]+)\}",m=>Get(m.Groups[1].Value)!.GetValue<string>()));}
+            return value?.DeepClone();
+        }
+        foreach(var step in args["Steps"]!.AsArray()) {
+            var api=step!["API"]!.GetValue<string>();var result=JsonNode.Parse(host.Invoke(api,JsonSerializer.SerializeToElement(Resolve(step["Arguments"])??new JsonObject())).GetRawText());
+            if(step["Capture"] is JsonValue capture)variables[capture.GetValue<string>()]=result;
+            if(step["Positive"] is JsonArray positive)foreach(var key in positive)if(result![key!.GetValue<string>()]!.GetValue<double>()<=0)throw new InvalidOperationException($"{api}: expected positive value");
+            if(step["Expect"] is JsonArray checks)foreach(var check in checks){var actual=result;foreach(var key in check!["Path"]!.GetValue<string>().Split('.'))actual=actual is JsonArray a?a[int.Parse(key)]:actual![key];if(!JsonNode.DeepEquals(actual,Resolve(check["Value"])))throw new InvalidOperationException($"{api}: expectation mismatch");}
+        }
+        return JsonSerializer.SerializeToElement(Resolve(args["Return"]));
+    }
 }

@@ -1,0 +1,20 @@
+{
+  "FileVersion": 1,
+  "Name": "MaterialAuthoringPython",
+  "EngineAssociation": "Genesis",
+  "Description": "Functions, collections, parameters, static/quality instances, cooking and native scene regression.",
+  "DefaultMap": "/Game/Maps/Main",
+  "Scripting": {
+    "GameplayLanguage": "None",
+    "EditorLanguages": [
+      "Python"
+    ],
+    "Modules": [
+      {
+        "Name": "main",
+        "Source": "../../../Scripting/Python/Source/Main.py",
+        "EditorFunction": "RunScenario"
+      }
+    ]
+  }
+}

@@ -11,6 +11,11 @@
 #include <filesystem>
 
 #include <cmath>
+#include <mutex>
+#include <deque>
+#include <set>
+#include <map>
+#include "Materials/MaterialFunction.h"
 
 FMaterialGraph FMaterialEditingLibrary::CreateGraph(const FMaterialAsset& M)
 
@@ -225,6 +230,71 @@ bool CompileTarget(const FString& Compiler, const FString& Source, const FString
 
 } // namespace
 
+namespace
+{
+struct FCachedMaterialShader
+{
+	FString Key;
+	TArray<uint8> DXIL, SPIRV;
+};
+std::mutex ShaderCacheMutex;
+std::deque<FCachedMaterialShader> ShaderCache;
+FMaterialShaderCacheStats ShaderCacheStats;
+constexpr uint64 ShaderCacheLimit = 32 * 1024 * 1024;
+FString ShaderCacheKey(const FString& Compiler, const FString& Source)
+{
+	std::error_code Error;
+	const auto Stamp = std::filesystem::last_write_time(std::filesystem::path(Compiler.ToWide()), Error);
+	if (Error)
+		return {};
+	return Compiler + FString::Format("\n{}\n", Stamp.time_since_epoch().count()) + Source;
+}
+bool CachedShader(const FString& Key, FMaterialAsset& M)
+{
+	std::lock_guard Lock(ShaderCacheMutex);
+	for (const auto& Entry : ShaderCache)
+		if (!Key.IsEmpty() && Entry.Key == Key)
+		{
+			M.GraphDXIL = Entry.DXIL;
+			M.GraphSPIRV = Entry.SPIRV;
+			++ShaderCacheStats.Hits;
+			return true;
+		}
+	++ShaderCacheStats.Misses;
+	return false;
+}
+void CacheShader(const FString& Key, const FMaterialAsset& M)
+{
+	const uint64 Bytes = M.GraphDXIL.size() + M.GraphSPIRV.size() + Key.Len();
+	if (Key.IsEmpty() || Bytes > ShaderCacheLimit)
+		return;
+	std::lock_guard Lock(ShaderCacheMutex);
+	for (const auto& Entry : ShaderCache)
+		if (Entry.Key == Key)
+			return;
+	while (!ShaderCache.empty() && ShaderCacheStats.Bytes + Bytes > ShaderCacheLimit)
+	{
+		ShaderCacheStats.Bytes -= ShaderCache.front().DXIL.size() + ShaderCache.front().SPIRV.size() +
+								  ShaderCache.front().Key.Len();
+		ShaderCache.pop_front();
+	}
+	ShaderCache.push_back({Key, M.GraphDXIL, M.GraphSPIRV});
+	ShaderCacheStats.Bytes += Bytes;
+	ShaderCacheStats.Entries = static_cast<int32>(ShaderCache.size());
+}
+} // namespace
+FMaterialShaderCacheStats FMaterialEditingLibrary::GetShaderCacheStats()
+{
+	std::lock_guard Lock(ShaderCacheMutex);
+	return ShaderCacheStats;
+}
+void FMaterialEditingLibrary::ClearShaderCache()
+{
+	std::lock_guard Lock(ShaderCacheMutex);
+	ShaderCache.clear();
+	ShaderCacheStats = {};
+}
+
 bool FMaterialEditingLibrary::CompileMaterial(FMaterialAsset& M, FString& Error)
 
 {
@@ -250,6 +320,15 @@ bool FMaterialEditingLibrary::CompileMaterial(FMaterialAsset& M, FString& Error)
 
 		Error.Empty();
 
+		return true;
+	}
+
+	const auto Compiler = FindDXC();
+	const auto CacheKey = ShaderCacheKey(Compiler, Program.PixelShaderSource);
+	if (CachedShader(CacheKey, M))
+	{
+		M.CookedGraphSource = Program.PixelShaderSource;
+		Error.Empty();
 		return true;
 	}
 
@@ -313,8 +392,6 @@ bool FMaterialEditingLibrary::CompileMaterial(FMaterialAsset& M, FString& Error)
 
 	TArray<uint8> D, S;
 
-	const auto Compiler = FindDXC();
-
 	if (!CompileTarget(Compiler, Source, DXIL, Log, false, Error) ||
 
 		!CompileTarget(Compiler, Source, SPIRV, Log, true, Error) || !FFile::ReadAllBytes(DXIL, D) ||
@@ -328,8 +405,136 @@ bool FMaterialEditingLibrary::CompileMaterial(FMaterialAsset& M, FString& Error)
 	M.GraphSPIRV = std::move(S);
 
 	M.CookedGraphSource = Program.PixelShaderSource;
+	CacheShader(CacheKey, M);
 
 	Error.Empty();
 
 	return true;
+}
+
+bool FMaterialEditingLibrary::CompileMaterialInstance(const FMaterialAsset& Parent,
+													  FMaterialInstanceAsset& Instance, FString& Error)
+{
+	if (Instance.StaticParameters.empty() && !Instance.bOverrideQuality)
+	{
+		Instance.StaticPermutation.reset();
+		Error.Empty();
+		return true;
+	}
+	FMaterialAsset Permutation;
+	if (!FMaterialInstance::BuildStaticPermutation(Parent, Instance, Permutation, Error) ||
+		!CompileMaterial(Permutation, Error))
+		return false;
+	auto Candidate = Instance;
+	Candidate.StaticPermutation = std::move(Permutation);
+	FMaterialAsset Check;
+	if (!FMaterialInstance::Resolve(Parent, Candidate, Check, Error))
+		return false;
+	Instance = std::move(Candidate);
+	Error.Empty();
+	return true;
+}
+
+bool FMaterialEditingLibrary::RecompileDependents(FAssetRegistry& Registry, const FAssetReference& Changed,
+												  int32& Updated, FString& Error)
+{
+	Updated = 0;
+	Error.Empty();
+	const auto* Source = Registry.Resolve(Changed, Error);
+	if (!Source)
+		return false;
+	const auto Assets = Registry.GetAssets();
+	std::set<FString> Dirty{Source->PackagePath};
+	std::set<FString> Candidates;
+	bool More = true;
+	while (More)
+	{
+		More = false;
+		for (const auto& A : Assets)
+			if (A.PackagePath != Source->PackagePath && !Candidates.contains(A.PackagePath) &&
+				(A.Metadata.Schema == "Genesis.Material" || A.Metadata.Schema == "Genesis.MaterialFunction" ||
+				 A.Metadata.Schema == "Genesis.MaterialInstance"))
+				for (const auto& D : A.Metadata.Dependencies)
+					if (Dirty.contains(D))
+					{
+						Candidates.insert(A.PackagePath);
+						Dirty.insert(A.PackagePath);
+						More = true;
+						break;
+					}
+	}
+	std::map<FString, int> State;
+	FString Failures;
+	std::function<bool(const FAssetData&)> Visit = [&](const auto& A) {
+		if (State[A.PackagePath] == 2)
+			return true;
+		if (State[A.PackagePath] == 3)
+			return false;
+		if (State[A.PackagePath] == 1)
+		{
+			Failures += "Dependency cycle at " + A.PackagePath + "\n";
+			return false;
+		}
+		State[A.PackagePath] = 1;
+		for (const auto& D : A.Metadata.Dependencies)
+			if (Candidates.contains(D))
+			{
+				const auto* Parent = Registry.FindByPath(D);
+				if (Parent && !Visit(*Parent))
+				{
+					State[A.PackagePath] = 3;
+					return false;
+				}
+			}
+		FString E;
+		FAssetPackage P;
+		bool Success = Registry.Load(A.GetReference(), P, E);
+		if (Success && P.Schema == "Genesis.MaterialFunction")
+		{
+			FMaterialGraph G;
+			bool Changed = false;
+			Success = FMaterialFunctionCodec::Decode(P, G, E) &&
+					  FMaterialFunctionCodec::Refresh(G, Registry, Changed, E, P.Id) &&
+					  FMaterialFunctionCodec::Encode(G, P, E);
+		}
+		else if (Success && P.Schema == "Genesis.Material")
+		{
+			FMaterialAsset M;
+			bool Changed = false;
+			Success = FRenderAssetCodec::DecodeMaterial(P, M, E);
+			if (Success && M.Graph)
+				Success = FMaterialFunctionCodec::Refresh(*M.Graph, Registry, Changed, E, P.Id) &&
+						  CompileMaterial(M, E) && FRenderAssetCodec::EncodeMaterial(M, P, E);
+		}
+		else if (Success && P.Schema == "Genesis.MaterialInstance")
+		{
+			FMaterialInstanceAsset M;
+			FMaterialAsset Parent;
+			Success = FRenderAssetCodec::DecodeMaterialInstance(P, M, E) &&
+					  FRenderAssetLoader(Registry).LoadMaterial(M.Parent, Parent, E) &&
+					  CompileMaterialInstance(Parent, M, E);
+			FMaterialAsset Check;
+			if (Success)
+				Success = FMaterialInstance::Resolve(Parent, M, Check, E) &&
+						  FRenderAssetCodec::EncodeMaterialInstance(M, P, E);
+		}
+		if (Success)
+			Success = FAssetPackageStore::Save(A.FilePath, P, E);
+		if (Success)
+		{
+			++Updated;
+			State[A.PackagePath] = 2;
+			return true;
+		}
+		State[A.PackagePath] = 3;
+		Failures += A.PackagePath + ": " + E + "\n";
+		return false;
+	};
+	for (const auto& A : Assets)
+		if (Candidates.contains(A.PackagePath))
+			Visit(A);
+	if (Updated)
+		Registry.Scan();
+	Error = std::move(Failures);
+	return Error.IsEmpty();
 }

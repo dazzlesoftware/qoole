@@ -1,133 +1,144 @@
-# Material graph first implementation
+# Material authoring
 
-Implemented 2026-10-22: an initial graph compiler, editor and desktop rendering
-slice. This is the start of the [material roadmap](MaterialSystemPlan.md), not
-full Unreal feature parity.
+The Material Editor provides typed node authoring for the current native-mesh
+renderer: reusable functions, instances, parameter collections and six-channel
+attribute layers. The broader [material roadmap](MaterialSystemPlan.md) includes
+separate renderer and Unreal parity work; this authoring milestone does not
+imply full Unreal expression or rendering parity.
 
-## Using the editor
+## Setup and workflow
 
-Run `Engine/Build/SetupMaterialCompiler.ps1` once to install the pinned Microsoft
-DXC distribution under ignored `Engine/Binaries/ThirdParty/DXC`. It includes the
-compiler and license notices. Alternatively point `GENESIS_DXC` at a DXC build
-that can emit both DXIL and SPIR-V. The Windows SDK compiler alone may not have
-SPIR-V enabled. Shipped games do not need this tool.
+Run `Engine/Build/SetupMaterialCompiler.ps1` to install the pinned DXC toolchain,
+or set `GENESIS_DXC` to a compiler supporting DXIL and SPIR-V. Shipped games
+consume cooked shaders and do not require DXC.
 
-Create a material through Add or the Content Browser context menu and open it.
-Existing v1-v3 materials convert in memory to explicit texture/factor/vertex-color
-nodes. Opening or compiling does not change the file; saving upgrades to v4.
+Open a project and use the Content Browser Add/context menu to create a Material,
+Material Function or Material Parameter Collection. Select a saved material to
+create a Material Instance. Double-click to open an editor; reopening an already
+open asset focuses its existing draft.
 
-- Right-click the graph and search for a node to add it.
-- Drag an output pin to an input. Scalar values broadcast to vector arithmetic;
-  incompatible vector widths and cycles are rejected. An input has one source.
-- Drag nodes to arrange them, middle-drag to pan and scroll to zoom around the
-  pointer. Frame fits all nodes. Alt-click an input to disconnect it.
-- Select nodes to edit constants, arithmetic defaults, channel masks, textures
-  and normal sampling in Details. Values are linear shader values. A color
-  texture marked sRGB decodes during sampling; normals always sample linear.
-- TextureSample and VertexColor output RGBA. Use ComponentMask (RGB=7, alpha=8)
-  to connect them to the material's RGB and scalar opacity outputs.
-- Ctrl/Shift-click adds or removes nodes from the selection; drag empty space
-  for marquee selection. Drag a selected node to move the group. Ctrl+A selects
-  all; Ctrl+C/X/V copy, cut and paste; Ctrl+D duplicates with fresh node IDs.
-  Delete removes selected nodes and their wires. Ctrl+Z/Ctrl+Y undo and redo.
-- Comment nodes group annotations visually. Node descriptions and comment sizes
-  live in Details and do not affect generated shaders. Reroutes pass values through.
-- Compile / Preview cooks both desktop targets and updates the sphere/cube
-  preview. Lit / Unlit changes the preview lighting. Compilation runs on a
-  background worker; Live Preview debounces edits and drops superseded results.
-  Save waits for the current revision to compile successfully.
-- Save writes the material; Save and Apply also assigns it to the selected mesh
-  actors' chosen material slot, as an undoable map transaction. Closing a dirty
-  material window asks before discarding changes. File saves are not map undo.
+- Right-click the graph to search/add expressions. Drag output pins onto inputs;
+  Alt-click an input to disconnect it. Each input has one source.
+- Drag nodes, middle-drag to pan, scroll to zoom and use Frame to fit.
+  Ctrl/Shift-click changes selection; empty-space dragging selects a marquee.
+  Moving a selected node moves the group.
+- Ctrl+A selects all; Ctrl+C/X/V copy/cut/paste; Ctrl+D duplicates; Delete removes
+  selected nodes and wires. Internal wires, properties and function snapshots
+  survive clipboard operations. Ctrl+Z/Ctrl+Y undo/redo graph, layout, blend
+  settings and attribute-output mode.
+- Details edits values, resource references, parameter names/groups, descriptions
+  and comment bounds. Reroutes forward typed values. Drag textures, functions
+  and collections from the browser onto the graph.
+- Compile / Preview cooks both desktop targets in a background worker. Live
+  Preview debounces edits; superseded results cannot replace newer revisions.
+  Failures retain the last successful preview and label it stale.
+- Preview sphere, cube, plane or a native custom mesh; adjust yaw/pitch/zoom and
+  Lit/Unlit. Preview Selected Node does not replace the saved material program.
+  Save returns to the complete material target and waits for its valid compile.
+- Save preserves the package UUID. Save and Apply assigns the chosen material
+  slot on selected native-mesh actors through a host map transaction. File saves
+  are separate from map undo. Dirty-window close asks before discard.
 
-Supported nodes: Constant, Constant2Vector, Constant3Vector, Constant4Vector,
-TextureCoordinate (UV0), TextureSample (2D repeat sampling), VertexColor, Add,
-Subtract, Multiply, Divide, LinearInterpolate, OneMinus, Clamp, ComponentMask and
-NormalDecode, Reroute, Comment, Abs, Ceil, Floor, Frac, Sine, Cosine, Tangent,
-SquareRoot, Power, Min, Max, Saturate, Normalize, Length, DotProduct, CrossProduct,
-AppendVector, Rotator, Distance, Step, SmoothStep, Sign, Fmod, Exp and Log.
-ScalarParameter and VectorParameter expose named defaults through uniform buffers.
-Shared names must have matching types/defaults. Vector parameters output RGBA;
-mask RGB for Base Color. Changing defaults keeps the cooked shader unchanged.
-Rotator uses radians. Clamp has input/min/max pins. Divide protects a near-zero divisor
-with signed epsilon. Disconnected expressions are retained for editing but not
-emitted; structural link/cycle validation still checks them.
+## Expressions and surface contract
+
+`Material.Describe` is the machine-readable expression/pin inventory. Families
+include constants, UV0, vertex color, 2D texture samples, scalar/vector/texture
+parameters, arithmetic/interpolation, trigonometry, exponent/log, rounding,
+clamp/saturate, step/smooth-step, vector append/mask/normalize/length/dot/cross/
+distance, UV rotation, normal decode, comments and reroutes.
+
+Numeric values have widths 1–4. Scalars broadcast in compatible arithmetic;
+incompatible widths and cycles are errors. Vector/texture/vertex-color results
+are RGBA: mask RGB for color and alpha for opacity. Rotator uses radians; Divide
+guards near-zero divisors with signed epsilon. Layout and annotations do not
+change shader semantics. Disconnected nodes remain editable; structural links
+and cycles are still validated.
 
 Outputs: Base Color, Roughness, Metallic, Opacity, tangent-space Normal and
-Emissive Color. Blend choices remain opaque, masked and translucent with the
-existing renderer's lighting and transparency limitations. The first preview
-offers sphere/cube and Lit/Unlit; advanced environment/mesh controls are pending.
+Emissive. Blend choices: Opaque, Masked and Translucent. sRGB textures decode
+during sampling; normal samples always use linear values.
 
-## Runtime and format
+Enable material attributes to replace individual output pins with one typed
+bundle. MakeMaterialAttributes supplies six channels with defaults;
+BreakMaterialAttributes selects a channel; BlendMaterialAttributes interpolates
+two bundles and normalizes the blended normal. Functions can accept/return
+bundles to build reusable layers. This blends existing surface parameters;
+layered BSDF scattering and Substrate are separate roadmap features.
 
-`Runtime/Engine/Public/Materials` owns the material and graph types.
-`Runtime/Engine/Private/Materials` owns material serialization/resource loading,
-graph validation and HLSL translation (`HLSLMaterialTranslator.cpp`).
-`Editor/MaterialEditor` is an independent module owning the toolkit, graph canvas,
-preview viewport and desktop compilation utilities (`MaterialEditingLibrary`).
-GenesisEditor supplies callbacks for map selection, transactions and host refresh;
-the material editor does not depend on MapEditor or MapCore.
-`Runtime/Renderer` consumes cooked shader bytes and immutable texture snapshots,
-caches pipelines/textures and defers releases while GPU work is in flight.
-Material v4 stores graph version 3 (versions 1 and 2 remain readable), editor node
-positions and descriptions, generated source and
-DXIL/SPIR-V payloads. Asset UUIDs are preserved on edits. Shader source comparison
-detects semantic edits without penalizing layout changes. Texture identity and
-sampler role remain resource-binding metadata, independent of shader source.
+## Functions and permutations
 
-Limits for this slice: 256 nodes and 12 reachable texture samples. Dependencies
-include graph texture references used by the shader. Stale cooks and invalid
-graphs fail instead of silently rendering with an unrelated program. A compiler
-failure retains the last successful preview; the status shows the failure.
-Saved materials whose generated source no longer matches the engine's compiler
-contract require recooking; cross-version automatic recooking is not implemented.
+A Material Function has one result and up to eight named input slots (0–7).
+FunctionInput types are float1–4 or attributes; defaults apply to unbound
+arguments. MaterialFunctionCall exposes declared slots. Functions may call
+functions and use parameters/collections. Missing/type-invalid links, duplicate
+references, recursion and exceeded budgets fail explicitly.
 
-The first cooked format contains two desktop target binaries. Additional target
-blob formats and shader-toolchain adapters are a later schema extension. The
-portable graph does not assume D3D12 on Xbox, SPIR-V on Switch 2, or desktop
-resource limits on PS5. Future console targets require their licensed shader
-compilers, RHI implementations, capability profiles, packaging and hardware tests.
-None of those platforms is currently supported.
+Materials embed immutable function snapshots: runtime compilation/rendering
+does not load function sources. Authoring refreshes through the registry.
+Saving a function or master recooks its affected dependency closure, including
+static instances, while preserving unrelated assets. A failed dependent cook is
+reported without overwriting that dependent. External changes refresh open
+editors and invalidate old worker results.
 
-Next milestones are reusable material functions and additional editor workflows,
-followed by the renderer features in the roadmap. Landscape graphs, WPO, scene
-texture nodes, Substrate-style layering and custom HLSL are not implemented.
+StaticSwitchParameter chooses True/False at cook time. QualitySwitch selects
+Low/Medium/High. PlatformSwitch chooses D3D12/Vulkan in the target compiler;
+resource layouts include both platform branches. Static/quality edits cook;
+a bounded 32 MiB source/compiler cache reuses earlier permutations. Uniform and
+texture replacements reuse shader binaries.
 
-`MaterialGraph` tests cover graph validation, cooking, package round trips,
-stale-cook rejection, migration, scaled pin dragging, undo/redo and GPU readbacks
-for constant and texture-driven outputs on D3D12 and Vulkan. A Slate-rendered
-canvas artifact is written under `Engine/Saved/MaterialGraph` for layout inspection.
+## Instances and shared parameters
 
-The material test source lives in `Editor/MaterialEditor/Private/Tests` and is
-compiled by the EngineTests program, keeping test dependencies out of the
-MaterialEditor production library. Source ownership follows the rules in
-[`AGENTS.md`](../../../AGENTS.md).
+Instances inherit materials or instances. Enable/reset scalar/vector/texture/
+static overrides, choose inherited or explicit quality, preview, undo/redo and
+save/apply. Names are case sensitive; shared names must agree in type/defaults.
+ParameterGroup labels organize numeric overrides. Remove obsolete overrides
+after parent changes. Chains are bounded to 32 assets and reject cycles/stale
+cooks. Static/quality instances store a validated cooked permutation.
 
-## Material instances and runtime updates
+Collections contain up to 256 uniquely named scalar/float4 defaults. Their editor
+supports add/remove/rename/value edits, history and save. Collection expressions
+use UUID plus parameter name. Material loading refreshes defaults without shader
+recooking; shared values are excluded from per-material instance overrides.
 
-Select a saved graph material in Content Browser and choose **Material Instance
-from Selection**. Instances can also parent other instances. Open an instance
-to choose its parent, enable scalar/vector/texture overrides, reset to inherited
-values, undo/redo changes, preview sphere/cube and save/apply to a mesh slot.
-The instance editor rejects parent cycles before saving. A changed parent may
-leave an obsolete override; its removal button lets you repair the instance.
+At runtime, `FMaterialParameterCollectionInstance` validates scalar/vector
+updates; register it through `FNativeMeshRenderer::SetParameterCollectionInstance`.
+It requires a UUID-backed reference and owning-thread use. Prepared frames retain
+immutable uniform snapshots. `FMaterialInstanceDynamic` validates numeric/texture
+updates; publish its resolved material through a new loaded material/mesh snapshot.
+These APIs do not modify asset files or automatically attach to actors.
 
-`TextureSampleParameter2D` exposes a named 2D texture using its parent's sampling
-role. Repeated texture names share one binding and must have matching defaults
-and sampling roles. Scalar/vector names must also have matching types/defaults.
-Parameter names are case sensitive. Texture replacements and numeric defaults
-reuse the parent's cooked shader; static permutations are a later feature.
+## Formats, ownership and limits
 
-Instance package schema `Genesis.MaterialInstance` version 2 stores a parent
-reference, numeric overrides and texture overrides. Version 1 numeric-only
-instances remain readable. Dependencies include parent and overridden textures.
-Loading resolves at most 32 assets in a parent chain, detects cycles, validates
-override names/types and commits output only after success. Runtime-only loaders
-and material pickers accept instances alongside materials.
+Runtime types/codecs/HLSL translation live in `Runtime/Engine/Materials`.
+The independent `Editor/MaterialEditor` owns authoring/DXC adapters;
+`Editor/EditorFramework` owns shared asset drag data. Selection/transactions
+enter through host callbacks. MaterialEditor depends on neither MapEditor nor
+MapCore, and runtime code does not depend on editor modules.
 
-`FMaterialInstanceDynamic::Create` takes a valid cooked parent snapshot. Its
-scalar/vector/texture setters and clear method validate before replacing the
-resolved snapshot. Publish `GetMaterial()` through `LoadMaterialResources` and
-a new loaded material/mesh snapshot; existing GPU frames retain their old
-resources until they finish. This API does not mutate an asset file, discover
-actors, or automatically attach itself to a world component.
+Material schema v4 stores graph v6, metadata, generated source, DXIL and SPIR-V.
+Graph versions 1–6 and legacy material versions 1–3 remain readable. Opening does
+not rewrite files. Functions/collections use schema v1. Instances read v1/v2;
+v3 adds static/quality permutations. UUIDs remain authoritative.
+
+Budgets: 256 expanded nodes, 12 reachable texture samples, function expansion
+depth 16, at most 64 refreshed dependencies, embedded metadata limited to
+65 graphs/4,096 nodes/depth 16. Function interfaces have eight inputs/one result.
+Invalid references/types/unknown expressions fail. Saved shaders whose generated
+source contract changes require recooking.
+
+Targets are desktop D3D12 and Vulkan. Switch 2, Xbox Series X/S and PS5 require
+licensed compilers, RHIs, capability profiles, packaging and hardware tests.
+Additional UV sets/texture dimensions, scene inputs, time/noise, custom HLSL,
+WPO/displacement, landscape graphs, extra surface channels/domains/shading models
+remain roadmap work. Full Unreal parity is not claimed.
+
+## Acceptance and examples
+
+`EngineTests --test-suite=MaterialGraph,EditorScripting` covers compilation,
+serialization/migration, dependencies/recursion, caching, collections, instances,
+multi-DPI canvas input, clipboard/history, background revision/save behavior and
+D3D12/Vulkan pixel readbacks. Tests are linked only into EngineTests.
+
+Run `Samples/Features/MaterialAuthoring/Run.ps1` for Lua, Python and C# projects
+using the public editor scripting entry point. See the sample README for setup,
+generated assets and regression expectations.

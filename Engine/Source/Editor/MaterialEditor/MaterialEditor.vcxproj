@@ -35,7 +35,7 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="..\..\..\Build\Engine.props" />
   </ImportGroup>
-  <ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisRuntimeDir)Renderer\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile></ItemDefinitionGroup>
+  <ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(GenesisEditorDir)EditorFramework\Public;$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisRuntimeDir)Renderer\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile></ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Private\MaterialEditor.cpp" />
     <ClCompile Include="Private\MaterialEditingLibrary.cpp" />
@@ -61,4 +61,4 @@
   <ItemGroup><ClCompile Include="Private\MaterialCompilationManager.cpp" /><ClInclude Include="Public\MaterialCompilationManager.h" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 <ItemGroup><ClInclude Include="Public\MaterialInstanceEditor.h" /><ClCompile Include="Private\MaterialInstanceEditor.cpp" /></ItemGroup>
-<ItemGroup><ClCompile Include="Private\Scripting\MaterialScriptBindings.cpp"/><ClInclude Include="Public\MaterialScriptBindings.h"/></ItemGroup></Project>
+<ItemGroup><ClCompile Include="Private\Scripting\MaterialScriptBindings.cpp"/><ClInclude Include="Public\MaterialScriptBindings.h"/></ItemGroup><ItemGroup><ClInclude Include="Public\MaterialParameterCollectionEditor.h"/><ClCompile Include="Private\MaterialParameterCollectionEditor.cpp"/></ItemGroup><ItemGroup><ProjectReference Include="..\EditorFramework\EditorFramework.vcxproj"><Project>{42CE52BA-CEAB-45CF-8B3E-170E89F80122}</Project></ProjectReference></ItemGroup></Project>

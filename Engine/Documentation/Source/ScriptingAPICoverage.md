@@ -49,6 +49,21 @@ available editor commands. Missing surfaces in this table remain incomplete.
 
 ## Implemented runtime/editor additions
 
+Material authoring adds Material.CreateFunctionGraph/LoadFunction/SaveFunction,
+LoadCollection/SaveCollection and LoadInstance/SaveInstance. CookGraph refreshes
+functions/collections before cooking; SaveFunction and material saves recook
+affected dependents and report any dependent failures. Instance saves support
+static/quality permutations. All use the same native codecs and UUID semantics.
+Assets.CreateBasicMesh and Assets.CreateTexture create native regression assets
+through Editor.Files (RGBA transfer capped at 65,536 bytes).
+
+Samples/Features/MaterialAuthoring runs these operations through the public
+execution service in Lua, Python and C#. Its shared named-expression scenario
+creates collections, functions, attribute layers, a textured master, a static
+instance and a saved/reloaded native scene. All six desktop language/backend
+CLI runs pass; EditorScripting verifies GPU results on both RHIs. This closes
+the material feature-project gate, not the remaining full API coverage gates.
+
 Runtime assets: Assets.GetAssets (paged), Resolve, LoadExports, ReadBulk (up to
 16,384 bytes), GetIssues and GetMounts. These use Assets.Read, retain authoritative
 UUID resolution and fail on expired registries.
