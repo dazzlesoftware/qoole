@@ -36,6 +36,7 @@
   <Folder Name="/Programs/">
     <Project Path="Engine/Source/Programs/RuntimeRenderCheck/RuntimeRenderCheck.vcxproj" Id="83f172f1-ac93-4d8e-a9ba-282340e17c07" />
     <Project Path="Engine/Source/Programs/RuntimeDataCheck/RuntimeDataCheck.vcxproj" Id="83f172f1-ac93-4d8e-a9ba-282340e17c05" />
+    <Project Path="Engine/Source/Programs/GenesisGridServer/GenesisGridServer.vcxproj" Id="8d65774d-9f38-4d34-a0d4-60b5b06e102e" />
     <Project Path="Engine/Source/Programs/GenesisEditor/GenesisEditor.vcxproj" Id="08da9a96-81ca-4fc1-a617-1170789bf886" />
     <Project Path="Engine/Source/Programs/EngineTests/EngineTests.vcxproj" Id="c087b070-3f95-5e50-af08-72ade3bf9d0a" />
     <Project Path="Engine/Source/Programs/GenesisTests/GenesisTests.vcxproj" Id="bbc47c09-d18a-47f5-9486-7c1db20ceb88" />

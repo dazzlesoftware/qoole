@@ -117,6 +117,72 @@ registry. The editor host writes them, because it owns the level format: an
 empty level with one flat landscape the size of a cell, centred on the map
 origin. A cell that is already taken is rejected before any file is written.
 
+## Grid server and region files
+
+`GenesisGridServer` is the main server for a composed world, after OpenSim's
+ROBUST grid service. Stage 1 runs once: it registers every region file on the
+world map, reports each result and exits. Region servers that stay connected
+and register over the network come in stage 2.
+
+```
+GenesisGridServer.exe -config=GridServer.ini [-save]
+```
+
+`GridServer.ini` has two sections. Paths are relative to the file. The sample
+is in `Samples/GridServer`.
+
+- `[GridServer]`
+  - `Project`: the `.gproject` whose content holds the world and the region maps.
+  - `World`: the `Genesis.WorldComposition` registry.
+  - `Regions`: the folder of region files.
+  - `SaveWorld`: whether to write registrations back to the registry, as
+    `-save` does.
+- `[GridService]`, as in OpenSim's `Robust.ini`
+  - `AutoRegistration`: whether regions the registry doesn't list may register
+    themselves.
+  - `DeleteOnUnregister`: whether those self-registered regions leave the map
+    when their server unregisters.
+  - `Region_<Name or RegionUUID>`: flags for one region. The flags are
+    `DefaultRegion`, `FallbackRegion`, `NoDirectLogin`, `Persistent`,
+    `LockedOut` and `NoMove`. `Reservation` and `Authenticate` are rejected
+    until region servers authenticate.
+
+Region files follow OpenSim's `Regions/*.ini`, with one `[Region Name]` section
+per region:
+
+- `RegionUUID`: required. It is stored lowercase.
+- `Location = x,y`: required. The grid cell of the region's -X/-Y corner.
+- `SizeX`, `SizeY`: in cells, where OpenSim counts metres. Default 1.
+- `Map`: required. The region's `Genesis.World` map.
+- `ExternalHostName` with `InternalPort`: the region server's address.
+
+Other OpenSim keys are reported with their file and line, then ignored. A file
+with a malformed line or section is rejected as a whole, and the other files
+still load.
+
+`FGridService` (`World/GridService.h`) applies the registration rules. A
+rejected call leaves the map unchanged.
+
+- A region the registry already lists keeps its identity. It may change its
+  host, name or location, unless it has `NoMove`.
+- An unlisted region is added when auto-registration is on.
+- Overlaps, reused names or maps, and `LockedOut` regions are refused.
+- Regions listed in the registry stay on the map when their server
+  unregisters. Self-registered ones leave unless `Persistent` or
+  `DeleteOnUnregister = false`.
+- With `-save`, self-registered regions are written into the registry, so the
+  editor shows them and from then on they count as listed regions.
+
+The grid server reads the world registry that the editor writes. The registry
+decides which regions exist and where they are. A region file brings a region
+online and may move it, within these rules.
+
+The program exits with 0 when every region registered, 1 when any region file
+or region was rejected, and 2 when the configuration, project or world is
+unusable. On a development workstation, run it against local content only.
+Hosting a grid for other people belongs on the server environment, not a
+workstation.
+
 ## Toward region servers
 
 The registry already carries what a multi-server world needs: permanent tile
@@ -124,7 +190,11 @@ IDs, an owner-neutral `Host` field, edge neighbours and a tile-source interface.
 A networked `IWorldTileSource` can stream hosted tiles without changing
 callers. Still to come:
 
-- A region-server protocol and tile source.
+- A region server program and a network endpoint on the grid server, so
+  regions register while their servers run, plus a networked tile source.
+- Region server authentication, which enables `Reservation` and
+  `Authenticate`.
+- Showing each region's online state in the WorldBrowser editor.
 - Player handoff across tile boundaries.
 - Ownership and access rules.
 - Matching landscape heights along shared edges.
@@ -161,6 +231,14 @@ or with `-vulkan`. It:
    with its landscape.
 6. Captures `world_region`.
 
+`GridService` tests (`Programs/EngineTests/GridServiceTests.cpp`) cover:
+
+- The INI reader: comments, quotes, CRLF and BOM files, and errors that name
+  the line.
+- OpenSim-style region files, unused-key warnings and malformed values.
+- Folder loading, which keeps good files when another one fails.
+- Region flags.
+- Every registration and unregistration rule.
 
 `WorldComposition` tests (`Programs/EngineTests/WorldCompositionTests.cpp`)
 cover:

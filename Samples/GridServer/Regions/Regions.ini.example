@@ -1,0 +1,22 @@
+; Region file, as OpenSim's Regions/Regions.ini. Copy to a .ini file to use it;
+; the grid server reads every *.ini in this folder. One section per region,
+; named after the region. Keys Genesis does not use yet are reported and ignored.
+
+[Hills]
+; Required, and permanent: a region keeps it when it moves or is renamed.
+RegionUUID = 7c1e0c8a-1111-4222-8333-444455556666
+; Required: the grid cell of the region's -X/-Y corner.
+Location = 0,0
+; Size in grid cells (OpenSim counts metres); default 1.
+SizeX = 1
+SizeY = 1
+; Required: the region's world map.
+Map = /Game/Regions/Hills
+; The region server's address; leave both out for a region this process loads.
+ExternalHostName = 127.0.0.1
+InternalPort = 9000
+
+[Coast]
+RegionUUID = 2d4e6f80-2222-4333-8444-555566667777
+Location = 1,0
+Map = /Game/Regions/Coast

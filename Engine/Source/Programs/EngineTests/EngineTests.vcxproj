@@ -46,7 +46,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AtlasPackerTests.cpp" />
-    <ClCompile Include="AssetRegistryTests.cpp" /><ClCompile Include="WorldTests.cpp" /><ClCompile Include="WorldCompositionTests.cpp" /><ClCompile Include="WorldBrowserTests.cpp" /><ClCompile Include="RenderAssetTests.cpp" /><ClCompile Include="NativeRendererTests.cpp" />
+    <ClCompile Include="AssetRegistryTests.cpp" /><ClCompile Include="WorldTests.cpp" /><ClCompile Include="WorldCompositionTests.cpp" /><ClCompile Include="WorldBrowserTests.cpp" /><ClCompile Include="GridServiceTests.cpp" /><ClCompile Include="RenderAssetTests.cpp" /><ClCompile Include="NativeRendererTests.cpp" />
     <ClCompile Include="BatcherTests.cpp" />
     <ClCompile Include="ClipStackTests.cpp" />
     <ClCompile Include="CoreTests.cpp" /><ClCompile Include="ProjectPackageTests.cpp" />

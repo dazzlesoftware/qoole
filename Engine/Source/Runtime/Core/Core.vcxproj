@@ -49,6 +49,7 @@
     <ClCompile Include="Private\Internationalization\TextLocalization.cpp" />
     <ClCompile Include="Private\Math\Color.cpp" />
     <ClCompile Include="Private\Misc\App.cpp" />
+    <ClCompile Include="Private\Misc\ConfigFile.cpp" />
     <ClCompile Include="Private\Misc\AssertionMacros.cpp" />
     <ClCompile Include="Private\Serialization\Json.cpp" />
     <ClCompile Include="Private\Services\ConfigStore.cpp" />
@@ -75,6 +76,7 @@
     <ClInclude Include="Public\Math\Transform2D.h" />
     <ClInclude Include="Public\Math\Vector2.h" />
     <ClInclude Include="Public\Misc\App.h" />
+    <ClInclude Include="Public\Misc\ConfigFile.h" />
     <ClInclude Include="Public\Misc\ScopeExit.h" />
     <ClInclude Include="Public\Misc\ValidationContext.h" />
     <ClInclude Include="Public\Misc\AssertionMacros.h" />

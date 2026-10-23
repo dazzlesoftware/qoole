@@ -62,7 +62,8 @@ Coverage and acceptance are tracked in [ScriptingAPICoverage.md](ScriptingAPICov
 - [x] Region registry: independently saved maps registered on a world grid, with overlap checks.
 - [x] Distance streaming of nearby regions through a replaceable tile source.
 - [x] Editor tools for registering and arranging regions (Editor/WorldBrowser).
-- [ ] Region servers, boundary handoff, ownership/access and edge matching.
+- [x] Grid server registering region files (Regions/*.ini) on the world map, with OpenSim's region flags (Programs/GenesisGridServer).
+- [ ] Region servers and network registration, boundary handoff, ownership/access and edge matching.
 
 Design and limits are in [WorldComposition.md](WorldComposition.md).
 
