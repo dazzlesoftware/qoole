@@ -78,6 +78,13 @@ GenesisEditor.exe "D:\Projects\MyWorld\MyWorld.gproject"
 GenesisEditor.exe -project="D:\Projects\MyWorld\MyWorld.gproject" "D:\Projects\MyWorld\Content\Maps\Main.gmap"
 ```
 
+Inside the editor, **File > Open Project...** and **File > New Project...**
+do the same. **File > Open...** also accepts a `.gproject`. The project is
+chosen at startup, before settings and content browsers exist, so switching
+projects asks to save the current level, starts a new editor with
+`-project=` or `-newproject=`, and closes this one. Choosing an existing file
+in **New Project...** opens that project.
+
 Creation never overwrites a descriptor. It creates `Content`, `Config`,
 `Source`, `Plugins`, `Saved`, and `Intermediate` directories. Project editor
 settings, layout and bindings are isolated in `Saved/Editor`. All four Content

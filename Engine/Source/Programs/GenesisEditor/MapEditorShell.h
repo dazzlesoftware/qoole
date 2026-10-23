@@ -138,6 +138,7 @@ public:
 	struct FCommandSet
 	{
 		TSharedPtr<FUICommandInfo> NewMap, OpenMap, SaveMap, SaveMapAs, ExportMap, Exit;
+		TSharedPtr<FUICommandInfo> NewProject, OpenProject;
 		TSharedPtr<FUICommandInfo> Undo, Redo, Cut, Copy, Paste, Duplicate, Delete, SelectAll, SelectNone;
 		TSharedPtr<FUICommandInfo> FrameSelection, ResetViews, ShowGrid, SnapToGrid, GridSmaller, GridLarger, SolidView;
 		TSharedPtr<FUICommandInfo> BrushWeaker, BrushStronger;
@@ -192,7 +193,12 @@ private:
 	void RefreshPlaceables();
 	void OnAssetActivated(const FContentBrowserItem& Item);
 	void OpenMaterialAsset(const FContentBrowserItem& Item);
-	void OpenWorldComposition(const FContentBrowserItem& Item);
+	void OpenWorldComposition(const FAssetReference& Composition, const FString& Name);
+	// Makes /Game/Worlds/World (World2, ...) in the active project and opens it.
+	void NewWorldComposition();
+	// The project is chosen at startup, so switching restarts the editor with
+	// Option (-project=<file> or -newproject=<file>). Callers confirm discarding first.
+	void SwitchProject(const FString& Option);
 	void OpenMeshAsset(const FContentBrowserItem& Item);
 	void OpenTextureAsset(const FContentBrowserItem& Item);
 	void ShowModeTab();

@@ -80,9 +80,11 @@ the viewer has moved beyond `UnloadDistance` and come back.
 The editor module `Editor/WorldBrowser` (Unreal's module for world composition)
 owns region editing. It has no MapEditor or MapCore dependency.
 
-To start, choose **World Composition** in the content browser's add menu. That
-creates an empty `World.gmap` registry. Double-click it to open the editor
-window. The window has:
+Open the region editor from **Window > World Composition**. That menu lists
+the project's worlds, and **New World Composition** makes an empty
+`/Game/Worlds/World` and opens it. You can also choose **World Composition**
+in the content browser's add menu, which creates an empty `World.gmap` in the
+folder shown, then double-click it. The window has:
 
 - **A grid** of the world seen from above, with +Y up.
   - Drag a region to move it by whole cells. The preview is green where the

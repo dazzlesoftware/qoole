@@ -20,6 +20,15 @@ struct FPlatformMisc
 	static void Sleep(float Seconds);
 };
 
+struct FPlatformProcess
+{
+	// The running program's full path.
+	static FString ExecutablePath();
+	// Starts a program and returns without waiting for it. Each argument is
+	// passed whole, quoted when it holds spaces.
+	static bool CreateProc(const FString& Executable, const TArray<FString>& Arguments, FString& Error);
+};
+
 struct FFileHelper
 {
 	static bool LoadFileToArray(TArray<uint8>& Out, const FString& Path);

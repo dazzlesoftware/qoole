@@ -1647,6 +1647,56 @@ void FGenesisEditorTestApp::TickSelfTest()
 			App->RequestDestroyWindow(ToSharedRef(Window));
 		break;
 	case 466:
+		// The same world from Window > World Composition. The content browser is
+		// filtered to nothing, so its World Composition type labels are not on screen.
+		if (WorldTileCount > 0)
+		{
+			if (const TSharedPtr<SContentBrowser> Browser = Shell->GetContentBrowser(0))
+				Browser->SetSearchText("~no assets match~");
+			PointAtText(GENESIS_TEXT("Window").View(), true);
+		}
+		break;
+	case 470:
+		// Menus open as the newest windows.
+		if (WorldTileCount > 0)
+			for (TArray<TSharedRef<SWindow>>::const_reverse_iterator It = App->GetWindows().rbegin();
+			     It != App->GetWindows().rend(); ++It)
+				if (PointAtText(GENESIS_TEXT("World Composition").View(), true, It->ToSharedPtr()))
+					break;
+		break;
+	case 478:
+		if (WorldTileCount > 0)
+			Capture("menu_world");
+		break;
+	case 480:
+	{
+		if (WorldTileCount == 0)
+			break;
+		const FAssetData* World = Shell->GetAssetRegistry()->FindByFile(WorldCompositionFile);
+		bool bClicked = false;
+		if (World)
+			for (TArray<TSharedRef<SWindow>>::const_reverse_iterator It = App->GetWindows().rbegin();
+			     It != App->GetWindows().rend() && !bClicked; ++It)
+				bClicked = PointAtText(World->PackagePath.View(), true, It->ToSharedPtr());
+		Report(bClicked && FindWorldCompositionWindow() ? "world composition opened from Window > World Composition"
+		                                                : "FAILED: Window > World Composition did not open the world");
+		break;
+	}
+	case 484:
+		if (const TSharedPtr<SWindow> Window = FindWorldCompositionWindow())
+			App->RequestDestroyWindow(ToSharedRef(Window));
+		if (const TSharedPtr<SContentBrowser> Browser = Shell->GetContentBrowser(0))
+			Browser->SetSearchText("");
+		break;
+	case 486:
+		if (WorldTileCount > 0)
+			PointAtText(GENESIS_TEXT("File").View(), true);
+		break;
+	case 494:
+		if (WorldTileCount > 0)
+			Capture("menu_file");
+		break;
+	case 496:
 		GENESIS_LOG(LogGenesisEditor, Display, "GenesisEditorTest: {} checks, {} failed", Checks, Failures);
 		App->RequestQuit();
 		break;

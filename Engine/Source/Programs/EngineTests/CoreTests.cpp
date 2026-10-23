@@ -2,6 +2,9 @@
 
 #include "TestHelpers.h"
 #include "Templates/SharedPointer.h"
+#include "HAL/PlatformMisc.h"
+#include <cstdlib>
+#include <filesystem>
 
 TEST_SUITE("Core")
 {
@@ -99,5 +102,23 @@ TEST_SUITE("Core")
 		const FColor RoundTrip = C.ToLinear().ToFColorSRGB();
 		CHECK(RoundTrip == C);
 		CHECK(FColor::FromHex(0x336699) == FColor(0x33, 0x66, 0x99));
+	}
+}
+
+TEST_SUITE("PlatformProcess")
+{
+	TEST_CASE("The running executable is found and programs start without waiting")
+	{
+		const FString Self = FPlatformProcess::ExecutablePath();
+		CHECK(Self.EndsWith("EngineTests.exe", ESearchCase::IgnoreCase));
+		CHECK(std::filesystem::exists(Self.ToWide()));
+		FString Error;
+		CHECK_FALSE(FPlatformProcess::CreateProc(Self + ".missing", {}, Error));
+		CHECK_FALSE(Error.IsEmpty());
+		const char* const SystemRoot = std::getenv("SystemRoot");
+		REQUIRE(SystemRoot);
+		const FString Shell = FString::Format("{}\\System32\\cmd.exe", SystemRoot);
+		CHECK(FPlatformProcess::CreateProc(Shell, {"/c", "exit", "0"}, Error));
+		CHECK(Error.IsEmpty());
 	}
 }

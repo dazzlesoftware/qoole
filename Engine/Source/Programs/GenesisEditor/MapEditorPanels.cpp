@@ -623,7 +623,7 @@ void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
 		OpenMaterialAsset(Item);
 		break;
 	case EContentAssetType::WorldComposition:
-		OpenWorldComposition(Item);
+		OpenWorldComposition({Item.PackageId, Item.PackagePath}, Item.Name);
 		break;
 	case EContentAssetType::Texture:
 		if (Item.Schema == "Genesis.Texture2D")
@@ -1101,12 +1101,45 @@ void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem& Item)
 		Log(Error);
 }
 
-void FMapEditorShell::OpenWorldComposition(const FContentBrowserItem& Item)
+void FMapEditorShell::NewWorldComposition()
+{
+	const FProjectContext* Project = FProjectContext::GetActive();
+	if (!Project)
+	{
+		Log(GENESIS_TEXT("Open a project to make a world composition."));
+		return;
+	}
+	for (int32 Number = 1; Number < 1000; ++Number)
+	{
+		const FString Name = Number == 1 ? FString("World") : FString::Format("World{}", Number);
+		const FString Package = "/Game/Worlds/" + Name;
+		FString File, Error;
+		if (!Project->ResolvePackage(Package, true, File, Error))
+		{
+			Log(Error);
+			return;
+		}
+		if (std::filesystem::exists(File.ToWide()))
+			continue;
+		FAssetPackage World;
+		FWorldComposition().ToPackage(World);
+		if (!FAssetPackageStore::Save(File, World, Error))
+		{
+			Log(Error);
+			return;
+		}
+		RefreshAssetRegistry();
+		OpenWorldComposition({World.Id, Package}, Name);
+		return;
+	}
+}
+
+void FMapEditorShell::OpenWorldComposition(const FAssetReference& Composition, const FString& Name)
 {
 	FWorldCompositionEditorArgs Args;
 	Args.Registry = AssetRegistry;
-	Args.Composition = {Item.PackageId, Item.PackagePath};
-	Args.Name = Item.Name;
+	Args.Composition = Composition;
+	Args.Name = Name;
 	Args.OnSaved = FSimpleDelegate::CreateLambda([this] { RefreshAssetRegistry(); });
 	Args.OnLog = TDelegate<void(const FString&)>::CreateLambda([this](const FString& Message) { Log(Message); });
 	// A region is an ordinary level: a new document with one flat landscape filling the cell.

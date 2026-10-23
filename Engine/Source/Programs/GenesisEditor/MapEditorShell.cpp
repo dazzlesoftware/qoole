@@ -15,6 +15,7 @@
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 #include "MapCoreHeaders.h"
 #include "Misc/App.h"
+#include "HAL/PlatformMisc.h"
 #include "Serialization/Json.h"
 #include "Services/FileDialogs.h"
 #include "Services/MessageDialog.h"
@@ -43,8 +44,9 @@ namespace
 	const TArray<FFileTypeFilter>& MapFilters()
 	{
 		static const TArray<FFileTypeFilter> Filters = {
-		    {"Maps (*.gmap, *.qle, *.map)", "*.gmap;*.qle;*.map"},
+		    {"Maps and projects (*.gmap, *.qle, *.map, *.gproject)", "*.gmap;*.qle;*.map;*.gproject"},
 		    {"Genesis levels (*.gmap)", "*.gmap"},
+		    {"Genesis projects (*.gproject)", "*.gproject"},
 		    {"Quake maps (*.map)", "*.map"},
 		};
 		return Filters;
@@ -351,6 +353,18 @@ void FMapEditorShell::UpdateTitle()
 	Window->SetTitle(FTextLocalization::Format("{}{} - {}Genesis Editor", Document->GetDisplayName(),
 	    Document->IsModified() ? " *" : "",
 	    FProjectContext::GetActive() ? FProjectContext::GetActive()->GetDescriptor().Name + " - " : FString()));
+}
+
+void FMapEditorShell::SwitchProject(const FString& Option)
+{
+	FString Error;
+	if (!FPlatformProcess::CreateProc(FPlatformProcess::ExecutablePath(), {Option}, Error))
+	{
+		FServices::GetMessageDialog().Show(EMessageType::Error, EMessageButtons::Ok, Error);
+		return;
+	}
+	Log(FTextLocalization::Format("Restarting the editor with {}", Option));
+	Host.Quit();
 }
 
 bool FMapEditorShell::ConfirmDiscard()
@@ -832,6 +846,8 @@ void FMapEditorShell::RegisterCommands()
 	Cmd.ExportMap = Add("ExportMap", "Export .map...", "Write the map as a Quake .map file", T::Button,
 	    FInputChord(EKey::E, M::Control));
 	Cmd.Exit = Add("Exit", "Exit", "Close the editor");
+	Cmd.NewProject = Add("NewProject", "New Project...", "Create a project and restart the editor on it");
+	Cmd.OpenProject = Add("OpenProject", "Open Project...", "Restart the editor on another .gproject");
 
 	Cmd.Undo = Add("Undo", "Undo", "Undo the last change", T::Button, FInputChord(EKey::Z, M::Control));
 	Cmd.Redo = Add("Redo", "Redo", "Redo the change undone last", T::Button, FInputChord(EKey::Y, M::Control));
@@ -950,10 +966,39 @@ void FMapEditorShell::RegisterCommands()
 		Options.Filters = MapFilters();
 		Options.InitialPath = DefaultFolder();
 		FString Path;
-		if (FServices::GetFileDialogs().OpenFile(Options, Path))
-		{
+		if (!FServices::GetFileDialogs().OpenFile(Options, Path))
+			return;
+		if (Path.EndsWith(".gproject", ESearchCase::IgnoreCase))
+			SwitchProject("-project=" + Path);
+		else
 			OpenMap(Path);
-		}
+	});
+	List.MapAction(ToSharedRef(Cmd.OpenProject), [this]
+	{
+		if (!ConfirmDiscard())
+			return;
+		FFileDialogOptions Options;
+		Options.Title = GENESIS_TEXT("Open project");
+		Options.Filters = {{GENESIS_TEXT("Genesis projects (*.gproject)"), "*.gproject"}};
+		Options.InitialPath = DefaultFolder();
+		FString Path;
+		if (FServices::GetFileDialogs().OpenFile(Options, Path))
+			SwitchProject("-project=" + Path);
+	});
+	List.MapAction(ToSharedRef(Cmd.NewProject), [this]
+	{
+		if (!ConfirmDiscard())
+			return;
+		FFileDialogOptions Options;
+		Options.Title = GENESIS_TEXT("New project");
+		Options.Filters = {{GENESIS_TEXT("Genesis projects (*.gproject)"), "*.gproject"}};
+		Options.DefaultExtension = "gproject";
+		Options.InitialPath = DefaultFolder();
+		FString Path;
+		if (!FServices::GetFileDialogs().SaveFile(Options, Path))
+			return;
+		// Choosing an existing project opens it rather than failing at startup.
+		SwitchProject((std::filesystem::exists(Path.ToWide()) ? "-project=" : "-newproject=") + Path);
 	});
 	List.MapAction(ToSharedRef(Cmd.SaveMap), [this]
 	{
@@ -1280,6 +1325,9 @@ void FMapEditorShell::RegisterMenus()
 	FMenuSection& Open = File.AddSection("Open");
 	Open.AddCommand(Cmd.NewMap);
 	Open.AddCommand(Cmd.OpenMap);
+	FMenuSection& ProjectSection = File.AddSection("Project");
+	ProjectSection.AddCommand(Cmd.NewProject);
+	ProjectSection.AddCommand(Cmd.OpenProject);
 	FMenuSection& Save = File.AddSection("Save");
 	Save.AddCommand(Cmd.SaveMap);
 	Save.AddCommand(Cmd.SaveMapAs);
@@ -1431,6 +1479,34 @@ void FMapEditorShell::RegisterMenus()
 	FMenuDefinition& Window = Registry.RegisterMenu("MapEditor.MainMenu.Window");
 	Window.AddDynamicSection(
 	    "Tabs", [this](FMenuSection& Section, const FMenuContext&) { TabManager->PopulateTabSpawnerMenu(Section); });
+	// The project's worlds, as Unreal's Window > World Composition (Levels).
+	Window.AddDynamicSection("World", [this](FMenuSection& Section, const FMenuContext&)
+	{
+		Section.AddSubMenu("WorldComposition", GENESIS_TEXT("World Composition"),
+		    GENESIS_TEXT("Arrange the regions of a world made of separately saved levels"),
+		    [this](FMenuSection& Sub, const FMenuContext&)
+		{
+			if (AssetRegistry)
+				for (const FAssetData& Asset : AssetRegistry->GetAssets())
+				{
+					if (Asset.Metadata.Schema != "Genesis.WorldComposition")
+						continue;
+					const FAssetReference Reference = Asset.GetReference();
+					const FString Name =
+					    FString::FromWide(std::filesystem::path(Asset.FilePath.ToWide()).stem().wstring());
+					FUIAction Open;
+					Open.Execute = FSimpleDelegate::CreateLambda(
+					    [this, Reference, Name] { OpenWorldComposition(Reference, Name); });
+					Sub.AddEntry(
+					    FName(Asset.PackagePath), Asset.PackagePath, GENESIS_TEXT("Open this world's regions"), Open);
+				}
+			FUIAction Create;
+			Create.Execute = FSimpleDelegate::CreateLambda([this] { NewWorldComposition(); });
+			Create.CanExecute = TDelegate<bool()>::CreateLambda([] { return FProjectContext::GetActive() != nullptr; });
+			Sub.AddEntry("NewWorldComposition", GENESIS_TEXT("New World Composition"),
+			    GENESIS_TEXT("Make an empty world in the project's Worlds folder and open it"), Create);
+		});
+	});
 	Window.AddSection("Layout").AddCommand(Cmd.ResetLayout);
 
 	Registry.RegisterMenu("MapEditor.MainMenu.Help").AddSection("About").AddCommand(Cmd.About);

@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "HAL/PlatformMisc.h"
+#include "Internationalization/TextLocalization.h"
 #include "Math/MathUtility.h"
 
 #include <Windows.h>
@@ -158,4 +159,45 @@ FString FPaths::FindContentDir()
 		Dir = FString(View.substr(0, Slash + 1));
 	}
 	return FString();
+}
+
+FString FPlatformProcess::ExecutablePath()
+{
+	std::wstring Buffer(MAX_PATH, L'\0');
+	for (;;)
+	{
+		const DWORD Length = GetModuleFileNameW(nullptr, Buffer.data(), static_cast<DWORD>(Buffer.size()));
+		if (Length == 0)
+			return {};
+		if (Length < Buffer.size())
+		{
+			Buffer.resize(Length);
+			return FString::FromWide(Buffer);
+		}
+		Buffer.resize(Buffer.size() * 2);
+	}
+}
+
+bool FPlatformProcess::CreateProc(const FString& Executable, const TArray<FString>& Arguments, FString& Error)
+{
+	std::wstring CommandLine = L"\"" + Executable.ToWide() + L"\"";
+	for (const FString& Argument : Arguments)
+	{
+		const std::wstring Wide = Argument.ToWide();
+		CommandLine += Wide.find_first_of(L" \t") == std::wstring::npos ? L" " + Wide : L" \"" + Wide + L"\"";
+	}
+	STARTUPINFOW Startup{};
+	Startup.cb = sizeof(Startup);
+	PROCESS_INFORMATION Process{};
+	if (!CreateProcessW(Executable.ToWide().c_str(), CommandLine.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr,
+	        &Startup, &Process))
+	{
+		Error = FTextLocalization::Format(
+		    "Could not start {} (error {}).", Executable, static_cast<uint32>(GetLastError()));
+		return false;
+	}
+	CloseHandle(Process.hThread);
+	CloseHandle(Process.hProcess);
+	Error.Empty();
+	return true;
 }
