@@ -27,6 +27,9 @@ class FNativeMeshFrame
 	{
 		FNativeMeshBatch Batch;
 		TSharedPtr<FRHITexture> Color, Normal;
+		TSharedPtr<FRHIGraphicsPipeline> GraphPipeline;
+		TSharedPtr<FRHIBuffer> Parameters;
+		TArray<TSharedPtr<FRHITexture>> GraphTextures;
 	};
 	FRHIDevice& Device;
 	TSharedPtr<FRHIBuffer> Vertices, Indices;
@@ -57,11 +60,20 @@ class FNativeMeshRenderer
 	{
 		std::shared_ptr<const FLoadedMeshAsset> Asset;
 		TSharedPtr<FRHITexture> Color, Normal;
+		TArray<TSharedPtr<FRHITexture>> GraphTextures;
 		uint64 LastUsed = 0;
 	};
 	std::map<const FLoadedMaterialSlot*, FEntry> Materials;
 	TSharedPtr<FRHITexture> White;
 	TSharedPtr<FRHIGraphicsPipeline> OpaquePipeline, TranslucentPipeline;
+	struct FGraphPipelineEntry
+	{
+		FMaterialAsset Material;
+		EPixelFormat Format;
+		TSharedPtr<FRHIGraphicsPipeline> Pipeline;
+		uint64 LastUsed = 0;
+	};
+	TArray<FGraphPipelineEntry> GraphPipelines;
 	EPixelFormat Format = EPixelFormat::Unknown;
 	uint64 Frame = 0;
 };

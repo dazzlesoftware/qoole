@@ -45,6 +45,10 @@ remain pending. See [RenderAssets.md](Engine/Documentation/Source/RenderAssets.m
 
 The planned node-based material editor and full material feature roadmap are in
 [MaterialSystemPlan.md](Engine/Documentation/Source/MaterialSystemPlan.md).
+The first node editor now saves and renders compiled graphs on D3D12 and Vulkan;
+see [MaterialGraph.md](Engine/Documentation/Source/MaterialGraph.md) for setup,
+supported nodes and controls. Project scripting configuration and the shared
+provider foundation are described in [Scripting.md](Engine/Documentation/Source/Scripting.md).
 
 ## Layout
 
@@ -54,7 +58,7 @@ The tree follows Unreal Engine's:
     Engine/
       Source/
         Runtime/                 Core, Projects, AssetCore, Geometry, Landscape, Foliage, Engine, Renderer, ApplicationCore, RHI, SlateCore, Slate, SlateRHIRenderer
-        Editor/                  MapCore, MapEditor
+        Editor/                  MapCore, MapEditor, MaterialEditor
         Programs/                GenesisEditor, GenesisTests, EngineTests, TestApps
         ThirdParty/              FreeType2, HarfBuzz, Vulkan, doctest
       Content/                   Slate/Fonts, Editor (the built-in game's data)
@@ -83,6 +87,9 @@ graphics driver. From a command line:
 `GenesisEditor.exe` (`GenesisEditorD.exe` for Debug), the test
 applications, `EngineTests.exe` and `GenesisTests.exe` are written to
 `Engine/Binaries/Win64`.
+
+For material graph authoring and its compiler tests, first run
+`Engine/Build/SetupMaterialCompiler.ps1` to install the desktop DXIL/SPIR-V compiler.
 
 ## The editor
 

@@ -439,7 +439,7 @@ FContentBrowserItem SContentBrowser::DescribeItem(const FString& FilePath) const
 		else if (Metadata.Schema == "Genesis.Prefab" && (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) && Metadata.Kind == EAssetPackageKind::Asset) Item.Type = EContentAssetType::Prefab;
 		else if (Metadata.Kind == EAssetPackageKind::Asset && (Metadata.SchemaVersion == 1 || Metadata.SchemaVersion == 2) && Metadata.Schema == "Genesis.StaticMesh") Item.Type = EContentAssetType::StaticMesh;
 		else if (Metadata.Kind == EAssetPackageKind::Asset && Metadata.SchemaVersion == 1 && Metadata.Schema == "Genesis.Texture2D") Item.Type = EContentAssetType::Texture;
-		else if (Metadata.Kind == EAssetPackageKind::Asset && (Metadata.SchemaVersion >= 1 && Metadata.SchemaVersion <= 3) && Metadata.Schema == "Genesis.Material") Item.Type = EContentAssetType::Material;
+		else if (IsMaterialAsset(Metadata)) Item.Type = EContentAssetType::Material;
 		else Item.Type = EContentAssetType::Package;
 		return Item;
 	}
@@ -783,6 +783,7 @@ TSharedRef<SWidget> SContentBrowser::MakeAddMenu()
 			.OnSelected([this] { CreateFolder(); })
 		]
 		+ SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry).Text("Material").IsEnabled([this] { return !Path.IsEmpty(); }).OnSelected([this] { CreateMaterial(); })]
+		+ SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry).Text("Material Instance from Selection").ToolTipText("Select a saved graph material or instance as the parent").IsEnabled([this]{return !Path.IsEmpty()&&GetAssetType(SelectedPath)==EContentAssetType::Material;}).OnSelected([this]{CreateMaterialInstance();})]
 		+ SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry).Text("Static Mesh from Selection").IsEnabled([this] { return !Path.IsEmpty() && OnCreateMesh.IsBound(); }).OnSelected([this] { CreateMeshFromSelection(); })];
 }
 
@@ -799,6 +800,21 @@ FString SContentBrowser::CreateMaterial()
 		Refresh(); SelectedPath=File; return File;
 	}
 	return {};
+}
+FString SContentBrowser::CreateMaterialInstance()
+{
+    if(Path.IsEmpty())return {};
+    FMaterialInstanceAsset Instance;
+    for(const auto& Item:Items)if(Item.Path==SelectedPath&&Item.Type==EContentAssetType::Material)Instance.Parent={Item.PackageId,Item.PackagePath};
+    if(Instance.Parent.IsNull())return {};
+    FString Error;FMaterialAsset Parent;
+    if(!Registry||!FRenderAssetLoader(*Registry).LoadMaterial(Instance.Parent,Parent,Error)||!Parent.Graph){UE_LOG(LogMapEditor,Warning,"Save the parent in the graph material editor before creating an instance. {}",Error);return {};}
+    for(int Number=1;Number<1000;++Number){
+        const auto File=FromPath(ToPath(Path)/(L"MaterialInstance"+(Number==1?std::wstring():std::to_wstring(Number))+L".asset"));if(fs::exists(ToPath(File)))continue;
+        FAssetPackage P;if(!FRenderAssetCodec::EncodeMaterialInstance(Instance,P,Error)||!FAssetPackageStore::Save(File,P,Error)){UE_LOG(LogMapEditor,Warning,"{}",Error);return {};}
+        Refresh();SelectedPath=File;return File;
+    }
+    return {};
 }
 FString SContentBrowser::CreateMeshFromSelection()
 {

@@ -1,0 +1,1 @@
+<Project><PropertyGroup><BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\..\..\Engine\Intermediate\Build\DotNet\ScriptExample\</BaseIntermediateOutputPath></PropertyGroup></Project>

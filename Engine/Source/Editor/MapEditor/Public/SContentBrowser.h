@@ -105,6 +105,7 @@ public:
 
 	EContentAssetType GetAssetType(const FString& FilePath) const;
 	FString CreateMaterial();
+	FString CreateMaterialInstance();
 	FString CreateMeshFromSelection();
 
 private:

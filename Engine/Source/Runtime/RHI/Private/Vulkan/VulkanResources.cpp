@@ -21,8 +21,9 @@ FVulkanBuffer::~FVulkanBuffer()
 {
 	if (Buffer)
 	{
-		Device.DeferDestroy([DeviceHandle = Device.GetHandle(), BufferHandle = Buffer, MemoryHandle = Memory]()
+		Device.DeferDestroy([DeviceHandle = Device.GetHandle(), BufferHandle = Buffer, MemoryHandle = Memory,Set=UniformSet,Pool=UniformPool]()
 		{
+			if(Set)vkFreeDescriptorSets(DeviceHandle,Pool,1,&Set);
 			vkDestroyBuffer(DeviceHandle, BufferHandle, nullptr);
 			vkFreeMemory(DeviceHandle, MemoryHandle, nullptr); // also unmaps
 		});
@@ -42,7 +43,8 @@ bool FVulkanBuffer::Initialize()
 		return false;
 	}
 
-	VkBufferUsageFlags Usage = Desc.Usage == EBufferUsage::Vertex ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    if(!ensuref(Desc.Usage!=EBufferUsage::Uniform || Desc.Size<=65536,"Uniform buffer exceeds 64 KiB"))return false;
+	VkBufferUsageFlags Usage = Desc.Usage == EBufferUsage::Uniform ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : Desc.Usage == EBufferUsage::Vertex ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 	if (!bUpload)
 	{
 		Usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -51,6 +53,14 @@ bool FVulkanBuffer::Initialize()
 	{
 		return false;
 	}
+    if(Desc.Usage==EBufferUsage::Uniform){
+        UniformSet=Device.AllocateUniformSet(UniformPool);if(!UniformSet)return false;
+        VkDescriptorBufferInfo Info{Buffer,0,Desc.Size};
+        VkWriteDescriptorSet Write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        Write.dstSet=UniformSet;Write.dstBinding=0;Write.descriptorCount=1;
+        Write.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;Write.pBufferInfo=&Info;
+        vkUpdateDescriptorSets(Device.GetHandle(),1,&Write,0,nullptr);
+    }
 	Device.SetDebugName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64>(Buffer), Desc.DebugName);
 
 	if (bUpload)
@@ -74,12 +84,12 @@ bool FVulkanBuffer::Initialize()
 
 	VkBufferMemoryBarrier Barrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
 	Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-	Barrier.dstAccessMask = Desc.Usage == EBufferUsage::Vertex ? VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT : VK_ACCESS_INDEX_READ_BIT;
+	Barrier.dstAccessMask = Desc.Usage == EBufferUsage::Uniform ? VK_ACCESS_UNIFORM_READ_BIT : Desc.Usage == EBufferUsage::Vertex ? VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT : VK_ACCESS_INDEX_READ_BIT;
 	Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	Barrier.buffer = Buffer;
 	Barrier.size = VK_WHOLE_SIZE;
-	vkCmdPipelineBarrier(Upload.CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+	vkCmdPipelineBarrier(Upload.CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, Desc.Usage==EBufferUsage::Uniform ? VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
 		0, 0, nullptr, 1, &Barrier, 0, nullptr);
 	Device.EndUpload(Upload);
 	return true;
@@ -571,7 +581,7 @@ bool FVulkanGraphicsPipeline::Initialize()
 	PipelineInfo.pDepthStencilState = &DepthStencil;
 	PipelineInfo.pColorBlendState = &ColorBlend;
 	PipelineInfo.pDynamicState = &DynamicState;
-	PipelineInfo.layout = Device.GetPipelineLayout(GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress), Desc.NumTextures);
+	PipelineInfo.layout = Device.GetPipelineLayout(GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress), Desc.NumTextures, Desc.bUniformBuffer);
 	PipelineInfo.renderPass = RenderPass;
 	PipelineInfo.subpass = 0;
 

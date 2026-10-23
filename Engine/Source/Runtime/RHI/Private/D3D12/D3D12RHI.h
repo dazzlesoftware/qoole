@@ -130,6 +130,7 @@ public:
 	void SetScissor(const FIntRect& Rect) override;
 	void SetPipeline(FRHIGraphicsPipeline& Pipeline) override;
 	void SetPushConstants(const void* Data, uint32 Size) override;
+	void SetUniformBuffer(FRHIBuffer& Buffer) override;
 	using FRHICommandList::SetTexture;
 	void SetTexture(FRHITexture& Texture, uint32 Slot) override;
 	using FRHICommandList::SetVertexBuffer;

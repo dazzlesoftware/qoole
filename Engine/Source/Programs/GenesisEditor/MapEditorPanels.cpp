@@ -6,6 +6,7 @@
 // and the Output Log at the bottom.
 
 #include "MapEditorShell.h"
+#include "MaterialEditor.h"
 #include "ProjectDescriptor.h"
 #include "AssetRegistry.h"
 
@@ -553,177 +554,6 @@ TSharedRef<SDockTab> FMapEditorShell::MakeContentBrowserTab(int32 Index)
 	return Tab;
 }
 
-void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem &Item)
-{
-	FString Error;
-	FAssetPackage Package;
-	if (!AssetRegistry->Load({Item.PackageId, Item.PackagePath}, Package, Error, "Genesis.Material"))
-	{
-		Log(Error);
-		return;
-	}
-	auto Material = std::make_shared<FMaterialAsset>();
-	if (!FRenderAssetCodec::DecodeMaterial(Package, *Material, Error))
-	{
-		Log(Error);
-		return;
-	}
-	const auto Content = SNew(SVerticalBox);
-	Content->AddSlot().AutoHeight()[SNew(STextBlock).Text("Base Color")];
-	Content->AddSlot().AutoHeight()[SNew(SColorPicker)
-										.UseAlpha(true)
-										.TargetColor([Material] {
-											return FColor(static_cast<uint8>(Material->BaseColor[0] * 255),
-														  static_cast<uint8>(Material->BaseColor[1] * 255),
-														  static_cast<uint8>(Material->BaseColor[2] * 255),
-														  static_cast<uint8>(Material->BaseColor[3] * 255));
-										})
-										.OnColorChanged([Material](FColor Color) {
-											Material->BaseColor[0] = Color.R / 255.0f;
-											Material->BaseColor[1] = Color.G / 255.0f;
-											Material->BaseColor[2] = Color.B / 255.0f;
-											Material->BaseColor[3] = Color.A / 255.0f;
-										})];
-	for (int I = 0; I < 2; ++I)
-		Content->AddSlot()
-			.AutoHeight()[SNew(SHorizontalBox) +
-						  SHorizontalBox::Slot().FillWidth(
-							  1)[SNew(STextBlock).Text(I == 0 ? "Roughness" : "Metallic")] +
-						  SHorizontalBox::Slot().FillWidth(
-							  1)[SNew(SSpinBox<float>)
-									 .MinValue(0.0f)
-									 .MaxValue(1.0f)
-									 .Delta(0.01f)
-									 .Value([Material, I] { return I == 0 ? Material->Roughness : Material->Metallic; })
-									 .OnValueChanged([Material, I](float Value) {
-										 (I == 0 ? Material->Roughness : Material->Metallic) = Value;
-									 })]];
-	auto BlendModes = std::make_shared<TArray<FString>>(TArray<FString>{"Opaque", "Masked", "Translucent"});
-	Content->AddSlot().AutoHeight()[SNew(STextBlock).Text("Blend Mode")];
-	Content->AddSlot().AutoHeight()[SNew(SComboBox<FString>)
-										.OptionsSource(BlendModes.get())
-										.OnGenerateWidget([](const FString& Label) -> TSharedRef<SWidget> {
-											return SNew(STextBlock).Text(Label);
-										})
-										.OnSelectionChanged([Material, BlendModes](const FString& Label, ESelectInfo) {
-											for (size_t I = 0; I < BlendModes->size(); ++I)
-												if ((*BlendModes)[I] == Label)
-													Material->BlendMode = static_cast<EMaterialBlendMode>(I);
-										})[SNew(STextBlock).Text([Material, BlendModes] {
-											return (*BlendModes)[static_cast<int>(Material->BlendMode)];
-										})]];
-	Content->AddSlot()
-		.AutoHeight()[SNew(SHorizontalBox) +
-					  SHorizontalBox::Slot().FillWidth(1)[SNew(STextBlock).Text("Opacity Mask Cutoff")] +
-					  SHorizontalBox::Slot().FillWidth(
-						  1)[SNew(SSpinBox<float>)
-								 .MinValue(0.0f)
-								 .MaxValue(1.0f)
-								 .Delta(0.01f)
-								 .Value([Material] { return Material->OpacityMaskClip; })
-								 .OnValueChanged([Material](float V) { Material->OpacityMaskClip = V; })]];
-	auto Textures = std::make_shared<TArray<FString>>();
-	auto References = std::make_shared<TArray<FAssetReference>>();
-	Textures->push_back("None");
-	References->push_back({});
-	for (const auto& Asset : AssetRegistry->GetAssets())
-		if (Asset.Metadata.Schema == "Genesis.Texture2D" && Asset.Metadata.SchemaVersion == 1)
-		{
-			Textures->push_back(Asset.PackagePath);
-			References->push_back(Asset.GetReference());
-		}
-	Content->AddSlot().AutoHeight()[SNew(STextBlock).Text("Base Color Texture")];
-	Content->AddSlot()
-		.AutoHeight()[SNew(SComboBox<FString>)
-						  .OptionsSource(Textures.get())
-						  .OnGenerateWidget(
-							  [](const FString& Label) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(Label); })
-						  .OnSelectionChanged([Material, Textures, References](const FString& Label, ESelectInfo) {
-							  for (size_t I = 0; I < Textures->size(); ++I)
-								  if ((*Textures)[I] == Label)
-									  Material->BaseColorTexture = (*References)[I];
-						  })[SNew(STextBlock).Text([Material] {
-							  return Material->BaseColorTexture.IsNull() ? FString("None")
-																		 : Material->BaseColorTexture.Path;
-						  })]];
-	Content->AddSlot().AutoHeight()[SNew(STextBlock).Text("Normal Map (tangent space)")];
-	Content->AddSlot()
-		.AutoHeight()[SNew(SComboBox<FString>)
-						  .OptionsSource(Textures.get())
-						  .OnGenerateWidget(
-							  [](const FString &Label) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(Label); })
-						  .OnSelectionChanged([Material, Textures, References](const FString &Label, ESelectInfo) {
-							  for (size_t I = 0; I < Textures->size(); ++I)
-								  if ((*Textures)[I] == Label)
-									  Material->NormalTexture = (*References)[I];
-						  })[SNew(STextBlock).Text([Material] {
-							  return Material->NormalTexture.IsNull() ? FString("None")
-																		 : Material->NormalTexture.Path;
-						  })]];
-	Content->AddSlot()
-		.AutoHeight()[SNew(STextBlock)
-						  .Text("Lit previews use the editor light. Unlit displays base color without lighting.")
-						  .AutoWrapText(true)];
-	auto ApplySlot = std::make_shared<int32>(0);
-	Content->AddSlot().AutoHeight()[SNew(SHorizontalBox) +
-									SHorizontalBox::Slot().FillWidth(1)[SNew(STextBlock).Text("Apply to Slot")] +
-									SHorizontalBox::Slot().FillWidth(
-										1)[SNew(SSpinBox<int32>)
-											   .MinValue(0)
-											   .MaxValue(63)
-											   .Delta(1)
-											   .Value([ApplySlot] { return *ApplySlot; })
-											   .OnValueChanged([ApplySlot](int32 V) { *ApplySlot = V; })]];
-	Content->AddSlot().AutoHeight()
-		[SNew(SButton).Text("Save and Apply to Selected Mesh Assets").OnClicked([this, Item, Material, ApplySlot] {
-			FString SaveError;
-			FAssetPackage P;
-			const auto* Current =
-				AssetRegistry->Resolve({Item.PackageId, Item.PackagePath}, SaveError, "Genesis.Material");
-			if (!Current)
-			{
-				Log(SaveError);
-				return FReply::Handled();
-			}
-			const auto Target = Current->FilePath;
-			for (const auto& TextureRef : {Material->BaseColorTexture,Material->NormalTexture})
-				if (!TextureRef.IsNull())
-				{
-					FTextureAsset Texture;
-					if (!FRenderAssetLoader(*AssetRegistry).LoadTexture(TextureRef, Texture, SaveError))
-					{
-						Log(SaveError);
-						return FReply::Handled();
-					}
-				}
-			if (!AssetRegistry->Load({Item.PackageId, Item.PackagePath}, P, SaveError, "Genesis.Material") ||
-				!FRenderAssetCodec::EncodeMaterial(*Material, P, SaveError) ||
-				!FAssetPackageStore::Save(Target, P, SaveError))
-			{
-				Log(SaveError);
-				return FReply::Handled();
-			}
-			RefreshAssetRegistry();
-			if (Document)
-			{
-				Document->BeginTransaction("Assign Material");
-				for (auto *Obj : Document->GetSelection())
-					if (Obj->HasMesh() && !Obj->HasLandscape())
-					{
-						if (!Document->SetMeshMaterial(*Obj, {Item.PackageId, Item.PackagePath}, SaveError, *ApplySlot))
-							Log(SaveError);
-					}
-				Document->EndTransaction();
-			}
-			Log(FString::Format("Saved material {}", Item.Name));
-			return FReply::Handled();
-		})];
-	FSlateApplication::Get().AddWindow(SNew(SWindow)
-										   .Title("Material: " + Item.Name)
-										   .BackgroundColor(FSlateColor(FColor(32,35,40)))
-										   .ClientSize(FVector2(460, 680))[SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Panel")).Padding(FMargin(12))[Content]]);
-}
-
 void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
 {
 	switch (Item.Type)
@@ -829,8 +659,7 @@ void FMapEditorShell::OpenMeshAsset(const FContentBrowserItem& Item)
 		Labels->push_back("None");
 		Refs->push_back({});
 		for (const auto& Asset : AssetRegistry->GetAssets())
-			if (Asset.Metadata.Schema == "Genesis.Material" && Asset.Metadata.SchemaVersion >= 1 &&
-				Asset.Metadata.SchemaVersion <= 3)
+			if (IsMaterialAsset(Asset.Metadata))
 			{
 				Labels->push_back(Asset.PackagePath);
 				Refs->push_back(Asset.GetReference());
@@ -1139,4 +968,32 @@ void FMapEditorShell::OpenTextureAsset(const FContentBrowserItem& Item)
 						  .Padding(FMargin(12))[SNew(SHorizontalBox) + SHorizontalBox::Slot().FillWidth(2)[Preview] +
 												SHorizontalBox::Slot().FillWidth(1).Padding(FMargin(
 													8, 0, 0, 0))[SNew(SScrollBox) + SScrollBox::Slot()[Panel]]]]);
+}
+
+void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem& Item)
+{
+	FMaterialEditorArgs Args;
+	Args.Registry = AssetRegistry;
+	Args.Material = {Item.PackageId, Item.PackagePath};
+	Args.Name = Item.Name;
+	Args.Device = Host.Device;
+	Args.Renderer = Host.Renderer;
+	Args.WindowRenderer = Host.WindowRenderer;
+	Args.OnSaved = FSimpleDelegate::CreateLambda([this] { RefreshAssetRegistry(); });
+	Args.OnLog =
+		TDelegate<void(const FString&)>::CreateLambda([this](const FString& Message) { Log(Message); });
+	Args.OnApply = TDelegate<void(int32)>::CreateLambda([this, Ref = Args.Material](int32 Slot) {
+		if (!Document)
+			return;
+		FString Error;
+		Document->BeginTransaction("Assign Material");
+		for (auto* Obj : Document->GetSelection())
+			if (Obj->HasMesh() && !Obj->HasLandscape())
+				if (!Document->SetMeshMaterial(*Obj, Ref, Error, Slot))
+					Log(Error);
+		Document->EndTransaction();
+	});
+	FString Error;
+	if (!FMaterialEditor::Open(Args, Error))
+		Log(Error);
 }

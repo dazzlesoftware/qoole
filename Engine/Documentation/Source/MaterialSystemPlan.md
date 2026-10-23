@@ -1,6 +1,8 @@
 # Material system roadmap
 
-Status: design, 2026-10-21. Material graph implementation has not started.
+Status: initial compiler/editor/rendering slice implemented, 2026-10-22.
+See [MaterialGraph.md](MaterialGraph.md) for the actual supported subset and
+remaining limitations. Later stages below remain a roadmap.
 The requested destination is Unreal-style material authoring and broad material
 feature parity. This document defines an implementation sequence and completion
 gates; no milestone implies that later renderer features already exist.
@@ -78,9 +80,11 @@ and unavailable in authoring until those systems exist.
 
 ## Proposed ownership and asset contracts
 
-1. Add runtime material graph/types/compiler services under Engine Assets first;
-   split into a dedicated runtime module when dependencies justify it. Runtime
-   must not depend on Slate or MapCore. Editor owns layout and interaction.
+1. Runtime material types, graph translation and codecs live under
+   `Runtime/Engine/{Public,Private}/Materials`. `Editor/MaterialEditor` owns
+   authoring, preview and toolchain adapters. Runtime must not depend on Slate or
+   MapCore; MaterialEditor must not depend on MapEditor. Host-specific selection
+   and transactions enter through callbacks.
 2. Store versioned graph nodes, stable node/pin IDs, expression type/version,
    properties, typed links, output/domain settings and parameter IDs in the
    package. Keep editor positions/comments separate from semantic graph data.

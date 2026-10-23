@@ -26,8 +26,7 @@ namespace
 		TArray<FString> Result{"Use Mesh Default"};
 		if (const auto Registry = FMapAssetLibrary::GetRegistry())
 			for (const auto& Asset : Registry->GetAssets())
-				if (Asset.Metadata.Schema == "Genesis.Material" && Asset.Metadata.SchemaVersion >= 1 &&
-					Asset.Metadata.SchemaVersion <= 3)
+				if (IsMaterialAsset(Asset.Metadata))
 					Result.push_back(Asset.PackagePath);
 		return Result;
 	}
@@ -230,7 +229,7 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 			return int32(0);
 		const auto Registry = FMapAssetLibrary::GetRegistry();
 		FString Error;
-		const auto* Data = Registry ? Registry->Resolve(Ref, Error, "Genesis.Material") : nullptr;
+		const auto* Data = Registry ? Registry->Resolve(Ref, Error) : nullptr;
 		for (size_t N = 1; N < Options.size(); ++N)
 			if (Data && Options[N] == Data->PackagePath)
 				return static_cast<int32>(N);
@@ -348,7 +347,7 @@ void FMapObjectProperties::SetValue(FName Property, const FPropertyValue& Value)
 		const int Slot=std::atoi(Name.ToAnsi().c_str()+13); const auto Options=MaterialOptions();
 		if(const auto* Index=std::get_if<int32>(&Value);Index && *Index>=0 && *Index<static_cast<int32>(Options.size())) {
 			FAssetReference Ref; FString Error;
-			if(*Index>0) { const auto Registry=FMapAssetLibrary::GetRegistry(); const auto* Data=Registry?Registry->Resolve({{},Options[*Index]},Error,"Genesis.Material"):nullptr; if(!Data) { UE_LOG(LogMapEditor,Warning,"{}",Error); return; } Ref=Data->GetReference(); }
+			if(*Index>0) { const auto Registry=FMapAssetLibrary::GetRegistry(); const auto* Data=Registry?Registry->Resolve({{},Options[*Index]},Error):nullptr; if(!Data) { UE_LOG(LogMapEditor,Warning,"{}",Error); return; } Ref=Data->GetReference(); }
 			if(!Document.SetMeshMaterial(Obj,Ref,Error,Slot)) UE_LOG(LogMapEditor,Warning,"{}",Error);
 		}
 		return;

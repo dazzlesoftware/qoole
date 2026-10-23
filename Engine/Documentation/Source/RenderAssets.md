@@ -9,6 +9,7 @@ No codec depends on MapCore, Slate, image decoders or a graphics API.
 | `Genesis.StaticMesh` v2 | Positions, indexed triangles, corner normals and UVs, wire edges, optional RGBA vertex colors, up to 64 material slots with names and per-triangle indices |
 | `Genesis.Texture2D` v1 | Width, height, RGBA8 pixels, sRGB metadata |
 | `Genesis.Material` v3 | RGBA base color, roughness, metallic, blend mode, mask cutoff, optional base color and tangent-space normal texture references |
+| `Genesis.Material` v4 | Material graph, editor node positions and cooked DXIL/SPIR-V programs; retains v3 property data for migration |
 
 The runtime API is `Runtime/Engine/Public/Assets/RenderAssets.h`.
 `FRenderAssetCodec` encodes/decodes package payloads. `FRenderAssetLoader` resolves
@@ -29,8 +30,9 @@ Open a `.gproject` so the Content Browser has a `/Game` mount.
 3. **Import** a PNG, BMP, JPEG or TIFF to create a texture `.asset`. Pixels are
    embedded, so the original image path is no longer needed to load it.
 4. Choose **Add → Material**. If a native texture tile is selected, the material
-   starts with that texture. Double-click the material to edit its base color,
-   surface values, base color texture and normal map. **Save and Apply to Selected Mesh Assets**
+   starts with that texture. Double-click to open the [node editor](MaterialGraph.md),
+   with mesh preview and compile controls. Saving upgrades older materials to v4.
+   **Save and Apply to Selection**
    saves the material and assigns it to selected native mesh actors. This
    assignment is undoable; saving the material file itself is not map undo.
 5. To paint with a native texture, select a landscape and paint layer, then

@@ -408,6 +408,14 @@ void FD3D12CommandList::SetPushConstants(const void* Data, uint32 Size)
 	List->SetGraphicsRoot32BitConstants(0, Size / 4, Data, 0);
 }
 
+void FD3D12CommandList::SetUniformBuffer(FRHIBuffer& Buffer)
+{
+    check(CurrentPipeline && CurrentPipeline->GetDesc().bUniformBuffer && Buffer.GetDesc().Usage==EBufferUsage::Uniform);
+    const auto& Desc=CurrentPipeline->GetDesc();
+    List->SetGraphicsRootConstantBufferView((Desc.PushConstantSize>0?1:0)+Desc.NumTextures,
+        static_cast<FD3D12Buffer&>(Buffer).GetResource()->GetGPUVirtualAddress());
+}
+
 void FD3D12CommandList::SetTexture(FRHITexture& Texture, uint32 Slot)
 {
 	check(CurrentPipeline && Slot < CurrentPipeline->GetDesc().NumTextures);
@@ -622,7 +630,9 @@ void FD3D12Device::DeferDelete(ComPtr<IUnknown> Object, uint32 SrvSlot, uint32 R
 	FDeferredDelete Entry;
 	// Everything submitted so far must finish; work recorded in the open
 	// frame is covered by the value the frame will signal.
-	Entry.FenceValue = LastSignaledValue + 1;
+	// An immediate texture upload can signal several fences while a frame
+	// is still being recorded. Only EndFrame knows that frame's final fence.
+	Entry.FenceValue = bInFrame ? ~0ull : LastSignaledValue + 1;
 	Entry.Object = std::move(Object);
 	Entry.SrvSlot = SrvSlot;
 	Entry.RtvSlot = RtvSlot;
@@ -633,7 +643,7 @@ void FD3D12Device::DeferDelete(ComPtr<IUnknown> Object, uint32 SrvSlot, uint32 R
 void FD3D12Device::DeferRelease(TSharedPtr<void> Resource)
 {
 	FDeferredDelete Entry;
-	Entry.FenceValue = LastSignaledValue + 1;
+	Entry.FenceValue = bInFrame ? ~0ull : LastSignaledValue + 1;
 	Entry.Shared = std::move(Resource);
 	Garbage.push_back(std::move(Entry));
 }
@@ -666,13 +676,14 @@ TUniquePtr<FRHISwapChain> FD3D12Device::CreateSwapChain(IPlatformWindow& Window)
 TSharedPtr<FRHIBuffer> FD3D12Device::CreateBuffer(const FRHIBufferDesc& BufferDesc)
 {
 	check(BufferDesc.Size > 0);
+	if (!ensuref(BufferDesc.Usage != EBufferUsage::Uniform || BufferDesc.Size <= 65536, "Uniform buffer exceeds 64 KiB")) return nullptr;
 	const bool bUpload = BufferDesc.Memory == EBufferMemory::Upload;
 
 	D3D12_HEAP_PROPERTIES Heap{};
 	Heap.Type = bUpload ? D3D12_HEAP_TYPE_UPLOAD : D3D12_HEAP_TYPE_DEFAULT;
 	D3D12_RESOURCE_DESC ResourceDesc{};
 	ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	ResourceDesc.Width = BufferDesc.Size;
+	ResourceDesc.Width = BufferDesc.Usage == EBufferUsage::Uniform ? (BufferDesc.Size + 255) & ~255ull : BufferDesc.Size;
 	ResourceDesc.Height = 1;
 	ResourceDesc.DepthOrArraySize = 1;
 	ResourceDesc.MipLevels = 1;
@@ -858,13 +869,13 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(const FRHIGraphicsPip
 	const uint32 PushConstantSize = PipelineDesc.PushConstantSize;
 	const ESamplerFilter Filter = PipelineDesc.SamplerFilter;
 	const uint32 NumTextures = FMath::Clamp(PipelineDesc.NumTextures, 1u, MaxTextures);
-	const uint32 Key = (PushConstantSize << 16) | (NumTextures << 8) | GetSamplerIndex(Filter, PipelineDesc.SamplerAddress);
+	const uint32 Key = (PipelineDesc.bUniformBuffer ? 1u << 31 : 0) | (PushConstantSize << 16) | (NumTextures << 8) | GetSamplerIndex(Filter, PipelineDesc.SamplerAddress);
 	if (auto It = RootSignatures.find(Key); It != RootSignatures.end())
 	{
 		return It->second;
 	}
 
-	D3D12_ROOT_PARAMETER Params[1 + MaxTextures]{};
+	D3D12_ROOT_PARAMETER Params[2 + MaxTextures]{};
 	uint32 NumParams = 0;
 	if (PushConstantSize > 0)
 	{
@@ -889,6 +900,13 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(const FRHIGraphicsPip
 		Table.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	}
 
+
+    if (PipelineDesc.bUniformBuffer) {
+        auto& Uniform=Params[NumParams++];
+        Uniform.ParameterType=D3D12_ROOT_PARAMETER_TYPE_CBV;
+        Uniform.Descriptor.ShaderRegister=1;
+        Uniform.ShaderVisibility=D3D12_SHADER_VISIBILITY_ALL;
+    }
 	D3D12_STATIC_SAMPLER_DESC Sampler{};
 	Sampler.Filter = Filter == ESamplerFilter::Point ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 	Sampler.AddressU = Sampler.AddressV = Sampler.AddressW =
@@ -1227,6 +1245,11 @@ void FD3D12Device::EndFrame()
 
 	Queue->Signal(Fence.Get(), ++LastSignaledValue);
 	Frame.FenceValue = LastSignaledValue;
+	for (auto& Entry : Garbage)
+	{
+		if (Entry.FenceValue == ~0ull)
+			Entry.FenceValue = Frame.FenceValue;
+	}
 	bInFrame = false;
 	FlushDebugMessages();
 }

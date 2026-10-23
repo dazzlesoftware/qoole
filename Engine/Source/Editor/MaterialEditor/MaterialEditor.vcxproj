@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{B872EF2A-5CD5-5124-A061-95C744523123}</ProjectGuid>
+    <RootNamespace>MaterialEditor</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\Build\Engine.props" />
+  </ImportGroup>
+  <ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisRuntimeDir)Renderer\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile></ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\MaterialEditor.cpp" />
+    <ClCompile Include="Private\MaterialEditingLibrary.cpp" />
+    <ClCompile Include="Private\SMaterialGraph.cpp" />
+    <ClCompile Include="Private\MaterialEditorViewportClient.cpp" />
+    <ClInclude Include="Public\MaterialEditor.h" />
+    <ClInclude Include="Public\MaterialEditingLibrary.h" />
+    <ClInclude Include="Public\SMaterialGraph.h" />
+    <ClInclude Include="Private\MaterialEditorViewportClient.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(GenesisRuntimeDir)Core\Core.vcxproj"><Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)AssetCore\AssetCore.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C02}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)Geometry\Geometry.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C03}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)Engine\Engine.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C04}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)ApplicationCore\ApplicationCore.vcxproj"><Project>{677BA165-FDBA-5E9B-8349-25D75147593A}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)RHI\RHI.vcxproj"><Project>{4EA620B2-9F21-526F-8D58-73DD975601E8}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)SlateCore\SlateCore.vcxproj"><Project>{6F3297E3-299E-599B-A2FE-946001E4FAF7}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)Slate\Slate.vcxproj"><Project>{3F5319A7-A0BC-4053-83E8-316D4FFD074A}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)SlateRHIRenderer\SlateRHIRenderer.vcxproj"><Project>{436BBD32-CC21-56E4-94F1-B731DD66653A}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)Renderer\Renderer.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C06}</Project></ProjectReference>
+  </ItemGroup>
+  <ItemGroup><ClCompile Include="Private\MaterialCompilationManager.cpp" /><ClInclude Include="Public\MaterialCompilationManager.h" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+<ItemGroup><ClInclude Include="Public\MaterialInstanceEditor.h" /><ClCompile Include="Private\MaterialInstanceEditor.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Private\Scripting\MaterialScriptBindings.cpp"/><ClInclude Include="Public\MaterialScriptBindings.h"/></ItemGroup></Project>

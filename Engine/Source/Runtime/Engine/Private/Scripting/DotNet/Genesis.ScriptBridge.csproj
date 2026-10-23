@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><AllowUnsafeBlocks>true</AllowUnsafeBlocks><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles><DefaultItemExcludes>$(DefaultItemExcludes);obj/**</DefaultItemExcludes><AssemblyName>Genesis.ScriptBridge</AssemblyName><RollForward>LatestPatch</RollForward></PropertyGroup>
+  <ItemGroup><Compile Include="../../../Public/Scripting/DotNet/ScriptModule.cs" Link="ScriptModule.cs" /></ItemGroup>
+</Project>

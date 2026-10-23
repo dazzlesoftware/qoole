@@ -18,6 +18,8 @@
     <Project Path="Engine/Source/Runtime/SlateRHIRenderer/SlateRHIRenderer.vcxproj" Id="436bbd32-cc21-56e4-94f1-b731dd66653a" />
   </Folder>
   <Folder Name="/Editor/">
+    <Project Path="Engine/Source/Editor/ScriptEditorPlugin/ScriptEditorPlugin.vcxproj" Id="a1b70f21-53e2-41e8-9592-210df1deda25" />
+    <Project Path="Engine/Source/Editor/MaterialEditor/MaterialEditor.vcxproj" Id="b872ef2a-5cd5-5124-a061-95c744523123" />
     <Project Path="Engine/Source/Editor/LandscapeEditorUtilities/LandscapeEditorUtilities.vcxproj" Id="80e5d3df-869e-4e9a-9f5c-25fc68b36a36" />
     <Project Path="Engine/Source/Editor/LandscapeEditor/LandscapeEditor.vcxproj" Id="072aca67-77b1-4e56-b304-c5192afa8c6a" />
     <Project Path="Engine/Source/Editor/FoliageEditor/FoliageEditor.vcxproj" Id="2e8b0eac-f17e-430f-a16a-a71d7fe07193" />
@@ -25,6 +27,7 @@
     <Project Path="Engine/Source/Editor/MapEditor/MapEditor.vcxproj" Id="248d610e-bede-4c49-afd7-43f90e5f4b54" />
   </Folder>
   <Folder Name="/ThirdParty/">
+    <Project Path="Engine/Source/ThirdParty/Lua/Lua.vcxproj" Id="dced32b2-90bc-48c7-93ee-0cba3cde440c" />
     <Project Path="Engine/Source/ThirdParty/FreeType2/FreeType2.vcxproj" Id="a394f7d3-d789-4c87-bf42-69fb4b7609a2" />
     <Project Path="Engine/Source/ThirdParty/HarfBuzz/HarfBuzz.vcxproj" Id="ffa50721-3b6e-440f-a253-4b19f430fc5d" />
   </Folder>

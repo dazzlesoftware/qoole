@@ -1,0 +1,21 @@
+{
+  "FileVersion": 1,
+  "Name": "LandscapeFoliageDotNet",
+  "EngineAssociation": "Genesis",
+  "Description": "Executable sculpt, paint, foliage, native persistence and undo regression example.",
+  "DefaultMap": "/Game/Maps/Main",
+  "Scripting": {
+    "GameplayLanguage": "DotNet",
+    "EditorLanguages": [
+      "DotNet"
+    ],
+    "Modules": [
+      {
+        "Name": "main",
+        "Source": "../../../Scripting/DotNet/Source/Genesis.ScriptExample.csproj",
+        "EditorFunction": "BuildTerrain",
+        "Runtime": "../../../../Engine/Binaries/ThirdParty/DotNet/Examples/Genesis.ScriptExample.dll"
+      }
+    ]
+  }
+}

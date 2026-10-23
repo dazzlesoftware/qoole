@@ -23,21 +23,7 @@ bool LoadSlot(const FAssetReference& Ref, const FAssetRegistry& Registry, FLoade
 	FMaterialAsset M;
 	if (!Loader.LoadMaterial(Ref, M, Error))
 		return false;
-	Slot.Material = M;
-	if (!M.BaseColorTexture.IsNull())
-	{
-		FTextureAsset T;
-		if (!Loader.LoadTexture(M.BaseColorTexture, T, Error))
-			return false;
-		Slot.Texture = std::move(T);
-	}
-	if (!M.NormalTexture.IsNull())
-	{
-		FTextureAsset T;
-		if (!Loader.LoadTexture(M.NormalTexture, T, Error))
-			return false;
-		Slot.NormalTexture = std::move(T);
-	}
+	if(!Loader.LoadMaterialResources(M,Slot,Error)) return false;
 	Out = std::move(Slot);
 	Error.Empty();
 	return true;

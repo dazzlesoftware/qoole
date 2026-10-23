@@ -50,10 +50,13 @@ public:
 	bool Initialize();
 	void* GetMappedData() override { return MappedData; }
 	VkBuffer GetHandle() const { return Buffer; }
+	VkDescriptorSet GetUniformSet() const { return UniformSet; }
 
 private:
 	FVulkanDevice& Device;
 	VkBuffer Buffer = VK_NULL_HANDLE;
+	VkDescriptorSet UniformSet = VK_NULL_HANDLE;
+	VkDescriptorPool UniformPool = VK_NULL_HANDLE;
 	VkDeviceMemory Memory = VK_NULL_HANDLE;
 	void* MappedData = nullptr;
 };
@@ -176,6 +179,7 @@ public:
 	void SetScissor(const FIntRect& Rect) override;
 	void SetPipeline(FRHIGraphicsPipeline& Pipeline) override;
 	void SetPushConstants(const void* Data, uint32 Size) override;
+	void SetUniformBuffer(FRHIBuffer& Buffer) override;
 	using FRHICommandList::SetTexture;
 	void SetTexture(FRHITexture& Texture, uint32 Slot) override;
 	using FRHICommandList::SetVertexBuffer;
@@ -196,6 +200,7 @@ private:
 	FIntPoint PassSize;
 	FVulkanGraphicsPipeline* Pipeline = nullptr;
 	FVulkanTexture* Textures[MaxTextures] = {};
+	FVulkanBuffer* UniformBuffer = nullptr;
 	bool bDescriptorDirty = true;
 	bool bPushConstantsDirty = false;
 	uint8 PushConstantData[64] = {};
@@ -258,8 +263,10 @@ public:
 		VkFormat DepthFormat = VK_FORMAT_UNDEFINED, bool bClearDepth = false);
 	// A set per texture slot, each the same layout (so a texture's set fits
 	// any slot), and the push constants; made when first asked for.
-	VkPipelineLayout GetPipelineLayout(uint32 SamplerIndex, uint32 NumTextures);
+	VkPipelineLayout GetPipelineLayout(uint32 SamplerIndex, uint32 NumTextures, bool bUniformBuffer = false);
 	VkDescriptorSet AllocateDescriptorSet(uint32 SamplerIndex, VkDescriptorPool& OutPool);
+	VkDescriptorSet AllocateUniformSet(VkDescriptorPool& OutPool);
+	VkDescriptorSet AllocateSet(VkDescriptorSetLayout Layout, VkDescriptorPool& OutPool);
 	FVulkanTexture& GetWhiteTexture() const { return *WhiteTexture; }
 
 	// Starts an upload; see the header comment. StagingSize may be 0.
@@ -316,6 +323,7 @@ private:
 	VkDescriptorSetLayout SetLayouts[NumSamplers] = {};
 	TMap<uint32, VkPipelineLayout> PipelineLayouts; // by sampler and texture count
 	TArray<VkDescriptorPool> DescriptorPools;
+	VkDescriptorSetLayout UniformSetLayout = VK_NULL_HANDLE;
 	TMap<uint64, VkRenderPass> RenderPasses;
 
 	FFrame Frames[MaxFramesInFlight];

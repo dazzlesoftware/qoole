@@ -58,6 +58,14 @@ namespace
 	}
 }
 
+bool SaveRgbaToPng(const FString& Path, int32 Width, int32 Height, const TArray<uint8>& Pixels)
+{
+	if(Width<=0 || Height<=0 || Pixels.size()!=static_cast<size_t>(Width)*Height*4) return false;
+	auto Bgra=Pixels;
+	for(size_t I=0;I<Bgra.size();I+=4) std::swap(Bgra[I],Bgra[I+2]);
+	return SavePng(Path,Width,Height,Bgra);
+}
+
 bool CaptureWindowClientToPng(void* NativeHandle, const FString& Path)
 {
 	const HWND Hwnd = static_cast<HWND>(NativeHandle);

@@ -27,6 +27,7 @@ void FVulkanCommandList::End()
 void FVulkanCommandList::ResetState()
 {
 	Pipeline = nullptr;
+	UniformBuffer = nullptr;
 	for (FVulkanTexture*& Bound : Textures)
 	{
 		Bound = nullptr;
@@ -180,7 +181,7 @@ void FVulkanCommandList::SetPipeline(FRHIGraphicsPipeline& InPipeline)
 	}
 	// Layouts with other samplers or texture counts are not compatible, so
 	// switching rebinds the textures; push constants are re-pushed too.
-	const auto LayoutKey = [](const FRHIGraphicsPipelineDesc& Desc) { return GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress) | (Desc.NumTextures << 8); };
+	const auto LayoutKey = [](const FRHIGraphicsPipelineDesc& Desc) { return GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress) | (Desc.NumTextures << 8) | (Desc.bUniformBuffer ? 1u << 16 : 0); };
 	if (!Pipeline || LayoutKey(Pipeline->GetDesc()) != LayoutKey(NewPipeline->GetDesc()))
 	{
 		bDescriptorDirty = true;
@@ -198,6 +199,13 @@ void FVulkanCommandList::SetPushConstants(const void* Data, uint32 Size)
 	}
 	std::memcpy(PushConstantData, Data, Size);
 	bPushConstantsDirty = true;
+}
+
+void FVulkanCommandList::SetUniformBuffer(FRHIBuffer& Buffer)
+{
+    check(Buffer.GetDesc().Usage==EBufferUsage::Uniform);
+    auto* NewBuffer=&static_cast<FVulkanBuffer&>(Buffer);
+    if(UniformBuffer!=NewBuffer){UniformBuffer=NewBuffer;bDescriptorDirty=true;}
 }
 
 void FVulkanCommandList::SetTexture(FRHITexture& InTexture, uint32 Slot)
@@ -247,11 +255,11 @@ void FVulkanCommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 Instance
 	const FRHIGraphicsPipelineDesc& Desc = Pipeline->GetDesc();
 	const uint32 SamplerIndex = GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress);
 	const uint32 NumTextures = FMath::Clamp(Desc.NumTextures, 1u, MaxTextures);
-	const VkPipelineLayout Layout = Device.GetPipelineLayout(SamplerIndex, NumTextures);
+	const VkPipelineLayout Layout = Device.GetPipelineLayout(SamplerIndex, NumTextures, Desc.bUniformBuffer);
 	if (bDescriptorDirty)
 	{
 		// A set per slot; slots left empty read the white texture.
-		VkDescriptorSet Sets[MaxTextures];
+		VkDescriptorSet Sets[MaxTextures+1];
 		for (uint32 Slot = 0; Slot < NumTextures; ++Slot)
 		{
 			FVulkanTexture& Bound = Textures[Slot] ? *Textures[Slot] : Device.GetWhiteTexture();
@@ -261,7 +269,11 @@ void FVulkanCommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 Instance
 				return;
 			}
 		}
-		vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Layout, 0, NumTextures, Sets, 0, nullptr);
+        if(Desc.bUniformBuffer){
+            if(!ensuref(UniformBuffer && UniformBuffer->GetUniformSet(),"Pipeline requires a uniform buffer"))return;
+            Sets[NumTextures]=UniformBuffer->GetUniformSet();
+        }
+		vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Layout, 0, NumTextures+(Desc.bUniformBuffer?1:0), Sets, 0, nullptr);
 		bDescriptorDirty = false;
 	}
 	if (bPushConstantsDirty)

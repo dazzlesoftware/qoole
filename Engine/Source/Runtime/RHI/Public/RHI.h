@@ -59,6 +59,7 @@ enum class EBufferUsage : uint8
 {
 	Vertex,
 	Index,
+	Uniform, // up to 64 KiB, immutable or one upload buffer per frame in flight
 };
 
 enum class EBufferMemory : uint8
@@ -220,6 +221,7 @@ struct FRHIGraphicsPipelineDesc
 	EBlendMode BlendMode = EBlendMode::AlphaBlend;
 	ESamplerFilter SamplerFilter = ESamplerFilter::Linear;
 	ESamplerAddress SamplerAddress = ESamplerAddress::Clamp;
+	bool bUniformBuffer = false; // b1 / [[vk::binding(0, NumTextures)]]; vertex and pixel stages
 	uint32 NumTextures = 1; // texture slots, 1 to MaxTextures
 	ECullMode CullMode = ECullMode::None;
 	EPixelFormat RenderTargetFormat = EPixelFormat::R8G8B8A8_UNORM;
@@ -267,6 +269,8 @@ public:
 	virtual void SetScissor(const FIntRect& Rect) = 0;
 	virtual void SetPipeline(FRHIGraphicsPipeline& Pipeline) = 0;
 	virtual void SetPushConstants(const void* Data, uint32 Size) = 0;
+	// Bind after SetPipeline. Entire buffer, no offset; caller owns in-flight lifetime.
+	virtual void SetUniformBuffer(FRHIBuffer& Buffer) = 0;
 	// Into a texture slot of the pipeline (0 to its NumTextures - 1).
 	virtual void SetTexture(FRHITexture& Texture, uint32 Slot) = 0;
 	void SetTexture(FRHITexture& Texture) { SetTexture(Texture, 0); }

@@ -37,7 +37,7 @@
   </ImportGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Geometry\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Projects\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Geometry\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="Main.cpp" /></ItemGroup>
@@ -46,4 +46,4 @@
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Geometry\Geometry.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C03}</Project></ProjectReference></ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Engine\Engine.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C04}</Project></ProjectReference></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-</Project>
+<ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Projects\Projects.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C01}</Project></ProjectReference></ItemGroup></Project>

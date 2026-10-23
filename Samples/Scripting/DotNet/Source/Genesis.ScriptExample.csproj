@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><AssemblyName>Genesis.ScriptExample</AssemblyName></PropertyGroup><ItemGroup><ProjectReference Include="../../../../Engine/Source/Runtime/Engine/Private/Scripting/DotNet/Genesis.ScriptBridge.csproj" /></ItemGroup></Project>

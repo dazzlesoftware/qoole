@@ -1,0 +1,19 @@
+{
+  "FileVersion": 1,
+  "Name": "PythonScripting",
+  "EngineAssociation": "Genesis",
+  "Description": "Python shared API example and regression project.",
+  "DefaultMap": "",
+  "Scripting": {
+    "GameplayLanguage": "Python",
+    "EditorLanguages": [
+      "Python"
+    ],
+    "Modules": [
+      {
+        "Name": "main",
+        "Source": "Source/Main.py"
+      }
+    ]
+  }
+}

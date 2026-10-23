@@ -37,10 +37,10 @@
   </ImportGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)AssetCore\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(GenesisThirdPartyDir)Lua\lua-5.4.9\src;$(GenesisThirdPartyDir)Python3\include;$(GenesisThirdPartyDir)DotNet\include;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)AssetCore\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
-  <ItemGroup></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\Materials\HLSLMaterialTranslator.cpp" /><ClInclude Include="Public\Materials\MaterialGraph.h" /><ClInclude Include="Private\Materials\MaterialShaderTemplate.h" /></ItemGroup>
   <ItemGroup><ClCompile Include="Private\Assets\RenderAssets.cpp" /></ItemGroup>
   <ItemGroup><ClInclude Include="Public\Assets\RenderAssets.h" /></ItemGroup>
   <ItemGroup><ClCompile Include="Private\World\WorldSceneSnapshot.cpp" /><ClInclude Include="Public\World\WorldSceneSnapshot.h" /><ClCompile Include="Private\World\WorldGeometry.cpp" /><ClInclude Include="Public\World\WorldGeometry.h" /><ClCompile Include="Private\World\World.cpp" /><ClCompile Include="Private\World\WorldIdentity.cpp" /></ItemGroup>
@@ -51,5 +51,14 @@
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)AssetCore\AssetCore.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C02}</Project></ProjectReference></ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Landscape\Landscape.vcxproj"><Project>{F56AFAD0-9726-4A5F-A556-F3914F9E98C0}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Foliage\Foliage.vcxproj"><Project>{777F84E0-A59C-4592-8368-1348146ECDF5}</Project></ProjectReference></ItemGroup>
   <ItemGroup><ClCompile Include="Private\World\FoliageLandscapeAttachment.cpp" /><ClInclude Include="Public\World\FoliageLandscapeAttachment.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\Scripting\ScriptRuntime.cpp" /><ClInclude Include="Public\Scripting\ScriptRuntime.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\Materials\Material.cpp" /><ClInclude Include="Public\Materials\Material.h" /><ClInclude Include="Private\Assets\RenderAssetCodecPrivate.h" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-</Project>
+  <ItemGroup><ClInclude Include="Public\Materials\MaterialInstance.h" /><ClCompile Include="Private\Materials\MaterialInstance.cpp" /></ItemGroup>
+<ItemGroup><ClInclude Include="Public\Materials\MaterialInstanceDynamic.h" /><ClCompile Include="Private\Materials\MaterialInstanceDynamic.cpp" /></ItemGroup>
+<ItemGroup><ClInclude Include="Public\Scripting\LuaScriptRuntime.h" /><ClCompile Include="Private\Scripting\LuaScriptRuntime.cpp" /><ProjectReference Include="$(GenesisThirdPartyDir)Lua\Lua.vcxproj"><Project>{DCED32B2-90BC-48C7-93EE-0CBA3CDE440C}</Project></ProjectReference></ItemGroup>
+<ItemGroup><ClInclude Include="Public\Scripting\ScriptBindings.h" /><ClCompile Include="Private\Scripting\ScriptBindings.cpp" /></ItemGroup>
+<ItemGroup><ClInclude Include="Public\Scripting\PythonScriptRuntime.h" /><ClCompile Include="Private\Scripting\PythonScriptRuntime.cpp" /></ItemGroup>
+<ItemGroup><ClInclude Include="Public\Scripting\DotNetScriptRuntime.h" /><ClCompile Include="Private\Scripting\DotNetScriptRuntime.cpp" /></ItemGroup>
+<ItemGroup><ClInclude Include="Public\Scripting\WorldScriptBindings.h" /><ClCompile Include="Private\Scripting\WorldScriptBindings.cpp" /></ItemGroup>
+<ItemGroup><ClInclude Include="Public\Scripting\AssetScriptBindings.h"/><ClCompile Include="Private\Scripting\AssetScriptBindings.cpp"/></ItemGroup><ItemGroup><ClInclude Include="Public\Scripting\ScriptWorldSubsystem.h"/><ClCompile Include="Private\Scripting\ScriptWorldSubsystem.cpp"/></ItemGroup></Project>

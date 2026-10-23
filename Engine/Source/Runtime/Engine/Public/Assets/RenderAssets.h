@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #pragma once
 #include "AssetRegistry.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstance.h"
 #include <memory>
 class StaticMesh;
 
@@ -9,23 +11,6 @@ struct FTextureAsset
 	int32 Width = 0, Height = 0;
 	bool bSRGB = true;
 	TArray<uint8> Pixels; // tightly packed RGBA8, rows from the top
-};
-
-enum class EMaterialBlendMode
-{
-	Opaque,
-	Masked,
-	Translucent
-};
-
-struct FMaterialAsset
-{
-	float BaseColor[4] = {1, 1, 1, 1};
-	float Roughness = 0.5f, Metallic = 0;
-	EMaterialBlendMode BlendMode = EMaterialBlendMode::Opaque;
-	float OpacityMaskClip = 0.333f;
-	FAssetReference BaseColorTexture;
-	FAssetReference NormalTexture; // tangent-space RGB; always sampled as linear data
 };
 
 struct FStaticMeshAsset
@@ -59,6 +44,8 @@ class FRenderAssetCodec
 	static bool DecodeTexture(const FAssetPackage&, FTextureAsset&, FString& Error);
 	static bool EncodeMaterial(const FMaterialAsset&, FAssetPackage&, FString& Error);
 	static bool DecodeMaterial(const FAssetPackage&, FMaterialAsset&, FString& Error);
+	static bool EncodeMaterialInstance(const FMaterialInstanceAsset&, FAssetPackage&, FString& Error);
+	static bool DecodeMaterialInstance(const FAssetPackage&, FMaterialInstanceAsset&, FString& Error);
 	static bool EncodeMesh(const FStaticMeshAsset&, FAssetPackage&, FString& Error);
 	static bool DecodeMesh(const FAssetPackage&, FStaticMeshAsset&, FString& Error);
 };
@@ -68,6 +55,8 @@ struct FLoadedMaterialSlot
 	TOptional<FMaterialAsset> Material;
 	TOptional<FTextureAsset> Texture;
 	TOptional<FTextureAsset> NormalTexture;
+	TArray<FTextureAsset> GraphTextures;
+	TArray<bool> GraphTextureNormals;
 };
 
 struct FLoadedMeshAsset : FLoadedMaterialSlot
@@ -91,6 +80,7 @@ class FRenderAssetLoader
 	}
 	bool LoadTexture(const FAssetReference&, FTextureAsset&, FString& Error) const;
 	bool LoadMaterial(const FAssetReference&, FMaterialAsset&, FString& Error) const;
+	bool LoadMaterialResources(const FMaterialAsset&, FLoadedMaterialSlot&, FString& Error) const;
 	bool LoadMesh(const FAssetReference&, FLoadedMeshAsset&, FString& Error,
 				  const FAssetReference& MaterialOverride = {},
 				  const TArray<FAssetReference>& AdditionalOverrides = {}) const;

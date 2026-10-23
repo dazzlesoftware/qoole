@@ -151,6 +151,7 @@ FVulkanDevice::~FVulkanDevice()
 		{
 			vkDestroyRenderPass(Device, RenderPass, nullptr);
 		}
+		if (UniformSetLayout) vkDestroyDescriptorSetLayout(Device, UniformSetLayout, nullptr);
 		for (VkDescriptorPool Pool : DescriptorPools)
 		{
 			vkDestroyDescriptorPool(Device, Pool, nullptr);
@@ -447,6 +448,13 @@ bool FVulkanDevice::CreateSharedObjects()
 			return false;
 		}
 	}
+
+    VkDescriptorSetLayoutBinding UniformBinding{};
+    UniformBinding.binding=0;UniformBinding.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    UniformBinding.descriptorCount=1;UniformBinding.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutCreateInfo UniformInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    UniformInfo.bindingCount=1;UniformInfo.pBindings=&UniformBinding;
+    if(!VulkanUtil::Check(vkCreateDescriptorSetLayout(Device,&UniformInfo,nullptr,&UniformSetLayout),"Uniform descriptor layout"))return false;
 	SetDebugName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64>(Samplers[0]), "LinearClampSampler");
 	SetDebugName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64>(Samplers[1]), "PointClampSampler");
 	SetDebugName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64>(Samplers[2]), "LinearWrapSampler");
@@ -692,14 +700,14 @@ VkRenderPass FVulkanDevice::GetRenderPass(VkFormat Format, bool bClear, VkImageL
 	return RenderPass;
 }
 
-VkPipelineLayout FVulkanDevice::GetPipelineLayout(uint32 SamplerIndex, uint32 NumTextures)
+VkPipelineLayout FVulkanDevice::GetPipelineLayout(uint32 SamplerIndex, uint32 NumTextures, bool bUniformBuffer)
 {
-	const uint32 Key = SamplerIndex | (NumTextures << 8);
+	const uint32 Key = SamplerIndex | (NumTextures << 8) | (bUniformBuffer ? 1u << 16 : 0);
 	if (const auto Found = PipelineLayouts.find(Key); Found != PipelineLayouts.end())
 	{
 		return Found->second;
 	}
-	VkDescriptorSetLayout Sets[MaxTextures];
+	VkDescriptorSetLayout Sets[MaxTextures+1];
 	for (uint32 Slot = 0; Slot < NumTextures; ++Slot)
 	{
 		Sets[Slot] = SetLayouts[SamplerIndex];
@@ -709,7 +717,8 @@ VkPipelineLayout FVulkanDevice::GetPipelineLayout(uint32 SamplerIndex, uint32 Nu
 	PushRange.offset = 0;
 	PushRange.size = MaxPushConstantSize;
 	VkPipelineLayoutCreateInfo LayoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-	LayoutInfo.setLayoutCount = NumTextures;
+	if(bUniformBuffer)Sets[NumTextures]=UniformSetLayout;
+	LayoutInfo.setLayoutCount = NumTextures+(bUniformBuffer?1:0);
 	LayoutInfo.pSetLayouts = Sets;
 	LayoutInfo.pushConstantRangeCount = 1;
 	LayoutInfo.pPushConstantRanges = &PushRange;
@@ -724,9 +733,17 @@ VkPipelineLayout FVulkanDevice::GetPipelineLayout(uint32 SamplerIndex, uint32 Nu
 
 VkDescriptorSet FVulkanDevice::AllocateDescriptorSet(uint32 SamplerIndex, VkDescriptorPool& OutPool)
 {
+    return AllocateSet(SetLayouts[SamplerIndex],OutPool);
+}
+VkDescriptorSet FVulkanDevice::AllocateUniformSet(VkDescriptorPool& OutPool)
+{
+    return AllocateSet(UniformSetLayout,OutPool);
+}
+VkDescriptorSet FVulkanDevice::AllocateSet(VkDescriptorSetLayout Layout,VkDescriptorPool& OutPool)
+{
 	VkDescriptorSetAllocateInfo AllocInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
 	AllocInfo.descriptorSetCount = 1;
-	AllocInfo.pSetLayouts = &SetLayouts[SamplerIndex];
+	AllocInfo.pSetLayouts = &Layout;
 
 	// Try the newest pool first, then create a new one.
 	for (int32 Attempt = 0; Attempt < 2; ++Attempt)
@@ -751,11 +768,12 @@ VkDescriptorSet FVulkanDevice::AllocateDescriptorSet(uint32 SamplerIndex, VkDesc
 		const VkDescriptorPoolSize Sizes[] = {
 			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, DescriptorSetsPerPool },
 			{ VK_DESCRIPTOR_TYPE_SAMPLER, DescriptorSetsPerPool },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, DescriptorSetsPerPool },
 		};
 		VkDescriptorPoolCreateInfo PoolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 		PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 		PoolInfo.maxSets = DescriptorSetsPerPool;
-		PoolInfo.poolSizeCount = 2;
+		PoolInfo.poolSizeCount = 3;
 		PoolInfo.pPoolSizes = Sizes;
 		VkDescriptorPool Pool = VK_NULL_HANDLE;
 		if (!VulkanUtil::Check(vkCreateDescriptorPool(Device, &PoolInfo, nullptr, &Pool), "vkCreateDescriptorPool"))

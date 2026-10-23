@@ -1,0 +1,20 @@
+{
+  "FileVersion": 1,
+  "Name": "DotNetScripting",
+  "EngineAssociation": "Genesis",
+  "Description": "C# gameplay/editor scripting and API conformance example.",
+  "DefaultMap": "",
+  "Scripting": {
+    "GameplayLanguage": "DotNet",
+    "EditorLanguages": [
+      "DotNet"
+    ],
+    "Modules": [
+      {
+        "Name": "main",
+        "Source": "Source/Main.cs",
+        "Runtime": "../../../Engine/Binaries/ThirdParty/DotNet/Examples/Genesis.ScriptExample.dll"
+      }
+    ]
+  }
+}

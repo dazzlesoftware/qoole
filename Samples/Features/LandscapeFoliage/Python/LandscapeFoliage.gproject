@@ -1,0 +1,20 @@
+{
+  "FileVersion": 1,
+  "Name": "LandscapeFoliagePython",
+  "EngineAssociation": "Genesis",
+  "Description": "Executable sculpt, paint, foliage, native persistence and undo regression example.",
+  "DefaultMap": "/Game/Maps/Main",
+  "Scripting": {
+    "GameplayLanguage": "Python",
+    "EditorLanguages": [
+      "Python"
+    ],
+    "Modules": [
+      {
+        "Name": "main",
+        "Source": "../../../Scripting/Python/Source/Main.py",
+        "EditorFunction": "BuildTerrain"
+      }
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+Run `Samples/Features/LandscapeFoliage/Run.ps1` from the repository root to generate Main.gmap through the editor scripting API. Generated manifests and generation sidecars are excluded from source control.

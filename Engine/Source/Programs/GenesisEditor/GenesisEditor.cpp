@@ -14,6 +14,10 @@
 //   -nodebug / -debug      D3D12 debug layer / Vulkan validation (default: the
 //                          preferences, else on in Debug builds)
 //   -resetlayout           start from the default window layout and key bindings
+//   -runscript=<path>     Lua/Python source or .NET DLL; -scriptfunction=Main
+//   -scriptmodule=<name>  execute a named module from the active .gproject
+//   -scriptargs=<json>    argument file; -scriptresult=<json> writes outcome
+//   -exitafterscript      exit after script execution (nonzero on failure)
 //   -selftest=<dir>        scripted run: builds maps from prefabs and
 //                          entities, selects, moves, rotates and clips with
 //                          the mouse, hollows and subtracts, edits
@@ -29,6 +33,10 @@
 #include "CoreMinimal.h"
 #include "ProjectDescriptor.h"
 #include "AssetRegistry.h"
+#include "MaterialEditor.h"
+#include "EditorScriptExecution.h"
+#include "HAL/File.h"
+#include "MaterialEditingLibrary.h"
 #include "MapAssetLibrary.h"
 #include "GenericPlatform/PlatformDialogs.h"
 #include "MapCoreHeaders.h"
@@ -389,7 +397,7 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 			break;
 		}
 	}
-	if (!bOpened)
+	if (!bOpened && !GetOption(Args, "-runscript=") && !GetOption(Args, "-scriptmodule="))
 	{
 		if (const auto* Project = FProjectContext::GetActive(); Project && !Project->GetDescriptor().DefaultMap.IsEmpty())
 		{
@@ -401,7 +409,7 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 			}
 		}
 	}
-	if (!bOpened && SelfTestDir.IsEmpty() && FMapEditorShell::GetStartupMapPreference() == FMapEditorShell::EStartupMap::LastOpened)
+	if (!bOpened && !GetOption(Args, "-runscript=") && !GetOption(Args, "-scriptmodule=") && SelfTestDir.IsEmpty() && FMapEditorShell::GetStartupMapPreference() == FMapEditorShell::EStartupMap::LastOpened)
 	{
 		const FString Last = FMapEditorShell::GetLastMap();
 		std::error_code Error;
@@ -428,6 +436,46 @@ int32 FMapEditorApp::Run(const FString& CommandLine)
 	{
 		Shutdown();
 		return 1;
+	}
+    auto Script=GetOption(Args,"-runscript=");
+    FString DefaultScriptFunction="Main";
+    if(const auto Module=GetOption(Args,"-scriptmodule=")) {
+        const auto* Project=FProjectContext::GetActive();FString File,Error;
+        if(Script||!Project||!Project->ResolveScriptModule(*Module,true,File,Error)){
+            UE_LOG(LogGenesisEditor,Error,"Named script module requires an active project and cannot be combined with -runscript: {}",Error);Shutdown();return 1;
+        }
+        Script=File;
+        for(const auto& Entry:Project->GetDescriptor().ScriptModules)if(Entry.Name==*Module)DefaultScriptFunction=Entry.Extensions.Get("EditorFunction").AsString("Main");
+    }
+    if (Script)
+    {
+		FEditorScriptRequest Request;
+		Request.ModulePath = *Script;
+		Request.Language = GetOption(Args, "-scriptlanguage=").value_or(Script->EndsWith(".lua", ESearchCase::IgnoreCase) ? FString("Lua") : Script->EndsWith(".py", ESearchCase::IgnoreCase) ? FString("Python") : FString("DotNet"));
+		Request.Function = GetOption(Args, "-scriptfunction=").value_or(DefaultScriptFunction);
+		Request.Capabilities.push_back("Editor.Files");
+		FString Error; FJsonValue Result;
+		if (const auto Input=GetOption(Args,"-scriptargs="))
+		{
+			FString Text;
+			if (!FFile::ReadAllText(*Input,Text)) {Shutdown();return 1;}
+			auto Parsed=FJsonValue::Parse(Text.View(),&Error);
+			if (!Parsed) {UE_LOG(LogGenesisEditor,Error,"Script arguments: {}",Error);Shutdown();return 1;}
+			Request.Arguments=std::move(*Parsed);
+		}
+		auto Context=std::make_shared<FEditorScriptContext>();
+		Context->GetDocument=[this]{return Shell->GetDocument();};
+		Context->Assets=FMapAssetLibrary::GetRegistry();
+		Context->GetCommands=[this]{return Shell->GetCommandList();};
+		Request.Capabilities.push_back("Editor.Commands");
+		const bool Success=ExecuteEditorScript(Request,Context,Result,Error);
+		if (!Success) UE_LOG(LogGenesisEditor,Error,"Editor script failed: {}",Error);
+		if (const auto Output=GetOption(Args,"-scriptresult="))
+		{
+			auto Report=FJsonValue::MakeObject();Report["Success"]=Success;Report["Result"]=Result;Report["Error"]=Error;
+			if (!FFile::WriteAllText(*Output,Report.ToString())) {Shutdown();return 1;}
+		}
+		if (!Success || HasFlag(Args,"-exitafterscript")) {Shutdown();return Success?0:1;}
 	}
 	if (!SelfTestDir.IsEmpty())
 	{
@@ -496,6 +544,19 @@ void FMapEditorApp::Shutdown()
 void FMapEditorApp::Capture(const char* Name, const TSharedPtr<SWindow>& Window)
 {
 	const TSharedPtr<SWindow> Target = Window ? Window : MainWindow;
+	if ((std::string_view(Name)=="material_asset"||std::string_view(Name)=="material_instance"))
+	{
+		for(int I=0;I<3;++I){Target->Invalidate(EInvalidateWidgetReason::Paint);App->Tick();}
+		const auto Size=Target->GetPixelSize();
+		auto Image=Renderer->CreateRenderTarget(Size.X,Size.Y,"Material editor QA");
+		auto& Cmd=Device->BeginFrame();Renderer->BeginFrame();
+		Renderer->Render(Cmd,Image->GetTexture(),Target->GetDrawElements(),FLinearColor(.03f,.03f,.03f,1));
+		Device->EndFrame();TArray<uint8> Pixels;
+		const auto Path=SelfTestDir+FString::Format("{}_{}.png",ToString(Backend),Name);
+		const bool Good=Device->ReadbackTexture(Image->GetTexture(),Pixels)&&SaveRgbaToPng(Path,Size.X,Size.Y,Pixels);
+		UE_LOG(LogGenesisEditor,Display,"Material editor offscreen screenshot {} -> {}",Good?"saved":"FAILED",Path);
+		return;
+	}
 	const HWND Hwnd = static_cast<HWND>(Target->GetNativeWindow()->GetNativeHandle());
 	SetWindowPos(Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 	for (int32 I = 0; I < 3; ++I)
@@ -1519,7 +1580,31 @@ void FMapEditorApp::TickSelfTest()
 		TArray<TSharedRef<SWindow>> Close; for(const auto& Window:App->GetWindows()) if(Window->GetTitle().StartsWith("Texture:")) Close.push_back(Window);
 		for(const auto& Window:Close) App->RequestDestroyWindow(Window); break;
 	}
-	case 446:
+
+    case 444:
+    {
+        const auto Project=FProjectContext::GetActive();const auto Registry=FMapAssetLibrary::GetRegistry();
+        if(!Project||!Registry)break;FString Error,File;FMaterialAsset Material;Material.Graph=FMaterialGraph{};auto& G=*Material.Graph;
+        const auto Texture=G.Add(EMaterialExpression::TextureSampleParameter2D);G.Find(Texture)->ParameterName="Albedo";
+        if(const auto* Asset=Registry->FindByPath("/Game/MaterialPattern"))G.Find(Texture)->Texture=Asset->GetReference();
+        const auto Tint=G.Add(EMaterialExpression::VectorParameter);G.Find(Tint)->ParameterName="Tint";for(float& V:G.Find(Tint)->Value)V=1;
+        const auto Product=G.Add(EMaterialExpression::Multiply);G.Find(Product)->Inputs[0]=Texture;G.Find(Product)->Inputs[1]=Tint;
+        const auto RGB=G.Add(EMaterialExpression::ComponentMask);G.Find(RGB)->Inputs[0]=Product;G.Outputs[0]=RGB;
+        const auto Roughness=G.Add(EMaterialExpression::ScalarParameter);G.Find(Roughness)->ParameterName="Roughness";G.Find(Roughness)->Value[0]=.5f;G.Outputs[1]=Roughness;
+        FAssetPackage Base,InstancePackage;FMaterialInstanceAsset Instance;
+        bool Good=FMaterialEditingLibrary::CompileMaterial(Material,Error)&&Project->ResolvePackage("/Game/InstanceQABase",false,File,Error)&&FRenderAssetCodec::EncodeMaterial(Material,Base,Error)&&FAssetPackageStore::Save(File,Base,Error);
+        Instance.Parent={Base.Id,"/Game/InstanceQABase"};Instance.Parameters={{"Tint",4,{.1f,.7f,1.f,1.f}},{"Roughness",1,{.2f,0,0,0}}};
+        Good=Good&&Project->ResolvePackage("/Game/InstanceQA",false,File,Error)&&FRenderAssetCodec::EncodeMaterialInstance(Instance,InstancePackage,Error)&&FAssetPackageStore::Save(File,InstancePackage,Error);
+        if(Good){
+            Shell->RefreshAssetRegistry();FMaterialEditorArgs Args;Args.Registry=Registry;Args.Material={InstancePackage.Id,"/Game/InstanceQA"};Args.Name="Instance QA";Args.Device=Device.get();Args.Renderer=Renderer.get();Args.WindowRenderer=WindowRenderer.get();
+            Good=FMaterialEditor::Open(Args,Error)!=nullptr;MaterialWindowOpenedAt=FPlatformTime::Seconds();
+        }
+        const FString Result=Good?FString("material instance editor opened with inherited texture and scalar/vector overrides"):"FAILED: material instance editor "+Error;Report(*Result);break;
+    }
+    case 446:
+        if(MaterialWindowOpenedAt>0&&FPlatformTime::Seconds()-MaterialWindowOpenedAt<.5){--SelfTestFrame;break;}
+        for(const auto& Window:App->GetWindows())if(Window->GetTitle().StartsWith("Material Instance:"))Capture("material_instance",Window.ToSharedPtr());break;
+    case 448:
 		App->RequestQuit();
 		break;
 	default:

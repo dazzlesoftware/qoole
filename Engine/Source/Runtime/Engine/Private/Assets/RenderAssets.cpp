@@ -1,5 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "Assets/RenderAssets.h"
+#include "RenderAssetCodecPrivate.h"
 #include "Geometry/StaticMesh.h"
 #include <bit>
 #include <cmath>
@@ -7,25 +8,8 @@
 
 namespace
 {
+using namespace RenderAssetCodecPrivate;
 using J = FJsonValue;
-void Need(bool Value, const char* Error)
-{
-	if (!Value)
-		throw std::runtime_error(Error);
-}
-int Count(const J& V, int Max)
-{
-	const auto N = V.AsNumber(-1);
-	Need(V.GetType() == EJsonType::Number && std::isfinite(N) && N >= 0 && N <= Max && N == std::floor(N),
-		 "Invalid asset count or offset.");
-	return static_cast<int>(N);
-}
-float Number(const J& V, float Low = 0, float High = 1)
-{
-	const auto N = V.AsNumber();
-	Need(V.GetType() == EJsonType::Number && std::isfinite(N) && N >= Low && N <= High, "Invalid asset numeric value.");
-	return static_cast<float>(N);
-}
 void FloatOK(float V)
 {
 	Need(std::isfinite(V) && std::abs(V) <= 1.0e9f, "Invalid mesh coordinate or normal.");
@@ -70,30 +54,11 @@ struct FReader
 		return Vector3d(X, Y, Z);
 	}
 };
-FAssetPackage Package(const FAssetPackage& Previous, const char* Schema)
-{
-	FAssetPackage P;
-	P.Id = Previous.Id;
-	P.Schema = Schema;
-	return P;
-}
 void Schema(const FAssetPackage& P, const char* Type)
 {
-	Need(P.Kind == EAssetPackageKind::Asset && P.Schema == Type && P.SchemaVersion == 1 && P.Exports.IsObject(),
+	Need(P.Kind == EAssetPackageKind::Asset && P.Schema == Type && P.SchemaVersion == 1 &&
+			 P.Exports.IsObject(),
 		 "Unsupported render asset schema.");
-}
-FAssetReference Reference(const J& Value)
-{
-	FString Error;
-	auto Ref = FAssetReference::FromJson(Value, Error);
-	Need(Ref.has_value(), "Invalid render asset reference.");
-	return *Ref;
-}
-void Dependency(FAssetPackage& P, const FAssetReference& R)
-{
-	Reference(R.ToJson());
-	if (!R.Path.IsEmpty() && std::find(P.Dependencies.begin(), P.Dependencies.end(), R.Path) == P.Dependencies.end())
-		P.Dependencies.push_back(R.Path);
 }
 std::shared_ptr<const StaticMesh> Tint(const StaticMesh& Mesh, const FMaterialAsset& Material)
 {
@@ -169,79 +134,6 @@ bool FRenderAssetCodec::DecodeTexture(const FAssetPackage& P, FTextureAsset& Out
 		return false;
 	}
 }
-bool FRenderAssetCodec::EncodeMaterial(const FMaterialAsset& In, FAssetPackage& Out, FString& Error)
-{
-	try
-	{
-		auto P = Package(Out, "Genesis.Material");
-		P.SchemaVersion = 3;
-		P.Exports["BaseColor"] = J::MakeArray();
-		for (float V : In.BaseColor)
-		{
-			Need(std::isfinite(V) && V >= 0 && V <= 1, "Material color must be between zero and one.");
-			P.Exports["BaseColor"].Push(V);
-		}
-		Need(std::isfinite(In.Roughness) && In.Roughness >= 0 && In.Roughness <= 1 && std::isfinite(In.Metallic) &&
-				 In.Metallic >= 0 && In.Metallic <= 1,
-			 "Invalid material surface values.");
-		P.Exports["Roughness"] = In.Roughness;
-		P.Exports["Metallic"] = In.Metallic;
-		Need(static_cast<int>(In.BlendMode) >= 0 && static_cast<int>(In.BlendMode) <= 2 &&
-				 std::isfinite(In.OpacityMaskClip) && In.OpacityMaskClip >= 0 && In.OpacityMaskClip <= 1,
-			 "Invalid material blend settings.");
-		P.Exports["BlendMode"] = static_cast<int>(In.BlendMode);
-		P.Exports["OpacityMaskClip"] = In.OpacityMaskClip;
-		P.Exports["BaseColorTexture"] = In.BaseColorTexture.ToJson();
-		Dependency(P, In.BaseColorTexture);
-		P.Exports["NormalTexture"] = In.NormalTexture.ToJson();
-		Dependency(P, In.NormalTexture);
-		Out = std::move(P);
-		Error.Empty();
-		return true;
-	}
-	catch (const std::exception& E)
-	{
-		Error = E.what();
-		return false;
-	}
-}
-bool FRenderAssetCodec::DecodeMaterial(const FAssetPackage& P, FMaterialAsset& Out, FString& Error)
-{
-	try
-	{
-		Need(P.Kind == EAssetPackageKind::Asset && P.Schema == "Genesis.Material" &&
-				 (P.SchemaVersion >= 1 && P.SchemaVersion <= 3) && P.Exports.IsObject(),
-			 "Unsupported material schema.");
-		Need(P.Bulk.empty(), "Unexpected material bulk payload.");
-		FMaterialAsset M;
-		const auto& Color = P.Exports.Get("BaseColor");
-		Need(Color.IsArray() && Color.Num() == 4, "Invalid material color.");
-		for (int I = 0; I < 4; ++I)
-			M.BaseColor[I] = Number(Color[I]);
-		M.Roughness = Number(P.Exports.Get("Roughness"));
-		M.Metallic = Number(P.Exports.Get("Metallic"));
-		M.BaseColorTexture = Reference(P.Exports.Get("BaseColorTexture"));
-		if (P.SchemaVersion >= 2)
-			M.NormalTexture = Reference(P.Exports.Get("NormalTexture"));
-		if (P.SchemaVersion >= 3)
-		{
-			const auto& Mode = P.Exports.Get("BlendMode");
-			Need(Mode.GetType() == EJsonType::Number && Mode.AsNumber() >= 0 && Mode.AsNumber() <= 2 &&
-					 std::floor(Mode.AsNumber()) == Mode.AsNumber(),
-				 "Invalid material blend mode.");
-			M.BlendMode = static_cast<EMaterialBlendMode>(static_cast<int>(Mode.AsNumber()));
-			M.OpacityMaskClip = Number(P.Exports.Get("OpacityMaskClip"));
-		}
-		Out = std::move(M);
-		Error.Empty();
-		return true;
-	}
-	catch (const std::exception& E)
-	{
-		Error = E.what();
-		return false;
-	}
-}
 bool FRenderAssetCodec::EncodeMesh(const FStaticMeshAsset& In, FAssetPackage& Out, FString& Error)
 {
 	try
@@ -262,12 +154,14 @@ bool FRenderAssetCodec::EncodeMesh(const FStaticMeshAsset& In, FAssetPackage& Ou
 		P.Exports["Triangles"] = static_cast<int>(M.GetTriangles().size());
 		P.Exports["Edges"] = static_cast<int>(M.GetEdgeList().size());
 		P.Exports["Colors"] = M.HasVertexColors();
-		Need(In.MaterialSlotNames.empty() || In.MaterialSlotNames.size() == static_cast<size_t>(In.GetNumMaterials()),
+		Need(In.MaterialSlotNames.empty() ||
+				 In.MaterialSlotNames.size() == static_cast<size_t>(In.GetNumMaterials()),
 			 "Invalid material slot names.");
 		P.Exports["MaterialSlotNames"] = J::MakeArray();
 		for (const auto& Name : In.MaterialSlotNames)
 		{
-			Need(Name.Len() <= 256 && Name.View().find('\0') == std::string_view::npos, "Invalid material slot name.");
+			Need(Name.Len() <= 256 && Name.View().find('\0') == std::string_view::npos,
+				 "Invalid material slot name.");
 			P.Exports["MaterialSlotNames"].Push(Name);
 		}
 		P.Exports["Materials"] = J::MakeArray();
@@ -327,9 +221,11 @@ bool FRenderAssetCodec::DecodeMesh(const FAssetPackage& P, FStaticMeshAsset& Out
 		const auto& E = P.Exports;
 		const int V = Count(E.Get("Vertices"), 1000000), T = Count(E.Get("Triangles"), 2000000),
 				  Edges = Count(E.Get("Edges"), 3000000);
-		Need(V > 0 && T > 0 && E.Get("Colors").GetType() == EJsonType::Bool, "Empty mesh or missing color flag.");
+		Need(V > 0 && T > 0 && E.Get("Colors").GetType() == EJsonType::Bool,
+			 "Empty mesh or missing color flag.");
 		const bool Colors = E.Get("Colors").AsBool();
-		const uint64 Bytes = static_cast<uint64>(V) * 12 + static_cast<uint64>(T) * (P.SchemaVersion == 1 ? 72 : 76) +
+		const uint64 Bytes = static_cast<uint64>(V) * 12 +
+							 static_cast<uint64>(T) * (P.SchemaVersion == 1 ? 72 : 76) +
 							 static_cast<uint64>(Edges) * 8 + (Colors ? static_cast<uint64>(V) * 4 : 0);
 		Need(Bytes == P.Bulk.size(), "Invalid mesh bulk byte count.");
 		const auto Name = E.Get("Name").AsString();
@@ -342,13 +238,15 @@ bool FRenderAssetCodec::DecodeMesh(const FAssetPackage& P, FStaticMeshAsset& Out
 		else
 		{
 			const auto& Slots = E.Get("Materials");
-			Need(Slots.IsArray() && Slots.Num() >= 1 && Slots.Num() <= 64, "Invalid mesh material slot count.");
+			Need(Slots.IsArray() && Slots.Num() >= 1 && Slots.Num() <= 64,
+				 "Invalid mesh material slot count.");
 			Asset.Material = Reference(Slots[0]);
 			for (int I = 1; I < Slots.Num(); ++I)
 				Asset.AdditionalMaterials.push_back(Reference(Slots[I]));
 		}
 		const auto& Names = E.Get("MaterialSlotNames");
-		Need(Names.IsNull() || (Names.IsArray() && (Names.Num() == 0 || Names.Num() == Asset.GetNumMaterials())),
+		Need(Names.IsNull() ||
+				 (Names.IsArray() && (Names.Num() == 0 || Names.Num() == Asset.GetNumMaterials())),
 			 "Invalid material slot names.");
 		for (const auto& N : Names.GetItems())
 		{
@@ -371,8 +269,8 @@ bool FRenderAssetCodec::DecodeMesh(const FAssetPackage& P, FStaticMeshAsset& Out
 			for (auto& Normal : N)
 			{
 				Normal = R.Vector();
-				const auto L =
-					Normal.GetX() * Normal.GetX() + Normal.GetY() * Normal.GetY() + Normal.GetZ() * Normal.GetZ();
+				const auto L = Normal.GetX() * Normal.GetX() + Normal.GetY() * Normal.GetY() +
+							   Normal.GetZ() * Normal.GetZ();
 				Need(L > 0.5f && L < 1.5f, "Invalid mesh normal.");
 			}
 			M->AddTriangle(A, B, C, N[0], N[1], N[2]);
@@ -417,18 +315,14 @@ bool FRenderAssetLoader::LoadTexture(const FAssetReference& R, FTextureAsset& Ou
 	FAssetPackage P;
 	return Registry.Load(R, P, Error, "Genesis.Texture2D") && FRenderAssetCodec::DecodeTexture(P, Out, Error);
 }
-bool FRenderAssetLoader::LoadMaterial(const FAssetReference& R, FMaterialAsset& Out, FString& Error) const
-{
-	FAssetPackage P;
-	return Registry.Load(R, P, Error, "Genesis.Material") && FRenderAssetCodec::DecodeMaterial(P, Out, Error);
-}
 bool FRenderAssetLoader::LoadMesh(const FAssetReference& R, FLoadedMeshAsset& Out, FString& Error,
 								  const FAssetReference& Override,
 								  const TArray<FAssetReference>& AdditionalOverrides) const
 {
 	FLoadedMeshAsset Asset;
 	FAssetPackage P;
-	if (!Registry.Load(R, P, Error, "Genesis.StaticMesh") || !FRenderAssetCodec::DecodeMesh(P, Asset.Data, Error))
+	if (!Registry.Load(R, P, Error, "Genesis.StaticMesh") ||
+		!FRenderAssetCodec::DecodeMesh(P, Asset.Data, Error))
 		return false;
 	const auto* Metadata = Registry.FindById(P.Id);
 	Asset.Source = {P.Id, Metadata ? Metadata->PackagePath : R.Path};
@@ -442,9 +336,10 @@ bool FRenderAssetLoader::LoadMesh(const FAssetReference& R, FLoadedMeshAsset& Ou
 	Asset.AdditionalSlots.resize(Asset.Data.AdditionalMaterials.size());
 	for (int I = 0; I < Asset.Data.GetNumMaterials(); ++I)
 	{
-		const auto Ref = I == 0 ? Override
-								: (I <= static_cast<int>(AdditionalOverrides.size()) ? AdditionalOverrides[I - 1]
-																					 : FAssetReference{});
+		const auto Ref = I == 0
+							 ? Override
+							 : (I <= static_cast<int>(AdditionalOverrides.size()) ? AdditionalOverrides[I - 1]
+																				  : FAssetReference{});
 		if (!FAssetReference::FromJson(Ref.ToJson(), Error))
 			return false;
 		const auto& Material = Ref.IsNull() ? Asset.Data.GetMaterial(I) : Ref;
@@ -454,21 +349,8 @@ bool FRenderAssetLoader::LoadMesh(const FAssetReference& R, FLoadedMeshAsset& Ou
 		FMaterialAsset M;
 		if (!LoadMaterial(Material, M, Error))
 			return false;
-		Slot.Material = M;
-		if (!M.BaseColorTexture.IsNull())
-		{
-			FTextureAsset T;
-			if (!LoadTexture(M.BaseColorTexture, T, Error))
-				return false;
-			Slot.Texture = std::move(T);
-		}
-		if (!M.NormalTexture.IsNull())
-		{
-			FTextureAsset T;
-			if (!LoadTexture(M.NormalTexture, T, Error))
-				return false;
-			Slot.NormalTexture = std::move(T);
-		}
+		if (!LoadMaterialResources(M, Slot, Error))
+			return false;
 	}
 	Asset.DisplayMesh = Asset.Material ? Tint(*Asset.Data.Mesh, *Asset.Material) : Asset.Data.Mesh;
 	Out = std::move(Asset);

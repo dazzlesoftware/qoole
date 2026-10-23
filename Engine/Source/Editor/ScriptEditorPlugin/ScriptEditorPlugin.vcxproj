@@ -1,0 +1,55 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{A1B70F21-53E2-41E8-9592-210DF1DEDA25}</ProjectGuid>
+    <RootNamespace>ScriptEditorPlugin</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\Build\Engine.props" />
+  </ImportGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <ConformanceMode>false</ConformanceMode>
+      <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(GenesisEditorDir)LandscapeEditor\Public;$(GenesisEditorDir)FoliageEditor\Public;$(GenesisEditorDir)LandscapeEditorUtilities\Public;$(GenesisEditorDir)MaterialEditor\Public;$(GenesisEditorDir)MapEditor\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Renderer\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir)Public;$(ProjectDir)Private;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <ClCompile Include="Private\EditorScriptBindings.cpp" />
+    <ClInclude Include="Public\EditorScriptBindings.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MapEditor\MapEditor.vcxproj">
+      <Project>{248D610E-BEDE-4C49-AFD7-43F90E5F4B54}</Project>
+    </ProjectReference>
+  </ItemGroup>
+<ItemGroup><ProjectReference Include="..\LandscapeEditor\LandscapeEditor.vcxproj"><Project>{072ACA67-77B1-4E56-B304-C5192AFA8C6A}</Project></ProjectReference><ProjectReference Include="..\FoliageEditor\FoliageEditor.vcxproj"><Project>{2E8B0EAC-F17E-430F-A16A-A71D7FE07193}</Project></ProjectReference></ItemGroup><ItemGroup><ClCompile Include="Private\EditorScriptExecution.cpp"/><ClInclude Include="Public\EditorScriptExecution.h"/></ItemGroup><ItemGroup><ProjectReference Include="..\MaterialEditor\MaterialEditor.vcxproj"><Project>{B872EF2A-5CD5-5124-A061-95C744523123}</Project></ProjectReference></ItemGroup></Project>

@@ -107,6 +107,26 @@ bool FNativeMeshRenderer::GetTextures(const std::shared_ptr<const FLoadedMeshAss
 			Device.DeferRelease(Entry.Normal);
 		return false;
 	}
+	if (Slot.Material && Slot.Material->Graph)
+	{
+		if (Slot.GraphTextureNormals.size() != Slot.GraphTextures.size())
+			return false;
+		for (size_t I = 0; I < Slot.GraphTextures.size(); ++I)
+		{
+			TSharedPtr<FRHITexture> Texture;
+			if (!Upload(Slot.GraphTextures[I], Slot.GraphTextureNormals[I], Texture))
+			{
+				for (const auto& T : Entry.GraphTextures)
+					Device.DeferRelease(T);
+				if (Entry.Color)
+					Device.DeferRelease(Entry.Color);
+				if (Entry.Normal)
+					Device.DeferRelease(Entry.Normal);
+				return false;
+			}
+			Entry.GraphTextures.push_back(Texture);
+		}
+	}
 	if (Entry.Color)
 		Color = Entry.Color;
 	if (Entry.Normal)
@@ -131,12 +151,22 @@ FNativeMeshFrame::~FNativeMeshFrame()
 			Device.DeferRelease(Draw.Color);
 		if (Draw.Normal)
 			Device.DeferRelease(Draw.Normal);
+		if (Draw.GraphPipeline)
+			Device.DeferRelease(Draw.GraphPipeline);
+		if (Draw.Parameters)
+			Device.DeferRelease(Draw.Parameters);
+		for (const auto& T : Draw.GraphTextures)
+			Device.DeferRelease(T);
 	}
 }
 FNativeMeshRenderer::~FNativeMeshRenderer()
 {
+	for (const auto& P : GraphPipelines)
+		Device.DeferRelease(P.Pipeline);
 	for (auto& [Key, Entry] : Materials)
 	{
+		for (const auto& T : Entry.GraphTextures)
+			Device.DeferRelease(T);
 		if (Entry.Color)
 			Device.DeferRelease(Entry.Color);
 		if (Entry.Normal)
@@ -148,10 +178,18 @@ FNativeMeshRenderer::~FNativeMeshRenderer()
 void FNativeMeshRenderer::Trim()
 {
 	++Frame;
+	std::erase_if(GraphPipelines, [&](auto& P) {
+		if (Frame - P.LastUsed <= 300)
+			return false;
+		Device.DeferRelease(P.Pipeline);
+		return true;
+	});
 	for (auto It = Materials.begin(); It != Materials.end();)
 	{
 		if (Frame - It->second.LastUsed > 300)
 		{
+			for (const auto& T : It->second.GraphTextures)
+				Device.DeferRelease(T);
 			if (It->second.Color)
 				Device.DeferRelease(It->second.Color);
 			if (It->second.Normal)
@@ -162,8 +200,8 @@ void FNativeMeshRenderer::Trim()
 			++It;
 	}
 }
-TUniquePtr<FNativeMeshFrame> FNativeMeshRenderer::Prepare(const FNativeMeshDrawList& List, EPixelFormat Target,
-														  FString& Error)
+TUniquePtr<FNativeMeshFrame> FNativeMeshRenderer::Prepare(const FNativeMeshDrawList& List,
+														  EPixelFormat Target, FString& Error)
 {
 	if (List.Vertices.empty())
 	{
@@ -200,9 +238,9 @@ TUniquePtr<FNativeMeshFrame> FNativeMeshRenderer::Prepare(const FNativeMeshDrawL
 	for (const auto& Batch : List.Batches)
 	{
 		if (!Batch.Asset || Batch.Slot >= static_cast<uint32>(Batch.Asset->Data.GetNumMaterials()) ||
-			(Batch.Slot > 0 && Batch.Slot > Batch.Asset->AdditionalSlots.size()) || Batch.NumVertices % 3 != 0 ||
-			Batch.FirstVertex > List.Vertices.size() || Batch.NumVertices > List.Vertices.size() - Batch.FirstVertex ||
-			!std::isfinite(Batch.Depth))
+			(Batch.Slot > 0 && Batch.Slot > Batch.Asset->AdditionalSlots.size()) ||
+			Batch.NumVertices % 3 != 0 || Batch.FirstVertex > List.Vertices.size() ||
+			Batch.NumVertices > List.Vertices.size() - Batch.FirstVertex || !std::isfinite(Batch.Depth))
 		{
 			Error = "Invalid native draw batch range or depth.";
 			return {};
@@ -243,6 +281,76 @@ TUniquePtr<FNativeMeshFrame> FNativeMeshRenderer::Prepare(const FNativeMeshDrawL
 			Error = "Cannot upload native mesh material textures.";
 			return {};
 		}
+		const auto& Slot = Batch.Asset->GetSlot(Batch.Slot);
+		if (Slot.Material && Slot.Material->Graph)
+		{
+			const auto& M = *Slot.Material;
+			FMaterialGraphProgram Program;
+			if (!FMaterialGraphCompiler::Compile(*M.Graph, Program, Error))
+				return {};
+			if (!Program.Parameters.empty())
+			{
+				TArray<float> Values;
+				for (const auto& P : Program.Parameters)
+					for (float V : P.Value)
+						Values.push_back(V);
+				FRHIBufferDesc BD;
+				BD.Size = Values.size() * sizeof(float);
+				BD.Usage = EBufferUsage::Uniform;
+				BD.Memory = EBufferMemory::Default;
+				BD.InitialData = Values.data();
+				BD.DebugName = "Material parameter snapshot";
+				Draw.Parameters = Device.CreateBuffer(BD);
+				if (!Draw.Parameters)
+				{
+					Error = "Cannot create material parameter buffer.";
+					return {};
+				}
+			}
+			if (M.CookedGraphSource != Program.PixelShaderSource ||
+				Slot.GraphTextures.size() != Slot.GraphTextureNormals.size() ||
+				Slot.GraphTextures.size() > FMaterialGraphCompiler::MaxTextures)
+			{
+				if (Error.IsEmpty())
+					Error = "Stale or incomplete graph material.";
+				return {};
+			}
+			for (auto& P : GraphPipelines)
+				if (P.Format == Target && P.Material.BlendMode == M.BlendMode &&
+					P.Material.CookedGraphSource == M.CookedGraphSource)
+				{
+					Draw.GraphPipeline = P.Pipeline;
+					P.LastUsed = Frame;
+					break;
+				}
+			if (!Draw.GraphPipeline)
+			{
+				FGraphPipelineEntry Entry{M, Target, {}, Frame};
+				auto GraphDesc =
+					(M.BlendMode == EMaterialBlendMode::Translucent ? TranslucentPipeline : OpaquePipeline)
+						->GetDesc();
+				const auto& Bytes = Device.GetBackend() == ERHIBackend::Vulkan ? Entry.Material.GraphSPIRV
+																			   : Entry.Material.GraphDXIL;
+				if (Bytes.empty())
+				{
+					Error = "Missing graph shader for this RHI.";
+					return {};
+				}
+				GraphDesc.PixelShader = {Bytes.data(), Bytes.size()};
+				GraphDesc.NumTextures = std::max(1u, static_cast<uint32>(Slot.GraphTextures.size()));
+				GraphDesc.bUniformBuffer = !Program.Parameters.empty();
+				GraphDesc.DebugName = "Compiled material graph";
+				Draw.GraphPipeline = Device.CreateGraphicsPipeline(GraphDesc);
+				if (!Draw.GraphPipeline)
+				{
+					Error = "Cannot create graph pipeline.";
+					return {};
+				}
+				Entry.Pipeline = Draw.GraphPipeline;
+				GraphPipelines.push_back(std::move(Entry));
+			}
+			Draw.GraphTextures = Materials.at(&Slot).GraphTextures;
+		}
 		Prepared->Draws.push_back(std::move(Draw));
 	}
 	Prepared->OpaqueOrder = List.GetDrawOrder(false);
@@ -250,8 +358,8 @@ TUniquePtr<FNativeMeshFrame> FNativeMeshRenderer::Prepare(const FNativeMeshDrawL
 	Error.Empty();
 	return Prepared;
 }
-void FNativeMeshRenderer::Draw(FRHICommandList& Cmd, const FNativeMeshFrame& Prepared, const FNativeMeshView& View,
-							   bool Transparent)
+void FNativeMeshRenderer::Draw(FRHICommandList& Cmd, const FNativeMeshFrame& Prepared,
+							   const FNativeMeshView& View, bool Transparent)
 {
 	if (View.Width == 0 || View.Height == 0)
 		return;
@@ -264,10 +372,15 @@ void FNativeMeshRenderer::Draw(FRHICommandList& Cmd, const FNativeMeshFrame& Pre
 	for (size_t I : Order)
 	{
 		const auto& Draw = Prepared.Draws[I];
+		Cmd.SetPipeline(Draw.GraphPipeline ? *Draw.GraphPipeline
+						: Transparent	   ? *Prepared.Translucent
+										   : *Prepared.Opaque);
 		const auto& Slot = Draw.Batch.Asset->GetSlot(Draw.Batch.Slot);
-		const auto Material = Slot.Material.value_or(FMaterialAsset{});
+		const FMaterialAsset DefaultMaterial;
+		const auto& Material = Slot.Material ? *Slot.Material : DefaultMaterial;
 		const int Flags = (View.bLit ? 1 : 0) | (Slot.NormalTexture ? 4 : 0) |
-						  (Material.BlendMode == EMaterialBlendMode::Masked ? 8 : 0) | (Transparent ? 16 : 0) |
+						  (Material.BlendMode == EMaterialBlendMode::Masked ? 8 : 0) |
+						  (Transparent ? 16 : 0) |
 						  (static_cast<int>(Material.OpacityMaskClip * 65535.0f + 0.5f) << 5);
 		const float Params[16] = {2.0f / View.Width,
 								  2.0f / View.Height,
@@ -286,8 +399,20 @@ void FNativeMeshRenderer::Draw(FRHICommandList& Cmd, const FNativeMeshFrame& Pre
 								  View.Up[2],
 								  Material.Metallic};
 		Cmd.SetPushConstants(Params, sizeof(Params));
-		Cmd.SetTexture(*Draw.Color, 0);
-		Cmd.SetTexture(*Draw.Normal, 1);
+		if (Draw.GraphPipeline)
+		{
+			if (Draw.Parameters)
+				Cmd.SetUniformBuffer(*Draw.Parameters);
+			if (Draw.GraphTextures.empty())
+				Cmd.SetTexture(*Draw.Color, 0);
+			for (uint32 T = 0; T < Draw.GraphTextures.size(); ++T)
+				Cmd.SetTexture(*Draw.GraphTextures[T], T);
+		}
+		else
+		{
+			Cmd.SetTexture(*Draw.Color, 0);
+			Cmd.SetTexture(*Draw.Normal, 1);
+		}
 		Cmd.DrawIndexed(Draw.Batch.NumVertices, Draw.Batch.FirstVertex, 0);
 	}
 }

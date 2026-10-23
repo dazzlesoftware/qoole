@@ -3,3 +3,14 @@ Engine/Binaries/
 Engine/Intermediate/
 Engine/Saved/
 *.user
+
+# Managed build intermediates
+/Intermediate/
+**/obj/
+
+# Generated scripting feature-project outputs
+/Samples/Features/**/Saved/
+/Samples/Features/**/Content/Maps/Main.gmap
+
+/Samples/Features/**/Content/Maps/Main.*.gexp
+/Samples/Features/**/Content/Maps/Main.*.gbulk
