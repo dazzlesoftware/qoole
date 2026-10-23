@@ -23,6 +23,8 @@
 
 #include "CoreMinimal.h"
 struct FAssetReference;
+struct FTransform3D;
+struct FActorTransformEdit;
 #include "MapEditorEnvironment.h"
 
 class Foliage;
@@ -101,6 +103,10 @@ public:
 
 	// ----- Selection -----
 	TArray<Object*> GetSelection() const;
+	// Native actor identities at the document boundary. Missing actors and actors
+	// outside the current editing scope are ignored; input order is preserved.
+	TArray<FString> GetSelectedActorIds() const;
+	void SetSelectedActorIds(const TArray<FString>& ActorIds);
 	bool IsSelected(const Object* Obj) const;
 	void SetSelection(const TArray<Object*>& Objects);
 	void AddToSelection(const TArray<Object*>& Objects);
@@ -116,6 +122,7 @@ public:
 	// Undoes what the open transaction did and drops it.
 	void CancelTransaction();
 	bool IsInTransaction() const { return Pending != nullptr; }
+	uint64 GetActiveTransactionId() const { return Pending ? TransactionId : 0; }
 
 	// ----- Edits (each is an undo step unless a transaction is open) -----
 	// Moves objects by Delta (scope space). Consecutive moves of the same
@@ -192,6 +199,11 @@ public:
 	void SetMesh(Object& Obj, const FString& MeshName);
 	// A mesh actor's rotation as SetMeshRotation takes it.
 	static Vector3d GetMeshRotation(const Object& Obj);
+	// Local native transforms for mesh, landscape and foliage actors. Geometry
+	// brushes retain their legacy vertex-editing path until their migration.
+	bool GetActorTransform(const FString& ActorId, FTransform3D& Out) const;
+	bool SetActorTransform(const FString& ActorId, const FTransform3D& Transform,
+		const FString& Description = "Transform Actor");
 
 	// Brush editing: moves a vertex, an edge or a face of one brush by Delta
 	// (scope space) inside a transaction begun with BeginBrushEdit. The edit
@@ -223,10 +235,15 @@ public:
 
 private:
 	FMapDocument(Object* InRoot, const FMapGameSet& InGameSet);
+	friend struct FActorTransformEdit;
+	Object* FindActorObject(const FString& ActorId) const;
+	bool ApplyActorTransform(const FString& ActorId, const FTransform3D& Transform);
 
 	bool ReloadMeshAssets(const FAssetReference* Filter, FString& Error);
 	void ApplySelection(const TArray<Object*>& Objects);
+	void ApplyActorSelection(const TArray<FString>& ActorIds);
 	void ApplyScope(Object& NewScope);
+	void ApplyActorScope(const FString& ActorId);
 	bool IsInMap(const Object& Obj) const;
 	void Record(TUniquePtr<FEdit> Edit, EMapChange Change);
 	void Changed(EMapChange Change);
@@ -246,6 +263,7 @@ private:
 	TArray<TUniquePtr<FTransaction>> RedoStack;
 	TUniquePtr<FTransaction> Pending;
 	int32 PendingDepth = 0;
+	uint64 TransactionId = 0;
 
 	Object* BrushEditTarget = nullptr;
 	bool bBrushEditStarted = false; // planes broken for the first move

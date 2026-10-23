@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{83F172F1-AC93-4D8E-A9BA-282340E17C06}</ProjectGuid>
+    <RootNamespace>Renderer</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\Build\Engine.props" />
+  </ImportGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(IntDir);$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)RHI\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\SceneViewVolume.cpp" /><ClInclude Include="Public\Renderer\SceneViewVolume.h" /><ClCompile Include="Private\FoliageRenderPlan.cpp" /><ClInclude Include="Public\Renderer\FoliageRenderPlan.h" /><ClCompile Include="Private\MeshInstanceDrawList.cpp" /><ClInclude Include="Public\Renderer\MeshInstanceDrawList.h" /><ClCompile Include="Private\ProjectedSceneRenderer.cpp" /><ClInclude Include="Public\Renderer\ProjectedSceneRenderer.h" /><ClCompile Include="Private\LandscapeTextures.cpp" /><ClInclude Include="Public\Renderer\LandscapeTextures.h" />
+    <ClCompile Include="Private\WorldSceneDrawList.cpp" /><ClInclude Include="Public\Renderer\WorldSceneDrawList.h" /><ClCompile Include="Private\LandscapeProjection.cpp" /><ClInclude Include="Public\Renderer\LandscapeProjection.h" /><ClCompile Include="Private\LandscapeDrawList.cpp" /><ClInclude Include="Public\Renderer\LandscapeDrawList.h" /><ClCompile Include="Private\LandscapeRenderPlan.cpp" /><ClCompile Include="Private\NativeMeshDrawList.cpp" /><ClCompile Include="Private\NativeMeshRenderer.cpp" /><ClCompile Include="Private\RenderTextureMips.cpp" />
+    <ClInclude Include="Public\Renderer\LandscapeRenderPlan.h" /><ClInclude Include="Public\Renderer\NativeMeshDrawList.h" /><ClInclude Include="Public\Renderer\NativeMeshRenderer.h" /><ClInclude Include="Public\Renderer\RenderTextureMips.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(GenesisRuntimeDir)Core\Core.vcxproj"><Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)Geometry\Geometry.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C03}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)Engine\Engine.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C04}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)RHI\RHI.vcxproj"><Project>{4EA620B2-9F21-526F-8D58-73DD975601E8}</Project></ProjectReference>
+  </ItemGroup>
+  <ItemGroup><CustomBuild Include="Private\Shaders\MeshMaterial.hlsl">
+      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSMaterial -Vn g_MeshMaterial_VSMaterial_DXIL -Fh &quot;$(IntDir)MeshMaterial_VSMaterial_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSMaterial -Vn g_MeshMaterial_PSMaterial_DXIL -Fh &quot;$(IntDir)MeshMaterial_PSMaterial_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
+      <Outputs>$(IntDir)MeshMaterial_VSMaterial_DXIL.h;$(IntDir)MeshMaterial_PSMaterial_DXIL.h</Outputs>
+      <Message>Compiling native mesh material shaders to DXIL</Message>
+    </CustomBuild></ItemGroup>
+  <ItemGroup><None Include="Private\Shaders\BuildMeshMaterialShaders.cmd" /></ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="Private\Shaders\SceneShaders.hlsl">
+      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSMain -Vn g_SceneShaders_VSMain_DXIL -Fh &quot;$(IntDir)SceneShaders_VSMain_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSFoliage -Vn g_SceneShaders_VSFoliage_DXIL -Fh &quot;$(IntDir)SceneShaders_VSFoliage_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSTextured -Vn g_SceneShaders_PSTextured_DXIL -Fh &quot;$(IntDir)SceneShaders_PSTextured_DXIL.h&quot; &quot;%(FullPath)&quot;
+&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSLandscape -Vn g_SceneShaders_PSLandscape_DXIL -Fh &quot;$(IntDir)SceneShaders_PSLandscape_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
+      <Outputs>$(IntDir)SceneShaders_VSMain_DXIL.h;$(IntDir)SceneShaders_VSFoliage_DXIL.h;$(IntDir)SceneShaders_PSTextured_DXIL.h;$(IntDir)SceneShaders_PSLandscape_DXIL.h</Outputs>
+      <Message>Compiling %(Filename)%(Extension) to DXIL</Message>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup><None Include="Private\Shaders\BuildSceneShaders.cmd" /></ItemGroup>
+  <ItemGroup><ClInclude Include="Private\Shaders\SceneShaders_VSMain_SPIRV.h" /><ClInclude Include="Private\Shaders\SceneShaders_VSFoliage_SPIRV.h" /><ClInclude Include="Private\Shaders\SceneShaders_PSTextured_SPIRV.h" /><ClInclude Include="Private\Shaders\SceneShaders_PSLandscape_SPIRV.h" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

@@ -1,5 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "MapAssetLibrary.h"
+#include "World/WorldGeometry.h"
+#include "Renderer/LandscapeTextures.h"
 #include "MapCoreHeaders.h"
 namespace
 {
@@ -10,6 +12,7 @@ TMap<std::string, std::weak_ptr<const FLoadedMeshAsset>> Meshes;
 void FMapAssetLibrary::SetRegistry(const std::shared_ptr<FAssetRegistry>& In)
 {
 	Registry = In;
+	FLandscapeTextureLibrary::SetAssetRegistry(In);
 	++Context;
 	Meshes.clear();
 	MeshRevision = 0;
@@ -59,23 +62,9 @@ FString FMapAssetLibrary::TextureToken(const FAssetReference& Ref)
 }
 bool FMapAssetLibrary::ParseTextureToken(const FString& Token, FAssetReference& Out, FString& Error)
 {
-	if (Token.View().substr(0, 6) != "asset:")
-	{
-		Error = "Expected a native texture reference.";
-		return false;
-	}
-	const auto Json = FJsonValue::Parse(Token.View().substr(6), &Error);
-	if (!Json)
-		return false;
-	const auto Ref = FAssetReference::FromJson(*Json, Error);
-	if (!Ref || Ref->IsNull())
-	{
-		Error = "Invalid native texture reference.";
-		return false;
-	}
-	Out = *Ref;
-	return true;
+	return FWorldGeometryCodec::ParseTextureToken(Token, Out, Error);
 }
+
 bool FMapAssetLibrary::LoadTexture(const FString& Token, FTextureAsset& Out, FString& Error)
 {
 	FAssetReference Ref;

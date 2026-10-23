@@ -487,7 +487,7 @@ Clip::BoundObject(const Object &obj) const {
   ry = (yv.SubVector(pos)).GetMagSqr();
   rz = (zv.SubVector(pos)).GetMagSqr();
 
-  maxRad = (float) sqrt(Max(Max(rx, ry), rz));
+  maxRad = (float) sqrt(GeometryMath::Max(GeometryMath::Max(rx, ry), rz));
 
   // Check Y.
   if ((pos.GetY() + maxRad) < clipMin.GetY() ||

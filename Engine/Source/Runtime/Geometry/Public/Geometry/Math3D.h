@@ -33,8 +33,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define ABS(X) ((X) >= 0 ? (X) : (-(X)))
 #endif
 
-#define Max(X, Y) ((X) > (Y) ? (X) : (Y))
-#define Min(X, Y) ((X) < (Y) ? (X) : (Y))
+// Geometry's value helpers have explicit scope and evaluate arguments once.
+// Runtime headers never export Min/Max macros into Core, RHI or editor code.
+namespace GeometryMath {
+ template<class T,class U> constexpr auto Max(T X,U Y) { return X>Y?X:Y; }
+ template<class T,class U> constexpr auto Min(T X,U Y) { return X<Y?X:Y; }
+}
 
 #define EQUAL0(X, Y) (ABS((X) - (Y)) < 1.0f)
 #define EQUAL1(X, Y) (ABS((X) - (Y)) < 0.1f)

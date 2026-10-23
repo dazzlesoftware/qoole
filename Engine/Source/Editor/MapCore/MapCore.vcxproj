@@ -53,7 +53,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ConformanceMode>false</ConformanceMode>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)AssetCore\Public;Private;Public\Basic;Public\Objects;Public\Render;Public\Game;$(GenesisRuntimeDir)Core\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Renderer\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)AssetCore\Public;Private;Public\Basic;Public\Objects;Public\Render;Public\Game;$(GenesisRuntimeDir)Core\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -119,5 +119,6 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Engine\Engine.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C04}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Renderer\Renderer.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C06}</Project></ProjectReference></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

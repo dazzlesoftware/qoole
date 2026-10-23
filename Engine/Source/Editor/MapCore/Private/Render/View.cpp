@@ -24,6 +24,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "MapCorePCH.h"
 #include "MeshVertexBuffer.h"
+#include "Renderer/LandscapeRenderPlan.h"
+#include "Renderer/LandscapeDrawList.h"
+#include "Renderer/FoliageRenderPlan.h"
 
 #include "view.h"
 
@@ -1258,9 +1261,9 @@ View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip, con
     scale = *scaleOverride;
   else
     objNode.GetScale(scale);
-  const float isx = 1.0f / Max(scale.GetX() * scale.GetX(), 1e-8f);
-  const float isy = 1.0f / Max(scale.GetY() * scale.GetY(), 1e-8f);
-  const float isz = 1.0f / Max(scale.GetZ() * scale.GetZ(), 1e-8f);
+  const float isx = 1.0f / GeometryMath::Max(scale.GetX() * scale.GetX(), 1e-8f);
+  const float isy = 1.0f / GeometryMath::Max(scale.GetY() * scale.GetY(), 1e-8f);
+  const float isz = 1.0f / GeometryMath::Max(scale.GetZ() * scale.GetZ(), 1e-8f);
 
   // A mirrored transform turns the triangles' winding around.
   Vector3d viewOrigin;
@@ -1307,7 +1310,7 @@ View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip, con
       const float len = n.GetMag();
       const float ndl = len > 1e-8f ? n.DotVector(lightDir) / len : 0.0f;
       const float sky = len > 1e-8f ? n.GetZ() / len : 0.0f;
-      shades[k] = Min(1.0f, 0.32f + 0.58f * Max(ndl, 0.0f) + 0.12f * (sky * 0.5f + 0.5f));
+      shades[k] = GeometryMath::Min(1.0f, 0.32f + 0.58f * GeometryMath::Max(ndl, 0.0f) + 0.12f * (sky * 0.5f + 0.5f));
       if (colored)
         colors[k] = mesh.GetVertexColor(tri.v[k]);
       if (land) {
@@ -1408,88 +1411,17 @@ View::RenderMeshSolid(Object &objNode, const Matrix44 &trans, bool polyClip, con
 //===== Landscapes =====
 
 namespace {
-  // The coarsest step (a power of two, a component at most) at which a
-  // quad that looks quadPixels big at step 1 stays within target pixels.
-  int LandscapeStep(float quadPixels, float target) {
-    int step = 1;
-    while (step < Landscape::ComponentQuads && quadPixels * (float) (step * 2) <= target)
-      step *= 2;
-    return step;
-  }
-
-  // The grid lines a component is drawn with at a step: from its first
-  // to its last, every step (the last always).
-  void LandscapeSamples(int first, int last, int step, std::vector<int> &out) {
-    out.clear();
-    for (int i = first; i < last; i += step)
-      out.push_back(i);
-    out.push_back(last);
-  }
-
-  // What each component of a landscape is drawn as this frame: culled
-  // (step 0) or at a step, and whether it crosses the view's edges.
-  struct LandscapePlan {
-    std::vector<int> steps;
-    std::vector<int> bounds;
-    int cxs = 0, cys = 0;
-    int Step(int cx, int cy) const {
-      return (cx < 0 || cy < 0 || cx >= cxs || cy >= cys) ? 0 : steps[(size_t) cy * cxs + cx];
+  FSceneViewVolume LandscapeRenderView(const Clip &clip, bool perspective) {
+    FSceneViewVolume view{clip.GetMinClipEdges(), clip.GetMaxClipEdges(), perspective};
+    // Legacy perspective clipping uses a unit cone, regardless of its stored
+    // orthographic X/Z extents. The runtime API takes explicit cone slopes.
+    if (perspective) {
+      view.Minimum.SetX(-1);
+      view.Minimum.SetZ(-1);
+      view.Maximum.SetX(1);
+      view.Maximum.SetZ(1);
     }
-  };
-
-  // Zoom: what lines are scaled by after (FDraw::GetZoom); faces are not.
-  void PlanLandscape(const Landscape &land, const Matrix44 &trans, const Clip &clip, bool perspective,
-                     float winWidth, float zoom, float target, LandscapePlan &plan) {
-    plan.cxs = land.GetComponentsX();
-    plan.cys = land.GetComponentsY();
-    plan.steps.assign((size_t) plan.cxs * plan.cys, 0);
-    plan.bounds.assign((size_t) plan.cxs * plan.cys, -1);
-    const float qs = land.GetQuadSize();
-    // How long a quad's side is in view space.
-    Vector3d o, ax, ay;
-    trans.Transform(o, Vector3d::origVec);
-    trans.Transform(ax, Vector3d(qs, 0.0f, 0.0f)).SubVector(o);
-    trans.Transform(ay, Vector3d(0.0f, qs, 0.0f)).SubVector(o);
-    // Seen from the side (an orthographic view), only what crosses the
-    // screen counts: the depth axis is y.
-    const float quadView = zoom * (perspective ? Max(ax.GetMag(), ay.GetMag())
-                                       : Max(sqrtf(ax.GetX() * ax.GetX() + ax.GetZ() * ax.GetZ()), sqrtf(ay.GetX() * ay.GetX() + ay.GetZ() * ay.GetZ())));
-    const int orthoStep = LandscapeStep(quadView, target);
-    Point3d corners[8];
-    for (int cy = 0; cy < plan.cys; cy++) {
-      for (int cx = 0; cx < plan.cxs; cx++) {
-        float lo, hi;
-        land.GetComponentHeights(cx, cy, lo, hi);
-        const int x0 = cx * Landscape::ComponentQuads, x1 = Min(x0 + Landscape::ComponentQuads, land.GetQuadsX());
-        const int y0 = cy * Landscape::ComponentQuads, y1 = Min(y0 + Landscape::ComponentQuads, land.GetQuadsY());
-        const float lx0 = x0 * qs - land.GetSizeX() * 0.5f, lx1 = x1 * qs - land.GetSizeX() * 0.5f;
-        const float ly0 = y0 * qs - land.GetSizeY() * 0.5f, ly1 = y1 * qs - land.GetSizeY() * 0.5f;
-        Vector3d nearMin, nearMax;
-        for (int i = 0; i < 8; i++) {
-          trans.Transform(corners[i], Vector3d((i & 1) ? lx1 : lx0, (i & 2) ? ly1 : ly0, (i & 4) ? hi + 0.01f : lo - 0.01f));
-          if (i == 0) {
-            nearMin = nearMax = corners[0];
-            continue;
-          }
-          nearMin.NewVector(Min(nearMin.GetX(), corners[i].GetX()), Min(nearMin.GetY(), corners[i].GetY()), Min(nearMin.GetZ(), corners[i].GetZ()));
-          nearMax.NewVector(Max(nearMax.GetX(), corners[i].GetX()), Max(nearMax.GetY(), corners[i].GetY()), Max(nearMax.GetZ(), corners[i].GetZ()));
-        }
-        const size_t c = (size_t) cy * plan.cxs + cx;
-        plan.bounds[c] = clip.BoundBox(corners);
-        if (plan.bounds[c] < 0)
-          continue;
-        if (!perspective) {
-          plan.steps[c] = orthoStep;
-          continue;
-        }
-        // The camera is the origin: how far the component's box is from it.
-        const float dx = Max(Max(nearMin.GetX(), -nearMax.GetX()), 0.0f);
-        const float dy = Max(Max(nearMin.GetY(), -nearMax.GetY()), 0.0f);
-        const float dz = Max(Max(nearMin.GetZ(), -nearMax.GetZ()), 0.0f);
-        const float distance = Max(sqrtf(dx * dx + dy * dy + dz * dz), 1.0f);
-        plan.steps[c] = LandscapeStep(quadView * winWidth / distance, target);
-      }
-    }
+    return view;
   }
 
   // Where a mesh's box is against the view (Clip::BoundBox): 1 inside, -1
@@ -1502,223 +1434,53 @@ namespace {
       trans.Transform(corners[i], Vector3d((i & 1) ? high.GetX() : low.GetX(), (i & 2) ? high.GetY() : low.GetY(), (i & 4) ? high.GetZ() : low.GetZ()));
     return clip.BoundBox(corners);
   }
-
-  // A grid point's height, or, on an edge it shares with a component drawn
-  // coarser, where that component's edge passes (so no crack opens).
-  float LandscapeEdgeHeight(const Landscape &land, const LandscapePlan &plan, int cx, int cy, int step,
-                            int x, int y, int x0, int x1, int y0, int y1) {
-    const auto along = [&](int i, int first, int last, int coarse, bool horizontal, int fixed) {
-      const int a = Min(first + ((i - first) / coarse) * coarse, last);
-      const int b = Min(a + coarse, last);
-      if (b == a)
-        return horizontal ? land.GetHeight(a, fixed) : land.GetHeight(fixed, a);
-      const float t = (float) (i - a) / (float) (b - a);
-      const float ha = horizontal ? land.GetHeight(a, fixed) : land.GetHeight(fixed, a);
-      const float hb = horizontal ? land.GetHeight(b, fixed) : land.GetHeight(fixed, b);
-      return ha + (hb - ha) * t;
-    };
-    int coarse;
-    if (y == y0 && (coarse = plan.Step(cx, cy - 1)) > step)
-      return along(x, x0, x1, coarse, true, y);
-    if (y == y1 && (coarse = plan.Step(cx, cy + 1)) > step)
-      return along(x, x0, x1, coarse, true, y);
-    if (x == x0 && (coarse = plan.Step(cx - 1, cy)) > step)
-      return along(y, y0, y1, coarse, false, x);
-    if (x == x1 && (coarse = plan.Step(cx + 1, cy)) > step)
-      return along(y, y0, y1, coarse, false, x);
-    return land.GetHeight(x, y);
-  }
 }
 
 void
 View::RenderLandscapeSolid(Object &objNode, const Matrix44 &trans) {
-  const Landscape &land = objNode.GetLandscape();
-  LandscapePlan plan;
-  PlanLandscape(land, trans, renderView->clipView, true, renderView->winWidth, 1.0f, landscapeDetailPixels, plan);
-
-  // Lit as static meshes are (RenderMeshSolid).
-  static Vector3d lightDir(0.0f, 0.0f, 0.0f);
-  if (lightDir.GetMag() == 0.0f) {
-    lightDir.NewVector(0.35f, -0.5f, 0.79f);
-    lightDir.MultVector(1.0f / lightDir.GetMag());
+  const Landscape &land=objNode.GetLandscape();
+  Vector3d scale; objNode.GetScale(scale);
+  for(const auto &mesh:land.GetSplineMeshes()) {
+    const int bound=mesh?BoundMesh(*mesh,trans,renderView->clipView):-1;
+    if(bound>=0) RenderMeshSolid(objNode,trans,bound==0,mesh.get(),&scale);
   }
-  Matrix44 absTrans;
-  absTrans.Multiply(svTrans, trans);
-  Vector3d origin, scale, viewX, viewY, viewZ, cross, viewOrigin;
-  absTrans.Transform(origin, Vector3d::origVec);
-  objNode.GetScale(scale);
-  const float isx = 1.0f / Max(scale.GetX() * scale.GetX(), 1e-8f);
-  const float isy = 1.0f / Max(scale.GetY() * scale.GetY(), 1e-8f);
-  const float isz = 1.0f / Max(scale.GetZ() * scale.GetZ(), 1e-8f);
-  trans.Transform(viewOrigin, Vector3d::origVec);
-  (trans.Transform(viewX, Vector3d::xAxisVec)).SubVector(viewOrigin);
-  (trans.Transform(viewY, Vector3d::yAxisVec)).SubVector(viewOrigin);
-  (trans.Transform(viewZ, Vector3d::zAxisVec)).SubVector(viewOrigin);
-  cross.CrossVector(viewY, viewZ);
-  const bool mirrored = cross.DotVector(viewX) < 0.0f;
-
-  // Its splines' meshes, bent along them (before the ground's setup: they
-  // set up as meshes).
-  Vector3d objectScale;
-  objNode.GetScale(objectScale);
-  for (const std::shared_ptr<const StaticMesh> &splineMesh : land.GetSplineMeshes()) {
-    const int bound = splineMesh ? BoundMesh(*splineMesh, trans, renderView->clipView) : -1;
-    if (bound >= 0)
-      RenderMeshSolid(objNode, trans, bound == 0, splineMesh.get(), &objectScale);
-  }
-
-  static const Vector3d up(0.0f, 0.0f, 1.0f);
-  renderDraw->ZBufSetup(&objNode, NULL, up);
-  const bool colored = land.HasColors();
-  const float qs = land.GetQuadSize();
-  const float invX = 1.0f / land.GetQuadsX(), invY = 1.0f / land.GetQuadsY();
-
-  std::vector<int> xs, ys;
-  std::vector<Point3d> pts;
-  std::vector<float> shades, gridS, gridT;
-  std::vector<unsigned int> cols;
-  Vector3d n, e1, e2, faceNorm;
-  ZPoint zpts[3];
-  const auto project = [](const Point3d &pt, ZPoint &zp) {
-    const float div = renderView->winWidth / pt.GetY();
-    zp.x = pt.GetX() * div;
-    zp.y = pt.GetZ() * div;
-    zp.z = pt.GetY();
-  };
-
-  for (int cy = 0; cy < plan.cys; cy++) {
-    for (int cx = 0; cx < plan.cxs; cx++) {
-      const int step = plan.Step(cx, cy);
-      if (step == 0)
-        continue;
-      const bool clip = plan.bounds[(size_t) cy * plan.cxs + cx] == 0;
-      const int x0 = cx * Landscape::ComponentQuads, x1 = Min(x0 + Landscape::ComponentQuads, land.GetQuadsX());
-      const int y0 = cy * Landscape::ComponentQuads, y1 = Min(y0 + Landscape::ComponentQuads, land.GetQuadsY());
-      LandscapeSamples(x0, x1, step, xs);
-      LandscapeSamples(y0, y1, step, ys);
-      const int nx = (int) xs.size(), ny = (int) ys.size();
-      pts.resize((size_t) nx * ny);
-      shades.resize(pts.size());
-      gridS.resize(pts.size());
-      gridT.resize(pts.size());
-      cols.resize(colored ? pts.size() : 0);
-      for (int j = 0; j < ny; j++) {
-        for (int i = 0; i < nx; i++) {
-          const int x = xs[i], y = ys[j];
-          const size_t k = (size_t) j * nx + i;
-          const float h = LandscapeEdgeHeight(land, plan, cx, cy, step, x, y, x0, x1, y0, y1);
-          trans.Transform(pts[k], Vector3d(x * qs - land.GetSizeX() * 0.5f, y * qs - land.GetSizeY() * 0.5f, h));
-          const Vector3d &local = land.GetNormal(x, y);
-          absTrans.Transform(n, local.GetX() * isx, local.GetY() * isy, local.GetZ() * isz);
-          n.SubVector(origin);
-          const float len = n.GetMag();
-          const float ndl = len > 1e-8f ? n.DotVector(lightDir) / len : 0.0f;
-          const float sky = len > 1e-8f ? n.GetZ() / len : 0.0f;
-          shades[k] = Min(1.0f, 0.32f + 0.58f * Max(ndl, 0.0f) + 0.12f * (sky * 0.5f + 0.5f));
-          gridS[k] = x * invX;
-          gridT[k] = y * invY;
-          if (colored)
-            cols[k] = land.GetColor(x, y);
-        }
+  static const Vector3d up(0,0,1);
+  renderDraw->ZBufSetup(&objNode,NULL,up);
+  class FTriangleAdapter final : public ILandscapeTriangleSink {
+   public:
+    FTriangleAdapter(FDraw& draw,float projection):Draw(draw),Projection(projection) {}
+    void OnTriangle(const FLandscapeTriangle& triangle) override {
+      ZPoint points[3]; float shades[3]; unsigned int colors[3];
+      for(int i=0;i<3;i++) {
+        const auto &v=triangle.Vertices[i];
+        const float div=Projection/v.Position.GetY();
+        points[i].x=v.Position.GetX()*div; points[i].y=v.Position.GetZ()*div;
+        points[i].z=v.Position.GetY(); points[i].s=v.U; points[i].t=v.V;
+        shades[i]=v.Shade; colors[i]=v.Color;
       }
-      landscapeComponentsDrawn++;
-
-      const auto emit = [&](size_t a, size_t b, size_t c) {
-        const size_t idx[3] = { a, b, c };
-        const Point3d &p0 = pts[a], &p1 = pts[b], &p2 = pts[c];
-        e1.SubVector(p1, p0);
-        e2.SubVector(p2, p0);
-        faceNorm.CrossVector(e1, e2);
-        const float facing = faceNorm.DotVector(p0);
-        if (mirrored ? facing <= 0.0f : facing >= 0.0f)
-          return;
-        float sh[3];
-        unsigned int co[3] = { 0, 0, 0 };
-        for (int q = 0; q < 3; q++) {
-          sh[q] = shades[idx[q]];
-          if (colored)
-            co[q] = cols[idx[q]];
-        }
-        if (!clip) {
-          for (int q = 0; q < 3; q++) {
-            if (pts[idx[q]].GetY() <= 0.0f)
-              return;
-            project(pts[idx[q]], zpts[q]);
-            zpts[q].s = gridS[idx[q]];
-            zpts[q].t = gridT[idx[q]];
-          }
-          renderDraw->ZBufLandscapeTriangle(zpts, sh, colored ? co : NULL);
-          landscapeTrianglesDrawn++;
-          return;
-        }
-        // Cut by the view's edges: the pieces keep their place on the grid
-        // and their light, from where each corner is in the triangle.
-        ptsBuf1[0] = p0;
-        ptsBuf1[1] = p1;
-        ptsBuf1[2] = p2;
-        Point3d *fvPtr = ptsBuf1;
-        int numPts = 3;
-        if (renderView->clipView.ClipPolygon(numPts, ptsBuf1, ptsBuf2, &fvPtr) < 3)
-          return;
-        unsigned int meanColor = 0xFF000000u;
-        for (int ch = 0; ch < 3; ch++) {
-          const unsigned int sum = ((co[0] >> (8 * ch)) & 0xFF) + ((co[1] >> (8 * ch)) & 0xFF) + ((co[2] >> (8 * ch)) & 0xFF);
-          meanColor |= (sum / 3) << (8 * ch);
-        }
-        const unsigned int flatColors[3] = { meanColor, meanColor, meanColor };
-        float pieceShades[3];
-        const auto locate = [&](const Point3d &pt, ZPoint &zp, float &shade) {
-          Vector3d d0, d1, d2;
-          d0.SubVector(p1, p0);
-          d1.SubVector(p2, p0);
-          d2.SubVector(pt, p0);
-          const float a00 = d0.DotVector(d0), a01 = d0.DotVector(d1), a11 = d1.DotVector(d1);
-          const float b0 = d2.DotVector(d0), b1 = d2.DotVector(d1);
-          const float den = a00 * a11 - a01 * a01;
-          const float w1 = den != 0.0f ? (a11 * b0 - a01 * b1) / den : 0.0f;
-          const float w2 = den != 0.0f ? (a00 * b1 - a01 * b0) / den : 0.0f;
-          const float w0 = 1.0f - w1 - w2;
-          zp.s = w0 * gridS[a] + w1 * gridS[b] + w2 * gridS[c];
-          zp.t = w0 * gridT[a] + w1 * gridT[b] + w2 * gridT[c];
-          shade = w0 * sh[0] + w1 * sh[1] + w2 * sh[2];
-        };
-        if (fvPtr[0].GetY() <= 0.0f)
-          return;
-        project(fvPtr[0], zpts[0]);
-        locate(fvPtr[0], zpts[0], pieceShades[0]);
-        for (int i = 2; i < numPts; i++) {
-          if (fvPtr[i - 1].GetY() <= 0.0f || fvPtr[i].GetY() <= 0.0f)
-            continue;
-          project(fvPtr[i - 1], zpts[1]);
-          project(fvPtr[i], zpts[2]);
-          locate(fvPtr[i - 1], zpts[1], pieceShades[1]);
-          locate(fvPtr[i], zpts[2], pieceShades[2]);
-          renderDraw->ZBufLandscapeTriangle(zpts, pieceShades, colored ? flatColors : NULL);
-          landscapeTrianglesDrawn++;
-        }
-      };
-      for (int j = 0; j + 1 < ny; j++) {
-        for (int i = 0; i + 1 < nx; i++) {
-          const size_t a = (size_t) j * nx + i, b = a + 1, c = a + 1 + nx, d = a + nx;
-          // Counterclockwise seen from above, as the full mesh.
-          emit(a, b, c);
-          emit(a, c, d);
-        }
-      }
+      Draw.ZBufLandscapeTriangle(points,shades,triangle.bColored?colors:NULL);
     }
-  }
+   private: FDraw& Draw; float Projection;
+  } sink(*renderDraw,renderView->winWidth);
+  Matrix44 world; world.Multiply(svTrans,trans);
+  FLandscapeDrawStats stats;
+  BuildLandscapeTriangles(land,trans,world,scale,LandscapeRenderView(renderView->clipView,true),
+                          renderView->winWidth,landscapeDetailPixels,sink,stats);
+  landscapeComponentsDrawn+=stats.Components;
+  landscapeTrianglesDrawn+=stats.Triangles;
 }
 
 void
 View::RenderLandscapeWireFrame(Object &objNode, bool lineClip) {
   const Landscape &land = objNode.GetLandscape();
   const Matrix44 &trans = objNode.GetTransformation();
-  LandscapePlan plan;
+  FLandscapeRenderPlan plan;
   // Lines may be a little denser than faces before they are thinned.
-  PlanLandscape(land, trans, renderView->clipView, renderView->perspective, renderView->winWidth, renderView->qdraw->GetZoom(),
+  PlanLandscape(land, trans, LandscapeRenderView(renderView->clipView, renderView->perspective),
+                renderView->perspective, renderView->winWidth, renderView->qdraw->GetZoom(),
                 landscapeDetailPixels * 0.75f, plan);
-  const float qs = land.GetQuadSize();
-  std::vector<int> xs, ys;
+  FLandscapeComponentMesh component;
+  auto &xs = component.X, &ys = component.Y;
   std::vector<Point3d> pts;
   Point3d pt1, pt2;
   const auto line = [&](const Point3d &a, const Point3d &b, bool clip) {
@@ -1741,15 +1503,15 @@ View::RenderLandscapeWireFrame(Object &objNode, bool lineClip) {
       if (step == 0)
         continue;
       const bool clip = lineClip && plan.bounds[(size_t) cy * plan.cxs + cx] == 0;
-      const int x0 = cx * Landscape::ComponentQuads, x1 = Min(x0 + Landscape::ComponentQuads, land.GetQuadsX());
-      const int y0 = cy * Landscape::ComponentQuads, y1 = Min(y0 + Landscape::ComponentQuads, land.GetQuadsY());
-      LandscapeSamples(x0, x1, step, xs);
-      LandscapeSamples(y0, y1, step, ys);
+      const int x0 = cx * Landscape::ComponentQuads, x1 = GeometryMath::Min(x0 + Landscape::ComponentQuads, land.GetQuadsX());
+      const int y0 = cy * Landscape::ComponentQuads, y1 = GeometryMath::Min(y0 + Landscape::ComponentQuads, land.GetQuadsY());
+      BuildLandscapeComponent(land, plan, cx, cy, trans, false, component);
+      pts.resize(component.Points.size());
+      for (size_t k = 0; k < pts.size(); ++k) {
+        const auto &p = component.Points[k];
+        pts[k].NewPos(p.GetX(), p.GetY(), p.GetZ());
+      }
       const int nx = (int) xs.size(), ny = (int) ys.size();
-      pts.resize((size_t) nx * ny);
-      for (int j = 0; j < ny; j++)
-        for (int i = 0; i < nx; i++)
-          trans.Transform(pts[(size_t) j * nx + i], land.GetPoint(xs[i], ys[j]));
       // The grid's lines (no diagonals); a component draws its lower and
       // left edges, and its upper and right ones only at the landscape's
       // edge, so shared lines are drawn once.
@@ -1784,47 +1546,11 @@ View::RenderLandscapeWireFrame(Object &objNode, bool lineClip) {
 //===== Foliage =====
 
 namespace {
-  // Where an instance is in view space and whether it is worth drawing:
-  // in front, in the view's cone, nearer than its cull distance. Clip is
-  // set when it crosses the view's edges (its triangles need cutting).
-  bool FoliageInView(const Foliage &foliage, const FoliageInstance &instance, const Matrix44 &trans, float objectScale,
-                     bool perspective, const Clip &clip, Matrix44 &out, bool &needsClip) {
-    const FoliageType &type = foliage.GetTypes()[instance.type];
-    const std::shared_ptr<const StaticMesh> &mesh = foliage.GetMesh(instance.type);
-    if (!mesh)
-      return false;
-    out.Multiply(trans, foliage.GetInstanceMatrix(instance));
-    Vector3d p;
-    out.Transform(p, Vector3d::origVec);
-    // Its pivot is at its foot: the sphere around its middle.
-    Vector3d low, high;
-    mesh->GetBounds(low, high);
-    Vector3d middle(0.5f * (low.GetX() + high.GetX()), 0.5f * (low.GetY() + high.GetY()), 0.5f * (low.GetZ() + high.GetZ()));
-    out.Transform(p, middle);
-    const float r = mesh->GetBoundRadius() * instance.scale * objectScale;
-    const Vector3d &near = clip.GetMinClipEdges();
-    const Vector3d &far = clip.GetMaxClipEdges();
-    if (!perspective) {
-      needsClip = p.GetX() - r < near.GetX() || p.GetX() + r > far.GetX() || p.GetZ() - r < near.GetZ() || p.GetZ() + r > far.GetZ();
-      return !(p.GetX() + r < near.GetX() || p.GetX() - r > far.GetX() || p.GetZ() + r < near.GetZ() || p.GetZ() - r > far.GetZ());
-    }
-    if (p.GetY() + r < near.GetY() || p.GetY() - r > far.GetY())
-      return false;
-    if (type.cullDistance > 0.0f && p.GetMag() - r > type.cullDistance * objectScale)
-      return false;
-    // The view's cone is |x| <= y and |z| <= y (Clip's perspective
-    // volume); a sphere is out when it is wholly past a side.
-    const float slack = r * 1.4143f;
-    if (p.GetX() - slack > p.GetY() || -p.GetX() - slack > p.GetY() || p.GetZ() - slack > p.GetY() || -p.GetZ() - slack > p.GetY())
-      return false;
-    needsClip = p.GetY() - r < near.GetY() || fabsf(p.GetX()) + slack > p.GetY() || fabsf(p.GetZ()) + slack > p.GetY();
-    return true;
-  }
 
   float ObjectScale(const Object &obj) {
     Vector3d scale;
     obj.GetScale(scale);
-    return Max(Max(fabsf(scale.GetX()), fabsf(scale.GetY())), fabsf(scale.GetZ()));
+    return GeometryMath::Max(GeometryMath::Max(fabsf(scale.GetX()), fabsf(scale.GetY())), fabsf(scale.GetZ()));
   }
 }
 
@@ -1838,10 +1564,10 @@ View::RenderFoliageSolid(Object &objNode, const Matrix44 &trans) {
   Matrix44 placed;
   for (const FoliageInstance &instance : foliage.GetInstances()) {
     bool clip = false;
-    if (!FoliageInView(foliage, instance, trans, scale, true, renderView->clipView, placed, clip))
+    if (!IsFoliageInstanceVisible(foliage, instance, trans, scale, LandscapeRenderView(renderView->clipView, true), placed, clip))
       continue;
     // The GPU's, when the renderer draws copies (its near plane cuts them).
-    if (renderDraw->ZBufMeshInstance(*foliage.GetMesh(instance.type), placed)) {
+    if (renderDraw->ZBufMeshInstance(foliage.GetMesh(instance.type), placed)) {
       foliageInstancesDrawn++;
       continue;
     }
@@ -1862,7 +1588,7 @@ View::RenderFoliageWireFrame(Object &objNode, bool lineClip) {
   Point3d pt1, pt2;
   for (const FoliageInstance &instance : foliage.GetInstances()) {
     bool clip = false;
-    if (!FoliageInView(foliage, instance, trans, scale, renderView->perspective, renderView->clipView, placed, clip))
+    if (!IsFoliageInstanceVisible(foliage, instance, trans, scale, LandscapeRenderView(renderView->clipView, renderView->perspective), placed, clip))
       continue;
     clip = clip || lineClip;
     const StaticMesh &mesh = *foliage.GetMesh(instance.type);
@@ -1872,7 +1598,7 @@ View::RenderFoliageWireFrame(Object &objNode, bool lineClip) {
     placed.Transform(foot, Vector3d::origVec);
     placed.Transform(top, Vector3d(0.0f, 0.0f, high.GetZ()));
     const float size = mesh.GetBoundRadius() * instance.scale * scale;
-    const float pixels = renderView->perspective ? size * renderView->winWidth / Max(foot.GetY(), 1.0f) : size * zoom;
+    const float pixels = renderView->perspective ? size * renderView->winWidth / GeometryMath::Max(foot.GetY(), 1.0f) : size * zoom;
     const auto line = [&](const Vector3d &a, const Vector3d &b) {
       pt1.NewVector(a.GetX(), a.GetY(), a.GetZ());
       pt2.NewVector(b.GetX(), b.GetY(), b.GetZ());

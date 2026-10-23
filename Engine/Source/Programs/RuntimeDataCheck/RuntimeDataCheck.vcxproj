@@ -37,7 +37,7 @@
   </ImportGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Geometry\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Geometry\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="Main.cpp" /></ItemGroup>

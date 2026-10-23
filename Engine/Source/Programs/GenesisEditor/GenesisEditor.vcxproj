@@ -39,7 +39,7 @@
     <ClCompile>
       <ConformanceMode>false</ConformanceMode>
       <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Projects\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir);$(ProjectDir)..\TestApps\TestAppHarness;$(GenesisThirdPartyDir)FreeType2\include;$(GenesisThirdPartyDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Renderer\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Projects\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)LandscapeEditor\Public;$(GenesisEditorDir)FoliageEditor\Public;$(GenesisEditorDir)LandscapeEditorUtilities\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir);$(ProjectDir)..\TestApps\TestAppHarness;$(GenesisThirdPartyDir)FreeType2\include;$(GenesisThirdPartyDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -98,5 +98,7 @@
       <Project>{FFA50721-3B6E-440F-A253-4B19F430FC5D}</Project>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Renderer\Renderer.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C06}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisEditorDir)LandscapeEditor\LandscapeEditor.vcxproj"><Project>{072ACA67-77B1-4E56-B304-C5192AFA8C6A}</Project></ProjectReference><ProjectReference Include="$(GenesisEditorDir)FoliageEditor\FoliageEditor.vcxproj"><Project>{2E8B0EAC-F17E-430F-A16A-A71D7FE07193}</Project></ProjectReference><ProjectReference Include="$(GenesisEditorDir)LandscapeEditorUtilities\LandscapeEditorUtilities.vcxproj"><Project>{80E5D3DF-869E-4E9A-9F5C-25FC68B36A36}</Project></ProjectReference></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

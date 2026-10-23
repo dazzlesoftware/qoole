@@ -761,8 +761,8 @@ Object::GetBoundBox(Vector3d &minVec, Vector3d &maxVec) {
         minVec = maxVec = placed;
         continue;
       }
-      minVec.NewVector(Min(minVec.GetX(), placed.GetX()), Min(minVec.GetY(), placed.GetY()), Min(minVec.GetZ(), placed.GetZ()));
-      maxVec.NewVector(Max(maxVec.GetX(), placed.GetX()), Max(maxVec.GetY(), placed.GetY()), Max(maxVec.GetZ(), placed.GetZ()));
+      minVec.NewVector(GeometryMath::Min(minVec.GetX(), placed.GetX()), GeometryMath::Min(minVec.GetY(), placed.GetY()), GeometryMath::Min(minVec.GetZ(), placed.GetZ()));
+      maxVec.NewVector(GeometryMath::Max(maxVec.GetX(), placed.GetX()), GeometryMath::Max(maxVec.GetY(), placed.GetY()), GeometryMath::Max(maxVec.GetZ(), placed.GetZ()));
     }
     return;
   }
@@ -793,12 +793,12 @@ Object::GetBoundBox(Vector3d &minVec, Vector3d &maxVec) {
       maxVec = bMaxVec;
     }
     else {
-      minVec.NewVector(Min(minVec.GetX(), bMinVec.GetX()),
-                       Min(minVec.GetY(), bMinVec.GetY()),
-                       Min(minVec.GetZ(), bMinVec.GetZ()));
-      maxVec.NewVector(Max(maxVec.GetX(), bMaxVec.GetX()),
-                       Max(maxVec.GetY(), bMaxVec.GetY()),
-                       Max(maxVec.GetZ(), bMaxVec.GetZ()));
+      minVec.NewVector(GeometryMath::Min(minVec.GetX(), bMinVec.GetX()),
+                       GeometryMath::Min(minVec.GetY(), bMinVec.GetY()),
+                       GeometryMath::Min(minVec.GetZ(), bMinVec.GetZ()));
+      maxVec.NewVector(GeometryMath::Max(maxVec.GetX(), bMaxVec.GetX()),
+                       GeometryMath::Max(maxVec.GetY(), bMaxVec.GetY()),
+                       GeometryMath::Max(maxVec.GetZ(), bMaxVec.GetZ()));
     }
   }
 }
@@ -847,9 +847,9 @@ Object::Transform(const Matrix44 &transMatrix,
     (m1.Transform(xVec, 1.0f, 0.0f, 0.0f)).SubVector(pVec);
     (m1.Transform(yVec, 0.0f, 1.0f, 0.0f)).SubVector(pVec);
     (m1.Transform(zVec, 0.0f, 0.0f, 1.0f)).SubVector(pVec);
-    float sx = Max(xVec.GetMag(), 1e-4f);
-    const float sy = Max(yVec.GetMag(), 1e-4f);
-    const float sz = Max(zVec.GetMag(), 1e-4f);
+    float sx = GeometryMath::Max(xVec.GetMag(), 1e-4f);
+    const float sy = GeometryMath::Max(yVec.GetMag(), 1e-4f);
+    const float sz = GeometryMath::Max(zVec.GetMag(), 1e-4f);
     cross.CrossVector(yVec, zVec);
     if (cross.DotVector(xVec) < 0.0f)
       sx = -sx;
@@ -1077,8 +1077,8 @@ Object::SetBoundRadius(bool bubble) {
   while (!iter.IsDone()) {
     child = iter.GetNext();
     child->GetScale(bound);
-    m1 = Max(bound.GetX(), bound.GetY());
-    m1 = Max(m1, bound.GetZ());
+    m1 = GeometryMath::Max(bound.GetX(), bound.GetY());
+    m1 = GeometryMath::Max(m1, bound.GetZ());
     child->GetPosition(bound);
     m2 = bound.GetMag();
     tmp = child->GetBoundRadius() * m1 + m2;
@@ -1881,9 +1881,9 @@ Object::LoadObject(LFile *inFile, int objNum,
       int r = 255, g = 255, b = 255, used = 0;
       if (landQuadsX < 0 || sscanf(inFile->GetLine() + 16, "%d %d %d %n", &r, &g, &b, &used) < 3)
         goto ERROR_LOAD_OBJECT;
-      layer.r = (unsigned char) Max(0, Min(r, 255));
-      layer.g = (unsigned char) Max(0, Min(g, 255));
-      layer.b = (unsigned char) Max(0, Min(b, 255));
+      layer.r = (unsigned char) GeometryMath::Max(0, GeometryMath::Min(r, 255));
+      layer.g = (unsigned char) GeometryMath::Max(0, GeometryMath::Min(g, 255));
+      layer.b = (unsigned char) GeometryMath::Max(0, GeometryMath::Min(b, 255));
       layer.name = inFile->GetLine() + 16 + used;
       while (!layer.name.empty() && (layer.name.back() == '\n' || layer.name.back() == '\r' || layer.name.back() == ' '))
         layer.name.pop_back();
@@ -2023,7 +2023,7 @@ Object::LoadObject(LFile *inFile, int objNum,
       if (landLayers.empty() || sscanf(inFile->GetLine() + 18, "%f %n", &tiling, &used) < 1)
         goto ERROR_LOAD_OBJECT;
       LandscapeLayer &layer = landLayers.back();
-      layer.tiling = Max(tiling, 1.0f);
+      layer.tiling = GeometryMath::Max(tiling, 1.0f);
       layer.texture = inFile->GetLine() + 18 + used;
       while (!layer.texture.empty() && (layer.texture.back() == '\n' || layer.texture.back() == '\r' || layer.texture.back() == ' '))
         layer.texture.pop_back();
@@ -2204,7 +2204,7 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
     const std::vector<float> &heights = land.GetHeights();
     for (size_t i = 0; i < heights.size(); i += 32) {
       fprintf(outFile, "  LandscapeHeights:");
-      for (size_t j = i; j < Min(heights.size(), i + 32); j++)
+      for (size_t j = i; j < GeometryMath::Min(heights.size(), i + 32); j++)
         fprintf(outFile, " %s", FormatFloat(heights[j]));
       fprintf(outFile, "\n");
     }
@@ -2214,7 +2214,7 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
         fprintf(outFile, "  LandscapeTexture: %s %s\n", FormatFloat(layer.tiling), layer.texture.c_str());
       for (size_t i = 0; i < layer.weights.size(); i += 32) {
         fprintf(outFile, "  LandscapeWeights:");
-        for (size_t j = i; j < Min(layer.weights.size(), i + 32); j++)
+        for (size_t j = i; j < GeometryMath::Min(layer.weights.size(), i + 32); j++)
           fprintf(outFile, " %s", FormatFloat(layer.weights[j]));
         fprintf(outFile, "\n");
       }
@@ -2230,7 +2230,7 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
       // 12 to a line: the reader's lines hold 1024 characters.
       for (size_t i = 0; i < spline.points.size(); i += 12) {
         fprintf(outFile, "  LandscapeSplinePoints:");
-        for (size_t j = i; j < Min(spline.points.size(), i + 12); j++) {
+        for (size_t j = i; j < GeometryMath::Min(spline.points.size(), i + 12); j++) {
           const LandscapeSplinePoint &point = spline.points[j];
           for (const float v : { point.position.GetX(), point.position.GetY(), point.position.GetZ(), point.width, point.falloff })
             fprintf(outFile, " %s", FormatFloat(v));
@@ -2244,7 +2244,7 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
         special |= !point.autoTangent || point.joint >= 0;
       for (size_t i = 0; special && i < spline.points.size(); i += 12) {
         fprintf(outFile, "  LandscapeSplineTangents:");
-        for (size_t j = i; j < Min(spline.points.size(), i + 12); j++) {
+        for (size_t j = i; j < GeometryMath::Min(spline.points.size(), i + 12); j++) {
           const LandscapeSplinePoint &point = spline.points[j];
           fprintf(outFile, " %d", point.autoTangent ? 1 : 0);
           for (const float v : { point.tangent.GetX(), point.tangent.GetY(), point.tangent.GetZ() })
@@ -2274,7 +2274,7 @@ Object::SaveObject(FILE *outFile, int &pDone, int &pTotal,
     const std::vector<FoliageInstance> &instances = foliage.GetInstances();
     for (size_t i = 0; i < instances.size(); i += 6) {
       fprintf(outFile, "  FoliageInstances:");
-      for (size_t j = i; j < Min(instances.size(), i + 6); j++) {
+      for (size_t j = i; j < GeometryMath::Min(instances.size(), i + 6); j++) {
         const FoliageInstance &f = instances[j];
         fprintf(outFile, " %d", f.type);
         for (const float v : { f.position.GetX(), f.position.GetY(), f.position.GetZ(), f.up.GetX(), f.up.GetY(), f.up.GetZ(), f.yaw, f.scale })

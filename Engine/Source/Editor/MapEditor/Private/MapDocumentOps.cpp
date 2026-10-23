@@ -52,6 +52,43 @@ void FMapDocument::MoveObjects(const TArray<Object*>& Objects, const Vector3d& D
 	{
 		return;
 	}
+	// Native actors use ID-addressed transform snapshots. Stage the whole move
+	// before mutation so invalid coordinates cannot partially move a selection.
+	TArray<std::pair<FString, FTransform3D>> NativeMoves;
+	bool bNativeOnly = true;
+	for (const Object* Obj : Objects)
+	{
+		FTransform3D Transform;
+		if (!Obj || !GetActorTransform(Obj->GetIdentity().Actor, Transform))
+		{
+			bNativeOnly = false;
+			break;
+		}
+		Transform.Location.AddVector(Delta);
+		if (!Transform.IsValid())
+		{
+			return;
+		}
+		const FString& Id = Obj->GetIdentity().Actor;
+		if (std::none_of(NativeMoves.begin(), NativeMoves.end(),
+			[&](const auto& Move) { return Move.first == Id; }))
+		{
+			NativeMoves.emplace_back(Id, Transform);
+		}
+	}
+	if (bNativeOnly)
+	{
+		const bool bOwn = BeginOwnTransaction("Move");
+		for (const auto& Move : NativeMoves)
+		{
+			SetActorTransform(Move.first, Move.second, "Move");
+		}
+		if (bOwn)
+		{
+			EndTransaction();
+		}
+		return;
+	}
 	const bool bOwn = BeginOwnTransaction("Move");
 	MoveBy(Objects, Delta);
 	FMoveEdit* Last = Pending->Edits.empty() ? nullptr : dynamic_cast<FMoveEdit*>(Pending->Edits.back().get());
@@ -1015,43 +1052,97 @@ Vector3d FMapDocument::GetMeshRotation(const Object& Obj)
 	return Vector3d(Clean(RollRad), Clean(PitchRad), Clean(YawRad));
 }
 
+bool FMapDocument::GetActorTransform(const FString& ActorId, FTransform3D& Out) const
+{
+	const Object* Obj = FindActorObject(ActorId);
+	if (!Obj || (!Obj->HasMesh() && !Obj->HasFoliage()))
+	{
+		return false;
+	}
+	Obj->GetPosition(Out.Location);
+	Obj->GetOrientation(Out.Rotation);
+	Obj->GetScale(Out.Scale);
+	return true;
+}
+
+bool FMapDocument::ApplyActorTransform(const FString& ActorId, const FTransform3D& Transform)
+{
+	Object* Obj = FindActorObject(ActorId);
+	if (!Transform.IsValid() || !Obj || (!Obj->HasMesh() && !Obj->HasFoliage()))
+	{
+		return false;
+	}
+	Obj->TransSpace::SetPosition(Transform.Location);
+	Obj->TransSpace::SetOrientation(Transform.Rotation);
+	Obj->SetScale(Transform.Scale);
+	if (Obj->GetParentPtr())
+	{
+		Obj->GetParentPtr()->SetBoundRadius();
+	}
+	return true;
+}
+
+bool FMapDocument::SetActorTransform(const FString& ActorId, const FTransform3D& Transform,
+	const FString& Description)
+{
+	FTransform3D Before;
+	if (!Transform.IsValid() || !GetActorTransform(ActorId, Before))
+	{
+		return false;
+	}
+	if (Before.ToJson() == Transform.ToJson())
+	{
+		return true;
+	}
+	const bool bOwn = BeginOwnTransaction(Description);
+	FActorTransformEdit* Last = Pending->Edits.empty() ? nullptr :
+		dynamic_cast<FActorTransformEdit*>(Pending->Edits.back().get());
+	ApplyActorTransform(ActorId, Transform);
+	if (Last && Last->ActorId == ActorId)
+	{
+		Last->After = Transform;
+		Changed(EMapChange::Geometry);
+	}
+	else
+	{
+		auto Edit = std::make_unique<FActorTransformEdit>();
+		Edit->ActorId = ActorId;
+		Edit->Before = Before;
+		Edit->After = Transform;
+		Record(std::move(Edit), EMapChange::Geometry);
+	}
+	if (bOwn)
+	{
+		EndTransaction();
+	}
+	return true;
+}
+
 void FMapDocument::SetMeshRotation(Object& Obj, const Vector3d& Degrees)
 {
-	if (!Obj.HasMesh())
+	FTransform3D Transform;
+	if (!Obj.HasMesh() || !GetActorTransform(Obj.GetIdentity().Actor, Transform))
 	{
 		return;
 	}
 	Vector3d Front, Top;
 	AxesFromDegrees(Degrees, Front, Top);
-	const bool bOwn = BeginOwnTransaction("Rotate");
-	CaptureObjects({ &Obj });
-	Obj.TransSpace::SetOrientation(Front, Top);
-	if (Obj.GetParentPtr())
-	{
-		Obj.GetParentPtr()->SetBoundRadius();
-	}
-	Changed(EMapChange::Geometry);
-	if (bOwn)
-	{
-		EndTransaction();
-	}
+	TransSpace Orientation;
+	Orientation.SetOrientation(Front, Top);
+	Orientation.GetOrientation(Transform.Rotation);
+	SetActorTransform(Obj.GetIdentity().Actor, Transform, "Rotate");
 }
 
 void FMapDocument::SetMeshScale(Object& Obj, const Vector3d& Scale)
 {
-	if (!Obj.HasMesh())
+	FTransform3D Transform;
+	if (!Obj.HasMesh() || !GetActorTransform(Obj.GetIdentity().Actor, Transform))
 	{
 		return;
 	}
 	const auto Safe = [](float V) { return std::fabs(V) < 1e-3f ? (V < 0.0f ? -1e-3f : 1e-3f) : V; };
-	const bool bOwn = BeginOwnTransaction("Scale");
-	CaptureObjects({ &Obj });
-	Obj.SetScale(Vector3d(Safe(Scale.GetX()), Safe(Scale.GetY()), Safe(Scale.GetZ())));
-	Changed(EMapChange::Geometry);
-	if (bOwn)
-	{
-		EndTransaction();
-	}
+	Transform.Scale = Vector3d(Safe(Scale.GetX()), Safe(Scale.GetY()), Safe(Scale.GetZ()));
+	SetActorTransform(Obj.GetIdentity().Actor, Transform, "Scale");
 }
 
 void FMapDocument::SetMesh(Object& Obj, const FString& MeshName)

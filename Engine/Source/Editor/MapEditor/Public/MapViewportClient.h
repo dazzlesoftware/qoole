@@ -37,7 +37,9 @@
 
 #include "CoreMinimal.h"
 #include "MapDocument.h"
+#include "Renderer/NativeMeshRenderer.h"
 #include "MapLandscapeTextures.h"
+#include "Renderer/ProjectedSceneRenderer.h"
 #include "RenderTargetViewportClient.h"
 
 #include "MapCoreHeaders.h"
@@ -46,6 +48,9 @@
 
 class FMapDraw;
 class FMapViewportClient;
+
+// Feature modules register scene overlays and remove their handle on shutdown.
+TMulticastDelegate<void(const FMapDocument&, const FMapViewportClient&, FSlateWindowElementList&, float)>& MapSceneOverlays();
 class View;
 
 // What an editor mode does with the viewports (Unreal's FEdMode, for
@@ -149,85 +154,36 @@ struct FMapViewSettings
 	static constexpr float MaxGridSize = 256.0f;
 };
 
-// GPU objects shared by all map views of a device.
+// Editor settings/diagnostics around device-shared runtime renderers.
 class FMapRenderResources
 {
-public:
-	explicit FMapRenderResources(FRHIDevice& InDevice) : Device(InDevice) {}
-	~FMapRenderResources();
-	FRHIGraphicsPipeline* GetSolidPipeline(EPixelFormat TargetFormat);
-	FRHIGraphicsPipeline* GetMaterialPipeline(EPixelFormat TargetFormat, bool Translucent = false);
-	bool bMeshMaterials = true;
-	bool GetMaterialTextures(const std::shared_ptr<const struct FLoadedMeshAsset>&, FRHITexture*& Color, FRHITexture*& Normal, int32 Slot = 0);
-	// Textured landscapes, their layers blended per pixel (PSLandscape).
-	FRHIGraphicsPipeline* GetLandscapePipeline(EPixelFormat TargetFormat);
-	// Meshes drawn instanced (foliage: VSFoliage), and a mesh's triangles
-	// for it (made once a mesh: positions, normals and colors a corner).
-	FRHIGraphicsPipeline* GetInstancedPipeline(EPixelFormat TargetFormat);
-	struct FMeshBuffers
+  public:
+	explicit FMapRenderResources(FRHIDevice& Device) : NativeMeshes(Device), Scene(Device)
 	{
-		TSharedPtr<FRHIBuffer> Vertices;
-		TSharedPtr<FRHIBuffer> Indices;
-		uint32 IndexCount = 0;
-	};
-	const FMeshBuffers* GetMeshBuffers(const StaticMesh& Mesh);
-	FRHITexture& GetWhiteTexture();
-	// A landscape's layers for the GPU to blend (FLandscapeLayerImages):
-	// its weights and its layers' textures, brought up to date (a stroke
-	// copies only the weights it changed). False if it has more layers than
-	// the GPU blends, or none textured: then it is drawn baked
-	// (GetLandscapeTexture). Call outside render passes.
-	bool GetLandscapeLayers(const Object& Land, FRHITexture*& OutWeights, FRHITexture*& OutLayers);
-	// Whether landscapes blend their layers on the GPU (true) or are drawn
-	// with a baked image (tests compare the two).
-	bool bBlendLandscapeLayers = true;
-	// Whether foliage is drawn instanced on the GPU (true) or as triangles
-	// View makes (tests compare the two).
-	bool bInstanceMeshes = true;
-	// A textured landscape's baked image (FLandscapeBake), brought up to
-	// date: only what a stroke changed is baked and copied again. Null if
-	// the object is no textured landscape. Call outside render passes.
-	FRHITexture* GetLandscapeTexture(const Object& Land);
-	// Once a frame: images no view has drawn for a while are let go.
+	}
+	~FMapRenderResources();
+	bool bMeshMaterials = true;
+	bool bBlendLandscapeLayers = true; // GPU blend versus baked fallback, also used by readback tests
+	bool bInstanceMeshes = true;	   // GPU instances versus CPU fallback, also used by readback tests
+	FNativeMeshRenderer& GetNativeMeshRenderer()
+	{
+		return NativeMeshes;
+	}
+	FProjectedSceneRenderer& GetSceneRenderer()
+	{
+		Scene.bBlendLandscapeLayers = bBlendLandscapeLayers;
+		return Scene;
+	}
 	void Trim();
-	int32 GetNumLandscapeTextures() const { return static_cast<int32>(Landscapes.size()); }
-	// The bake of a landscape drawn lately (tests); null if none.
+	int32 GetNumLandscapeTextures() const
+	{
+		return Scene.GetNumLandscapeTextures();
+	}
 	const FLandscapeBake* FindLandscapeBake(const Object& Land) const;
 
-private:
-	struct FMaterialEntry
-	{
-		std::shared_ptr<const struct FLoadedMeshAsset> Asset;
-		TSharedPtr<FRHITexture> Color, Normal;
-		uint64 LastUsed = 0;
-	};
-	std::map<const struct FLoadedMaterialSlot*, FMaterialEntry> Materials;
-	struct FLandscapeEntry
-	{
-		FLandscapeBake Bake;
-		TSharedPtr<FRHITexture> Texture;
-		FLandscapeLayerImages Layers;
-		TSharedPtr<FRHITexture> WeightTexture;
-		TSharedPtr<FRHITexture> LayerTexture;
-		uint64 LastUsed = 0;
-	};
-	FLandscapeEntry& FindEntry(const Object& Land);
-	void Release(FLandscapeEntry& Entry);
-
-	FRHIDevice& Device;
-	TSharedPtr<FRHITexture> WhiteTexture;
-	TSharedPtr<FRHIGraphicsPipeline> SolidPipeline;
-	TSharedPtr<FRHIGraphicsPipeline> MaterialPipeline;
-	TSharedPtr<FRHIGraphicsPipeline> TranslucentMaterialPipeline;
-	EPixelFormat MaterialFormat = EPixelFormat::Unknown;
-	EPixelFormat SolidFormat = EPixelFormat::Unknown;
-	TSharedPtr<FRHIGraphicsPipeline> LandscapePipeline;
-	EPixelFormat LandscapeFormat = EPixelFormat::Unknown;
-	TSharedPtr<FRHIGraphicsPipeline> InstancedPipeline;
-	EPixelFormat InstancedFormat = EPixelFormat::Unknown;
-	std::map<const StaticMesh*, FMeshBuffers> MeshBuffers;
-	std::map<const Object*, std::unique_ptr<FLandscapeEntry>> Landscapes;
-	uint64 Frame = 0;
+  private:
+	FNativeMeshRenderer NativeMeshes;
+	FProjectedSceneRenderer Scene;
 };
 
 class FMapViewportClient final : public FRenderTargetViewportClient

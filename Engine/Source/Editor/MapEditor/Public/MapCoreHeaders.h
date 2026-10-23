@@ -1,11 +1,9 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 //
-// The map core headers the MapEditor module uses. Include this instead of
-// them directly: Math3D.h defines Min and Max as macros, which would break
-// FMath::Min/Max everywhere after it, so they are removed here (the map
-// core headers do not use them in inline code). The map core is older code
-// that does not build cleanly at warning level 4; its headers are read at
-// level 3.
+// Compatibility include for the editor's remaining legacy object operations.
+// Runtime geometry uses value helpers rather than Min/Max macros, so including
+// these headers no longer imposes an order on Core/RHI headers. The remaining
+// legacy headers are read at warning level 3 during migration.
 
 #pragma once
 
@@ -27,6 +25,3 @@
 #include "View.h"
 
 #pragma warning(pop)
-
-#undef Min
-#undef Max

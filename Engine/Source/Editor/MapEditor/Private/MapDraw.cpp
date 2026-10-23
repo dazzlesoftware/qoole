@@ -67,70 +67,15 @@ void FMapDraw::Reset()
 	Triangles.clear();
 	Batches.clear();
 	InstanceBatches.clear();
-	MaterialVertices.clear();
-	MaterialBatches.clear();
+	MaterialDraws.Reset();
 }
 
 bool FMapDraw::ZBufMaterialMesh(const Object& Obj, const Matrix44& ToView)
 {
-	const auto Asset = Obj.GetMeshAsset();
-	if (!bMaterials || !Asset)
+	if (!bMaterials || !Obj.GetMeshAsset())
 		return false;
-	const auto& Mesh = *Asset->Data.Mesh;
-	Vector3d Origin, Axis[3], Cofactor[3];
-	ToView.Transform(Origin, Vector3d());
-	for (int I = 0; I < 3; ++I)
-	{
-		Vector3d Unit(I == 0 ? 1.0f : 0.0f, I == 1 ? 1.0f : 0.0f, I == 2 ? 1.0f : 0.0f);
-		ToView.Transform(Axis[I], Unit);
-		Axis[I].SubVector(Origin);
-	}
-	Cofactor[0].CrossVector(Axis[1], Axis[2]);
-	Cofactor[1].CrossVector(Axis[2], Axis[0]);
-	Cofactor[2].CrossVector(Axis[0], Axis[1]);
-	const float Det = Axis[0].DotVector(Cofactor[0]);
-	if (!std::isfinite(Det) || std::abs(Det) < 1e-30f)
-		return false;
-	for (const auto& T : Mesh.GetTriangles())
-	{
-		const auto& Slot = Asset->GetSlot(T.MaterialSlot);
-		const bool Translucent = Slot.Material && Slot.Material->BlendMode == EMaterialBlendMode::Translucent;
-		Vector3d P[3], A, B, Face;
-		for (int K = 0; K < 3; ++K)
-			ToView.Transform(P[K], Mesh.GetVertex(T.v[K]));
-		A.SubVector(P[1], P[0]);
-		B.SubVector(P[2], P[0]);
-		Face.CrossVector(A, B);
-		const float Facing = Face.DotVector(P[0]);
-		if (Det < 0 ? Facing <= 0 : Facing >= 0)
-			continue;
-		const uint32 TriangleStart = static_cast<uint32>(MaterialVertices.size());
-		for (int K = 0; K < 3; ++K)
-		{
-			const auto& N = T.norm[K];
-			Vector3d Normal;
-			Normal.NewVector(
-				(Cofactor[0].GetX() * N.GetX() + Cofactor[1].GetX() * N.GetY() + Cofactor[2].GetX() * N.GetZ()) / Det,
-				(Cofactor[0].GetY() * N.GetX() + Cofactor[1].GetY() * N.GetY() + Cofactor[2].GetY() * N.GetZ()) / Det,
-				(Cofactor[0].GetZ() * N.GetX() + Cofactor[1].GetZ() * N.GetY() + Cofactor[2].GetZ() * N.GetZ()) / Det);
-			const float Length = Normal.GetMag();
-			if (Length > 1e-20f)
-				Normal.MultVector(1 / Length);
-			FMapMaterialVertex V = {{P[K].GetX(), P[K].GetY(), P[K].GetZ()},
-									{Normal.GetX(), Normal.GetY(), Normal.GetZ()},
-									{T.uv[K][0], T.uv[K][1]},
-									Mesh.HasVertexColors() ? Mesh.GetVertexColor(T.v[K]) : 0xffffffffu};
-			MaterialVertices.push_back(V);
-		}
-		if (!Translucent && !MaterialBatches.empty() && MaterialBatches.back().Mesh == &Obj &&
-			MaterialBatches.back().Slot == T.MaterialSlot &&
-			MaterialBatches.back().FirstVertex + MaterialBatches.back().NumVertices == TriangleStart)
-			MaterialBatches.back().NumVertices += 3;
-		else
-			MaterialBatches.push_back(
-				{&Obj, TriangleStart, 3, (P[0].GetY() + P[1].GetY() + P[2].GetY()) / 3, T.MaterialSlot});
-	}
-	return true;
+	FString Error;
+	return MaterialDraws.Append(Obj.GetMeshAsset(), ToView, Error);
 }
 
 FColor FMapDraw::GetPaletteColor(int Index) const
@@ -193,10 +138,11 @@ FColor FMapDraw::ObjectColor(float Shade) const
 
 void FMapDraw::AddVertex(const FMapVertex& Vertex, const Object* Textured)
 {
-	if (Batches.empty() || Batches.back().Landscape != Textured)
+	if (Batches.empty() || Batches.back().LandscapeKey != reinterpret_cast<uint64>(Textured))
 	{
 		FMapTriangleBatch Batch;
-		Batch.Landscape = Textured;
+		Batch.LandscapeKey = reinterpret_cast<uint64>(Textured);
+  Batch.Terrain=Textured?Textured->GetLandscapePtr():nullptr;
 		Batch.FirstVertex = static_cast<uint32>(Triangles.size());
 		Batches.push_back(Batch);
 	}
@@ -304,30 +250,9 @@ void FMapDraw::ZBufInstanceLight(const Vector3d& Light, const Vector3d& Up, floa
 	InstanceWinWidth = WinWidth;
 }
 
-bool FMapDraw::ZBufMeshInstance(const StaticMesh& Mesh, const Matrix44& ToView)
+bool FMapDraw::ZBufMeshInstance(const std::shared_ptr<const StaticMesh>& Mesh, const Matrix44& ToView)
 {
-	if (!bInstancing || !Mesh.HasVertexColors())
-	{
-		return false;
-	}
-	FMapInstanceBatch* Batch = nullptr;
-	for (FMapInstanceBatch& Existing : InstanceBatches)
-	{
-		Batch = Existing.Mesh == &Mesh ? &Existing : Batch;
-	}
-	if (!Batch)
-	{
-		InstanceBatches.push_back(FMapInstanceBatch{ &Mesh, {} });
-		Batch = &InstanceBatches.back();
-	}
-	for (int Row = 0; Row < 3; ++Row)
-	{
-		for (int Col = 0; Col < 4; ++Col)
-		{
-			Batch->Rows.push_back(ToView.GetMatrix(Row, Col));
-		}
-	}
-	return true;
+ return bInstancing && Mesh && Mesh->HasVertexColors() && AppendMeshInstance(InstanceBatches,Mesh,ToView);
 }
 
 void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float Q2)

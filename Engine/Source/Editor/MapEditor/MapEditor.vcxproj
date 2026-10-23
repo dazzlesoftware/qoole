@@ -46,18 +46,15 @@
     <ClCompile>
       <ConformanceMode>false</ConformanceMode>
       <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir)Public;$(ProjectDir)Private;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Renderer\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir)Public;$(ProjectDir)Private;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="Private\MapBrushSettings.cpp" /><ClCompile Include="Private\MapTerrainAttachments.cpp" /><ClInclude Include="Public\MapBrushSettings.h" /><ClInclude Include="Public\MapTerrainAttachments.h" /></ItemGroup>
   <ItemGroup>
     <ClCompile Include="Private\MapDocument.cpp" /><ClCompile Include="Private\MapPackage.cpp" /><ClCompile Include="Private\MapWorldAdapter.cpp" /><ClCompile Include="Private\MapAssetLibrary.cpp" /><ClCompile Include="Private\MapAssetImport.cpp" /><ClCompile Include="Private\MeshAssetEditor.cpp" /><ClCompile Include="Private\TextureAssetEditor.cpp" /><ClCompile Include="Private\STextureAssetPreview.cpp" />
     <ClCompile Include="Private\MapDocumentOps.cpp" />
-    <ClCompile Include="Private\MapDraw.cpp" /><ClCompile Include="Private\MapMaterialTextures.cpp" />
+    <ClCompile Include="Private\MapDraw.cpp" />
     <ClCompile Include="Private\MapEditorEnvironment.cpp" />
-    <ClCompile Include="Private\MapFoliageMode.cpp" />
-    <ClCompile Include="Private\MapHeightmap.cpp" />
-    <ClCompile Include="Private\MapLandscapeMode.cpp" />
-    <ClCompile Include="Private\MapLandscapeTextures.cpp" />
     <ClCompile Include="Private\MapObjectProperties.cpp" />
     <ClCompile Include="Private\MapViewportClient.cpp" />
     <ClCompile Include="Private\MapViewportTools.cpp" />
@@ -70,16 +67,9 @@
     <ClInclude Include="Private\MapEditorIcons.h" />
     <ClInclude Include="Private\MapEditorPrivate.h" />
     <ClInclude Include="Private\MapEdits.h" />
-    <ClInclude Include="Private\Shaders\MapShaders_PSLandscape_SPIRV.h" />
-    <ClInclude Include="Private\Shaders\MapShaders_PSTextured_SPIRV.h" />
-    <ClInclude Include="Private\Shaders\MapShaders_VSFoliage_SPIRV.h" />
-    <ClInclude Include="Private\Shaders\MapShaders_VSMain_SPIRV.h" />
     <ClInclude Include="Public\MapDocument.h" /><ClInclude Include="Public\MapPackage.h" /><ClInclude Include="Public\MapWorldAdapter.h" /><ClInclude Include="Public\MapAssetLibrary.h" /><ClInclude Include="Public\MapAssetImport.h" /><ClInclude Include="Public\MeshAssetEditor.h" /><ClInclude Include="Public\TextureAssetEditor.h" /><ClInclude Include="Public\STextureAssetPreview.h" />
     <ClInclude Include="Public\MapDraw.h" /><ClInclude Include="Public\MapMaterialTextures.h" />
     <ClInclude Include="Public\MapEditorEnvironment.h" />
-    <ClInclude Include="Public\MapFoliageMode.h" />
-    <ClInclude Include="Public\MapHeightmap.h" />
-    <ClInclude Include="Public\MapLandscapeMode.h" />
     <ClInclude Include="Public\MapLandscapeTextures.h" />
     <ClInclude Include="Public\MapObjectProperties.h" />
     <ClInclude Include="Public\MapViewportClient.h" />
@@ -91,24 +81,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Private\Shaders\BuildMapShaders.cmd" />
-    <None Include="Private\Shaders\BuildMeshMaterialShaders.cmd" />
   </ItemGroup>
-  <ItemGroup>
-    <CustomBuild Include="Private\Shaders\MapShaders.hlsl">
-      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSMain -Vn g_MapShaders_VSMain_DXIL -Fh &quot;$(IntDir)MapShaders_VSMain_DXIL.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSFoliage -Vn g_MapShaders_VSFoliage_DXIL -Fh &quot;$(IntDir)MapShaders_VSFoliage_DXIL.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSTextured -Vn g_MapShaders_PSTextured_DXIL -Fh &quot;$(IntDir)MapShaders_PSTextured_DXIL.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSLandscape -Vn g_MapShaders_PSLandscape_DXIL -Fh &quot;$(IntDir)MapShaders_PSLandscape_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
-      <Outputs>$(IntDir)MapShaders_VSMain_DXIL.h;$(IntDir)MapShaders_VSFoliage_DXIL.h;$(IntDir)MapShaders_PSTextured_DXIL.h;$(IntDir)MapShaders_PSLandscape_DXIL.h</Outputs>
-      <Message>Compiling %(Filename)%(Extension) to DXIL</Message>
-    </CustomBuild>
-    <CustomBuild Include="Private\Shaders\MeshMaterial.hlsl">
-      <Command>&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T vs_6_0 -E VSMaterial -Vn g_MeshMaterial_VSMaterial_DXIL -Fh &quot;$(IntDir)MeshMaterial_VSMaterial_DXIL.h&quot; &quot;%(FullPath)&quot;
-&quot;$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxc.exe&quot; -nologo -O3 -T ps_6_0 -E PSMaterial -Vn g_MeshMaterial_PSMaterial_DXIL -Fh &quot;$(IntDir)MeshMaterial_PSMaterial_DXIL.h&quot; &quot;%(FullPath)&quot;</Command>
-      <Outputs>$(IntDir)MeshMaterial_VSMaterial_DXIL.h;$(IntDir)MeshMaterial_PSMaterial_DXIL.h</Outputs>
-      <Message>Compiling native mesh material shaders to DXIL</Message>
-    </CustomBuild>
-  </ItemGroup>
+
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)AssetCore\AssetCore.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C02}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Renderer\Renderer.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C06}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\MapFeaturePanelHost.cpp" /><ClInclude Include="Public\MapFeaturePanelHost.h" /><ClInclude Include="Public\MapFeaturePanelWidgets.h" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

@@ -178,7 +178,7 @@ namespace {
   }
 
   unsigned int Mix(unsigned int a, unsigned int b, float t) {
-    t = Max(0.0f, Min(t, 1.0f));
+    t = GeometryMath::Max(0.0f, GeometryMath::Min(t, 1.0f));
     unsigned int out = 0xFF000000u;
     for (int c = 0; c < 3; c++) {
       const float va = (float) ((a >> (8 * c)) & 0xFF), vb = (float) ((b >> (8 * c)) & 0xFF);
@@ -259,7 +259,7 @@ namespace {
   // floor when it is a cone (seen from below).
   void Frustum(ColoredMesh &out, float z0, float z1, float r0, float r1, unsigned int bottom, unsigned int top, int segments = 8) {
     std::vector<int> low, high;
-    const float lean = (r0 - r1) / Max(z1 - z0, 1e-3f);
+    const float lean = (r0 - r1) / GeometryMath::Max(z1 - z0, 1e-3f);
     for (int j = 0; j < segments; j++) {
       const float theta = 2.0f * Pi * (float) j / segments;
       low.push_back(out.Vertex(Vector3d(r0 * cosf(theta), r0 * sinf(theta), z0), bottom));
@@ -459,7 +459,7 @@ namespace {
         const auto &p=mesh->GetVertex(t.v[k]); const auto &n=t.norm[0];
         if (sphere || cylindrical) {
           uv[k][0]=atan2f(p.GetY(),p.GetX())/(2*Pi)+0.5f;
-          uv[k][1]=sphere?acosf(Max(-1.0f,Min(1.0f,p.GetZ()/64.0f)))/Pi:0.5f-p.GetZ()/128.0f;
+          uv[k][1]=sphere?acosf(GeometryMath::Max(-1.0f,GeometryMath::Min(1.0f,p.GetZ()/64.0f)))/Pi:0.5f-p.GetZ()/128.0f;
         } else if (fabsf(n.GetZ())>=fabsf(n.GetX()) && fabsf(n.GetZ())>=fabsf(n.GetY())) {
           uv[k][0]=p.GetX()/128.0f+0.5f; uv[k][1]=0.5f-p.GetY()/128.0f;
         } else if (fabsf(n.GetX())>=fabsf(n.GetY())) {
@@ -469,7 +469,7 @@ namespace {
         }
       }
       if (sphere || cylindrical) {
-        const float lo=Min(uv[0][0],Min(uv[1][0],uv[2][0])), hi=Max(uv[0][0],Max(uv[1][0],uv[2][0]));
+        const float lo=GeometryMath::Min(uv[0][0],GeometryMath::Min(uv[1][0],uv[2][0])), hi=GeometryMath::Max(uv[0][0],GeometryMath::Max(uv[1][0],uv[2][0]));
         if (hi-lo>0.5f) for(int k=0; k<3; ++k) if(uv[k][0]<0.5f) uv[k][0]+=1;
         for(int k=0; k<3; ++k) if(fabsf(mesh->GetVertex(t.v[k]).GetX())+fabsf(mesh->GetVertex(t.v[k]).GetY())<1e-4f)
           uv[k][0]=(uv[(k+1)%3][0]+uv[(k+2)%3][0])*0.5f;
@@ -549,13 +549,13 @@ StaticMesh::Finish(void) {
   boundRadius = 0.0f;
   for (size_t i = 0; i < vertices.size(); i++) {
     const Vector3d &p = vertices[i];
-    boundRadius = Max(boundRadius, p.GetMag());
+    boundRadius = GeometryMath::Max(boundRadius, p.GetMag());
     if (i == 0) {
       boundMin = boundMax = p;
       continue;
     }
-    boundMin.NewVector(Min(boundMin.GetX(), p.GetX()), Min(boundMin.GetY(), p.GetY()), Min(boundMin.GetZ(), p.GetZ()));
-    boundMax.NewVector(Max(boundMax.GetX(), p.GetX()), Max(boundMax.GetY(), p.GetY()), Max(boundMax.GetZ(), p.GetZ()));
+    boundMin.NewVector(GeometryMath::Min(boundMin.GetX(), p.GetX()), GeometryMath::Min(boundMin.GetY(), p.GetY()), GeometryMath::Min(boundMin.GetZ(), p.GetZ()));
+    boundMax.NewVector(GeometryMath::Max(boundMax.GetX(), p.GetX()), GeometryMath::Max(boundMax.GetY(), p.GetY()), GeometryMath::Max(boundMax.GetZ(), p.GetZ()));
   }
 }
 
@@ -568,8 +568,8 @@ StaticMesh::FindTransBoundBox(const Matrix44 &trans, Vector3d &minVec, Vector3d 
       minVec = maxVec = p;
       continue;
     }
-    minVec.NewVector(Min(minVec.GetX(), p.GetX()), Min(minVec.GetY(), p.GetY()), Min(minVec.GetZ(), p.GetZ()));
-    maxVec.NewVector(Max(maxVec.GetX(), p.GetX()), Max(maxVec.GetY(), p.GetY()), Max(maxVec.GetZ(), p.GetZ()));
+    minVec.NewVector(GeometryMath::Min(minVec.GetX(), p.GetX()), GeometryMath::Min(minVec.GetY(), p.GetY()), GeometryMath::Min(minVec.GetZ(), p.GetZ()));
+    maxVec.NewVector(GeometryMath::Max(maxVec.GetX(), p.GetX()), GeometryMath::Max(maxVec.GetY(), p.GetY()), GeometryMath::Max(maxVec.GetZ(), p.GetZ()));
   }
 }
 

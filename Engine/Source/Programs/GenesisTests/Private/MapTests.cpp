@@ -404,8 +404,8 @@ TEST_CASE("CSG subtraction carves one brush out of another")
 		CHECK(Piece->GetBrush().GetNumFaces() == 6);
 		Vector3d Min, Max;
 		GetWorldBounds(*Piece, Min, Max);
-		UnionMin.NewVector(Min(UnionMin.GetX(), Min.GetX()), Min(UnionMin.GetY(), Min.GetY()), Min(UnionMin.GetZ(), Min.GetZ()));
-		UnionMax.NewVector(Max(UnionMax.GetX(), Max.GetX()), Max(UnionMax.GetY(), Max.GetY()), Max(UnionMax.GetZ(), Max.GetZ()));
+		UnionMin.NewVector(GeometryMath::Min(UnionMin.GetX(), Min.GetX()), GeometryMath::Min(UnionMin.GetY(), Min.GetY()), GeometryMath::Min(UnionMin.GetZ(), Min.GetZ()));
+		UnionMax.NewVector(GeometryMath::Max(UnionMax.GetX(), Max.GetX()), GeometryMath::Max(UnionMax.GetY(), Max.GetY()), GeometryMath::Max(UnionMax.GetZ(), Max.GetZ()));
 
 		const bool bOverlapsHole =
 			Min.GetX() < 16 - 0.01f && Max.GetX() > -16 + 0.01f &&

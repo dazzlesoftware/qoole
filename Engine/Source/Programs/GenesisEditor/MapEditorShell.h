@@ -22,6 +22,9 @@
 #include "MapViewportClient.h"
 #include "MapFoliageMode.h"
 #include "MapLandscapeMode.h"
+#include "MapFeaturePanelHost.h"
+class SLandscapeEditorPanel;
+class SFoliageEditorPanel;
 #include "SContentBrowser.h"
 #include "SMapViewport.h"
 #include "Widgets/Layout/SBox.h"
@@ -176,24 +179,9 @@ private:
 	TSharedRef<SDockTab> MakeBrushEditingTab();
 	TSharedRef<SDockTab> MakeLandscapeTab();
 	TSharedRef<SDockTab> MakeFoliageTab();
-	// The foliage type list (and the selected type's settings), when the
-	// types changed.
+	FMapFeaturePanelHost MakeFeaturePanelHost();
 	void RefreshFoliageTypes();
-	TSharedRef<SWidget> MakeFoliageTypeList();
-	TSharedRef<SWidget> MakeFoliageTypeSettings();
-	// The paint layer list, when the layers (or the landscape) changed.
 	void RefreshLandscapeLayers();
-	// A heightmap or weightmap file to read or write (false if cancelled).
-	bool PickLandscapeFile(bool bSave, const FString& Title, const FString& Name, FString& OutPath);
-	// An image for a paint layer's texture (false if cancelled or unreadable).
-	bool PickLandscapeTexture(FString& OutPath);
-	// The paint layer list rebuilt even if its layers look the same.
-	void RefreshLandscapeLayersNow();
-	// Logs and shows an import or export's outcome.
-	void ReportLandscapeFile(bool bOk, const FString& Done, const FString& Error);
-	TSharedRef<SWidget> MakeLandscapeLayerList();
-	// The Splines tool's settings: the selected point's and its spline's.
-	TSharedRef<SWidget> MakeLandscapeSplineSettings();
 	TSharedRef<SDockTab> MakeOutlinerTab();
 	TSharedRef<SDockTab> MakeDetailsTab();
 	TSharedRef<SDockTab> MakeContentBrowserTab(int32 Index);
@@ -218,6 +206,7 @@ private:
 
 	TUniquePtr<FMapDocument> Document;
 	FDelegateHandle DocumentHandle;
+	FDelegateHandle LandscapeOverlayHandle;
 	FMapViewSettings ViewSettings;
 	TUniquePtr<FMapRenderResources> RenderResources;
 	// The panes' views, in the layout's pane order.
@@ -243,15 +232,8 @@ private:
 	EMapEditorMode Mode = EMapEditorMode::Selection;
 	FMapLandscapeMode LandscapeMode;
 	FMapFoliageMode FoliageMode;
-	int32 SelectedFoliageType = 0;
-	TWeakPtr<SBox> FoliageTypeHost;
-	TWeakPtr<SBox> FoliageSettingsHost;
-	FString FoliageSignature;
-	bool bFoliageQueued = false;
-	TWeakPtr<SBox> LandscapeLayerHost;
-	TWeakPtr<SBox> LandscapeSplineHost;
-	FString LandscapeLayerSignature;
-	bool bLandscapeLayersQueued = false;
+	TWeakPtr<SLandscapeEditorPanel> LandscapePanel;
+	TWeakPtr<SFoliageEditorPanel> FoliagePanel;
 	TWeakPtr<SWindow> PreferencesWindow;
 
 	TArray<FString> LogLines;

@@ -1065,9 +1065,9 @@ TransSpace::SetScale(const Vector3d &newScale) {
 const Vector3d &
 TransSpace::ChangeScale(const Vector3d &scaleDelta) {
   scale.AddVector(scaleDelta);
-  scale.NewVector(Max(scale.GetX(), 0.01f),
-                  Max(scale.GetY(), 0.01f),
-                  Max(scale.GetZ(), 0.01f));
+  scale.NewVector(GeometryMath::Max(scale.GetX(), 0.01f),
+                  GeometryMath::Max(scale.GetY(), 0.01f),
+                  GeometryMath::Max(scale.GetZ(), 0.01f));
   return scale;
 }
 

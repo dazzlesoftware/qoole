@@ -102,7 +102,7 @@ convex polygon fans and negative indices. It preserves `usemtl` names and face g
 Assign materials in the actor Details panel. It does not import MTL material definitions,
 groups as separate actors, animation, or coordinate-system/unit conversion.
 Triangulate complex/nonplanar polygons in the source tool before importing.
-Image decoding stays in Editor through WIC; runtime loading needs only the
+Asset import image decoding stays in Editor through WIC; typed runtime asset loading needs only the
 embedded RGBA8 bytes. Image dimensions are 1–8192 on each axis.
 
 Mesh bulk layout is little-endian: float32 positions (12 bytes per vertex),
@@ -217,3 +217,10 @@ an editor discards unsaved changes; changing preview channels never dirties an
 asset. Saving rejects a stale manifest, moved package or changed identity. The
 texture payload remains `Genesis.Texture2D` version 1; import-source information
 is optional editor metadata and runtime loaders do not read the source file.
+
+The native mesh/material GPU path now belongs to `Runtime/Renderer`, including
+mesh preparation, material shader builds and mip generation. MapEditor adapts
+its scene data into runtime draw lists. Terrain geometry/layer resources and
+foliage preparation/instancing now also belong to Renderer, with native world
+construction/traversal available independently. Legacy brush drawing remains in
+the editor bridge. See [Renderer.md](Renderer.md).

@@ -1450,12 +1450,12 @@ Geometry::FindTransBoundBox(const Matrix44 trans,
       init = 1;
     }
     else {
-      minVec.NewVector(Min(minVec.GetX(), vec.GetX()),
-                       Min(minVec.GetY(), vec.GetY()),
-                       Min(minVec.GetZ(), vec.GetZ()));
-      maxVec.NewVector(Max(maxVec.GetX(), vec.GetX()),
-                       Max(maxVec.GetY(), vec.GetY()),
-                       Max(maxVec.GetZ(), vec.GetZ()));
+      minVec.NewVector(GeometryMath::Min(minVec.GetX(), vec.GetX()),
+                       GeometryMath::Min(minVec.GetY(), vec.GetY()),
+                       GeometryMath::Min(minVec.GetZ(), vec.GetZ()));
+      maxVec.NewVector(GeometryMath::Max(maxVec.GetX(), vec.GetX()),
+                       GeometryMath::Max(maxVec.GetY(), vec.GetY()),
+                       GeometryMath::Max(maxVec.GetZ(), vec.GetZ()));
     }
   }
 }
@@ -2654,12 +2654,12 @@ WireFrameGeom::FindTransBoundBox(const Matrix44 trans,
   for(i = 1; i < numWFVertices; i++) {
     vertex = &(wfVertices[i]);
     trans.Transform(vec, vertex->x, vertex->y, vertex->z);
-    minVec.NewVector(Min(minVec.GetX(), vec.GetX()),
-                     Min(minVec.GetY(), vec.GetY()),
-                     Min(minVec.GetZ(), vec.GetZ()));
-    maxVec.NewVector(Max(maxVec.GetX(), vec.GetX()),
-                     Max(maxVec.GetY(), vec.GetY()),
-                     Max(maxVec.GetZ(), vec.GetZ()));
+    minVec.NewVector(GeometryMath::Min(minVec.GetX(), vec.GetX()),
+                     GeometryMath::Min(minVec.GetY(), vec.GetY()),
+                     GeometryMath::Min(minVec.GetZ(), vec.GetZ()));
+    maxVec.NewVector(GeometryMath::Max(maxVec.GetX(), vec.GetX()),
+                     GeometryMath::Max(maxVec.GetY(), vec.GetY()),
+                     GeometryMath::Max(maxVec.GetZ(), vec.GetZ()));
   }
 }
 
@@ -2678,12 +2678,12 @@ WireFrameGeom::FindSelfDimen(Vector3d &minVec, Vector3d &maxVec) const {
 
   for(i = 1; i < numWFVertices; i++) {
     vertex = &(wfVertices[i]);
-    minVec.NewVector(Min(minVec.GetX(), vertex->x),
-                     Min(minVec.GetY(), vertex->y),
-                     Min(minVec.GetZ(), vertex->z));
-    maxVec.NewVector(Max(maxVec.GetX(), vertex->x),
-                     Max(maxVec.GetY(), vertex->y),
-                     Max(maxVec.GetZ(), vertex->z));
+    minVec.NewVector(GeometryMath::Min(minVec.GetX(), vertex->x),
+                     GeometryMath::Min(minVec.GetY(), vertex->y),
+                     GeometryMath::Min(minVec.GetZ(), vertex->z));
+    maxVec.NewVector(GeometryMath::Max(maxVec.GetX(), vertex->x),
+                     GeometryMath::Max(maxVec.GetY(), vertex->y),
+                     GeometryMath::Max(maxVec.GetZ(), vertex->z));
   }
 }
 
@@ -2761,12 +2761,12 @@ WireFrameGeom::ConsApprxBox(void) {
 
   for(i = 1; i < numWFVertices; i++) {
     vertex = &(wfVertices[i]);
-    xMin = Min(xMin, vertex->x);
-    yMin = Min(yMin, vertex->y);
-    zMin = Min(zMin, vertex->z);
-    xMax = Max(xMax, vertex->x);
-    yMax = Max(yMax, vertex->y);
-    zMax = Max(zMax, vertex->z);
+    xMin = GeometryMath::Min(xMin, vertex->x);
+    yMin = GeometryMath::Min(yMin, vertex->y);
+    zMin = GeometryMath::Min(zMin, vertex->z);
+    xMax = GeometryMath::Max(xMax, vertex->x);
+    yMax = GeometryMath::Max(yMax, vertex->y);
+    zMax = GeometryMath::Max(zMax, vertex->z);
   }
 
   // Add the vertices to bounding box.
@@ -2828,12 +2828,12 @@ WireFrameGeom::GetMinMax(Vector3d &minVec, Vector3d &maxVec) const {
 
   for(i = 1; i < numWFVertices; i++) {
     vertex = &(wfVertices[i]);
-    xMin = Min(xMin, vertex->x);
-    yMin = Min(yMin, vertex->y);
-    zMin = Min(zMin, vertex->z);
-    xMax = Max(xMax, vertex->x);
-    yMax = Max(yMax, vertex->y);
-    zMax = Max(zMax, vertex->z);
+    xMin = GeometryMath::Min(xMin, vertex->x);
+    yMin = GeometryMath::Min(yMin, vertex->y);
+    zMin = GeometryMath::Min(zMin, vertex->z);
+    xMax = GeometryMath::Max(xMax, vertex->x);
+    yMax = GeometryMath::Max(yMax, vertex->y);
+    zMax = GeometryMath::Max(zMax, vertex->z);
   }
 
   minVec.SetX(xMin);

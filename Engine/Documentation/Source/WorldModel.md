@@ -51,8 +51,10 @@ The transitional editor maps its existing payloads to these schema types:
 
 Payload values are stored in `Properties.Data`. Bulk ranges still address the
 enclosing package's `.gbulk`; `FWorld` validates the scene graph, while the
-existing editor payload readers validate those ranges and payload schemas.
-This does not yet provide runtime construction/rendering of every component.
+shared Runtime/Engine `FWorldGeometryCodec` validates mesh component definitions,
+sparse material overrides, terrain/foliage bulk ranges and payload schemas. `FWorldSceneSnapshot` constructs supported render components
+without editor modules; unsupported components are reported explicitly. See
+[Renderer.md](Renderer.md) for the current drawing boundary.
 
 The editor reads version 1 native worlds/prefabs through the old codec. Opening
 a version 1 world creates scene IDs and marks it modified; saving writes version
@@ -81,9 +83,11 @@ Prefab placement remains a copied scene, without a live prefab-instance link.
 
 Typed mesh/material/texture assets and payload loaders are now implemented (see
 [RenderAssets.md](RenderAssets.md)). Opaque mesh textures, normal maps and metallic/
-roughness preview shading are implemented. Remaining work includes transparency,
-material slots, then migrating selection, transactions, rendering and editor operations to runtime
-actors. MapCore retirement, gameplay component lifecycle, cross-world actor
+roughness preview shading are implemented. Material slots, masking/transparency, and mesh/texture editors with reimport
+are implemented. Runtime/Renderer now owns native mesh/material rendering.
+Runtime terrain/foliage preparation, GPU rendering and native scene traversal are
+also implemented. Remaining work includes migrating selection, transactions and
+the editor's live document/operations to runtime actors. MapCore retirement, gameplay component lifecycle, cross-world actor
 references, streaming, and plugin loading remain later stages.
 
 ## Validation
@@ -99,3 +103,17 @@ World/prefab schema v3 adds per-slot mesh material overrides. Versions 1/2
 remain readable and are marked for upgrade. Version 2 scene identities survive
 the upgrade. Mesh component assets list source followed by non-null overrides
 in slot order, matching the component Data payload.
+
+### Actor editing transition
+
+The live editor still owns the legacy object tree, but transaction selection and
+scope snapshots now store persistent actor IDs and resolve current objects when
+undoing, redoing or cancelling. `GetSelectedActorIds` / `SetSelectedActorIds`
+provide an identity-based selection boundary without exporting terrain payloads.
+Missing or out-of-scope IDs are ignored and duplicate selections are removed.
+
+Mesh, landscape and foliage actors expose validated local `FTransform3D` edits.
+Their Details rotation/scale fields and native-only viewport moves record before
+and after transforms by actor ID. Consecutive edits to one actor coalesce within
+a transaction. Legacy brushes, mixed selections and structural edits retain the
+existing adapters; authoritative native-world ownership is still pending.

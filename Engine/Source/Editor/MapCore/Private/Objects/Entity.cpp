@@ -504,7 +504,7 @@ Entity::ParseKeys(const char *line, char **key, char **key2) {
 		return false;
 	if ((c1 = strchr(c + 1, '"')) == NULL)
 		return false;
-	len = (int)Min(c1 - c - 1, 79);
+	len = (int)GeometryMath::Min(c1 - c - 1, 79);
 	strncpy(rtnVal1, c + 1, len);
 	rtnVal1[len] = '\0';
 	*key = rtnVal1;
@@ -513,7 +513,7 @@ Entity::ParseKeys(const char *line, char **key, char **key2) {
 		return true;
 	if ((c1 = strchr(c + 1, '"')) == NULL)
 		return true;
-	len = (int)Min(c1 - c - 1, 511);
+	len = (int)GeometryMath::Min(c1 - c - 1, 511);
 	strncpy(rtnVal2, c + 1, len);
 	rtnVal2[len] = '\0';
 	*key2 = rtnVal2;

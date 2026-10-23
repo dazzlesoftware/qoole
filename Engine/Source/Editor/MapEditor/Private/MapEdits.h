@@ -14,6 +14,7 @@
 
 #include "MapDocument.h"
 #include "MapEditorPrivate.h"
+#include "World/World.h"
 
 struct FMapDocument::FEdit
 {
@@ -27,10 +28,10 @@ struct FMapDocument::FTransaction
 {
 	FString Description;
 	TArray<TUniquePtr<FEdit>> Edits;
-	TArray<Object*> SelectionBefore;
-	TArray<Object*> SelectionAfter;
-	Object* ScopeBefore = nullptr;
-	Object* ScopeAfter = nullptr;
+	TArray<FString> SelectionBefore;
+	TArray<FString> SelectionAfter;
+	FString ScopeBefore;
+	FString ScopeAfter;
 	TArray<Object*> Captured; // objects with an FContentEdit in this transaction
 	EMapChange Changes = EMapChange::None;
 	int64 VersionBefore = 0;
@@ -63,6 +64,15 @@ namespace MapEditorPrivate
 		return !Obj.HasBrush() && !Obj.HasEntity() && !Obj.HasMesh() && !Obj.HasFoliage() && Obj.GetNumChildren() == 0;
 	}
 }
+
+// Native transform snapshots resolve by persistent actor ID on replay.
+struct FActorTransformEdit final : FMapDocument::FEdit
+{
+	FString ActorId;
+	FTransform3D Before, After;
+	void Undo(FMapDocument& Doc) override { Doc.ApplyActorTransform(ActorId, Before); }
+	void Redo(FMapDocument& Doc) override { Doc.ApplyActorTransform(ActorId, After); }
+};
 
 struct FMoveEdit final : FMapDocument::FEdit
 {

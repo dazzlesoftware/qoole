@@ -19,52 +19,25 @@
 // Coordinates are physical pixels of the target.
 
 #pragma once
+#include "Renderer/NativeMeshDrawList.h"
+#include "Renderer/ProjectedSceneRenderer.h"
 
 #include "CoreMinimal.h"
 #include "Rendering/DrawElements.h"
 
 #include "MapCoreHeaders.h"
 
-struct FMapVertex
-{
-	float X, Y, Q; // window pixels; Q = 1 / view depth
-	float U, V;    // on a textured landscape's baked image; 0 otherwise
-	uint32 Color;  // RGBA8, R in the low byte
-};
+using FMapVertex=FProjectedVertex;
 
-// A run of triangles drawn with one texture: a textured landscape's (the
-// object), or none (white).
-struct FMapTriangleBatch
-{
-	const Object* Landscape = nullptr;
-	uint32 FirstVertex = 0;
-	uint32 NumVertices = 0;
-};
+// Runtime triangle batches retain terrain snapshots; untextured faces use white.
+using FMapTriangleBatch=FProjectedTriangleBatch;
 
 // Copies of one mesh drawn on the GPU (foliage): each copy's
 // object-to-view matrix, its first three rows (12 floats a copy).
-struct FMapInstanceBatch
-{
-	const StaticMesh* Mesh = nullptr;
-	TArray<float> Rows;
-	uint32 Count() const { return static_cast<uint32>(Rows.size() / 12); }
-};
+using FMapInstanceBatch=FMeshInstanceBatch;
 
-struct FMapMaterialVertex
-{
-	float Position[3]; // view space: X right, Y depth, Z up
-	float Normal[3];
-	float UV[2];
-	uint32 Color;
-};
-
-struct FMapMaterialBatch
-{
-	const Object* Mesh = nullptr;
-	uint32 FirstVertex = 0, NumVertices = 0;
-	float Depth = 0;
-	uint32 Slot = 0;
-};
+using FMapMaterialVertex = FNativeMeshVertex;
+using FMapMaterialBatch = FNativeMeshBatch;
 
 class FMapDraw final : public FDraw
 {
@@ -96,8 +69,9 @@ public:
 	// projection's width, and the window's center (all set by View).
 	bool bInstancing = true;
 	bool bMaterials = true;
-	const TArray<FMapMaterialVertex>& GetMaterialVertices() const { return MaterialVertices; }
-	const TArray<FMapMaterialBatch>& GetMaterialBatches() const { return MaterialBatches; }
+	const FNativeMeshDrawList& GetMaterialDrawList() const { return MaterialDraws; }
+	const TArray<FMapMaterialVertex>& GetMaterialVertices() const { return MaterialDraws.Vertices; }
+	const TArray<FMapMaterialBatch>& GetMaterialBatches() const { return MaterialDraws.Batches; }
 	const TArray<FMapInstanceBatch>& GetInstanceBatches() const { return InstanceBatches; }
 	const Vector3d& GetInstanceLight() const { return InstanceLight; }
 	const Vector3d& GetInstanceUp() const { return InstanceUp; }
@@ -121,7 +95,7 @@ public:
 	void ZBufColoredTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3]) override;
 	void ZBufLandscapeTriangle(ZPoint Points[3], const float Shades[3], const unsigned int Colors[3]) override;
 	void ZBufInstanceLight(const Vector3d& Light, const Vector3d& Up, float WinWidth) override;
-	bool ZBufMeshInstance(const StaticMesh& Mesh, const Matrix44& ToView) override;
+	bool ZBufMeshInstance(const std::shared_ptr<const StaticMesh>& Mesh, const Matrix44& ToView) override;
 	bool ZBufMaterialMesh(const Object& Object, const Matrix44& ToView) override;
 	void ZBufRender() override {}
 
@@ -137,8 +111,7 @@ private:
 	TArray<FMapVertex> Triangles;
 	TArray<FMapTriangleBatch> Batches;
 	TArray<FMapInstanceBatch> InstanceBatches;
-	TArray<FMapMaterialVertex> MaterialVertices;
-	TArray<FMapMaterialBatch> MaterialBatches;
+	FNativeMeshDrawList MaterialDraws;
 	Vector3d InstanceLight;
 	Vector3d InstanceUp;
 	float InstanceWinWidth = 1.0f;

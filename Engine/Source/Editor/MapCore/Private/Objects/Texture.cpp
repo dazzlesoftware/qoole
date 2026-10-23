@@ -344,7 +344,7 @@ TexDB::TexDB(Game *_game) {
 
 	file.Read(texEntry, sizeof(TexEntry), texEntries);
 	file.Read(&texDirs, sizeof(texDirs));
-	texDirs = Min(texDirs, TEXDIR_MAX);
+	texDirs = GeometryMath::Min(texDirs, TEXDIR_MAX);
 	for(i = 0; i < texDirs; i++) {
 		TexDirFile dirFile;
 		file.Read(&dirFile, sizeof(TexDirFile), 1);

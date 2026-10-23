@@ -10,6 +10,7 @@
 #include "MapEdits.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -386,6 +387,31 @@ void FMapDocument::ApplyScope(Object& NewScope)
 	SelectorPtr = new Selector(*Scope);
 }
 
+Object* FMapDocument::FindActorObject(const FString& ActorId) const
+{
+	TArray<Object*> Nodes{ Root };
+	while (!Nodes.empty())
+	{
+		Object* Node = Nodes.back();
+		Nodes.pop_back();
+		if (Node->GetIdentity().Actor == ActorId)
+		{
+			return Node;
+		}
+		for (int Index = 0; Index < Node->GetNumChildren(); ++Index)
+		{
+			Nodes.push_back(&Node->GetChild(Index));
+		}
+	}
+	return nullptr;
+}
+
+void FMapDocument::ApplyActorScope(const FString& ActorId)
+{
+	Object* Node = FindActorObject(ActorId);
+	ApplyScope(Node ? *Node : *Root);
+}
+
 bool FMapDocument::SetScope(Object& NewScope)
 {
 	if (&NewScope == Scope)
@@ -426,6 +452,56 @@ void FMapDocument::ScopeUp()
 TArray<Object*> FMapDocument::GetSelection() const
 {
 	return ToArray(SelectorPtr->GetMSelectedObjects());
+}
+
+TArray<FString> FMapDocument::GetSelectedActorIds() const
+{
+	TArray<FString> Result;
+	for (const Object* Obj : GetSelection())
+	{
+		Result.push_back(Obj->GetIdentity().Actor);
+	}
+	return Result;
+}
+
+void FMapDocument::ApplyActorSelection(const TArray<FString>& ActorIds)
+{
+	TMap<std::string, Object*> Children;
+	for (int Index = 0; Index < Scope->GetNumChildren(); ++Index)
+	{
+		Object& Child = Scope->GetChild(Index);
+		Children.emplace(Child.GetIdentity().Actor.ToStdString(), &Child);
+	}
+	TArray<Object*> Resolved;
+	TSet<std::string> Seen;
+	for (const FString& Id : ActorIds)
+	{
+		const std::string Key = Id.ToStdString();
+		const auto Found = Children.find(Key);
+		if (Found != Children.end() && Seen.insert(Key).second)
+		{
+			Resolved.push_back(Found->second);
+		}
+	}
+	// Resolved contains only unique children, so do not repeat the pointer
+	// adapter's quadratic duplicate search for large native selections.
+	LinkList<ObjectPtr> List;
+	ToList(Resolved, List);
+	SelectorPtr->MSelectObjects(List);
+}
+
+void FMapDocument::SetSelectedActorIds(const TArray<FString>& ActorIds)
+{
+	const auto Before = GetSelectedActorIds();
+	ApplyActorSelection(ActorIds);
+	if (GetSelectedActorIds() != Before)
+	{
+		if (Pending)
+		{
+			Pending->Changes |= EMapChange::Selection;
+		}
+		Changed(EMapChange::Selection);
+	}
 }
 
 bool FMapDocument::IsSelected(const Object* Obj) const
@@ -523,10 +599,12 @@ void FMapDocument::BeginTransaction(const FString& Description)
 	{
 		return;
 	}
+	static std::atomic<uint64> NextTransactionId{0};
+	TransactionId = ++NextTransactionId;
 	Pending = std::make_unique<FTransaction>();
 	Pending->Description = Description;
-	Pending->SelectionBefore = GetSelection();
-	Pending->ScopeBefore = Scope;
+	Pending->SelectionBefore = GetSelectedActorIds();
+	Pending->ScopeBefore = Scope->GetIdentity().Actor;
 }
 
 bool FMapDocument::BeginOwnTransaction(const FString& Description)
@@ -551,8 +629,8 @@ void FMapDocument::EndTransaction()
 	{
 		return; // selection and scope changes alone are not undo steps
 	}
-	Done->SelectionAfter = GetSelection();
-	Done->ScopeAfter = Scope;
+	Done->SelectionAfter = GetSelectedActorIds();
+	Done->ScopeAfter = Scope->GetIdentity().Actor;
 	Done->VersionBefore = Version;
 	Done->VersionAfter = NextVersion++;
 	Version = Done->VersionAfter;
@@ -580,8 +658,8 @@ void FMapDocument::CancelTransaction()
 		Undone->Edits[Index]->Undo(*this);
 		Undone->Edits[Index]->bApplied = false;
 	}
-	ApplyScope(IsInMap(*Undone->ScopeBefore) ? *Undone->ScopeBefore : *Root);
-	ApplySelection(Undone->SelectionBefore);
+	ApplyActorScope(Undone->ScopeBefore);
+	ApplyActorSelection(Undone->SelectionBefore);
 	Changed(Undone->Changes | EMapChange::Selection);
 }
 
@@ -635,8 +713,8 @@ void FMapDocument::Undo()
 		Step->Edits[Index]->Undo(*this);
 		Step->Edits[Index]->bApplied = false;
 	}
-	ApplyScope(IsInMap(*Step->ScopeBefore) ? *Step->ScopeBefore : *Root);
-	ApplySelection(Step->SelectionBefore);
+	ApplyActorScope(Step->ScopeBefore);
+	ApplyActorSelection(Step->SelectionBefore);
 	Version = Step->VersionBefore;
 	const EMapChange Changes = Step->Changes | EMapChange::Selection | EMapChange::Scope | EMapChange::File;
 	RedoStack.push_back(std::move(Step));
@@ -657,8 +735,8 @@ void FMapDocument::Redo()
 		Edit->Redo(*this);
 		Edit->bApplied = true;
 	}
-	ApplyScope(IsInMap(*Step->ScopeAfter) ? *Step->ScopeAfter : *Root);
-	ApplySelection(Step->SelectionAfter);
+	ApplyActorScope(Step->ScopeAfter);
+	ApplyActorSelection(Step->SelectionAfter);
 	Version = Step->VersionAfter;
 	const EMapChange Changes = Step->Changes | EMapChange::Selection | EMapChange::Scope | EMapChange::File;
 	UndoStack.push_back(std::move(Step));

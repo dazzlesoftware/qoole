@@ -3,6 +3,9 @@
     <Platform Name="x64" />
   </Configurations>
   <Folder Name="/Runtime/">
+    <Project Path="Engine/Source/Runtime/Landscape/Landscape.vcxproj" Id="f56afad0-9726-4a5f-a556-f3914f9e98c0" />
+    <Project Path="Engine/Source/Runtime/Foliage/Foliage.vcxproj" Id="777f84e0-a59c-4592-8368-1348146ecdf5" />
+    <Project Path="Engine/Source/Runtime/Renderer/Renderer.vcxproj" Id="83f172f1-ac93-4d8e-a9ba-282340e17c06" />
     <Project Path="Engine/Source/Runtime/Geometry/Geometry.vcxproj" Id="83f172f1-ac93-4d8e-a9ba-282340e17c03" />
     <Project Path="Engine/Source/Runtime/Engine/Engine.vcxproj" Id="83f172f1-ac93-4d8e-a9ba-282340e17c04" />
     <Project Path="Engine/Source/Runtime/Projects/Projects.vcxproj" Id="83f172f1-ac93-4d8e-a9ba-282340e17c01" />
@@ -15,6 +18,9 @@
     <Project Path="Engine/Source/Runtime/SlateRHIRenderer/SlateRHIRenderer.vcxproj" Id="436bbd32-cc21-56e4-94f1-b731dd66653a" />
   </Folder>
   <Folder Name="/Editor/">
+    <Project Path="Engine/Source/Editor/LandscapeEditorUtilities/LandscapeEditorUtilities.vcxproj" Id="80e5d3df-869e-4e9a-9f5c-25fc68b36a36" />
+    <Project Path="Engine/Source/Editor/LandscapeEditor/LandscapeEditor.vcxproj" Id="072aca67-77b1-4e56-b304-c5192afa8c6a" />
+    <Project Path="Engine/Source/Editor/FoliageEditor/FoliageEditor.vcxproj" Id="2e8b0eac-f17e-430f-a16a-a71d7fe07193" />
     <Project Path="Engine/Source/Editor/MapCore/MapCore.vcxproj" Id="e6b3966d-7ccb-46db-92a6-40893ed2e9dd" />
     <Project Path="Engine/Source/Editor/MapEditor/MapEditor.vcxproj" Id="248d610e-bede-4c49-afd7-43f90e5f4b54" />
   </Folder>
@@ -23,6 +29,7 @@
     <Project Path="Engine/Source/ThirdParty/HarfBuzz/HarfBuzz.vcxproj" Id="ffa50721-3b6e-440f-a253-4b19f430fc5d" />
   </Folder>
   <Folder Name="/Programs/">
+    <Project Path="Engine/Source/Programs/RuntimeRenderCheck/RuntimeRenderCheck.vcxproj" Id="83f172f1-ac93-4d8e-a9ba-282340e17c07" />
     <Project Path="Engine/Source/Programs/RuntimeDataCheck/RuntimeDataCheck.vcxproj" Id="83f172f1-ac93-4d8e-a9ba-282340e17c05" />
     <Project Path="Engine/Source/Programs/GenesisEditor/GenesisEditor.vcxproj" Id="08da9a96-81ca-4fc1-a617-1170789bf886" />
     <Project Path="Engine/Source/Programs/EngineTests/EngineTests.vcxproj" Id="c087b070-3f95-5e50-af08-72ade3bf9d0a" />

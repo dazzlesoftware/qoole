@@ -168,14 +168,21 @@ Migration order:
    Runtime actor/component IDs and explicit scene references are implemented;
    portable mesh/texture/material codecs and references are implemented (see
    [RenderAssets.md](RenderAssets.md)). Editor-authored actor references,
-   transparency/material slots and a project browser are pending. Opaque mesh
+   a project browser are pending. Material slots, masking/transparency, mesh/texture
+   editors and reimport are implemented. Opaque mesh
    textures, normal maps and metallic/roughness preview shading are implemented.
 3. Runtime math/mesh and landscape/foliage data extraction (implemented), then
    Engine world/actor/component model, native schema version 2 adapter and
    identity round-trip tests (implemented; see [WorldModel.md](WorldModel.md)).
-   Editing operations and undo still use the legacy object model and need migration.
-4. Move runtime rendering out of MapCore; implement the remaining landscape
-   features against the new data model.
+   Selection/scope undo snapshots now use actor IDs; native actor transform edits
+   and native-only viewport moves use runtime transform snapshots. Structural and
+   brush operations and live document ownership still need migration.
+4. Runtime/Renderer now owns mesh/material rendering, terrain visibility/LOD,
+   triangle preparation, layer resources and foliage instancing. Native payload
+   construction, shared component codecs and world traversal render supported `.gmap` scenes without
+   editor modules (see [Renderer.md](Renderer.md)). Migrate the editor's live
+   document/operations to runtime actors, then remove legacy drawing. Implement
+   remaining landscape features against that data model.
 5. Move QLE/MAP conversion and game definitions into LegacyQoole. Remove native
    runtime/editor dependence on the old model, then retire MapCore's target.
 6. Make optional features plugins after these migrations, as requested.
@@ -196,3 +203,15 @@ dependency resolution, content discovery and tests with plugins disabled.
 
 Existing GPL notices and Qoole attribution remain on derived code throughout
 these moves. Consult Unreal for structure; Genesis package formats are its own.
+
+Landscape and foliage now have separate runtime targets (`Landscape`, `Foliage`)
+and editor targets (`LandscapeEditor`, `FoliageEditor`). Heightmap/weightmap file
+utilities live in `LandscapeEditorUtilities`. These are build modules, with
+plugin packaging still scheduled after native document/legacy separation.
+See [FeatureModules.md](FeatureModules.md) for their dependency boundaries.
+
+Feature panel ownership is now inside LandscapeEditor and FoliageEditor as well.
+GenesisEditor provides host callbacks and docking only. Foliage reprojection after
+terrain edits is shared Runtime/Engine code; the document adapter only records
+undoable results. Native live-document ownership and structural editing remain
+separate migration tasks before retiring MapCore or adding plugin loading.

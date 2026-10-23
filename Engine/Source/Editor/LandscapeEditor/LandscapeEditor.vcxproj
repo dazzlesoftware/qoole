@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{072ACA67-77B1-4E56-B304-C5192AFA8C6A}</ProjectGuid>
+    <RootNamespace>LandscapeEditor</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\Build\Engine.props" />
+  </ImportGroup>
+  <ItemDefinitionGroup><ClCompile><ConformanceMode>false</ConformanceMode><PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Renderer\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisEditorDir)LandscapeEditorUtilities\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile></ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="Private\MapLandscapeMode.cpp" /><ClInclude Include="Public\MapLandscapeMode.h" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisEditorDir)MapEditor\MapEditor.vcxproj"><Project>{248D610E-BEDE-4C49-AFD7-43F90E5F4B54}</Project></ProjectReference><ProjectReference Include="$(GenesisEditorDir)MapCore\MapCore.vcxproj"><Project>{E6B3966D-7CCB-46DB-92A6-40893ED2E9DD}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Core\Core.vcxproj"><Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Geometry\Geometry.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C03}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Engine\Engine.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C04}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Renderer\Renderer.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C06}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Slate\Slate.vcxproj"><Project>{3F5319A7-A0BC-4053-83E8-316D4FFD074A}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Landscape\Landscape.vcxproj"><Project>{F56AFAD0-9726-4A5F-A556-F3914F9E98C0}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Foliage\Foliage.vcxproj"><Project>{777F84E0-A59C-4592-8368-1348146ECDF5}</Project></ProjectReference><ProjectReference Include="$(GenesisEditorDir)LandscapeEditorUtilities\LandscapeEditorUtilities.vcxproj"><Project>{80E5D3DF-869E-4E9A-9F5C-25FC68B36A36}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\SLandscapeEditorPanel.cpp" /><ClInclude Include="Public\SLandscapeEditorPanel.h" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

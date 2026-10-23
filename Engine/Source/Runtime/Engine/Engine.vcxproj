@@ -37,17 +37,19 @@
   </ImportGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)AssetCore\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(ProjectDir)Private;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)AssetCore\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="Private\Landscape\Landscape.cpp" /><ClCompile Include="Private\Foliage\Foliage.cpp" /></ItemGroup>
+  <ItemGroup></ItemGroup>
   <ItemGroup><ClCompile Include="Private\Assets\RenderAssets.cpp" /></ItemGroup>
   <ItemGroup><ClInclude Include="Public\Assets\RenderAssets.h" /></ItemGroup>
-  <ItemGroup><ClCompile Include="Private\World\World.cpp" /><ClCompile Include="Private\World\WorldIdentity.cpp" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\World\WorldSceneSnapshot.cpp" /><ClInclude Include="Public\World\WorldSceneSnapshot.h" /><ClCompile Include="Private\World\WorldGeometry.cpp" /><ClInclude Include="Public\World\WorldGeometry.h" /><ClCompile Include="Private\World\World.cpp" /><ClCompile Include="Private\World\WorldIdentity.cpp" /></ItemGroup>
   <ItemGroup><ClInclude Include="Public\World\World.h" /><ClInclude Include="Public\World\WorldIdentity.h" /></ItemGroup>
-  <ItemGroup><ClInclude Include="Public\Landscape\Landscape.h" /><ClInclude Include="Public\Foliage\Foliage.h" /></ItemGroup>
+  <ItemGroup></ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Core\Core.vcxproj"><Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project></ProjectReference></ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Geometry\Geometry.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C03}</Project></ProjectReference></ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)AssetCore\AssetCore.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C02}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Landscape\Landscape.vcxproj"><Project>{F56AFAD0-9726-4A5F-A556-F3914F9E98C0}</Project></ProjectReference><ProjectReference Include="$(GenesisRuntimeDir)Foliage\Foliage.vcxproj"><Project>{777F84E0-A59C-4592-8368-1348146ECDF5}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\World\FoliageLandscapeAttachment.cpp" /><ClInclude Include="Public\World\FoliageLandscapeAttachment.h" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

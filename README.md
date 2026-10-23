@@ -53,7 +53,7 @@ The tree follows Unreal Engine's:
     Genesis.slnx                 the solution
     Engine/
       Source/
-        Runtime/                 Core, Projects, AssetCore, Geometry, Engine, ApplicationCore, RHI, SlateCore, Slate, SlateRHIRenderer
+        Runtime/                 Core, Projects, AssetCore, Geometry, Landscape, Foliage, Engine, Renderer, ApplicationCore, RHI, SlateCore, Slate, SlateRHIRenderer
         Editor/                  MapCore, MapEditor
         Programs/                GenesisEditor, GenesisTests, EngineTests, TestApps
         ThirdParty/              FreeType2, HarfBuzz, Vulkan, doctest
@@ -210,8 +210,11 @@ were removed in milestone 6 of the Genesis UI plan.
 
 The code lives in static-library modules named after their Unreal
 counterparts: `Core`, `ApplicationCore`, `RHI`, `SlateCore`, `Slate` and
-`SlateRHIRenderer` in `Engine/Source/Runtime`, `MapCore` and `MapEditor` in
-`Engine/Source/Editor`. `MapCore` holds Qoole's map model, geometry and game
+`SlateRHIRenderer` in `Engine/Source/Runtime`, `MapCore`, `MapEditor`, `LandscapeEditor`, `FoliageEditor` and
+`LandscapeEditorUtilities` in `Engine/Source/Editor`. Runtime landscape and
+foliage data have independent `Landscape` and `Foliage` modules. See
+[FeatureModules.md](Engine/Documentation/Source/FeatureModules.md) for ownership
+and dependencies. `MapCore` holds Qoole's map model, geometry and game
 definitions (`Basic`, `Objects`, `Render` and `Game`, headers under
 `Public`, sources under `Private`). Third-party libraries (FreeType2,
 HarfBuzz, doctest, Vulkan headers) are vendored in
@@ -245,7 +248,7 @@ HarfBuzz, doctest, Vulkan headers) are vendored in
 - Debug builds enable the D3D12 debug layer (the Windows "Graphics Tools"
   optional feature) and the Vulkan validation layer when installed.
 - The UI shaders are in `Engine/Source/Runtime/SlateRHIRenderer/Private/Shaders`
-  and the map views' in `Engine/Source/Editor/MapEditor/Private/Shaders`. DXIL is compiled
+  and the scene shaders in `Engine/Source/Runtime/Renderer/Private/Shaders`. DXIL is compiled
   at build time with the Windows SDK; after editing the HLSL, rerun
   `BuildSlateShaders.cmd` or `BuildMapShaders.cmd` with a SPIR-V capable
   `dxc.exe` (Vulkan SDK or a DirectXShaderCompiler release) to regenerate
@@ -309,3 +312,16 @@ controls, zoom/pan and staged image reimport. Save preserves the texture UUID
 and refreshes level texture dependencies. Open a texture and choose **Use for
 Selected Landscape Layer** to assign it to terrain. Preview is limited to
 2048 pixels per side; original image resolution is retained in saved assets.
+
+`Runtime/Renderer` owns native mesh/material drawing, terrain visibility/LOD and
+clipped triangle preparation, landscape layer textures/baked fallback, and foliage
+visibility/instancing. Shader sources and GPU resources live in that runtime module.
+The editor uses thin adapters while its selection/undo model remains in MapCore.
+
+Native terrain/foliage codecs and `FWorldSceneSnapshot` live in Runtime/Engine.
+`FWorldSceneDrawList` renders supported native world components independently of
+the legacy object tree. `RuntimeRenderCheck.exe -vulkan World.gmap Project/Content
+Capture.bmp` loads a saved world and checks offscreen readback without editor/UI
+modules; the capture argument is optional. Unsupported legacy components are
+reported explicitly. See Engine/Documentation/Source/Renderer.md for the boundary
+and remaining editor migration.

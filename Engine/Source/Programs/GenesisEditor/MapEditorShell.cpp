@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapEditorShell.h"
+#include "SLandscapeEditorPanel.h"
+#include "SFoliageEditorPanel.h"
 #include "MapAssetLibrary.h"
 #include "ProjectDescriptor.h"
 #include "AssetRegistry.h"
@@ -58,6 +60,7 @@ const char* ToString(EMapEditorMode Mode)
 FMapEditorShell::FMapEditorShell(FHost InHost)
 	: Host(std::move(InHost))
 {
+	LandscapeOverlayHandle = RegisterLandscapeViewportOverlay([this] { return Document.get(); });
 	Commands = std::make_shared<FUICommandList>();
 	TabManager = FTabManager::Create().ToSharedPtr();
 	// The mode follows its panel, as Unreal's mode tabs do: bringing the
@@ -120,6 +123,9 @@ FMapEditorShell::FMapEditorShell(FHost InHost)
 
 FMapEditorShell::~FMapEditorShell()
 {
+	if (auto Panel = LandscapePanel.lock()) Panel->EndInteraction();
+	if (auto Panel = FoliagePanel.lock()) Panel->EndInteraction();
+	MapSceneOverlays().Remove(LandscapeOverlayHandle);
 	ViewSettings.EditorMode = nullptr;
 	LandscapeMode.SetDocument(nullptr);
 	FoliageMode.SetDocument(nullptr);
@@ -244,6 +250,9 @@ void FMapEditorShell::SaveEditorSettings() const
 
 void FMapEditorShell::SetDocument(TUniquePtr<FMapDocument> NewDocument)
 {
+	FSlateApplication::Get().DismissAllMenus();
+	if (auto Panel = LandscapePanel.lock()) Panel->EndInteraction();
+	if (auto Panel = FoliagePanel.lock()) Panel->EndInteraction();
 	for (const TSharedPtr<FMapViewportClient>& View : Views)
 	{
 		View->SetDocument(nullptr);
@@ -275,6 +284,8 @@ void FMapEditorShell::SetDocument(TUniquePtr<FMapDocument> NewDocument)
 	}
 	RefreshOutliner();
 	RefreshProperties();
+	RefreshLandscapeLayers();
+	RefreshFoliageTypes();
 	UpdateTitle();
 }
 

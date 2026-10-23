@@ -13,6 +13,7 @@
 #include "MapDocument.h"
 #include "MapPackage.h"
 #include "MapWorldAdapter.h"
+#include "World/World.h"
 #include "MapAssetLibrary.h"
 #include "MapAssetImport.h"
 #include "MeshAssetEditor.h"
@@ -28,6 +29,10 @@
 #include "MapLandscapeTextures.h"
 #include "HAL/File.h"
 #include "MapLandscapeMode.h"
+#include "SLandscapeEditorPanel.h"
+#include "SFoliageEditorPanel.h"
+#include "Layout/Children.h"
+#include "Widgets/Text/STextBlock.h"
 #include "MapObjectProperties.h"
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 #include "MapViewportClient.h"
@@ -50,6 +55,7 @@ namespace
 		Options.EditorContentDir = FPaths::Combine(FPaths::FindContentDir(), "Editor");
 		REQUIRE(FMapEditorEnvironment::Startup(Options));
 		REQUIRE(FMapEditorEnvironment::Activate(FMapEditorEnvironment::GetBuiltInGameSet()));
+		RegisterLandscapeViewportOverlay();
 		bStarted = true;
 	}
 
@@ -167,6 +173,205 @@ TEST_SUITE("MapEditor")
 		Doc->AddEntity("info_null", Vector3d(0.0f, 0.0f, 0.0f));
 		CHECK(!Doc->CanRedo());
 		CHECK(Doc->IsModified());
+	}
+
+	TEST_CASE("Feature panel interactions close only their own transaction")
+	{
+		EnsureMapCore();
+		auto Doc = FMapDocument::CreateNew();
+		FMapPanelTransaction Interaction;
+		Doc->BeginTransaction("External edit");
+		Interaction.Begin(Doc.get(), "Slider");
+		Interaction.End(Doc.get());
+		CHECK(Doc->IsInTransaction());
+		Doc->CancelTransaction();
+		Interaction.Begin(Doc.get(), "Slider");
+		REQUIRE(Doc->IsInTransaction());
+		const uint64 SliderId = Doc->GetActiveTransactionId();
+		Doc->CancelTransaction();
+		Doc->BeginTransaction("Replacement edit");
+		CHECK(Doc->GetActiveTransactionId() != SliderId);
+		Interaction.End(Doc.get());
+		CHECK(Doc->IsInTransaction());
+		Doc->CancelTransaction();
+		Interaction.Begin(Doc.get(), "Own edit");
+		Interaction.End(Doc.get());
+		CHECK_FALSE(Doc->IsInTransaction());
+		auto Other = FMapDocument::CreateNew();
+		Interaction.Begin(Doc.get(), "Old document");
+		Other->BeginTransaction("Other document");
+		Interaction.End(Other.get());
+		CHECK(Doc->IsInTransaction());
+		CHECK(Other->IsInTransaction());
+		Doc->CancelTransaction();
+		Other->CancelTransaction();
+		// IDs also differ across documents, even if their transaction counts match.
+		auto First = FMapDocument::CreateNew();
+		auto Second = FMapDocument::CreateNew();
+		First->BeginTransaction("First");
+		Second->BeginTransaction("Second");
+		CHECK(First->GetActiveTransactionId() != Second->GetActiveTransactionId());
+		First->CancelTransaction();
+		Second->CancelTransaction();
+	}
+
+	TEST_CASE("Feature panels run outside GenesisEditor and refresh after document changes")
+	{
+		EnsureMapCore();
+		FUITestApp UI;
+		auto Doc = FMapDocument::CreateNew();
+		FMapLandscapeMode Land;
+		FMapFoliageMode Leaves;
+		Land.SetDocument(Doc.get());
+		Leaves.SetDocument(Doc.get());
+		FMapFeaturePanelHost Host;
+		Host.GetDocument = [&] { return Doc.get(); };
+		auto LandscapePanel = SNew(SLandscapeEditorPanel, &Land, Host);
+		auto FoliagePanel = SNew(SFoliageEditorPanel, &Leaves, Host);
+		const TSharedRef<SLandscapeEditorPanel> Terrain = LandscapePanel;
+		const TSharedRef<SFoliageEditorPanel> Plants = FoliagePanel;
+		UI.AddWindow(SNew(SHorizontalBox) + SHorizontalBox::Slot()[Terrain] + SHorizontalBox::Slot()[Plants], FVector2(900, 1200));
+		UI.Tick();
+		const auto Contains = [](const SWidget& Root, std::string_view Text)
+		{
+			const auto Find = [&](auto&& Self, const SWidget& Node) -> bool
+			{
+				if (const auto* Block = dynamic_cast<const STextBlock*>(&Node); Block && Block->GetText().View().find(Text) != std::string_view::npos) return true;
+				const FChildren* Children = Node.GetChildren();
+				for (int32 I = 0; I < Children->Num(); ++I)
+					if (Self(Self, Children->GetChildAt(I).Get())) return true;
+				return false;
+			};
+			return Find(Find, Root);
+		};
+		CHECK(Contains(Terrain.Get(), "Create a landscape (or select one)"));
+		CHECK(Contains(Plants.Get(), "No foliage types yet"));
+		Land.NewQuadsX = Land.NewQuadsY = 4;
+		REQUIRE(Land.CreateLandscape(Vector3d(0, 0, 0)));
+		REQUIRE(Leaves.AddType("Grass"));
+		Terrain->RefreshLandscapeLayers();
+		Plants->RefreshFoliageTypes();
+		UI.Tick();
+		CHECK(Contains(Terrain.Get(), "No paint layers yet"));
+		CHECK_FALSE(Contains(Plants.Get(), "No foliage types yet"));
+		// Queue a rebuild, then replace the document before that timer fires.
+		REQUIRE(Leaves.AddType("Rock"));
+		Plants->RefreshFoliageTypes();
+		Terrain->EndInteraction();
+		Plants->EndInteraction();
+		Land.SetDocument(nullptr);
+		Leaves.SetDocument(nullptr);
+		Doc = FMapDocument::CreateNew();
+		Land.SetDocument(Doc.get());
+		Leaves.SetDocument(Doc.get());
+		Terrain->RefreshLandscapeLayers();
+		Plants->RefreshFoliageTypes();
+		UI.Tick();
+		CHECK(Contains(Terrain.Get(), "Create a landscape (or select one)"));
+		CHECK(Contains(Plants.Get(), "No foliage types yet"));
+		Land.SetDocument(nullptr);
+		Leaves.SetDocument(nullptr);
+	}
+
+	TEST_CASE("Native actor transform records replay and reject invalid edits atomically")
+	{
+		EnsureMapCore();
+		auto Doc = FMapDocument::CreateNew();
+		Object* Mesh = Doc->AddMesh("Cube", Vector3d(16, 32, 64));
+		REQUIRE(Mesh);
+		const FString Id = Mesh->GetIdentity().Actor;
+		FTransform3D Before;
+		REQUIRE(Doc->GetActorTransform(Id, Before));
+		FTransform3D After = Before;
+		After.Location = Vector3d(128, 256, 512);
+		After.Scale = Vector3d(-2, 3, 4);
+		REQUIRE(Doc->SetActorTransform(Id, After));
+		CHECK(Same(PositionOf(Mesh), After.Location));
+		Doc->Undo();
+		FTransform3D Actual;
+		REQUIRE(Doc->GetActorTransform(Id, Actual));
+		CHECK(Actual.ToJson() == Before.ToJson());
+		Doc->Redo();
+		REQUIRE(Doc->GetActorTransform(Id, Actual));
+		CHECK(Actual.ToJson() == After.ToJson());
+		Doc->BeginTransaction("Transform drag");
+		After.Location = Vector3d(1024, 0, 0);
+		REQUIRE(Doc->SetActorTransform(Id, After));
+		After.Location = Vector3d(2048, 0, 0);
+		REQUIRE(Doc->SetActorTransform(Id, After));
+		Doc->CancelTransaction();
+		CHECK(Same(PositionOf(Mesh), Vector3d(128, 256, 512)));
+		After.Scale = Vector3d(0, 1, 1);
+		CHECK_FALSE(Doc->SetActorTransform(Id, After));
+		CHECK_FALSE(Doc->SetActorTransform("missing", Before));
+		CHECK_FALSE(Doc->SetActorTransform(Doc->GetRoot().GetIdentity().Actor, Before));
+		CHECK(Same(PositionOf(Mesh), Vector3d(128, 256, 512)));
+		// A no-op must preserve the redo stack.
+		Doc->Undo();
+		REQUIRE(Doc->GetActorTransform(Id, Actual));
+		CHECK(Doc->SetActorTransform(Id, Actual));
+		CHECK(Doc->CanRedo());
+	}
+
+	TEST_CASE("Actor selection and scope snapshots resolve replacement hierarchy objects")
+	{
+		EnsureMapCore();
+		auto Doc = FMapDocument::CreateNew();
+		Object* Mesh = Doc->AddMesh("Cube", Vector3d(0, 0, 32));
+		Object* Group = Doc->GroupObjects({ Mesh });
+		REQUIRE(Group);
+		const FString GroupId = Group->GetIdentity().Actor;
+		const FString MeshId = Mesh->GetIdentity().Actor;
+		REQUIRE(Doc->SetScope(*Group));
+		Doc->SetSelectedActorIds({ MeshId });
+		Doc->MoveObjects({ Mesh }, Vector3d(16, 0, 0));
+		// A content snapshot replaces descendants with equivalent copies on undo.
+		Doc->SetObjectName(Doc->GetRoot(), "Renamed World");
+		Doc->Undo();
+		CHECK(Doc->GetScope().GetIdentity().Actor == GroupId);
+		CHECK(&Doc->GetScope() != Group);
+		REQUIRE(Doc->GetSelection().size() == 1);
+		CHECK(Doc->GetSelection()[0] != Mesh);
+		CHECK(Doc->GetSelection()[0]->GetParentPtr() == &Doc->GetScope());
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ MeshId });
+		Doc->Undo(); // native move resolves the replacement mesh by ID
+		CHECK(Same(PositionOf(Doc->GetSelection()[0]), Vector3d(0, 0, 0)));
+		Doc->Redo();
+		CHECK(Same(PositionOf(Doc->GetSelection()[0]), Vector3d(16, 0, 0)));
+		Doc->Redo();
+		CHECK(Doc->GetScope().GetIdentity().Actor == GroupId);
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ MeshId });
+	}
+
+	TEST_CASE("Actor identity selection resolves current objects and survives transaction replay")
+	{
+		EnsureMapCore();
+		auto Doc = FMapDocument::CreateNew();
+		Object* First = Doc->AddEntity("light", Vector3d(0, 0, 32));
+		Object* Second = Doc->AddEntity("light", Vector3d(64, 0, 32));
+		const FString FirstId = First->GetIdentity().Actor;
+		const FString SecondId = Second->GetIdentity().Actor;
+		Doc->SetSelectedActorIds({ SecondId, FirstId, SecondId, "missing" });
+		CHECK(Doc->GetSelection() == TArray<Object*>{ Second, First });
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
+		Doc->MoveObjects({ First }, Vector3d(16, 0, 0));
+		Doc->ClearSelection();
+		Doc->Undo();
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
+		Doc->Redo();
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
+		Doc->DeleteObjects({ First });
+		Doc->SetSelectedActorIds({ FirstId });
+		CHECK(Doc->GetSelection().empty());
+		Doc->Undo();
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
+		Doc->BeginTransaction("Cancelled selection");
+		Doc->MoveObjects({ First }, Vector3d(8, 0, 0));
+		Doc->SetSelectedActorIds({ SecondId });
+		Doc->CancelTransaction();
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
+		Doc->SetSelectedActorIds({ Doc->GetRoot().GetIdentity().Actor });
+		CHECK(Doc->GetSelection().empty());
 	}
 
 	TEST_CASE("Duplicating copies the selection and undoing it frees the copies")
