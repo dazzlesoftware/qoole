@@ -95,7 +95,16 @@ window. The window has:
   - Middle-drag pans, the wheel zooms, **F** frames every region and
     **Delete** unregisters the selected one.
 - **A toolbar** with **New Region** (in the free cell nearest the selection),
-  **Undo**, **Redo**, **Frame All**, **Save** and the grid cell size.
+  **Undo**, **Redo**, **Frame All**, **Preview World**, **Save** and the grid
+  cell size.
+- **Terrain thumbnails:** each tile shows its region's landscape from above,
+  in its painted colours with relief shading lit from the north. Thumbnails
+  are built one region per frame. They are rebuilt after the asset registry
+  rescans, so a region re-saved in the level editor shows its new terrain.
+- **Preview World** opens every region's landscapes together in the level
+  editor, each at its place on the grid and named after its region. The
+  preview is one unsaved level: use it to look around the whole world, and
+  open a region to edit it.
 - **A details panel** for the selected region:
   - Name, cell position, and width and depth in cells.
   - Region server host.
@@ -116,6 +125,36 @@ New regions are written to `<composition>Regions/Region N.gmap` beside the
 registry. The editor host writes them, because it owns the level format: an
 empty level with one flat landscape the size of a cell, centred on the map
 origin. A cell that is already taken is rejected before any file is written.
+
+## Demo world
+
+`WorldCompositionDemo` builds a demo world of eight regions on a 4x2 grid.
+Each region is its own level with a different heightmap: Rolling Hills,
+Mountains, Canyon, Mesa, Dunes, Lake, Crater and Terraces. The terrain is
+painted with sand, rock, snow and lakebed layers by height and slope. Every
+heightmap blends to height 0 at its edges, so neighbouring regions meet
+without cliffs.
+
+```
+WorldCompositionDemo.exe -project=<folder>/WorldDemo.gproject
+```
+
+The project is created if it does not exist. The tool writes:
+
+- `Content/Worlds/WorldDemo.gmap`: the world registry.
+- `Content/Worlds/WorldDemoRegions/*.gmap`: one level per region.
+- `GridServer/GridServer.ini` and `GridServer/Regions/*.ini`: the grid server
+  files that register the same regions, with Rolling Hills as the default
+  region and Lake as the fallback.
+
+If the demo world already exists, the tool stops without changing anything.
+
+To see it, open the project in GenesisEditor
+(`GenesisEditor.exe -project=<folder>/WorldDemo.gproject`). In the content
+browser, open `Worlds` and double-click `WorldDemo`. The grid shows the eight
+terrains, and **Preview World** shows them together in 3D. To register them
+through the grid server instead, run
+`GenesisGridServer.exe -config=<folder>/GridServer/GridServer.ini`.
 
 ## Grid server and region files
 
@@ -215,6 +254,8 @@ callers. Still to come:
 - The free-cell search.
 - Grid dragging, refused drops, selection and Delete, driven through real
   mouse and key input.
+- Terrain thumbnails: one pixel per height point, relief shading, and
+  rebuilding after a rescan.
 
 The editor automation program (`Programs/TestApps/GenesisEditorTest`) runs the
 same workflow in the real editor when started with a project, for example
@@ -230,6 +271,14 @@ or with `-vulkan`. It:
 5. Clicks **Open Region Map** and checks that the level editor opened that map
    with its landscape.
 6. Captures `world_region`.
+7. Clicks **Preview World**, checks that the level holds every region's
+   landscape, and captures `world_preview`.
+
+With `-openworld=/Game/Worlds/WorldDemo` and `-project=<demo project>`, it
+opens that existing world instead of creating one, waits for the thumbnails
+and previews all eight regions. Run it on a copy of the demo project, because
+the earlier stages save their own assets into the project.
+
 
 `GridService` tests (`Programs/EngineTests/GridServiceTests.cpp`) cover:
 

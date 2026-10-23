@@ -21,7 +21,8 @@ PATTERNS = [
 
 def gather():
     messages = set()
-    for group in ('Runtime', 'Editor', 'Programs/GenesisEditor', 'Programs/GenesisGridServer'):
+    for group in ('Runtime', 'Editor', 'Programs/GenesisEditor', 'Programs/GenesisGridServer',
+                  'Programs/WorldCompositionDemo'):
         for path in (ROOT / 'Source' / group).rglob('*'):
             if path.suffix not in ('.h', '.cpp'):
                 continue

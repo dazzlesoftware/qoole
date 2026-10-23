@@ -63,6 +63,7 @@ Coverage and acceptance are tracked in [ScriptingAPICoverage.md](ScriptingAPICov
 - [x] Distance streaming of nearby regions through a replaceable tile source.
 - [x] Editor tools for registering and arranging regions (Editor/WorldBrowser).
 - [x] Grid server registering region files (Regions/*.ini) on the world map, with OpenSim's region flags (Programs/GenesisGridServer).
+- [x] Demo world of eight regions with different heightmaps, terrain thumbnails and Preview World in the editor.
 - [ ] Region servers and network registration, boundary handoff, ownership/access and edge matching.
 
 Design and limits are in [WorldComposition.md](WorldComposition.md).

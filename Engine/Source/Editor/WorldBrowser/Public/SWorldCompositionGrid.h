@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #pragma once
 #include "WorldCompositionEditing.h"
+#include "WorldTileThumbnails.h"
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/WidgetDelegates.h"
 
@@ -74,6 +75,7 @@ private:
 	FSimpleDelegate OnChanged, OnSelectionChanged;
 	TDelegate<void(const FString&)> OnError, OnOpenTile;
 	TDelegate<void(int32, int32)> OnNewRegion;
+	FWorldTileThumbnails Thumbnails;
 	FString Selected;
 	FVector2 Pan{320, 240}, Last;
 	float PixelsPerCell = 48.0f;

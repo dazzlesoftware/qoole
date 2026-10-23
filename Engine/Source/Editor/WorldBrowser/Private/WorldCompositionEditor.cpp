@@ -46,6 +46,10 @@ namespace
 			Button(
 			    GENESIS_TEXT("Redo"), GENESIS_TEXT("Redo the last undone region change"), [this] { History(false); });
 			Button(GENESIS_TEXT("Frame All"), GENESIS_TEXT("Show every region (F)"), [this] { Grid->FrameAll(); });
+			Button(GENESIS_TEXT("Preview World"),
+			    GENESIS_TEXT("Open every region together in the level editor, each at its place on the grid, as one "
+			                 "unsaved level"),
+			    [this] { PreviewWorld(); });
 			Button(GENESIS_TEXT("Save"), GENESIS_TEXT("Save the region registry"), [this] { Save(); });
 			Toolbar->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(GENESIS_TEXT("  Cell size "))];
 			Toolbar->AddSlot().AutoWidth()[SNew(SSpinBox<float>)
@@ -129,6 +133,35 @@ namespace
 			Changed(FTextLocalization::Format(
 			    "Created {}; save to keep its registration.", Session->GetComposition().FindTile(TileId)->Name));
 			Args.OnSaved.ExecuteIfBound(); // the new map file is now in the content browser
+		}
+		void PreviewWorld()
+		{
+			if (!Args.OnPreviewWorld.IsBound())
+			{
+				SetStatus(GENESIS_TEXT("This editor host cannot preview worlds."));
+				return;
+			}
+			const FWorldComposition& World = Session->GetComposition();
+			TArray<FWorldPreviewRegion> Regions;
+			FString Missing;
+			for (const FWorldCompositionTile& Tile : World.GetTiles())
+			{
+				FString Error;
+				if (const FAssetData* Map = Session->ResolveMap(Tile.Id, Error))
+					Regions.push_back({Tile.Name, *Map, World.GetTileOrigin(Tile)});
+				else
+					Missing += Missing.IsEmpty() ? Tile.Name : FString::Format(", {}", Tile.Name);
+			}
+			if (Regions.empty())
+			{
+				SetStatus(GENESIS_TEXT("No region has a map to preview."));
+				return;
+			}
+			Args.OnPreviewWorld.Execute(Regions);
+			SetStatus(Missing.IsEmpty()
+			        ? FTextLocalization::Format("Previewing {} regions in the level editor.", Regions.size())
+			        : FTextLocalization::Format(
+			              "Previewing {} regions; these have no map: {}", Regions.size(), Missing));
 		}
 		void OpenRegion(const FString& TileId)
 		{

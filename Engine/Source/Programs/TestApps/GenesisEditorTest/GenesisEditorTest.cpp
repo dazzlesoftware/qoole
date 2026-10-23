@@ -91,10 +91,16 @@ private:
 	Object* TestSphere = nullptr;
 	Object* TestPyramid = nullptr;
 	FString WorldCompositionFile, WorldRegionFile;
+	// -openworld=<package>: check an existing world (the demo) instead of creating one.
+	FString OpenWorldPackage;
+	size_t WorldTileCount = 0;
 };
 
 void FGenesisEditorTestApp::OnInitialize(const TArray<FString>& Args)
 {
+	for (const FString& Arg : Args)
+		if (Arg.StartsWith("-openworld="))
+			OpenWorldPackage = Arg.Mid(11);
 	if (const TOptional<FString> Dir = GetSelfTestDirectory(Args))
 	{
 		SelfTestDir = *Dir;
@@ -1493,9 +1499,18 @@ void FGenesisEditorTestApp::TickSelfTest()
 		const TSharedPtr<SContentBrowser> Browser = Shell->GetContentBrowser(0);
 		if (!Project || !Browser)
 			break;
-		Browser->SetPath(Project->GetContentDir());
 		Browser->SetSearchText("");
-		WorldCompositionFile = Browser->CreateWorldComposition();
+		if (OpenWorldPackage.IsEmpty())
+		{
+			Browser->SetPath(Project->GetContentDir());
+			WorldCompositionFile = Browser->CreateWorldComposition();
+		}
+		else if (const FAssetData* Existing = Shell->GetAssetRegistry()->FindByPath(OpenWorldPackage))
+		{
+			WorldCompositionFile = Existing->FilePath;
+			Browser->SetPath(
+			    FString::FromWide(std::filesystem::path(WorldCompositionFile.ToWide()).parent_path().wstring()));
+		}
 		Shell->RefreshAssetRegistry();
 		Browser->Refresh();
 		bool bOpened = false;
@@ -1522,6 +1537,8 @@ void FGenesisEditorTestApp::TickSelfTest()
 			--SelfTestFrame;
 			break;
 		}
+		if (!OpenWorldPackage.IsEmpty())
+			break; // an existing world already has its regions
 		// The host writes the region's level through its own document.
 		const bool bClicked = PointAtText(GENESIS_TEXT("New Region").View(), true, Window);
 		Report(bClicked ? "world composition New Region clicked" : "FAILED: no New Region button");
@@ -1532,7 +1549,7 @@ void FGenesisEditorTestApp::TickSelfTest()
 		const TSharedPtr<SWindow> Window = FindWorldCompositionWindow();
 		if (!Window)
 			break;
-		const bool bSaved = PointAtText(GENESIS_TEXT("Save").View(), true, Window);
+		const bool bSaved = !OpenWorldPackage.IsEmpty() || PointAtText(GENESIS_TEXT("Save").View(), true, Window);
 		const FAssetRegistry* Registry = Shell->GetAssetRegistry();
 		const FAssetData* Composition = Registry ? Registry->FindByFile(WorldCompositionFile) : nullptr;
 		FAssetPackage Package;
@@ -1540,7 +1557,14 @@ void FGenesisEditorTestApp::TickSelfTest()
 		FString Error;
 		bool Good = bSaved && Composition &&
 		    Registry->Load(Composition->GetReference(), Package, Error, "Genesis.WorldComposition") &&
-		    FWorldComposition::FromPackage(Package, World, Error) && World.GetTiles().size() == 1;
+		    FWorldComposition::FromPackage(Package, World, Error) &&
+		    (OpenWorldPackage.IsEmpty() ? World.GetTiles().size() == 1 : !World.GetTiles().empty());
+		WorldTileCount = Good ? World.GetTiles().size() : 0;
+		if (Good && !OpenWorldPackage.IsEmpty())
+		{
+			Report(*FString::Format("existing world composition opened with {} regions", WorldTileCount));
+			break;
+		}
 		const FAssetData* Region = nullptr;
 		if (Good)
 		{
@@ -1555,6 +1579,12 @@ void FGenesisEditorTestApp::TickSelfTest()
 		break;
 	}
 	case 454:
+		// Thumbnails build one region per frame; give them time before capturing.
+		if (FPlatformTime::Seconds() - MaterialWindowOpenedAt < 1.0)
+		{
+			--SelfTestFrame;
+			break;
+		}
 		if (const TSharedPtr<SWindow> Window = FindWorldCompositionWindow())
 			Capture("world_composition", Window);
 		break;
@@ -1588,10 +1618,35 @@ void FGenesisEditorTestApp::TickSelfTest()
 			Capture("world_region");
 		break;
 	case 460:
+	{
+		const TSharedPtr<SWindow> Window = FindWorldCompositionWindow();
+		if (!Window || WorldTileCount == 0)
+			break;
+		if (Shell->GetDocument()->IsModified() && !Shell->GetDocument()->GetPath().IsEmpty())
+			Shell->SaveMap(Shell->GetDocument()->GetPath());
+		if (Shell->GetDocument()->IsModified())
+		{
+			Report("FAILED: the current level could not be saved before previewing the world");
+			break;
+		}
+		PointAtText(GENESIS_TEXT("Preview World").View(), true, Window);
+		size_t Landscapes = 0;
+		for (Object* Obj : Shell->GetDocument()->GetObjects())
+			Landscapes += Obj->HasLandscape() ? 1 : 0;
+		Report(Shell->GetDocument()->GetPath().IsEmpty() && Landscapes == WorldTileCount
+		        ? "world preview opened every region's landscape in one level"
+		        : "FAILED: world preview");
+		break;
+	}
+	case 462:
+		if (WorldTileCount > 0)
+			Capture("world_preview");
+		break;
+	case 464:
 		if (const TSharedPtr<SWindow> Window = FindWorldCompositionWindow())
 			App->RequestDestroyWindow(ToSharedRef(Window));
 		break;
-	case 462:
+	case 466:
 		GENESIS_LOG(LogGenesisEditor, Display, "GenesisEditorTest: {} checks, {} failed", Checks, Failures);
 		App->RequestQuit();
 		break;

@@ -20,6 +20,8 @@ namespace
 	constexpr float MinLabelWidth = 40.0f;
 	constexpr float FrameMargin = 0.1f;
 	constexpr float WheelZoomStep = 1.15f;
+	constexpr float ThumbnailInset = 2.0f;
+	constexpr float LabelHeight = 24.0f;
 } // namespace
 
 void SWorldCompositionGrid::Construct(const FArguments& A)
@@ -118,6 +120,8 @@ void SWorldCompositionGrid::Tick(const FGeometry& G, double, float)
 		bFramed = true;
 		FrameAll();
 	}
+	if (Thumbnails.BuildNext(Session->GetComposition(), Session->GetRegistry()))
+		Invalidate(EInvalidateWidgetReason::Paint);
 }
 
 void SWorldCompositionGrid::UpdateDragPreview()
@@ -347,6 +351,12 @@ int32 SWorldCompositionGrid::OnPaint(const FPaintArgs&, const FGeometry& G, cons
 		    G.ToPaintGeometry(FVector2(Box.Left, Box.Top), FVector2(Box.Right - Box.Left, Box.Bottom - Box.Top)),
 		    bDragging && bSelected ? FColor(Fill.R, Fill.G, Fill.B, 110) : Fill, 3,
 		    bSelected ? FColor(240, 170, 45) : FColor(100, 140, 120), bSelected ? 2.0f : 1.0f);
+		// The region's terrain, inside the outline so the selection stays visible.
+		if (const TSharedPtr<FSlateTextureData> Image = Thumbnails.Find(Tile))
+			Out.AddBox(L + 3,
+			    G.ToPaintGeometry(FVector2(Box.Left + ThumbnailInset, Box.Top + ThumbnailInset),
+			        FVector2(Box.Right - Box.Left - 2 * ThumbnailInset, Box.Bottom - Box.Top - 2 * ThumbnailInset)),
+			    FBrush::FromImage(Image, bDragging && bSelected ? FColor(255, 255, 255, 110) : FColor::White()));
 		if (Box.Right - Box.Left >= MinLabelWidth)
 		{
 			const TSharedRef<const FShapedGlyphSequence> Run =
@@ -354,7 +364,11 @@ int32 SWorldCompositionGrid::OnPaint(const FPaintArgs&, const FGeometry& G, cons
 			// Long names stop at the tile's edge.
 			Out.PushClip(G.ToPaintGeometry(
 			    FVector2(Box.Left + 2, Box.Top + 2), FVector2(Box.Right - Box.Left - 4, Box.Bottom - Box.Top - 4)));
-			Out.AddText(L + 3,
+			Out.AddSolidBox(L + 4,
+			    G.ToPaintGeometry(FVector2(Box.Left + ThumbnailInset, Box.Top + ThumbnailInset),
+			        FVector2(Box.Right - Box.Left - 2 * ThumbnailInset, LabelHeight)),
+			    FColor(16, 18, 22, 160));
+			Out.AddText(L + 5,
 			    G.ToPaintGeometry(FVector2(Box.Left + 6, Box.Top + 4), FVector2(Box.Right - Box.Left - 8, 20)), Run,
 			    FColor(225, 230, 235));
 			Out.PopClip();
@@ -364,10 +378,10 @@ int32 SWorldCompositionGrid::OnPaint(const FPaintArgs&, const FGeometry& G, cons
 		if (const FWorldCompositionTile* Tile = World.FindTile(Selected))
 		{
 			const FRect Box = Footprint(PreviewX, PreviewY, Tile->SizeX, Tile->SizeY);
-			Out.AddRoundedBox(L + 4,
+			Out.AddRoundedBox(L + 6,
 			    G.ToPaintGeometry(FVector2(Box.Left, Box.Top), FVector2(Box.Right - Box.Left, Box.Bottom - Box.Top)),
 			    bPreviewValid ? FColor(70, 160, 110, 120) : FColor(170, 60, 55, 120), 3,
 			    bPreviewValid ? FColor(120, 230, 160) : FColor(250, 90, 80), 2.0f);
 		}
-	return L + 5;
+	return L + 7;
 }

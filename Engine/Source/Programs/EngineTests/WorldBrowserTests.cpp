@@ -214,6 +214,45 @@ TEST_SUITE("WorldBrowser")
 		CHECK(Y == 7);
 	}
 
+	TEST_CASE("Region thumbnails show each map's terrain and rebuild after the registry rescans")
+	{
+		FBrowserProject Project;
+		TUniquePtr<FWorldCompositionEditSession> Session = Project.Open();
+		FString Error, HillsId, CoastId;
+		REQUIRE(Session->RegisterMap(Project.Hills, 0, 0, HillsId, Error));
+		REQUIRE(Session->RegisterMap(Project.Coast, 1, 0, CoastId, Error));
+		FWorldTileThumbnails Thumbnails;
+		const FWorldCompositionTile& Hills = *Session->GetComposition().FindTile(HillsId);
+		CHECK_FALSE(Thumbnails.Find(Hills));
+		int32 Built = 0;
+		while (Thumbnails.BuildNext(Session->GetComposition(), Session->GetRegistry()))
+			++Built;
+		CHECK(Built == 2);
+		const TSharedPtr<FSlateTextureData> Image = Thumbnails.Find(Hills);
+		REQUIRE(Image);
+		// The test maps' landscapes have 9 x 9 heights: one pixel each.
+		CHECK(Image->GetWidth() == 9);
+		CHECK(Image->GetHeight() == 9);
+		CHECK(Image->GetPixels()[3] == 255);
+		CHECK(Thumbnails.Find(*Session->GetComposition().FindTile(CoastId)));
+		CHECK_FALSE(Thumbnails.BuildNext(Session->GetComposition(), Session->GetRegistry()));
+		Project.Registry->Scan();
+		CHECK(Thumbnails.BuildNext(Session->GetComposition(), Session->GetRegistry()));
+
+		// Light comes from the north: ground rising to the north faces away and is darker.
+		const int32 Quads = 16;
+		TArray<float> Rising((Quads + 1) * (Quads + 1));
+		for (int32 Y = 0; Y <= Quads; ++Y)
+			for (int32 X = 0; X <= Quads; ++X)
+				Rising[Y * (Quads + 1) + X] = Y * 40.0f;
+		const std::shared_ptr<const Landscape> Slope = Landscape::Create(Quads, Quads, 32, Rising);
+		REQUIRE(Slope);
+		const TSharedPtr<FSlateTextureData> Flat = FWorldTileThumbnails::Render(Landscape(Quads, Quads, 32));
+		const TSharedPtr<FSlateTextureData> Facing = FWorldTileThumbnails::Render(*Slope);
+		const size_t Middle = (static_cast<size_t>(8) * Flat->GetWidth() + 8) * 4;
+		CHECK(Facing->GetPixels()[Middle] < Flat->GetPixels()[Middle]);
+	}
+
 	TEST_CASE("The grid moves regions by dragging, previews invalid drops and removes the selection")
 	{
 		FBrowserProject Project;

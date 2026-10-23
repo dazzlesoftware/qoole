@@ -1110,12 +1110,14 @@ void FMapEditorShell::OpenWorldComposition(const FContentBrowserItem& Item)
 	Args.OnSaved = FSimpleDelegate::CreateLambda([this] { RefreshAssetRegistry(); });
 	Args.OnLog = TDelegate<void(const FString&)>::CreateLambda([this](const FString& Message) { Log(Message); });
 	// A region is an ordinary level: a new document with one flat landscape filling the cell.
-	Args.OnCreateRegionMap = FCreateRegionMap::CreateLambda(
-	    [](const FString& File, double SizeX, double SizeY, FString& Error)
+	Args.OnCreateRegionMap =
+	    FCreateRegionMap::CreateLambda([](const FString& File, double SizeX, double SizeY, FString& Error)
 	{
 		const float DefaultQuadSize = 32.0f;
-		const int32 QuadsX = FMath::Clamp(static_cast<int32>(std::ceil(SizeX / DefaultQuadSize)), 1, Landscape::MaxQuads);
-		const int32 QuadsY = FMath::Clamp(static_cast<int32>(std::ceil(SizeY / DefaultQuadSize)), 1, Landscape::MaxQuads);
+		const int32 QuadsX =
+		    FMath::Clamp(static_cast<int32>(std::ceil(SizeX / DefaultQuadSize)), 1, Landscape::MaxQuads);
+		const int32 QuadsY =
+		    FMath::Clamp(static_cast<int32>(std::ceil(SizeY / DefaultQuadSize)), 1, Landscape::MaxQuads);
 		const float QuadSize = static_cast<float>(std::max(SizeX / QuadsX, SizeY / QuadsY));
 		TUniquePtr<FMapDocument> Region = FMapDocument::CreateNew();
 		if (!Region->AddLandscape(QuadsX, QuadsY, QuadSize, Vector3d()))
@@ -1129,6 +1131,44 @@ void FMapEditorShell::OpenWorldComposition(const FContentBrowserItem& Item)
 	{
 		if (ConfirmDiscard())
 			OpenMap(Map.FilePath);
+	});
+	// The preview is an ordinary unsaved level holding each region's terrain at its place.
+	Args.OnPreviewWorld = TDelegate<void(const TArray<FWorldPreviewRegion>&)>::CreateLambda(
+	    [this](const TArray<FWorldPreviewRegion>& Regions)
+	{
+		if (!ConfirmDiscard())
+			return;
+		TUniquePtr<FMapDocument> Preview = FMapDocument::CreateNew();
+		int32 Landscapes = 0;
+		for (const FWorldPreviewRegion& Region : Regions)
+		{
+			FString Error;
+			const TUniquePtr<FMapDocument> Level = FMapDocument::Open(Region.Map.FilePath, Error);
+			if (!Level)
+			{
+				Log(FTextLocalization::Format("Could not open region {}: {}", Region.Name, Error));
+				continue;
+			}
+			for (Object* Obj : Level->GetObjects())
+				if (Obj->HasLandscape())
+				{
+					const Vector3d& At = Obj->GetPosition();
+					if (Object* Placed = Preview->AddLandscape(Obj->GetLandscapePtr(),
+					        Vector3d(Region.Origin.GetX() + At.GetX(), Region.Origin.GetY() + At.GetY(),
+					            Region.Origin.GetZ() + At.GetZ()),
+					        FTextLocalization::Format("Preview {}", Region.Name)))
+					{
+						Placed->SetObjName(Region.Name.ToAnsi().c_str());
+						++Landscapes;
+					}
+				}
+		}
+		// Nothing selected, so the views frame the whole world.
+		Preview->ClearSelection();
+		SetDocument(std::move(Preview));
+		Log(FTextLocalization::Format(
+		    "World preview: {} landscapes from {} regions (unsaved; open a region to edit it)", Landscapes,
+		    Regions.size()));
 	});
 	FString Error;
 	if (!FWorldCompositionEditor::Open(Args, Error))

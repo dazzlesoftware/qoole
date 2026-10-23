@@ -20,6 +20,10 @@ public:
 	{
 		return Composition;
 	}
+	const FAssetRegistry& GetRegistry() const
+	{
+		return *Registry;
+	}
 	const FString& GetFilePath() const
 	{
 		return FilePath;
