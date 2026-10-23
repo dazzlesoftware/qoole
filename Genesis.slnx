@@ -26,6 +26,7 @@
     <Project Path="Engine/Source/Editor/FoliageEditor/FoliageEditor.vcxproj" Id="2e8b0eac-f17e-430f-a16a-a71d7fe07193" />
     <Project Path="Engine/Source/Editor/MapCore/MapCore.vcxproj" Id="e6b3966d-7ccb-46db-92a6-40893ed2e9dd" />
     <Project Path="Engine/Source/Editor/MapEditor/MapEditor.vcxproj" Id="248d610e-bede-4c49-afd7-43f90e5f4b54" />
+    <Project Path="Engine/Source/Editor/WorldBrowser/WorldBrowser.vcxproj" Id="702eb400-f37b-44a2-90df-9a608229ac6e" />
   </Folder>
   <Folder Name="/ThirdParty/">
     <Project Path="Engine/Source/ThirdParty/Lua/Lua.vcxproj" Id="dced32b2-90bc-48c7-93ee-0cba3cde440c" />

@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 source = Path(__file__).resolve().parents[1] / 'Source'
 ns = {'m': 'http://schemas.microsoft.com/developer/msbuild/2003'}
 projects = {p.stem: p for p in source.rglob('*.vcxproj')}
-features = ('Landscape', 'Foliage', 'LandscapeEditorUtilities', 'LandscapeEditor', 'FoliageEditor')
+features = ('Landscape', 'Foliage', 'LandscapeEditorUtilities', 'LandscapeEditor', 'FoliageEditor', 'WorldBrowser')
 graph = {}
 errors = []
 for name, project in projects.items():
@@ -33,7 +33,8 @@ for name, project in projects.items():
 for name in ('Landscape', 'Foliage'):
     if set(graph[name]) - {'Core', 'Geometry'}:
         errors.append(f'{name}: runtime data depends on higher-level modules')
-for name, forbidden in {'MapEditor': {'LandscapeEditor', 'FoliageEditor'},
+for name, forbidden in {'MapEditor': {'LandscapeEditor', 'FoliageEditor', 'WorldBrowser'},
+                        'WorldBrowser': {'MapEditor', 'MapCore', 'LandscapeEditor', 'FoliageEditor'},
                         'LandscapeEditor': {'FoliageEditor'},
                         'FoliageEditor': {'LandscapeEditor'},
                         'LandscapeEditorUtilities': {'MapEditor', 'MapCore', 'LandscapeEditor', 'FoliageEditor'}}.items():

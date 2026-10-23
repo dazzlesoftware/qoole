@@ -75,6 +75,48 @@ failed tile records a localized error and is not retried on every update. It
 is retried after `Retry`, after its map or host registration changes, or once
 the viewer has moved beyond `UnloadDistance` and come back.
 
+## Editing regions
+
+The editor module `Editor/WorldBrowser` (Unreal's module for world composition)
+owns region editing. It has no MapEditor or MapCore dependency.
+
+To start, choose **World Composition** in the content browser's add menu. That
+creates an empty `World.gmap` registry. Double-click it to open the editor
+window. The window has:
+
+- **A grid** of the world seen from above, with +Y up.
+  - Drag a region to move it by whole cells. The preview is green where the
+    region fits and red where it would overlap. A refused drop leaves the
+    region where it was and shows why.
+  - Drop a world map from the content browser to register it at the cell
+    under the cursor.
+  - Right-click a cell for **New Region Here**, **Open Region Map** and
+    **Remove Region**.
+  - Middle-drag pans, the wheel zooms, **F** frames every region and
+    **Delete** unregisters the selected one.
+- **A toolbar** with **New Region** (in the free cell nearest the selection),
+  **Undo**, **Redo**, **Frame All**, **Save** and the grid cell size.
+- **A details panel** for the selected region:
+  - Name, cell position, and width and depth in cells.
+  - Region server host.
+  - The resolved map path and world bounds.
+  - **Open Region Map**, which opens the map in the level editor.
+  - **Remove**, which unregisters the region and keeps its map file.
+
+`FWorldCompositionEditSession` holds the logic behind the window, with no UI
+dependencies:
+
+- Every edit validates first and records a whole-registry undo step (up to 100).
+  A rejected edit or a no-op is not recorded.
+- Registered regions are named after their map file, with a number added when
+  the name is taken.
+- Saving keeps the package identity and rescans the registry.
+
+New regions are written to `<composition>Regions/Region N.gmap` beside the
+registry. The editor host writes them, because it owns the level format: an
+empty level with one flat landscape the size of a cell, centred on the map
+origin. A cell that is already taken is rejected before any file is written.
+
 ## Toward region servers
 
 The registry already carries what a multi-server world needs: permanent tile
@@ -85,7 +127,6 @@ callers. Still to come:
 - A region-server protocol and tile source.
 - Player handoff across tile boundaries.
 - Ownership and access rules.
-- Editor tools for registering and arranging tiles.
 - Matching landscape heights along shared edges.
 - Origin rebasing. Tile transforms use single-precision vectors, so content
   far from the world origin loses precision.
@@ -93,6 +134,17 @@ callers. Still to come:
   per-update load budget.
 
 ## Validation
+
+`WorldBrowser` tests (`Programs/EngineTests/WorldBrowserTests.cpp`) cover:
+
+- Naming regions after their map file.
+- Rejected registrations and edits that leave the registry unchanged.
+- Undo and redo, save and reopen, and the retained package identity.
+- Region creation through the host callback, and occupied cells rejected
+  before a file is written.
+- The free-cell search.
+- Grid dragging, refused drops, selection and Delete, driven through real
+  mouse and key input.
 
 `WorldComposition` tests (`Programs/EngineTests/WorldCompositionTests.cpp`)
 cover:

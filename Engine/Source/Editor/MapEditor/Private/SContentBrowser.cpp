@@ -7,6 +7,7 @@
 #include "DragAndDrop/AssetDragDropOp.h"
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "World/WorldComposition.h"
 #include "AssetPackage.h"
 #include "AssetRegistry.h"
 #include "MapAssetImport.h"
@@ -47,6 +48,8 @@ const char* ToString(EContentAssetType Type)
 		return "Material Function";
 	case EContentAssetType::MaterialParameterCollection:
 		return "Parameter Collection";
+	case EContentAssetType::WorldComposition:
+		return "World Composition";
 	case EContentAssetType::Map:
 		return "Map";
 	case EContentAssetType::QuakeMap:
@@ -113,6 +116,7 @@ namespace
 			return EIcon::Prefab;
 		case EContentAssetType::Map:
 		case EContentAssetType::QuakeMap:
+		case EContentAssetType::WorldComposition:
 			return EIcon::Map;
 		case EContentAssetType::EntityList:
 			return EIcon::Entity;
@@ -141,6 +145,8 @@ namespace
 			return FColor(120, 100, 210);
 		case EContentAssetType::MaterialParameterCollection:
 			return FColor(80, 170, 190);
+		case EContentAssetType::WorldComposition:
+			return FColor(220, 120, 70);
 		case EContentAssetType::Font:
 			return FColor(180, 120, 220);
 		case EContentAssetType::InvalidPackage:
@@ -232,7 +238,8 @@ namespace
 		{
 			if (!Item.PackageId.IsEmpty() &&
 			    (Item.Schema == "Genesis.Texture2D" || Item.Schema == "Genesis.MaterialFunction" ||
-			        Item.Schema == "Genesis.MaterialParameterCollection"))
+			        Item.Schema == "Genesis.MaterialParameterCollection" ||
+			        (Item.Schema == "Genesis.World" && Item.Type == EContentAssetType::Map)))
 				return FReply::Handled().BeginDragDrop(
 				    FAssetDragDropOp::New({Item.PackageId, Item.PackagePath}, Item.Schema, Item.Name));
 			// Prefabs drag into the viewports.
@@ -557,6 +564,9 @@ FContentBrowserItem SContentBrowser::DescribeItem(const FString& FilePath) const
 			Item.Type = EContentAssetType::MaterialFunction;
 		else if (Metadata.Schema == "Genesis.MaterialParameterCollection")
 			Item.Type = EContentAssetType::MaterialParameterCollection;
+		else if (Metadata.Schema == "Genesis.WorldComposition" && Metadata.Kind == EAssetPackageKind::Map &&
+		    Metadata.SchemaVersion == 1)
+			Item.Type = EContentAssetType::WorldComposition;
 		else
 			Item.Type = EContentAssetType::Package;
 		return Item;
@@ -937,6 +947,11 @@ TSharedRef<SWidget> SContentBrowser::MakeAddMenu()
 	            .IsEnabled([this] { return !Path.IsEmpty(); })
 	            .OnSelected([this] { CreateMaterialFunction(); })] +
 	    SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry)
+	            .Text(GENESIS_TEXT("World Composition"))
+	            .ToolTipText(GENESIS_TEXT("A world made of separately saved regions registered on a grid"))
+	            .IsEnabled([this] { return !Path.IsEmpty(); })
+	            .OnSelected([this] { CreateWorldComposition(); })] +
+	    SVerticalBox::Slot().AutoHeight()[SNew(SMenuEntry)
 	            .Text(GENESIS_TEXT("Material Instance from Selection"))
 	            .ToolTipText(GENESIS_TEXT("Select a saved graph material or instance as the parent"))
 	            .IsEnabled(
@@ -1142,6 +1157,30 @@ FString SContentBrowser::CreateMaterialFunction()
 	return {};
 }
 
+FString SContentBrowser::CreateWorldComposition()
+{
+	if (Path.IsEmpty())
+		return {};
+	for (int Number = 1; Number < 1000; ++Number)
+	{
+		const FString File = FromPath(
+		    ToPath(Path) / (L"World" + (Number == 1 ? std::wstring() : std::to_wstring(Number)) + L".gmap"));
+		if (fs::exists(ToPath(File)))
+			continue;
+		FAssetPackage P;
+		FWorldComposition().ToPackage(P);
+		FString Error;
+		if (!FAssetPackageStore::Save(File, P, Error))
+		{
+			GENESIS_LOG(LogMapEditor, Warning, "{}", Error);
+			return {};
+		}
+		Refresh();
+		SelectedPath = File;
+		return File;
+	}
+	return {};
+}
 FString SContentBrowser::CreateMaterialParameterCollection()
 {
 	if (Path.IsEmpty())

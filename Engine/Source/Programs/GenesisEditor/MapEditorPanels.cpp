@@ -10,6 +10,8 @@
 #include "Templates/SharedPointer.h"
 #include "Internationalization/TextLocalization.h"
 #include "MaterialEditor.h"
+#include "WorldCompositionEditor.h"
+#include "Landscape/Landscape.h"
 #include "ProjectDescriptor.h"
 #include "AssetRegistry.h"
 
@@ -620,6 +622,9 @@ void FMapEditorShell::OnAssetActivated(const FContentBrowserItem& Item)
 	case EContentAssetType::MaterialParameterCollection:
 		OpenMaterialAsset(Item);
 		break;
+	case EContentAssetType::WorldComposition:
+		OpenWorldComposition(Item);
+		break;
 	case EContentAssetType::Texture:
 		if (Item.Schema == "Genesis.Texture2D")
 			OpenTextureAsset(Item);
@@ -1093,5 +1098,39 @@ void FMapEditorShell::OpenMaterialAsset(const FContentBrowserItem& Item)
 	});
 	FString Error;
 	if (!FMaterialEditor::Open(Args, Error))
+		Log(Error);
+}
+
+void FMapEditorShell::OpenWorldComposition(const FContentBrowserItem& Item)
+{
+	FWorldCompositionEditorArgs Args;
+	Args.Registry = AssetRegistry;
+	Args.Composition = {Item.PackageId, Item.PackagePath};
+	Args.Name = Item.Name;
+	Args.OnSaved = FSimpleDelegate::CreateLambda([this] { RefreshAssetRegistry(); });
+	Args.OnLog = TDelegate<void(const FString&)>::CreateLambda([this](const FString& Message) { Log(Message); });
+	// A region is an ordinary level: a new document with one flat landscape filling the cell.
+	Args.OnCreateRegionMap = FCreateRegionMap::CreateLambda(
+	    [](const FString& File, double SizeX, double SizeY, FString& Error)
+	{
+		const float DefaultQuadSize = 32.0f;
+		const int32 QuadsX = FMath::Clamp(static_cast<int32>(std::ceil(SizeX / DefaultQuadSize)), 1, Landscape::MaxQuads);
+		const int32 QuadsY = FMath::Clamp(static_cast<int32>(std::ceil(SizeY / DefaultQuadSize)), 1, Landscape::MaxQuads);
+		const float QuadSize = static_cast<float>(std::max(SizeX / QuadsX, SizeY / QuadsY));
+		TUniquePtr<FMapDocument> Region = FMapDocument::CreateNew();
+		if (!Region->AddLandscape(QuadsX, QuadsY, QuadSize, Vector3d()))
+		{
+			Error = GENESIS_TEXT("Could not create the region landscape.");
+			return false;
+		}
+		return Region->Save(File, Error);
+	});
+	Args.OnOpenRegion = TDelegate<void(const FAssetData&)>::CreateLambda([this](const FAssetData& Map)
+	{
+		if (ConfirmDiscard())
+			OpenMap(Map.FilePath);
+	});
+	FString Error;
+	if (!FWorldCompositionEditor::Open(Args, Error))
 		Log(Error);
 }

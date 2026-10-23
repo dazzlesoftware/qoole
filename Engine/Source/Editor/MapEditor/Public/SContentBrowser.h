@@ -44,6 +44,7 @@ enum class EContentAssetType : uint8
 	InvalidPackage,
 	MaterialFunction,
 	MaterialParameterCollection,
+	WorldComposition,
 };
 
 const char* ToString(EContentAssetType Type);
@@ -121,6 +122,7 @@ class SContentBrowser final : public SCompoundWidget
 	FString CreateMaterial();
 	FString CreateMaterialFunction();
 	FString CreateMaterialParameterCollection();
+	FString CreateWorldComposition();
 	FString CreateMaterialInstance();
 	FString CreateMeshFromSelection();
 

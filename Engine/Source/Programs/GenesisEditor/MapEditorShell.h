@@ -192,6 +192,7 @@ private:
 	void RefreshPlaceables();
 	void OnAssetActivated(const FContentBrowserItem& Item);
 	void OpenMaterialAsset(const FContentBrowserItem& Item);
+	void OpenWorldComposition(const FContentBrowserItem& Item);
 	void OpenMeshAsset(const FContentBrowserItem& Item);
 	void OpenTextureAsset(const FContentBrowserItem& Item);
 	void ShowModeTab();

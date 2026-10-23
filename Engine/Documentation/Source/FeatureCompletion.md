@@ -61,7 +61,7 @@ Coverage and acceptance are tracked in [ScriptingAPICoverage.md](ScriptingAPICov
 
 - [x] Region registry: independently saved maps registered on a world grid, with overlap checks.
 - [x] Distance streaming of nearby regions through a replaceable tile source.
-- [ ] Editor tools for registering and arranging regions.
+- [x] Editor tools for registering and arranging regions (Editor/WorldBrowser).
 - [ ] Region servers, boundary handoff, ownership/access and edge matching.
 
 Design and limits are in [WorldComposition.md](WorldComposition.md).

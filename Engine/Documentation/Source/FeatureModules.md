@@ -9,6 +9,7 @@ Each has Public/ and Private/ directories and a .vcxproj target in Genesis.slnx.
 | Runtime/Foliage | Foliage types, instances and instance transforms | Core, Geometry |
 | Editor/LandscapeEditor | Sculpt, paint, terrain creation/import workflows, spline interaction, overlays and the Landscape panel | MapEditor, Landscape, LandscapeEditorUtilities |
 | Editor/FoliageEditor | Foliage paint, erase, single placement, the Foliage panel and type settings | MapEditor, Foliage |
+| Editor/WorldBrowser | World composition editing: the region grid, details, registration, region creation through a host callback, undo and saving | Engine, Slate, EditorFramework |
 | Editor/LandscapeEditorUtilities | Heightmap/weightmap image and RAW file conversion | Core, Geometry, Landscape, ApplicationCore file-dialog types |
 
 Runtime features have no dependency on Engine, Renderer, UI or Editor. Engine
