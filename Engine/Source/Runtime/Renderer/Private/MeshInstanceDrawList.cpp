@@ -2,8 +2,8 @@
 #include "Renderer/MeshInstanceDrawList.h"
 #include "Geometry/StaticMesh.h"
 #include <cmath>
-bool AppendMeshInstance(TArray<FMeshInstanceBatch>& Batches, const std::shared_ptr<const StaticMesh>& Mesh,
-						const Matrix44& ToView)
+bool AppendMeshInstance(
+    TArray<FMeshInstanceBatch>& Batches, const std::shared_ptr<const StaticMesh>& Mesh, const Matrix44& ToView)
 {
 	if (!Mesh)
 		return false;
@@ -20,7 +20,7 @@ bool AppendMeshInstance(TArray<FMeshInstanceBatch>& Batches, const std::shared_p
 	if (!ValidateMeshInstanceTransform(Rows, Mirrored))
 		return false;
 	FMeshInstanceBatch* Batch = nullptr;
-	for (auto& Existing : Batches)
+	for (FMeshInstanceBatch& Existing : Batches)
 		if (Existing.Mesh == Mesh && Existing.bMirrored == Mirrored)
 		{
 			Batch = &Existing;
@@ -43,8 +43,8 @@ bool ValidateMeshInstanceTransform(const float* Rows, bool& Mirrored)
 		if (!std::isfinite(Rows[I]))
 			return false;
 	const double D = double(Rows[0]) * (double(Rows[5]) * Rows[10] - double(Rows[6]) * Rows[9]) -
-					 double(Rows[1]) * (double(Rows[4]) * Rows[10] - double(Rows[6]) * Rows[8]) +
-					 double(Rows[2]) * (double(Rows[4]) * Rows[9] - double(Rows[5]) * Rows[8]);
+	    double(Rows[1]) * (double(Rows[4]) * Rows[10] - double(Rows[6]) * Rows[8]) +
+	    double(Rows[2]) * (double(Rows[4]) * Rows[9] - double(Rows[5]) * Rows[8]);
 	if (!std::isfinite(D) || std::abs(D) < 1e-12)
 		return false;
 

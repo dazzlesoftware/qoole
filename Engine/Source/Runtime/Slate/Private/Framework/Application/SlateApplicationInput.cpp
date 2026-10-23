@@ -4,6 +4,7 @@
 // replies, hover, capture, cursors and drag and drop.
 
 #include "SlateApplicationPrivate.h"
+#include "Templates/SharedPointer.h"
 
 using namespace UIApplicationUtil;
 
@@ -15,11 +16,12 @@ namespace
 	{
 		return Widget.IsEnabledInHierarchy();
 	}
-}
+} // namespace
 
 FPointerEvent FSlateApplication::MakePointerEvent(FVector2 Position, EMouseButton Button, float WheelDelta) const
 {
-	return FPointerEvent(Position, LastCursorPosition, PressedButtons, Button, WheelDelta, Platform->GetModifierKeys(), 0);
+	return FPointerEvent(
+	    Position, LastCursorPosition, PressedButtons, Button, WheelDelta, Platform->GetModifierKeys(), 0);
 }
 
 TArray<TSharedRef<SWidget>> FSlateApplication::GetHoveredPath() const
@@ -38,7 +40,8 @@ TArray<TSharedRef<SWidget>> FSlateApplication::GetHoveredPath() const
 // ---------------------------------------------------------------------------
 // Replies, capture
 
-void FSlateApplication::ProcessReply(const FReply& Reply, const TSharedPtr<SWidget>& Handler, const FPointerEvent* PointerEvent, int32 UserIndex)
+void FSlateApplication::ProcessReply(
+    const FReply& Reply, const TSharedPtr<SWidget>& Handler, const FPointerEvent* PointerEvent, int32 UserIndex)
 {
 	(void)Handler;
 	if (const TSharedPtr<SWidget>& Captor = Reply.GetMouseCaptor())
@@ -57,7 +60,7 @@ void FSlateApplication::ProcessReply(const FReply& Reply, const TSharedPtr<SWidg
 				const FRect Rect = Captor->GetCachedGeometry().GetLayoutBoundingRect();
 				const FIntPoint Origin = Window->GetNativeWindow()->GetClientPosition();
 				const FIntRect Screen(Origin.X + FMath::FloorToInt(Rect.Left), Origin.Y + FMath::FloorToInt(Rect.Top),
-					Origin.X + FMath::CeilToInt(Rect.Right), Origin.Y + FMath::CeilToInt(Rect.Bottom));
+				    Origin.X + FMath::CeilToInt(Rect.Right), Origin.Y + FMath::CeilToInt(Rect.Bottom));
 				Cursor->Lock(&Screen);
 			}
 		}
@@ -78,7 +81,8 @@ void FSlateApplication::ProcessReply(const FReply& Reply, const TSharedPtr<SWidg
 
 	if (const TSharedPtr<SWidget>& DetectWidget = Reply.GetDetectDragWidget(); DetectWidget && PointerEvent)
 	{
-		DragDetect = FDragDetect{ DetectWidget, Reply.GetDetectDragButton(), PointerEvent->GetAbsolutePosition(), WindowUnderCursor };
+		DragDetect = FDragDetect{
+		    DetectWidget, Reply.GetDetectDragButton(), PointerEvent->GetAbsolutePosition(), WindowUnderCursor};
 	}
 	if (const TSharedPtr<FDragDropOperation>& Operation = Reply.GetDragDropOperation(); Operation && PointerEvent)
 	{
@@ -97,7 +101,7 @@ void FSlateApplication::ProcessReply(const FReply& Reply, const TSharedPtr<SWidg
 			const FRect Rect = LockWidget->GetCachedGeometry().GetLayoutBoundingRect();
 			const FIntPoint Origin = Window->GetNativeWindow()->GetClientPosition();
 			const FIntRect Screen(Origin.X + FMath::FloorToInt(Rect.Left), Origin.Y + FMath::FloorToInt(Rect.Top),
-				Origin.X + FMath::CeilToInt(Rect.Right), Origin.Y + FMath::CeilToInt(Rect.Bottom));
+			    Origin.X + FMath::CeilToInt(Rect.Right), Origin.Y + FMath::CeilToInt(Rect.Bottom));
 			Platform->GetCursor()->Lock(&Screen);
 		}
 	}
@@ -161,7 +165,8 @@ void FSlateApplication::ReleaseMouseCapture()
 		ICursor* Cursor = Platform->GetCursor();
 		Platform->SetRawMouseInputEnabled(false);
 		Cursor->Lock(nullptr);
-		Cursor->SetPosition(FMath::RoundToInt(HighPrecisionRestoreScreen.X), FMath::RoundToInt(HighPrecisionRestoreScreen.Y));
+		Cursor->SetPosition(
+		    FMath::RoundToInt(HighPrecisionRestoreScreen.X), FMath::RoundToInt(HighPrecisionRestoreScreen.Y));
 		Cursor->Show(true);
 	}
 	if (Old)
@@ -185,12 +190,13 @@ bool FSlateApplication::OnRawMouseMove(int32 DeltaX, int32 DeltaY)
 // ---------------------------------------------------------------------------
 // Hover and cursor
 
-void FSlateApplication::UpdateHover(const TSharedPtr<SWindow>& Window, const TArray<TSharedRef<SWidget>>& NewPath, const FPointerEvent& Event)
+void FSlateApplication::UpdateHover(
+    const TSharedPtr<SWindow>& Window, const TArray<TSharedRef<SWidget>>& NewPath, const FPointerEvent& Event)
 {
 	(void)Window;
 	const TArray<TWeakPtr<SWidget>> OldPath = HoveredPath;
 	// Leave, innermost first.
-	for (auto It = OldPath.rbegin(); It != OldPath.rend(); ++It)
+	for (TArray<TWeakPtr<SWidget>>::const_reverse_iterator It = OldPath.rbegin(); It != OldPath.rend(); ++It)
 	{
 		const TSharedPtr<SWidget> W = It->lock();
 		if (W && !PathContains(NewPath, W.get()))
@@ -204,7 +210,8 @@ void FSlateApplication::UpdateHover(const TSharedPtr<SWindow>& Window, const TAr
 	{
 		const TSharedRef<SWidget>& W = NewPath[I];
 		const bool bLeaf = I + 1 == NewPath.size();
-		const bool bWasHovered = std::any_of(OldPath.begin(), OldPath.end(), [&W](const TWeakPtr<SWidget>& O) { return O.lock() == W.ToSharedPtr(); });
+		const bool bWasHovered = std::any_of(
+		    OldPath.begin(), OldPath.end(), [&W](const TWeakPtr<SWidget>& O) { return O.lock() == W.ToSharedPtr(); });
 		W->SetHovered(true, bLeaf);
 		if (!bWasHovered)
 		{
@@ -238,7 +245,7 @@ void FSlateApplication::ApplyCursor()
 		{
 			Path = GetHoveredPath();
 		}
-		for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+		for (TArray<TSharedRef<SWidget>>::reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 		{
 			const FCursorReply Reply = (*It)->OnCursorQuery((*It)->GetCachedGeometry(), Event);
 			if (Reply.IsEventHandled())
@@ -271,7 +278,8 @@ void FSlateApplication::SynthesizeMouseMove()
 	TArray<TSharedRef<SWidget>> Path = Window->HitTestAt(CursorPosition);
 	if (const TSharedPtr<SWidget> Captor = MouseCaptor.lock())
 	{
-		std::erase_if(Path, [&Captor](const TSharedRef<SWidget>& W) { return &W.Get() != Captor.get() && !W->IsAncestorOf(Captor.get()); });
+		std::erase_if(Path, [&Captor](const TSharedRef<SWidget>& W)
+		{ return &W.Get() != Captor.get() && !W->IsAncestorOf(Captor.get()); });
 	}
 	UpdateHover(Window, Path, Event);
 	ApplyCursor();
@@ -290,7 +298,8 @@ bool FSlateApplication::RoutePointerDown(SWindow& Window, const FPointerEvent& E
 	if (Captor)
 	{
 		Path = GetPathToWidget(ToSharedRef(Captor));
-		Reply = bDoubleClick ? Captor->OnMouseButtonDoubleClick(Captor->GetCachedGeometry(), Event) : Captor->OnMouseButtonDown(Captor->GetCachedGeometry(), Event);
+		Reply = bDoubleClick ? Captor->OnMouseButtonDoubleClick(Captor->GetCachedGeometry(), Event)
+		                     : Captor->OnMouseButtonDown(Captor->GetCachedGeometry(), Event);
 		if (bDoubleClick && !Reply.IsEventHandled())
 		{
 			Reply = Captor->OnMouseButtonDown(Captor->GetCachedGeometry(), Event);
@@ -319,14 +328,15 @@ bool FSlateApplication::RoutePointerDown(SWindow& Window, const FPointerEvent& E
 		// Bubble: leaf to root.
 		if (!Handler)
 		{
-			for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+			for (TArray<TSharedRef<SWidget>>::reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 			{
 				const TSharedRef<SWidget>& W = *It;
 				if (!CanReceiveInput(*W))
 				{
 					continue;
 				}
-				Reply = bDoubleClick ? W->OnMouseButtonDoubleClick(W->GetCachedGeometry(), Event) : W->OnMouseButtonDown(W->GetCachedGeometry(), Event);
+				Reply = bDoubleClick ? W->OnMouseButtonDoubleClick(W->GetCachedGeometry(), Event)
+				                     : W->OnMouseButtonDown(W->GetCachedGeometry(), Event);
 				if (bDoubleClick && !Reply.IsEventHandled())
 				{
 					Reply = W->OnMouseButtonDown(W->GetCachedGeometry(), Event);
@@ -347,13 +357,14 @@ bool FSlateApplication::RoutePointerDown(SWindow& Window, const FPointerEvent& E
 	// nobody handled on nothing focusable clears focus.
 	if (!Captor && !Reply.GetFocusRecipient() && !Reply.ShouldClearFocus())
 	{
-		auto Start = Path.rbegin();
+		TArray<TSharedRef<SWidget>>::reverse_iterator Start = Path.rbegin();
 		if (Handler)
 		{
-			Start = std::find_if(Path.rbegin(), Path.rend(), [&Handler](const TSharedRef<SWidget>& W) { return W.ToSharedPtr() == Handler; });
+			Start = std::find_if(Path.rbegin(), Path.rend(),
+			    [&Handler](const TSharedRef<SWidget>& W) { return W.ToSharedPtr() == Handler; });
 		}
 		TSharedPtr<SWidget> Focusable;
-		for (auto It = Start; It != Path.rend(); ++It)
+		for (TArray<TSharedRef<SWidget>>::reverse_iterator It = Start; It != Path.rend(); ++It)
 		{
 			if ((*It)->SupportsKeyboardFocus() && CanReceiveInput(**It))
 			{
@@ -407,7 +418,8 @@ bool FSlateApplication::OnMouseDown(const TSharedRef<IPlatformWindow>& Native, E
 	return RoutePointerDown(*Window, Event, false);
 }
 
-bool FSlateApplication::OnMouseDoubleClick(const TSharedRef<IPlatformWindow>& Native, EMouseButton Button, FVector2 Position)
+bool FSlateApplication::OnMouseDoubleClick(
+    const TSharedRef<IPlatformWindow>& Native, EMouseButton Button, FVector2 Position)
 {
 	const TSharedPtr<SWindow> Window = FindWindowForNative(Native.Get());
 	if (!Window)
@@ -481,7 +493,7 @@ bool FSlateApplication::OnMouseUp(const TSharedRef<IPlatformWindow>& Native, EMo
 			return true;
 		}
 		const TArray<TSharedRef<SWidget>> Path = Window->HitTestAt(Position);
-		for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+		for (TArray<TSharedRef<SWidget>>::const_reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 		{
 			if (!CanReceiveInput(**It))
 			{
@@ -530,7 +542,8 @@ bool FSlateApplication::OnMouseMove(const TSharedRef<IPlatformWindow>& Native, F
 			DragDetect.reset();
 			if (Source)
 			{
-				const FPointerEvent DragEvent(Start, Start, PressedButtons, EMouseButton::Invalid, 0.0f, Platform->GetModifierKeys(), 0);
+				const FPointerEvent DragEvent(
+				    Start, Start, PressedButtons, EMouseButton::Invalid, 0.0f, Platform->GetModifierKeys(), 0);
 				const FReply Reply = Source->OnDragDetected(Source->GetCachedGeometry(), DragEvent);
 				ProcessReply(Reply, Source, &Event, 0);
 			}
@@ -560,7 +573,8 @@ bool FSlateApplication::OnMouseMove(const TSharedRef<IPlatformWindow>& Native, F
 	if (const TSharedPtr<SWidget> Captor = MouseCaptor.lock())
 	{
 		// While captured, only the captor and its ancestors count as hovered.
-		std::erase_if(Path, [&Captor](const TSharedRef<SWidget>& W) { return &W.Get() != Captor.get() && !W->IsAncestorOf(Captor.get()); });
+		std::erase_if(Path, [&Captor](const TSharedRef<SWidget>& W)
+		{ return &W.Get() != Captor.get() && !W->IsAncestorOf(Captor.get()); });
 		UpdateHover(Window, Path, Event);
 		Reply = Captor->OnMouseMove(Captor->GetCachedGeometry(), Event);
 		Handler = Captor;
@@ -568,7 +582,7 @@ bool FSlateApplication::OnMouseMove(const TSharedRef<IPlatformWindow>& Native, F
 	else if (!Modal || Modal == Window)
 	{
 		UpdateHover(Window, Path, Event);
-		for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+		for (TArray<TSharedRef<SWidget>>::reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 		{
 			if (!CanReceiveInput(**It))
 			{
@@ -603,7 +617,8 @@ bool FSlateApplication::OnMouseLeave(const TSharedRef<IPlatformWindow>& Native)
 	return true;
 }
 
-bool FSlateApplication::OnMouseWheel(const TSharedRef<IPlatformWindow>& Native, float Delta, bool bHorizontal, FVector2 Position)
+bool FSlateApplication::OnMouseWheel(
+    const TSharedRef<IPlatformWindow>& Native, float Delta, bool bHorizontal, FVector2 Position)
 {
 	const TSharedPtr<SWindow> Window = FindWindowForNative(Native.Get());
 	if (!Window)
@@ -629,8 +644,9 @@ bool FSlateApplication::OnMouseWheel(const TSharedRef<IPlatformWindow>& Native, 
 
 	FReply Reply = FReply::Unhandled();
 	TSharedPtr<SWidget> Handler;
-	const TArray<TSharedRef<SWidget>> Path = MouseCaptor.lock() ? GetPathToWidget(ToSharedRef(MouseCaptor.lock())) : Window->HitTestAt(Position);
-	for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+	const TArray<TSharedRef<SWidget>> Path =
+	    MouseCaptor.lock() ? GetPathToWidget(ToSharedRef(MouseCaptor.lock())) : Window->HitTestAt(Position);
+	for (TArray<TSharedRef<SWidget>>::const_reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 	{
 		if (!CanReceiveInput(**It))
 		{
@@ -650,7 +666,8 @@ bool FSlateApplication::OnMouseWheel(const TSharedRef<IPlatformWindow>& Native, 
 // ---------------------------------------------------------------------------
 // Drag and drop
 
-TSharedPtr<SWindow> FSlateApplication::MapDragToWindow(const SWindow& EventWindow, FVector2 Position, FVector2& OutLocal)
+TSharedPtr<SWindow> FSlateApplication::MapDragToWindow(
+    const SWindow& EventWindow, FVector2 Position, FVector2& OutLocal)
 {
 	const TSharedPtr<IPlatformWindow>& Native = EventWindow.GetNativeWindow();
 	const FVector2 Screen = (Native ? Native->GetClientPosition().ToVector2() : FVector2::Zero()) + Position;
@@ -665,7 +682,7 @@ TSharedPtr<SWindow> FSlateApplication::MapDragToWindow(const SWindow& EventWindo
 	{
 		Candidates.push_back(ToSharedRef(Last));
 	}
-	for (auto It = Windows.rbegin(); It != Windows.rend(); ++It)
+	for (TArray<TSharedRef<SWindow>>::reverse_iterator It = Windows.rbegin(); It != Windows.rend(); ++It)
 	{
 		Candidates.push_back(*It);
 	}
@@ -759,7 +776,7 @@ void FSlateApplication::UpdateDragDropTargets(const TArray<TSharedRef<SWidget>>&
 		return;
 	}
 	const FDragDropEvent DragEvent(Event, DragDropOperation);
-	for (auto It = DragDropTargets.rbegin(); It != DragDropTargets.rend(); ++It)
+	for (TArray<TWeakPtr<SWidget>>::reverse_iterator It = DragDropTargets.rbegin(); It != DragDropTargets.rend(); ++It)
 	{
 		const TSharedPtr<SWidget> W = It->lock();
 		if (W && !PathContains(Path, W.get()))
@@ -771,14 +788,15 @@ void FSlateApplication::UpdateDragDropTargets(const TArray<TSharedRef<SWidget>>&
 	DragDropTargets.clear();
 	for (const TSharedRef<SWidget>& W : Path)
 	{
-		const bool bWasTarget = std::any_of(Old.begin(), Old.end(), [&W](const TWeakPtr<SWidget>& O) { return O.lock() == W.ToSharedPtr(); });
+		const bool bWasTarget = std::any_of(
+		    Old.begin(), Old.end(), [&W](const TWeakPtr<SWidget>& O) { return O.lock() == W.ToSharedPtr(); });
 		if (!bWasTarget && CanReceiveInput(*W))
 		{
 			W->OnDragEnter(W->GetCachedGeometry(), DragEvent);
 		}
 		DragDropTargets.push_back(W.ToSharedPtr());
 	}
-	for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+	for (TArray<TSharedRef<SWidget>>::const_reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 	{
 		if (CanReceiveInput(**It) && (*It)->OnDragOver((*It)->GetCachedGeometry(), DragEvent).IsEventHandled())
 		{
@@ -800,7 +818,7 @@ void FSlateApplication::DropOrCancel(const TArray<TSharedRef<SWidget>>* Path, co
 	TSharedPtr<SWidget> Handler;
 	if (!bCancel && Path)
 	{
-		for (auto It = Path->rbegin(); It != Path->rend(); ++It)
+		for (TArray<TSharedRef<SWidget>>::const_reverse_iterator It = Path->rbegin(); It != Path->rend(); ++It)
 		{
 			if (!CanReceiveInput(**It))
 			{
@@ -815,7 +833,7 @@ void FSlateApplication::DropOrCancel(const TArray<TSharedRef<SWidget>>* Path, co
 			}
 		}
 	}
-	for (auto It = DragDropTargets.rbegin(); It != DragDropTargets.rend(); ++It)
+	for (TArray<TWeakPtr<SWidget>>::reverse_iterator It = DragDropTargets.rbegin(); It != DragDropTargets.rend(); ++It)
 	{
 		if (const TSharedPtr<SWidget> W = It->lock())
 		{
@@ -888,7 +906,7 @@ bool FSlateApplication::RouteKeyDown(const FKeyEvent& Event)
 			return true;
 		}
 	}
-	for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+	for (TArray<TSharedRef<SWidget>>::reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 	{
 		if (!CanReceiveInput(**It))
 		{
@@ -919,7 +937,8 @@ bool FSlateApplication::RouteKeyDown(const FKeyEvent& Event)
 	const EUINavigation Direction = NavigationConfig->GetNavigationDirectionFromKey(Event);
 	if (Direction != EUINavigation::Invalid)
 	{
-		const bool bMoved = AttemptNavigation(Direction, UserIndex, Event.IsGamepad() ? ENavigationGenesis::Controller : ENavigationGenesis::Keyboard, Event.GetModifierKeys());
+		const bool bMoved = AttemptNavigation(Direction, UserIndex,
+		    Event.IsGamepad() ? ENavigationGenesis::Controller : ENavigationGenesis::Keyboard, Event.GetModifierKeys());
 		// Tab never reaches the OS or anything else.
 		return bMoved || Direction == EUINavigation::Next || Direction == EUINavigation::Previous;
 	}
@@ -929,7 +948,7 @@ bool FSlateApplication::RouteKeyDown(const FKeyEvent& Event)
 bool FSlateApplication::RouteKeyUp(const FKeyEvent& Event)
 {
 	const TArray<TSharedRef<SWidget>> Path = GetFocusPath(Event.GetUserIndex());
-	for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+	for (TArray<TSharedRef<SWidget>>::const_reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 	{
 		if (!CanReceiveInput(**It))
 		{
@@ -981,7 +1000,7 @@ bool FSlateApplication::OnKeyChar(char32_t Character, bool bIsRepeat)
 {
 	const FCharacterEvent Event(Character, Platform->GetModifierKeys(), 0, bIsRepeat);
 	const TArray<TSharedRef<SWidget>> Path = GetFocusPath(0);
-	for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+	for (TArray<TSharedRef<SWidget>>::const_reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 	{
 		if (!CanReceiveInput(**It))
 		{
@@ -1036,11 +1055,13 @@ bool FSlateApplication::OnGamepadAnalog(int32 UserIndex, EGamepadAxis Axis, floa
 	FSlateUser& User = GetUser(UserIndex);
 	const EUINavigation Direction = NavigationConfig->GetNavigationDirectionFromAnalog(Axis, Value);
 	const bool bHorizontalAxis = Axis == EGamepadAxis::LeftX;
-	const bool bCurrentIsHorizontal = User.AnalogDirection == EUINavigation::Left || User.AnalogDirection == EUINavigation::Right;
+	const bool bCurrentIsHorizontal =
+	    User.AnalogDirection == EUINavigation::Left || User.AnalogDirection == EUINavigation::Right;
 	if (Direction == EUINavigation::Invalid)
 	{
 		// The stick came back on the axis we were navigating along.
-		if (User.AnalogDirection != EUINavigation::Invalid && bHorizontalAxis == bCurrentIsHorizontal && (Axis == EGamepadAxis::LeftX || Axis == EGamepadAxis::LeftY))
+		if (User.AnalogDirection != EUINavigation::Invalid && bHorizontalAxis == bCurrentIsHorizontal &&
+		    (Axis == EGamepadAxis::LeftX || Axis == EGamepadAxis::LeftY))
 		{
 			User.AnalogDirection = EUINavigation::Invalid;
 		}
@@ -1059,7 +1080,8 @@ bool FSlateApplication::OnGamepadAnalog(int32 UserIndex, EGamepadAxis Axis, floa
 // ---------------------------------------------------------------------------
 // Window events
 
-void FSlateApplication::OnSizeChanged(const TSharedRef<IPlatformWindow>& Native, int32 Width, int32 Height, bool bWasMinimized)
+void FSlateApplication::OnSizeChanged(
+    const TSharedRef<IPlatformWindow>& Native, int32 Width, int32 Height, bool bWasMinimized)
 {
 	const TSharedPtr<SWindow> Window = FindWindowForNative(Native.Get());
 	if (!Window || bWasMinimized)
@@ -1089,7 +1111,8 @@ void FSlateApplication::OnDpiScaleChanged(const TSharedRef<IPlatformWindow>& Nat
 	}
 }
 
-void FSlateApplication::OnWindowActivationChanged(const TSharedRef<IPlatformWindow>& Native, EWindowActivation Activation)
+void FSlateApplication::OnWindowActivationChanged(
+    const TSharedRef<IPlatformWindow>& Native, EWindowActivation Activation)
 {
 	const TSharedPtr<SWindow> Window = FindWindowForNative(Native.Get());
 	if (!Window || Window->IsPopupWindow())

@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapTestApp.h"
+#include "Templates/SharedPointer.h"
 
 #include "Widgets/SViewport.h"
 
@@ -10,13 +11,19 @@ bool FMapTestApp::StartServices()
 	Options.EditorContentDir = FPaths::Combine(FPaths::FindContentDir(), "Editor");
 	bEnvironmentStarted = FMapEditorEnvironment::Startup(Options);
 	FString Error;
-	if (!Expect(bEnvironmentStarted && FMapEditorEnvironment::Activate(FMapEditorEnvironment::GetBuiltInGameSet(), &Error),
-		FString::Format("the map core starts with the Genesis game{}", Error.IsEmpty() ? FString() : FString(": ") + Error)))
+	if (!Expect(
+	        bEnvironmentStarted && FMapEditorEnvironment::Activate(FMapEditorEnvironment::GetBuiltInGameSet(), &Error),
+	        FString::Format(
+	            "the map core starts with the Genesis game{}", Error.IsEmpty() ? FString() : FString(": ") + Error)))
 	{
 		return false;
 	}
 	ViewSettings.OnCursorText = [this](const FString& Text) { CursorText = Text; };
-	ViewSettings.OnMessage = [this](const FString& Text) { ToolMessage = Text; SetLastEvent(Text); };
+	ViewSettings.OnMessage = [this](const FString& Text)
+	{
+		ToolMessage = Text;
+		SetLastEvent(Text);
+	};
 	RenderResources = MakeUnique<FMapRenderResources>(GetDevice());
 	SetDocument(FMapDocument::CreateNew());
 	return true;
@@ -52,7 +59,8 @@ void FMapTestApp::SetDocument(TUniquePtr<FMapDocument> NewDocument)
 
 TSharedRef<FMapViewportClient> FMapTestApp::CreateView(EMapViewType Type)
 {
-	auto View = std::make_shared<FMapViewportClient>(GetDevice(), GetRenderer(), *RenderResources, ViewSettings, Type);
+	TSharedPtr<FMapViewportClient> View =
+	    std::make_shared<FMapViewportClient>(GetDevice(), GetRenderer(), *RenderResources, ViewSettings, Type);
 	GetWindowRenderer().AddViewportClient(ToSharedRef(StaticCastSharedPtr<FRenderTargetViewportClient>(View)));
 	View->SetDocument(Document.get());
 	Views.push_back(View);
@@ -112,8 +120,11 @@ void FMapTestApp::Report(const char* What) const
 {
 	Vector3d Min, Max;
 	const bool bAny = Document->GetSelectionBounds(Min, Max);
-	UE_LOG(LogTestApp, Display, "{}: {} brushes, {} entities, {} selected{}", What, Document->CountBrushes(), Document->CountEntities(), Document->GetSelection().size(),
-		bAny ? FString::Format(" at ({:.0f} {:.0f} {:.0f})-({:.0f} {:.0f} {:.0f})", Min.GetX(), Min.GetY(), Min.GetZ(), Max.GetX(), Max.GetY(), Max.GetZ()) : FString());
+	GENESIS_LOG(LogTestApp, Display, "{}: {} brushes, {} entities, {} selected{}", What, Document->CountBrushes(),
+	    Document->CountEntities(), Document->GetSelection().size(),
+	    bAny ? FString::Format(" at ({:.0f} {:.0f} {:.0f})-({:.0f} {:.0f} {:.0f})", Min.GetX(), Min.GetY(), Min.GetZ(),
+	               Max.GetX(), Max.GetY(), Max.GetZ())
+	         : FString());
 }
 
 void FMapTestApp::BuildScene()

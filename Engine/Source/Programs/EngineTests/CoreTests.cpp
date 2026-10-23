@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "TestHelpers.h"
+#include "Templates/SharedPointer.h"
 
 TEST_SUITE("Core")
 {
@@ -45,10 +46,13 @@ TEST_SUITE("Core")
 		struct FCounter
 		{
 			int32 Value = 0;
-			void Add(int32 N) { Value += N; }
+			void Add(int32 N)
+			{
+				Value += N;
+			}
 		};
 
-		auto Counter = std::make_shared<FCounter>();
+		TSharedPtr<FCounter> Counter = std::make_shared<FCounter>();
 		TMulticastDelegate<void(int32)> OnValue;
 		int32 LambdaTotal = 0;
 		const FDelegateHandle LambdaHandle = OnValue.AddLambda([&LambdaTotal](int32 N) { LambdaTotal += N; });
@@ -69,10 +73,10 @@ TEST_SUITE("Core")
 	TEST_CASE("FTransform2D")
 	{
 		const FTransform2D Scale = FTransform2D::FromScale(2.0f);
-		const FTransform2D Move = FTransform2D::FromTranslation({ 10.0f, 5.0f });
+		const FTransform2D Move = FTransform2D::FromTranslation({10.0f, 5.0f});
 		const FTransform2D Both = Scale.Concatenate(Move); // scale, then move
-		CHECK(Both.TransformPoint({ 1.0f, 1.0f }) == FVector2(12.0f, 7.0f));
-		const FVector2 Back = Both.Inverse().TransformPoint({ 12.0f, 7.0f });
+		CHECK(Both.TransformPoint({1.0f, 1.0f}) == FVector2(12.0f, 7.0f));
+		const FVector2 Back = Both.Inverse().TransformPoint({12.0f, 7.0f});
 		CHECK(Back.X == doctest::Approx(1.0f));
 		CHECK(Back.Y == doctest::Approx(1.0f));
 		CHECK(Both.IsAxisAligned());
@@ -85,8 +89,8 @@ TEST_SUITE("Core")
 		const FRect B(5, 5, 20, 20);
 		CHECK(A.IntersectionWith(B) == FRect(5, 5, 10, 10));
 		CHECK(A.IntersectionWith(FRect(20, 20, 30, 30)).IsEmpty());
-		CHECK(A.Contains({ 0.0f, 0.0f }));
-		CHECK_FALSE(A.Contains({ 10.0f, 5.0f }));
+		CHECK(A.Contains({0.0f, 0.0f}));
+		CHECK_FALSE(A.Contains({10.0f, 5.0f}));
 	}
 
 	TEST_CASE("Colors")

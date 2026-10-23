@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{DC1E6E72-B19D-487E-9F33-DAAF63D96317}</ProjectGuid>
+    <RootNamespace>GenesisEditorTest</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\..\Build\Engine.props" />
+  </ImportGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <ConformanceMode>false</ConformanceMode>
+      <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Renderer\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Projects\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)ScriptEditorPlugin\Public;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)MaterialEditor\Public;$(GenesisEditorDir)LandscapeEditor\Public;$(GenesisEditorDir)FoliageEditor\Public;$(GenesisEditorDir)LandscapeEditorUtilities\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir);$(ProjectDir)..\..\GenesisEditor;$(ProjectDir)..\TestAppHarness;$(GenesisThirdPartyDir)FreeType2\include;$(GenesisThirdPartyDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxguid.lib;xinput.lib;imm32.lib;shcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <Manifest>
+      <EnableDpiAwareness>false</EnableDpiAwareness>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\GenesisEditor\GenesisEditor.cpp" />
+    <ClCompile Include="GenesisEditorTest.cpp" />
+    <ClCompile Include="..\TestAppHarness\Screenshot.cpp" />
+    <ClCompile Include="..\..\GenesisEditor\MapEditorPanels.cpp" />
+    <ClCompile Include="..\..\GenesisEditor\MapEditorPreferences.cpp" />
+    <ClCompile Include="..\..\GenesisEditor\MapEditorShell.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\GenesisEditor\MapEditorShell.h" />
+    <ClInclude Include="..\..\GenesisEditor\GenesisEditorApp.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="..\..\GenesisEditor\GenesisEditor.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(GenesisRuntimeDir)Projects\Projects.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C01}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)AssetCore\AssetCore.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C02}</Project></ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)Core\Core.vcxproj">
+      <Project>{E35D228A-878B-5068-9EF0-84E2774DC6F5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)ApplicationCore\ApplicationCore.vcxproj">
+      <Project>{677BA165-FDBA-5E9B-8349-25D75147593A}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)RHI\RHI.vcxproj">
+      <Project>{4EA620B2-9F21-526F-8D58-73DD975601E8}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)SlateCore\SlateCore.vcxproj">
+      <Project>{6F3297E3-299E-599B-A2FE-946001E4FAF7}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)Slate\Slate.vcxproj">
+      <Project>{3F5319A7-A0BC-4053-83E8-316D4FFD074A}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisRuntimeDir)SlateRHIRenderer\SlateRHIRenderer.vcxproj">
+      <Project>{436BBD32-CC21-56E4-94F1-B731DD66653A}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEditorDir)MapCore\MapCore.vcxproj">
+      <Project>{E6B3966D-7CCB-46DB-92A6-40893ED2E9DD}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisEditorDir)MapEditor\MapEditor.vcxproj">
+      <Project>{248D610E-BEDE-4C49-AFD7-43F90E5F4B54}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisThirdPartyDir)FreeType2\FreeType2.vcxproj">
+      <Project>{A394F7D3-D789-4C87-BF42-69FB4B7609A2}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(GenesisThirdPartyDir)HarfBuzz\HarfBuzz.vcxproj">
+      <Project>{FFA50721-3B6E-440F-A253-4B19F430FC5D}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Renderer\Renderer.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C06}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisEditorDir)LandscapeEditor\LandscapeEditor.vcxproj"><Project>{072ACA67-77B1-4E56-B304-C5192AFA8C6A}</Project></ProjectReference><ProjectReference Include="$(GenesisEditorDir)FoliageEditor\FoliageEditor.vcxproj"><Project>{2E8B0EAC-F17E-430F-A16A-A71D7FE07193}</Project></ProjectReference><ProjectReference Include="$(GenesisEditorDir)LandscapeEditorUtilities\LandscapeEditorUtilities.vcxproj"><Project>{80E5D3DF-869E-4E9A-9F5C-25FC68B36A36}</Project></ProjectReference></ItemGroup>
+  <ItemGroup><ProjectReference Include="$(GenesisEditorDir)MaterialEditor\MaterialEditor.vcxproj"><Project>{B872EF2A-5CD5-5124-A061-95C744523123}</Project></ProjectReference></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+<ItemGroup><ProjectReference Include="$(GenesisEditorDir)ScriptEditorPlugin\ScriptEditorPlugin.vcxproj"><Project>{A1B70F21-53E2-41E8-9592-210DF1DEDA25}</Project></ProjectReference></ItemGroup>
+</Project>

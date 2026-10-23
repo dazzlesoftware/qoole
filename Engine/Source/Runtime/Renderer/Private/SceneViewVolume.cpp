@@ -6,7 +6,7 @@ int FSceneViewVolume::BoundBox(const Vector3d corners[8]) const
 	unsigned char all = 0xFF, any = 0;
 	for (int i = 0; i < 8; i++)
 	{
-		const auto& p = corners[i];
+		const Vector3d& p = corners[i];
 		const float depth = Perspective ? p.GetY() : 1.0f;
 		unsigned char code = 0;
 		if (p.GetX() < Minimum.GetX() * depth)
@@ -33,5 +33,5 @@ bool FSceneViewVolume::IsValid() const
 		if (!std::isfinite(V))
 			return false;
 	return Minimum.GetX() < Maximum.GetX() && Minimum.GetY() < Maximum.GetY() && Minimum.GetZ() < Maximum.GetZ() &&
-		   (!Perspective || Minimum.GetY() > 0);
+	    (!Perspective || Minimum.GetY() > 0);
 }

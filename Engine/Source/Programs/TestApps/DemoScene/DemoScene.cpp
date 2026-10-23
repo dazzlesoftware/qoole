@@ -1,13 +1,15 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "DemoScene.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SViewport.h"
 
 namespace
 {
-	const char* const KindNames[] = { "Brush", "Light", "Player start", "Trigger" };
+	const char* const KindNames[] = {"Brush", "Light", "Player start", "Trigger"};
 }
 
 const char* GetEntityKindName(int32 Kind)
@@ -20,7 +22,8 @@ const char* GetEntityKindName(int32 Kind)
 
 FDemoScene::FDemoScene()
 {
-	const auto Add = [this](const char* Name, int32 Kind, FVector2 Position, FVector2 Size, FColor Color)
+	const TFunction<void(const char*, int32, FVector2, FVector2, FColor)> Add =
+	    [this](const char* Name, int32 Kind, FVector2 Position, FVector2 Size, FColor Color)
 	{
 		FDemoEntity E;
 		E.Id = static_cast<int32>(Entities.size()) + 1;
@@ -74,7 +77,7 @@ void FDemoScene::BeginTransaction(const FString& Description)
 {
 	if (Depth++ == 0)
 	{
-		Pending = FUndoStep{ Description, Entities, {} };
+		Pending = FUndoStep{Description, Entities, {}};
 	}
 }
 
@@ -141,7 +144,7 @@ int32 FDemoScene::AddEntity(int32 Kind)
 	BeginTransaction(FString::Format("Add {}", GetEntityKindName(Kind)));
 	Entities.push_back(E);
 	EndTransaction();
-	SetSelection({ E.Id });
+	SetSelection({E.Id});
 	Changed();
 	return E.Id;
 }
@@ -172,14 +175,18 @@ void FDemoEntitySource::GetProperties(TArray<FPropertyDesc>& Out) const
 {
 	const FDemoEntity* E = Scene.Find(Id);
 	Out.push_back(FPropertyDesc("Name", EPropertyType::String, "Name", "General"));
-	Out.push_back(FPropertyDesc("Kind", EPropertyType::Enum, "Kind", "General").SetOptions({ KindNames[0], KindNames[1], KindNames[2], KindNames[3] }));
-	Out.push_back(FPropertyDesc("Visible", EPropertyType::Bool, "Visible", "General").SetToolTip("Hidden objects are not drawn"));
+	Out.push_back(FPropertyDesc("Kind", EPropertyType::Enum, "Kind", "General")
+	        .SetOptions({KindNames[0], KindNames[1], KindNames[2], KindNames[3]}));
+	Out.push_back(
+	    FPropertyDesc("Visible", EPropertyType::Bool, "Visible", "General").SetToolTip("Hidden objects are not drawn"));
 	Out.push_back(FPropertyDesc("Position", EPropertyType::Vector2, "Position", "Transform"));
 	Out.push_back(FPropertyDesc("Size", EPropertyType::Vector2, "Size", "Transform").SetRange(8.0f, 4096.0f));
 	Out.push_back(FPropertyDesc("Color", EPropertyType::Color, "Color", "Appearance"));
 	if (E && E->Kind == 1)
 	{
-		Out.push_back(FPropertyDesc("Brightness", EPropertyType::Float, "Brightness", "Appearance").SetRange(0.0f, 10.0f).SetToolTip("Lights only"));
+		Out.push_back(FPropertyDesc("Brightness", EPropertyType::Float, "Brightness", "Appearance")
+		        .SetRange(0.0f, 10.0f)
+		        .SetToolTip("Lights only"));
 	}
 	Out.push_back(FPropertyDesc("Id", EPropertyType::Int, "Id", "Info").SetReadOnly());
 }
@@ -192,14 +199,22 @@ FPropertyValue FDemoEntitySource::GetValue(FName Property) const
 		return FPropertyValue(false);
 	}
 	const std::string_view P = Property.View();
-	if (P == "Name") return E->Name;
-	if (P == "Kind") return E->Kind;
-	if (P == "Visible") return E->bVisible;
-	if (P == "Position") return E->Position;
-	if (P == "Size") return E->Size;
-	if (P == "Color") return E->Color;
-	if (P == "Brightness") return E->Brightness;
-	if (P == "Id") return E->Id;
+	if (P == "Name")
+		return E->Name;
+	if (P == "Kind")
+		return E->Kind;
+	if (P == "Visible")
+		return E->bVisible;
+	if (P == "Position")
+		return E->Position;
+	if (P == "Size")
+		return E->Size;
+	if (P == "Color")
+		return E->Color;
+	if (P == "Brightness")
+		return E->Brightness;
+	if (P == "Id")
+		return E->Id;
 	return FPropertyValue(false);
 }
 
@@ -211,21 +226,29 @@ void FDemoEntitySource::SetValue(FName Property, const FPropertyValue& Value)
 		return;
 	}
 	const std::string_view P = Property.View();
-	if (P == "Name") E->Name = std::get<FString>(Value);
-	else if (P == "Kind") E->Kind = std::get<int32>(Value);
-	else if (P == "Visible") E->bVisible = std::get<bool>(Value);
-	else if (P == "Position") E->Position = std::get<FVector2>(Value);
-	else if (P == "Size") E->Size = FVector2::Max(std::get<FVector2>(Value), FVector2(8.0f, 8.0f));
-	else if (P == "Color") E->Color = std::get<FColor>(Value);
-	else if (P == "Brightness") E->Brightness = std::get<float>(Value);
+	if (P == "Name")
+		E->Name = std::get<FString>(Value);
+	else if (P == "Kind")
+		E->Kind = std::get<int32>(Value);
+	else if (P == "Visible")
+		E->bVisible = std::get<bool>(Value);
+	else if (P == "Position")
+		E->Position = std::get<FVector2>(Value);
+	else if (P == "Size")
+		E->Size = FVector2::Max(std::get<FVector2>(Value), FVector2(8.0f, 8.0f));
+	else if (P == "Color")
+		E->Color = std::get<FColor>(Value);
+	else if (P == "Brightness")
+		E->Brightness = std::get<float>(Value);
 	Scene.Changed();
 }
 
 // ---------------------------------------------------------------------------
 // Viewport client
 
-FDemoViewportClient::FDemoViewportClient(FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer, FDemoScene& InScene)
-	: FRenderTargetViewportClient(InDevice, InRenderer), Scene(InScene)
+FDemoViewportClient::FDemoViewportClient(
+    FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer, FDemoScene& InScene)
+    : FRenderTargetViewportClient(InDevice, InRenderer), Scene(InScene)
 {
 }
 
@@ -236,7 +259,7 @@ FVector2 FDemoViewportClient::ToWorld(const FGeometry& Geometry, FVector2 Absolu
 
 int32 FDemoViewportClient::PickEntity(FVector2 World) const
 {
-	for (auto It = Scene.Entities.rbegin(); It != Scene.Entities.rend(); ++It)
+	for (TArray<FDemoEntity>::reverse_iterator It = Scene.Entities.rbegin(); It != Scene.Entities.rend(); ++It)
 	{
 		if (It->bVisible && FRect::FromPosSize(It->Position, It->Size).Contains(World))
 		{
@@ -258,11 +281,13 @@ void FDemoViewportClient::FrameSelection()
 	{
 		if (const FDemoEntity* E = Scene.Find(Id))
 		{
-			Bounds = FRect(FVector2::Min(Bounds.GetTopLeft(), E->Position), FVector2::Max(Bounds.GetBottomRight(), E->Position + E->Size));
+			Bounds = FRect(FVector2::Min(Bounds.GetTopLeft(), E->Position),
+			    FVector2::Max(Bounds.GetBottomRight(), E->Position + E->Size));
 		}
 	}
 	const FVector2 View = ViewportWidget->GetCachedGeometry().Size;
-	Zoom = FMath::Clamp(FMath::Min(View.X / (Bounds.Width() + 128.0f), View.Y / (Bounds.Height() + 128.0f)), 0.1f, 8.0f);
+	Zoom =
+	    FMath::Clamp(FMath::Min(View.X / (Bounds.Width() + 128.0f), View.Y / (Bounds.Height() + 128.0f)), 0.1f, 8.0f);
 	Pan = View * 0.5f - Bounds.GetCenter() * Zoom;
 	RequestRedraw();
 }
@@ -293,14 +318,16 @@ FReply FDemoViewportClient::OnMouseButtonDown(const FGeometry& Geometry, const F
 		}
 		if (Event.IsShiftDown())
 		{
-			if (ArrayUtil::Contains(Selection, Hit)) ArrayUtil::Remove(Selection, Hit);
-			else Selection.push_back(Hit);
+			if (ArrayUtil::Contains(Selection, Hit))
+				ArrayUtil::Remove(Selection, Hit);
+			else
+				Selection.push_back(Hit);
 			Scene.SetSelection(Selection);
 			return FReply::Handled();
 		}
 		if (!Scene.IsSelected(Hit))
 		{
-			Scene.SetSelection({ Hit });
+			Scene.SetSelection({Hit});
 		}
 		Drag = EDrag::Move;
 		DragStartWorld = World;
@@ -329,8 +356,11 @@ FReply FDemoViewportClient::OnMouseMove(const FGeometry& Geometry, const FPointe
 	if (Drag == EDrag::Move)
 	{
 		const FVector2 Delta = ToWorld(Geometry, Event.GetAbsolutePosition()) - DragStartWorld;
-		for (const auto& [Id, Start] : DragStartPositions)
+		for (const std::pair<const int, FVector2>& IdBinding : DragStartPositions)
 		{
+			const int& Id = IdBinding.first;
+			const FVector2& Start = IdBinding.second;
+
 			if (FDemoEntity* E = Scene.Find(Id))
 			{
 				E->Position = FVector2(Snap(Start.X + Delta.X), Snap(Start.Y + Delta.Y));
@@ -395,7 +425,9 @@ FCursorReply FDemoViewportClient::OnCursorQuery(const FGeometry& Geometry, const
 	{
 		return FCursorReply::Cursor(Drag == EDrag::Move ? EMouseCursor::CardinalCross : EMouseCursor::GrabHand);
 	}
-	return PickEntity(ToWorld(Geometry, Event.GetAbsolutePosition())) != INDEX_NONE ? FCursorReply::Cursor(EMouseCursor::Hand) : FCursorReply::Cursor(EMouseCursor::Crosshairs);
+	return PickEntity(ToWorld(Geometry, Event.GetAbsolutePosition())) != INDEX_NONE
+	    ? FCursorReply::Cursor(EMouseCursor::Hand)
+	    : FCursorReply::Cursor(EMouseCursor::Crosshairs);
 }
 
 void FDemoViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRHI& RenderTarget)
@@ -408,13 +440,14 @@ void FDemoViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetR
 	const FVector2 View = PixelSize.ToVector2() / Scale;
 	Elements.Reset();
 	Elements.SetViewportSize(PixelSize);
-	const auto Geo = [Scale](FVector2 Position, FVector2 Extent) { return FPaintGeometry::Make(Position, Extent, Scale); };
+	const TFunction<FPaintGeometry(FVector2, FVector2)> Geo = [Scale](FVector2 Position, FVector2 Extent)
+	{ return FPaintGeometry::Make(Position, Extent, Scale); };
 
 	Elements.AddSolidBox(0, Geo(FVector2::Zero(), View), FColor(20, 22, 27));
 	if (bShowGrid)
 	{
 		// Minor lines every 16 units (when not too dense), major every 128.
-		for (const float Step : { 16.0f, 128.0f })
+		for (const float Step : {16.0f, 128.0f})
 		{
 			const float Pixels = Step * Zoom;
 			if (Pixels < 6.0f)
@@ -456,31 +489,43 @@ void FDemoViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetR
 		{
 			const FVector2 C = P + S * 0.5f;
 			const float Glow = S.X * (1.0f + E.Brightness);
-			Elements.AddRoundedBox(3, Geo(C - FVector2(Glow * 0.5f), FVector2(Glow)), E.Color.WithAlpha(40), Glow * 0.5f);
-			Elements.AddRoundedBox(4, Geo(P, S), E.Color, S.X * 0.5f, bSelected ? Selected : FColor(0, 0, 0, 120), bSelected ? 2.0f : 1.0f);
+			Elements.AddRoundedBox(
+			    3, Geo(C - FVector2(Glow * 0.5f), FVector2(Glow)), E.Color.WithAlpha(40), Glow * 0.5f);
+			Elements.AddRoundedBox(4, Geo(P, S), E.Color, S.X * 0.5f, bSelected ? Selected : FColor(0, 0, 0, 120),
+			    bSelected ? 2.0f : 1.0f);
 			break;
 		}
 		case 2: // player start: an arrow
-			Elements.AddRoundedBox(4, Geo(P, S), E.Color.WithAlpha(60), 4.0f, bSelected ? Selected : E.Color, bSelected ? 2.0f : 1.5f);
-			Elements.AddLines(5, Geo(P, S), { FVector2(S.X * 0.25f, S.Y * 0.25f), FVector2(S.X * 0.8f, S.Y * 0.5f), FVector2(S.X * 0.25f, S.Y * 0.75f) }, E.Color, 2.0f, true);
+			Elements.AddRoundedBox(
+			    4, Geo(P, S), E.Color.WithAlpha(60), 4.0f, bSelected ? Selected : E.Color, bSelected ? 2.0f : 1.5f);
+			Elements.AddLines(5, Geo(P, S),
+			    {FVector2(S.X * 0.25f, S.Y * 0.25f), FVector2(S.X * 0.8f, S.Y * 0.5f),
+			        FVector2(S.X * 0.25f, S.Y * 0.75f)},
+			    E.Color, 2.0f, true);
 			break;
 		case 3: // trigger: translucent with an outline
-			Elements.AddRoundedBox(3, Geo(P, S), E.Color.WithAlpha(50), 2.0f, bSelected ? Selected : E.Color, bSelected ? 2.0f : 1.0f);
+			Elements.AddRoundedBox(
+			    3, Geo(P, S), E.Color.WithAlpha(50), 2.0f, bSelected ? Selected : E.Color, bSelected ? 2.0f : 1.0f);
 			break;
 		default: // brush
-			Elements.AddRoundedBox(3, Geo(P, S), E.Color, 2.0f, bSelected ? Selected : FColor(0, 0, 0, 160), bSelected ? 2.0f : 1.0f);
+			Elements.AddRoundedBox(
+			    3, Geo(P, S), E.Color, 2.0f, bSelected ? Selected : FColor(0, 0, 0, 160), bSelected ? 2.0f : 1.0f);
 			break;
 		}
 		if (Font.Font && Zoom >= 0.5f)
 		{
-			const TSharedRef<const FShapedGlyphSequence> Text = Fonts.ShapeText(E.Name.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
-			Elements.AddText(6, Geo(P + FVector2(2.0f, -16.0f), Text->GetLogicalSize()), Text, bSelected ? Selected : FColor(200, 205, 215));
+			const TSharedRef<const FShapedGlyphSequence> Text =
+			    Fonts.ShapeText(E.Name.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
+			Elements.AddText(6, Geo(P + FVector2(2.0f, -16.0f), Text->GetLogicalSize()), Text,
+			    bSelected ? Selected : FColor(200, 205, 215));
 		}
 	}
 	if (Font.Font)
 	{
-		const FString Hint = FString::Format("Zoom {:.0f}%   ·   left: select/move   middle: pan   right: pan (raw mouse)   wheel: zoom", Zoom * 100.0f);
-		const TSharedRef<const FShapedGlyphSequence> Text = Fonts.ShapeText(Hint.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
+		const FString Hint = FString::Format(
+		    "Zoom {:.0f}%   ·   left: select/move   middle: pan   right: pan (raw mouse)   wheel: zoom", Zoom * 100.0f);
+		const TSharedRef<const FShapedGlyphSequence> Text =
+		    Fonts.ShapeText(Hint.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
 		Elements.AddText(7, Geo(FVector2(8.0f, View.Y - 20.0f), Text->GetLogicalSize()), Text, FColor(140, 146, 160));
 	}
 	Renderer.Render(CommandList, RenderTarget.GetTexture(), Elements, FLinearColor(0.0f, 0.0f, 0.0f, 1.0f));

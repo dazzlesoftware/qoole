@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Widgets/Layout/SWrapBox.h"
+#include "Containers/ContainerAliases.h"
 
 #include "Layout/LayoutUtils.h"
 
@@ -75,7 +76,8 @@ void SWrapBox::OnPreArrange(const FGeometry& AllottedGeometry)
 void SWrapBox::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const
 {
 	const float Width = bUseAllottedSize ? AllottedGeometry.Size.X : PreferredSize.Get();
-	Flow(Width, [&](int32 Index, FVector2 Offset, FVector2 Size) { ArrangeSlotChild(AllottedGeometry, ArrangedChildren, Children[Index], Offset, Size); });
+	Flow(Width, [&](int32 Index, FVector2 Offset, FVector2 Size)
+	{ ArrangeSlotChild(AllottedGeometry, ArrangedChildren, Children[Index], Offset, Size); });
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +103,8 @@ FVector2 SCanvas::ComputeDesiredSize(float) const
 		{
 			continue;
 		}
-		const FVector2 Child = Slot.bAutoSize ? Slot.GetWidget()->GetDesiredSize() : FVector2(Slot.OffsetValue.Right, Slot.OffsetValue.Bottom);
+		const FVector2 Child = Slot.bAutoSize ? Slot.GetWidget()->GetDesiredSize()
+		                                      : FVector2(Slot.OffsetValue.Right, Slot.OffsetValue.Bottom);
 		if (!Slot.AnchorsValue.IsStretchedHorizontal())
 		{
 			Size.X = FMath::Max(Size.X, Slot.OffsetValue.Left + Child.X * (1.0f - Slot.AlignmentValue.X));
@@ -122,7 +125,8 @@ void SCanvas::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChil
 	{
 		Order[I] = I;
 	}
-	std::stable_sort(Order.begin(), Order.end(), [this](int32 A, int32 B) { return Children[A].ZOrderValue < Children[B].ZOrderValue; });
+	std::stable_sort(Order.begin(), Order.end(),
+	    [this](int32 A, int32 B) { return Children[A].ZOrderValue < Children[B].ZOrderValue; });
 
 	const FVector2 Area = AllottedGeometry.Size;
 	for (const int32 I : Order)
@@ -154,12 +158,13 @@ void SCanvas::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChil
 			Size.Y = Slot.bAutoSize ? Desired.Y : O.Bottom;
 			Position.Y = A.Minimum.Y * Area.Y + O.Top - Size.Y * Slot.AlignmentValue.Y;
 		}
-		ArrangedChildren.AddWidget(Child->GetVisibility(), FArrangedWidget(Child, AllottedGeometry.MakeChild(Position, FVector2::Max(Size, FVector2::Zero()))));
+		ArrangedChildren.AddWidget(Child->GetVisibility(),
+		    FArrangedWidget(Child, AllottedGeometry.MakeChild(Position, FVector2::Max(Size, FVector2::Zero()))));
 	}
 }
 
-int32 SCanvas::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SCanvas::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	int32 MaxLayer = LayerId;
 	for (const FArrangedWidget& Child : GetArrangedChildren())
@@ -210,12 +215,23 @@ float SScaleBox::ComputeScale(FVector2 Allotted, FVector2 Content) const
 	switch (Stretch)
 	{
 	case EStretch::None:
-	case EStretch::Fill: Scale = 1.0f; break;
-	case EStretch::ScaleToFit: Scale = FMath::Min(FitX, FitY); break;
-	case EStretch::ScaleToFitX: Scale = FitX; break;
-	case EStretch::ScaleToFitY: Scale = FitY; break;
-	case EStretch::ScaleToFill: Scale = FMath::Max(FitX, FitY); break;
-	case EStretch::UserSpecified: return UserSpecifiedScale.Get();
+	case EStretch::Fill:
+		Scale = 1.0f;
+		break;
+	case EStretch::ScaleToFit:
+		Scale = FMath::Min(FitX, FitY);
+		break;
+	case EStretch::ScaleToFitX:
+		Scale = FitX;
+		break;
+	case EStretch::ScaleToFitY:
+		Scale = FitY;
+		break;
+	case EStretch::ScaleToFill:
+		Scale = FMath::Max(FitX, FitY);
+		break;
+	case EStretch::UserSpecified:
+		return UserSpecifiedScale.Get();
 	}
 	if (StretchDirection == EStretchDirection::DownOnly)
 	{
@@ -251,7 +267,8 @@ void SScaleBox::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedCh
 	if (Stretch == EStretch::Fill)
 	{
 		// Fill lays the child out at the full size rather than scaling pixels.
-		ArrangedChildren.AddWidget(Child->GetVisibility(), FArrangedWidget(Child, AllottedGeometry.MakeChild(FVector2::Zero(), AllottedGeometry.Size)));
+		ArrangedChildren.AddWidget(Child->GetVisibility(),
+		    FArrangedWidget(Child, AllottedGeometry.MakeChild(FVector2::Zero(), AllottedGeometry.Size)));
 		return;
 	}
 	const FVector2 Scaled = Child->GetDesiredSize() * ContentScale;
@@ -260,5 +277,6 @@ void SScaleBox::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedCh
 	const float FracX = Slot.GetHAlign() == HAlign_Left ? 0.0f : (Slot.GetHAlign() == HAlign_Right ? 1.0f : 0.5f);
 	const float FracY = Slot.GetVAlign() == VAlign_Top ? 0.0f : (Slot.GetVAlign() == VAlign_Bottom ? 1.0f : 0.5f);
 	const FVector2 Offset((AllottedGeometry.Size.X - Scaled.X) * FracX, (AllottedGeometry.Size.Y - Scaled.Y) * FracY);
-	ArrangedChildren.AddWidget(Child->GetVisibility(), FArrangedWidget(Child, AllottedGeometry.MakeChild(Offset, Child->GetDesiredSize(), ContentScale)));
+	ArrangedChildren.AddWidget(Child->GetVisibility(),
+	    FArrangedWidget(Child, AllottedGeometry.MakeChild(Offset, Child->GetDesiredSize(), ContentScale)));
 }

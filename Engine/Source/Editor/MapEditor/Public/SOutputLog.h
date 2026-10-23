@@ -3,7 +3,7 @@
 // The output log, as in Unreal (OutputLog module):
 //
 //   FOutputLogHistory  an output device that keeps every line written with
-//                      UE_LOG (category, verbosity, time) from when it starts.
+//                      GENESIS_LOG (category, verbosity, time) from when it starts.
 //   SOutputLog         the panel: the lines, colored by verbosity, filtered
 //                      by a search text and by verbosity (errors, warnings,
 //                      messages), with Clear; it follows new lines while it
@@ -64,7 +64,10 @@ public:
 	void Construct(const FArguments& Args);
 
 	// The lines shown (after the filters), for tests.
-	int32 GetNumShown() const { return static_cast<int32>(Shown.size()); }
+	int32 GetNumShown() const
+	{
+		return static_cast<int32>(Shown.size());
+	}
 	void SetFilterText(const FString& Text);
 
 private:
@@ -80,8 +83,8 @@ private:
 	void Refilter();
 	void Poll();
 
-	TArray<FOutputLogMessage> All;   // every message read from the history
-	TArray<int32> Shown;             // indices into All
+	TArray<FOutputLogMessage> All; // every message read from the history
+	TArray<int32> Shown;           // indices into All
 	uint64 NextSerial = 0;
 	FFilter Filter;
 	TSharedPtr<SListView<int32>> List;

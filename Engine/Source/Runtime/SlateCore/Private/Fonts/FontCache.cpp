@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Fonts/FontCache.h"
+#include "Templates/SharedPointer.h"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -31,7 +32,7 @@ namespace
 		const hb_script_t Script = hb_unicode_script(Unicode, CodePoint);
 		return Script == HB_SCRIPT_COMMON || Script == HB_SCRIPT_INHERITED;
 	}
-}
+} // namespace
 
 // ---------------------------------------------------------------------------
 
@@ -71,7 +72,7 @@ void FFontAtlasPage::MarkDirty(const FIntRect& Rect)
 	else
 	{
 		DirtyRect = FIntRect(FMath::Min(DirtyRect->Left, Rect.Left), FMath::Min(DirtyRect->Top, Rect.Top),
-			FMath::Max(DirtyRect->Right, Rect.Right), FMath::Max(DirtyRect->Bottom, Rect.Bottom));
+		    FMath::Max(DirtyRect->Right, Rect.Right), FMath::Max(DirtyRect->Bottom, Rect.Bottom));
 	}
 	++Revision;
 }
@@ -87,7 +88,7 @@ FSlateFontCache::FSlateFontCache()
 	}
 	else
 	{
-		UE_LOG(LogFont, Error, "FT_Init_FreeType failed");
+		GENESIS_LOG(LogFont, Error, "FT_Init_FreeType failed");
 	}
 	Buffer = hb_buffer_create();
 }
@@ -103,7 +104,7 @@ TSharedPtr<FFontFace> FSlateFontCache::LoadFace(const FString& Path)
 	TArray<uint8> Data;
 	if (!FFileHelper::LoadFileToArray(Data, Path))
 	{
-		UE_LOG(LogFont, Error, "Cannot read font file \"{}\"", Path);
+		GENESIS_LOG(LogFont, Error, "Cannot read font file \"{}\"", Path);
 		return nullptr;
 	}
 	return LoadFaceFromMemory(std::move(Data));
@@ -118,9 +119,10 @@ TSharedPtr<FFontFace> FSlateFontCache::LoadFaceFromMemory(TArray<uint8> Data)
 	TSharedPtr<FFontFace> Face(new FFontFace());
 	Face->Library = Library;
 	Face->Data = std::move(Data);
-	if (FT_New_Memory_Face(Library.get(), Face->Data.data(), static_cast<FT_Long>(Face->Data.size()), 0, &Face->Face) != 0)
+	if (FT_New_Memory_Face(Library.get(), Face->Data.data(), static_cast<FT_Long>(Face->Data.size()), 0, &Face->Face) !=
+	    0)
 	{
-		UE_LOG(LogFont, Error, "FreeType cannot open the font");
+		GENESIS_LOG(LogFont, Error, "FreeType cannot open the font");
 		return nullptr;
 	}
 	FT_Select_Charmap(Face->Face, FT_ENCODING_UNICODE);
@@ -129,23 +131,27 @@ TSharedPtr<FFontFace> FSlateFontCache::LoadFaceFromMemory(TArray<uint8> Data)
 	Face->Id = NextFaceId++;
 	Face->FamilyName = Face->Face->family_name ? Face->Face->family_name : "";
 	Face->StyleName = Face->Face->style_name ? Face->Face->style_name : "";
-	UE_LOG(LogFont, Log, "Loaded font {} {} ({} glyphs)", Face->FamilyName, Face->StyleName, Face->Face->num_glyphs);
+	GENESIS_LOG(
+	    LogFont, Log, "Loaded font {} {} ({} glyphs)", Face->FamilyName, Face->StyleName, Face->Face->num_glyphs);
 	return Face;
 }
 
-TSharedRef<const FShapedGlyphSequence> FSlateFontCache::ShapeText(std::string_view Text, const FSlateFontInfo& Font, float Scale)
+TSharedRef<const FShapedGlyphSequence> FSlateFontCache::ShapeText(
+    std::string_view Text, const FSlateFontInfo& Font, float Scale)
 {
 	check(Font.Font && !Font.Font->Faces.empty() && Scale > 0.0f);
 	const float PixelSize = Font.Size * Scale;
 	const int32 Size26_6 = ToSize26_6(PixelSize);
 
-	const FString Key = FString::Format("{}|{}|{}|{}", static_cast<const void*>(Font.Font.get()), Size26_6, Scale, Text);
-	if (auto It = ShapeCache.find(Key); It != ShapeCache.end())
+	const FString Key =
+	    FString::Format("{}|{}|{}|{}", static_cast<const void*>(Font.Font.get()), Size26_6, Scale, Text);
+	if (TMap<FString, TSharedRef<const FShapedGlyphSequence>>::iterator It = ShapeCache.find(Key);
+	    It != ShapeCache.end())
 	{
 		return It->second;
 	}
 
-	auto Result = std::make_shared<FShapedGlyphSequence>();
+	TSharedPtr<FShapedGlyphSequence> Result = std::make_shared<FShapedGlyphSequence>();
 	Result->PixelSize = static_cast<float>(Size26_6) / 64.0f;
 	Result->Scale = Scale;
 
@@ -174,7 +180,8 @@ TSharedRef<const FShapedGlyphSequence> FSlateFontCache::ShapeText(std::string_vi
 		const char* CharStart = Cursor;
 		const char32_t CodePoint = FUtf8::Decode(Cursor, End);
 		int32 FaceIndex = 0;
-		if (!Runs.empty() && StaysWithPreviousRun(Unicode, CodePoint) && Faces[Runs.back().FaceIndex]->HasCharacter(CodePoint))
+		if (!Runs.empty() && StaysWithPreviousRun(Unicode, CodePoint) &&
+		    Faces[Runs.back().FaceIndex]->HasCharacter(CodePoint))
 		{
 			FaceIndex = Runs.back().FaceIndex;
 		}
@@ -197,7 +204,7 @@ TSharedRef<const FShapedGlyphSequence> FSlateFontCache::ShapeText(std::string_vi
 		}
 		else
 		{
-			Runs.push_back({ FaceIndex, Offset, Length });
+			Runs.push_back({FaceIndex, Offset, Length});
 		}
 	}
 
@@ -256,8 +263,8 @@ FVector2 FSlateFontCache::MeasureText(std::string_view Text, const FSlateFontInf
 const FCachedGlyph& FSlateFontCache::GetGlyph(const FFontFace& Face, float PixelSize, uint32 GlyphIndex)
 {
 	const int32 Size26_6 = ToSize26_6(PixelSize);
-	const FGlyphKey Key{ Face.GetId(), Size26_6, GlyphIndex };
-	if (auto It = Glyphs.find(Key); It != Glyphs.end())
+	const FGlyphKey Key{Face.GetId(), Size26_6, GlyphIndex};
+	if (TMap<FGlyphKey, FCachedGlyph, FGlyphKeyHash>::iterator It = Glyphs.find(Key); It != Glyphs.end())
 	{
 		return It->second;
 	}
@@ -265,7 +272,8 @@ const FCachedGlyph& FSlateFontCache::GetGlyph(const FFontFace& Face, float Pixel
 	FCachedGlyph Cached;
 	Face.SetPixelSize(Size26_6);
 	FT_Face FTFace = Face.GetFTFace();
-	if (FT_Load_Glyph(FTFace, GlyphIndex, GlyphLoadFlags) == 0 && FT_Render_Glyph(FTFace->glyph, FT_RENDER_MODE_NORMAL) == 0)
+	if (FT_Load_Glyph(FTFace, GlyphIndex, GlyphLoadFlags) == 0 &&
+	    FT_Render_Glyph(FTFace->glyph, FT_RENDER_MODE_NORMAL) == 0)
 	{
 		const FT_GlyphSlot Slot = FTFace->glyph;
 		const FT_Bitmap& Bitmap = Slot->bitmap;
@@ -283,20 +291,22 @@ const FCachedGlyph& FSlateFontCache::GetGlyph(const FFontFace& Face, float Pixel
 			}
 			if (!Slot2)
 			{
-				auto Page = MakeUnique<FFontAtlasPage>();
+				TUniquePtr<FFontAtlasPage> Page = MakeUnique<FFontAtlasPage>();
 				Page->Pixels.assign(SIZE_T(FFontAtlasPage::Size) * FFontAtlasPage::Size, 0);
 				Pages.push_back(std::move(Page));
 				PageIndex = static_cast<int32>(Pages.size()) - 1;
 				Slot2 = Pages[PageIndex]->Packer.Allocate(Width, Height);
-				UE_LOG(LogFont, Log, "Glyph atlas page {} created", PageIndex);
+				GENESIS_LOG(LogFont, Log, "Glyph atlas page {} created", PageIndex);
 			}
 			if (Slot2)
 			{
 				FFontAtlasPage& Page = *Pages[PageIndex];
 				for (int32 Row = 0; Row < Height; ++Row)
 				{
-					const uint8* Source = Bitmap.buffer + (Bitmap.pitch >= 0 ? Row * Bitmap.pitch : (Height - 1 - Row) * -Bitmap.pitch);
-					memcpy(&Page.Pixels[SIZE_T(Slot2->Top + Row) * FFontAtlasPage::Size + Slot2->Left], Source, SIZE_T(Width));
+					const uint8* Source =
+					    Bitmap.buffer + (Bitmap.pitch >= 0 ? Row * Bitmap.pitch : (Height - 1 - Row) * -Bitmap.pitch);
+					memcpy(&Page.Pixels[SIZE_T(Slot2->Top + Row) * FFontAtlasPage::Size + Slot2->Left], Source,
+					    SIZE_T(Width));
 				}
 				Page.MarkDirty(*Slot2);
 				Cached.PageIndex = PageIndex;
@@ -304,7 +314,7 @@ const FCachedGlyph& FSlateFontCache::GetGlyph(const FFontFace& Face, float Pixel
 			}
 			else
 			{
-				UE_LOG(LogFont, Warning, "Glyph {} ({}x{}) does not fit an atlas page", GlyphIndex, Width, Height);
+				GENESIS_LOG(LogFont, Warning, "Glyph {} ({}x{}) does not fit an atlas page", GlyphIndex, Width, Height);
 			}
 		}
 	}

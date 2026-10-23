@@ -1,6 +1,9 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Renderer/LandscapeTextures.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
+#include "Internationalization/TextLocalization.h"
 #include "Assets/RenderAssets.h"
 #include "World/WorldGeometry.h"
 #include "Logging/Log.h"
@@ -26,192 +29,193 @@
 static FLogCategory LogLandscapeTextures{"LogLandscapeTextures", ELogVerbosity::Log};
 namespace
 {
-std::weak_ptr<FAssetRegistry> AssetRegistry;
-uint64 AssetContext = 0;
-bool ParseTextureToken(const FString& Token, FAssetReference& Out, FString& Error)
-{
-	return FWorldGeometryCodec::ParseTextureToken(Token, Out, Error);
-}
-bool LoadTexture(const FString& Token, FTextureAsset& Out, FString& Error)
-{
-	FAssetReference Ref;
-	if (!ParseTextureToken(Token, Ref, Error))
-		return false;
-	auto Registry = AssetRegistry.lock();
-	if (!Registry)
+	std::weak_ptr<FAssetRegistry> AssetRegistry;
+	uint64 AssetContext = 0;
+	bool ParseTextureToken(const FString& Token, FAssetReference& Out, FString& Error)
 	{
-		Error = "No asset registry is available for this landscape texture.";
-		return false;
+		return FWorldGeometryCodec::ParseTextureToken(Token, Out, Error);
 	}
-	return FRenderAssetLoader(*Registry).LoadTexture(Ref, Out, Error);
-}
-
-constexpr float Pi = 3.14159265f;
-constexpr int32 BuiltInSize = 256;
-std::string NativeTextureRevision(const Landscape& Land)
-{
-	for (const auto& Layer : Land.GetLayers())
-		if (Layer.texture.rfind("asset:", 0) == 0)
-			return FLandscapeTextureLibrary::RevisionKey();
-	return {};
-}
-
-// 0 to 1, fixed per lattice point and seed.
-float Hash01(int32 X, int32 Y, uint32 Seed)
-{
-	uint32 H = static_cast<uint32>(X) * 374761393u + static_cast<uint32>(Y) * 668265263u + Seed * 2246822519u;
-	H = (H ^ (H >> 13)) * 1274126177u;
-	H ^= H >> 16;
-	return static_cast<float>(H & 0xFFFFu) / 65535.0f;
-}
-
-// Smooth noise over a lattice that repeats every Period cells, so the
-// patterns tile.
-float ValueNoise(float X, float Y, int32 Period, uint32 Seed)
-{
-	const int32 X0 = static_cast<int32>(std::floor(X));
-	const int32 Y0 = static_cast<int32>(std::floor(Y));
-	const float FX = X - static_cast<float>(X0);
-	const float FY = Y - static_cast<float>(Y0);
-	const auto Wrap = [Period](int32 V) { return ((V % Period) + Period) % Period; };
-	const auto At = [&](int32 DX, int32 DY) { return Hash01(Wrap(X0 + DX), Wrap(Y0 + DY), Seed); };
-	const float SX = FX * FX * (3.0f - 2.0f * FX);
-	const float SY = FY * FY * (3.0f - 2.0f * FY);
-	const float Top = At(0, 0) + (At(1, 0) - At(0, 0)) * SX;
-	const float Bottom = At(0, 1) + (At(1, 1) - At(0, 1)) * SX;
-	return Top + (Bottom - Top) * SY;
-}
-
-// Octaves of noise from Frequency cells across the tile; 0 to 1.
-float Fbm(float U, float V, int32 Frequency, int32 Octaves, uint32 Seed)
-{
-	float Sum = 0.0f;
-	float Amplitude = 0.5f;
-	float Total = 0.0f;
-	for (int32 Octave = 0; Octave < Octaves; ++Octave)
+	bool LoadTexture(const FString& Token, FTextureAsset& Out, FString& Error)
 	{
-		const int32 Cells = Frequency << Octave;
-		Sum += ValueNoise(U * static_cast<float>(Cells), V * static_cast<float>(Cells), Cells,
-						  Seed + static_cast<uint32>(Octave) * 101u) *
-			   Amplitude;
-		Total += Amplitude;
-		Amplitude *= 0.5f;
-	}
-	return Sum / Total;
-}
-
-// The built-in patterns: brightness around 1 at each point of the tile.
-float Pattern(const FString& Name, float U, float V, int32 X, int32 Y)
-{
-	if (Name == "Grass")
-	{
-		// Patches, and blades running one way.
-		const float Patches = Fbm(U, V, 4, 4, 11) - 0.5f;
-		const float Blades = ValueNoise(U * 128.0f, V * 32.0f, 128, 12) - 0.5f;
-		const float Fine = Hash01(X, Y, 13) - 0.5f;
-		return 1.0f + 0.34f * Patches + 0.3f * Blades + 0.12f * Fine;
-	}
-	if (Name == "Rock")
-	{
-		// Broad slabs with dark cracks between them.
-		const float Slabs = Fbm(U, V, 4, 5, 21) - 0.5f;
-		const float Ridge = 1.0f - std::fabs(2.0f * Fbm(U, V, 6, 4, 22) - 1.0f);
-		const float Grain = Hash01(X, Y, 23) - 0.5f;
-		return 1.0f + 0.5f * Slabs - 0.45f * std::pow(Ridge, 10.0f) + 0.1f * Grain;
-	}
-	if (Name == "Dirt")
-	{
-		// Clods, and pebbles here and there.
-		const float Clods = Fbm(U, V, 8, 5, 31) - 0.5f;
-		const float Pebble = ValueNoise(U * 48.0f, V * 48.0f, 48, 32);
-		return (1.0f + 0.42f * Clods + 0.1f * (Hash01(X, Y, 33) - 0.5f)) * (Pebble > 0.86f ? 1.22f : 1.0f);
-	}
-	if (Name == "Sand")
-	{
-		// Fine grain over wind ripples.
-		const float Warp = Fbm(U, V, 4, 3, 41);
-		const float Ripples = std::sin(2.0f * Pi * (V * 12.0f + Warp * 1.5f));
-		return 1.0f + 0.07f * Ripples + 0.1f * (Fbm(U, V, 32, 2, 42) - 0.5f) + 0.1f * (Hash01(X, Y, 43) - 0.5f);
-	}
-	// Snow: soft drifts and a little sparkle.
-	const float Drifts = Fbm(U, V, 4, 4, 51) - 0.5f;
-	return 1.0f + 0.12f * Drifts + (Hash01(X, Y, 52) > 0.996f ? 0.08f : 0.0f);
-}
-
-FLandscapeImage MakeBuiltIn(const FString& Name)
-{
-	FLandscapeImage Image;
-	Image.Width = BuiltInSize;
-	Image.Height = BuiltInSize;
-	Image.Pixels.resize(static_cast<SIZE_T>(BuiltInSize) * BuiltInSize * 4);
-	for (int32 Y = 0; Y < BuiltInSize; ++Y)
-	{
-		for (int32 X = 0; X < BuiltInSize; ++X)
+		FAssetReference Ref;
+		if (!ParseTextureToken(Token, Ref, Error))
+			return false;
+		TSharedPtr<FAssetRegistry> Registry = AssetRegistry.lock();
+		if (!Registry)
 		{
-			const float U = static_cast<float>(X) / BuiltInSize;
-			const float V = static_cast<float>(Y) / BuiltInSize;
-			const uint8 Value =
-				static_cast<uint8>(FMath::Clamp(Pattern(Name, U, V, X, Y) * 128.0f + 0.5f, 0.0f, 255.0f));
-			uint8* Texel = &Image.Pixels[(static_cast<SIZE_T>(Y) * BuiltInSize + X) * 4];
-			Texel[0] = Texel[1] = Texel[2] = Value;
-			Texel[3] = 255;
+			Error = GENESIS_TEXT("No asset registry is available for this landscape texture.");
+			return false;
 		}
+		return FRenderAssetLoader(*Registry).LoadTexture(Ref, Out, Error);
 	}
-	return Image;
-}
 
-// Each mip half the one before (the 2 x 2 texels' average), to 1 x 1.
-void MakeMips(FLandscapeTexture& Texture)
-{
-	while (Texture.Mips.back().Width > 1 || Texture.Mips.back().Height > 1)
+	constexpr float Pi = 3.14159265f;
+	constexpr int32 BuiltInSize = 256;
+	std::string NativeTextureRevision(const Landscape& Land)
 	{
-		const FLandscapeImage& From = Texture.Mips.back();
-		FLandscapeImage To;
-		To.Width = FMath::Max(From.Width / 2, 1);
-		To.Height = FMath::Max(From.Height / 2, 1);
-		To.Pixels.resize(static_cast<SIZE_T>(To.Width) * To.Height * 4);
-		for (int32 Y = 0; Y < To.Height; ++Y)
+		for (const LandscapeLayer& Layer : Land.GetLayers())
+			if (Layer.texture.rfind("asset:", 0) == 0)
+				return FLandscapeTextureLibrary::RevisionKey();
+		return {};
+	}
+
+	// 0 to 1, fixed per lattice point and seed.
+	float Hash01(int32 X, int32 Y, uint32 Seed)
+	{
+		uint32 H = static_cast<uint32>(X) * 374761393u + static_cast<uint32>(Y) * 668265263u + Seed * 2246822519u;
+		H = (H ^ (H >> 13)) * 1274126177u;
+		H ^= H >> 16;
+		return static_cast<float>(H & 0xFFFFu) / 65535.0f;
+	}
+
+	// Smooth noise over a lattice that repeats every Period cells, so the
+	// patterns tile.
+	float ValueNoise(float X, float Y, int32 Period, uint32 Seed)
+	{
+		const int32 X0 = static_cast<int32>(std::floor(X));
+		const int32 Y0 = static_cast<int32>(std::floor(Y));
+		const float FX = X - static_cast<float>(X0);
+		const float FY = Y - static_cast<float>(Y0);
+		const TFunction<int32(int32)> Wrap = [Period](int32 V) { return ((V % Period) + Period) % Period; };
+		const TFunction<float(int32, int32)> At = [&](int32 DX, int32 DY)
+		{ return Hash01(Wrap(X0 + DX), Wrap(Y0 + DY), Seed); };
+		const float SX = FX * FX * (3.0f - 2.0f * FX);
+		const float SY = FY * FY * (3.0f - 2.0f * FY);
+		const float Top = At(0, 0) + (At(1, 0) - At(0, 0)) * SX;
+		const float Bottom = At(0, 1) + (At(1, 1) - At(0, 1)) * SX;
+		return Top + (Bottom - Top) * SY;
+	}
+
+	// Octaves of noise from Frequency cells across the tile; 0 to 1.
+	float Fbm(float U, float V, int32 Frequency, int32 Octaves, uint32 Seed)
+	{
+		float Sum = 0.0f;
+		float Amplitude = 0.5f;
+		float Total = 0.0f;
+		for (int32 Octave = 0; Octave < Octaves; ++Octave)
 		{
-			for (int32 X = 0; X < To.Width; ++X)
+			const int32 Cells = Frequency << Octave;
+			Sum += ValueNoise(U * static_cast<float>(Cells), V * static_cast<float>(Cells), Cells,
+			           Seed + static_cast<uint32>(Octave) * 101u) *
+			    Amplitude;
+			Total += Amplitude;
+			Amplitude *= 0.5f;
+		}
+		return Sum / Total;
+	}
+
+	// The built-in patterns: brightness around 1 at each point of the tile.
+	float Pattern(const FString& Name, float U, float V, int32 X, int32 Y)
+	{
+		if (Name == "Grass")
+		{
+			// Patches, and blades running one way.
+			const float Patches = Fbm(U, V, 4, 4, 11) - 0.5f;
+			const float Blades = ValueNoise(U * 128.0f, V * 32.0f, 128, 12) - 0.5f;
+			const float Fine = Hash01(X, Y, 13) - 0.5f;
+			return 1.0f + 0.34f * Patches + 0.3f * Blades + 0.12f * Fine;
+		}
+		if (Name == "Rock")
+		{
+			// Broad slabs with dark cracks between them.
+			const float Slabs = Fbm(U, V, 4, 5, 21) - 0.5f;
+			const float Ridge = 1.0f - std::fabs(2.0f * Fbm(U, V, 6, 4, 22) - 1.0f);
+			const float Grain = Hash01(X, Y, 23) - 0.5f;
+			return 1.0f + 0.5f * Slabs - 0.45f * std::pow(Ridge, 10.0f) + 0.1f * Grain;
+		}
+		if (Name == "Dirt")
+		{
+			// Clods, and pebbles here and there.
+			const float Clods = Fbm(U, V, 8, 5, 31) - 0.5f;
+			const float Pebble = ValueNoise(U * 48.0f, V * 48.0f, 48, 32);
+			return (1.0f + 0.42f * Clods + 0.1f * (Hash01(X, Y, 33) - 0.5f)) * (Pebble > 0.86f ? 1.22f : 1.0f);
+		}
+		if (Name == "Sand")
+		{
+			// Fine grain over wind ripples.
+			const float Warp = Fbm(U, V, 4, 3, 41);
+			const float Ripples = std::sin(2.0f * Pi * (V * 12.0f + Warp * 1.5f));
+			return 1.0f + 0.07f * Ripples + 0.1f * (Fbm(U, V, 32, 2, 42) - 0.5f) + 0.1f * (Hash01(X, Y, 43) - 0.5f);
+		}
+		// Snow: soft drifts and a little sparkle.
+		const float Drifts = Fbm(U, V, 4, 4, 51) - 0.5f;
+		return 1.0f + 0.12f * Drifts + (Hash01(X, Y, 52) > 0.996f ? 0.08f : 0.0f);
+	}
+
+	FLandscapeImage MakeBuiltIn(const FString& Name)
+	{
+		FLandscapeImage Image;
+		Image.Width = BuiltInSize;
+		Image.Height = BuiltInSize;
+		Image.Pixels.resize(static_cast<SIZE_T>(BuiltInSize) * BuiltInSize * 4);
+		for (int32 Y = 0; Y < BuiltInSize; ++Y)
+		{
+			for (int32 X = 0; X < BuiltInSize; ++X)
 			{
-				for (int32 C = 0; C < 4; ++C)
-				{
-					int32 Sum = 0;
-					for (int32 DY = 0; DY < 2; ++DY)
-					{
-						for (int32 DX = 0; DX < 2; ++DX)
-						{
-							const int32 SX = FMath::Min(X * 2 + DX, From.Width - 1);
-							const int32 SY = FMath::Min(Y * 2 + DY, From.Height - 1);
-							Sum += From.Pixels[(static_cast<SIZE_T>(SY) * From.Width + SX) * 4 + C];
-						}
-					}
-					To.Pixels[(static_cast<SIZE_T>(Y) * To.Width + X) * 4 + C] = static_cast<uint8>((Sum + 2) / 4);
-				}
+				const float U = static_cast<float>(X) / BuiltInSize;
+				const float V = static_cast<float>(Y) / BuiltInSize;
+				const uint8 Value =
+				    static_cast<uint8>(FMath::Clamp(Pattern(Name, U, V, X, Y) * 128.0f + 0.5f, 0.0f, 255.0f));
+				uint8* Texel = &Image.Pixels[(static_cast<SIZE_T>(Y) * BuiltInSize + X) * 4];
+				Texel[0] = Texel[1] = Texel[2] = Value;
+				Texel[3] = 255;
 			}
 		}
-		Texture.Mips.push_back(std::move(To));
+		return Image;
 	}
-}
 
-bool SameLook(const Landscape& A, const Landscape& B)
-{
-	if (A.GetQuadsX() != B.GetQuadsX() || A.GetQuadsY() != B.GetQuadsY() || A.GetQuadSize() != B.GetQuadSize() ||
-		A.GetNumLayers() != B.GetNumLayers())
+	// Each mip half the one before (the 2 x 2 texels' average), to 1 x 1.
+	void MakeMips(FLandscapeTexture& Texture)
 	{
-		return false;
+		while (Texture.Mips.back().Width > 1 || Texture.Mips.back().Height > 1)
+		{
+			const FLandscapeImage& From = Texture.Mips.back();
+			FLandscapeImage To;
+			To.Width = FMath::Max(From.Width / 2, 1);
+			To.Height = FMath::Max(From.Height / 2, 1);
+			To.Pixels.resize(static_cast<SIZE_T>(To.Width) * To.Height * 4);
+			for (int32 Y = 0; Y < To.Height; ++Y)
+			{
+				for (int32 X = 0; X < To.Width; ++X)
+				{
+					for (int32 C = 0; C < 4; ++C)
+					{
+						int32 Sum = 0;
+						for (int32 DY = 0; DY < 2; ++DY)
+						{
+							for (int32 DX = 0; DX < 2; ++DX)
+							{
+								const int32 SX = FMath::Min(X * 2 + DX, From.Width - 1);
+								const int32 SY = FMath::Min(Y * 2 + DY, From.Height - 1);
+								Sum += From.Pixels[(static_cast<SIZE_T>(SY) * From.Width + SX) * 4 + C];
+							}
+						}
+						To.Pixels[(static_cast<SIZE_T>(Y) * To.Width + X) * 4 + C] = static_cast<uint8>((Sum + 2) / 4);
+					}
+				}
+			}
+			Texture.Mips.push_back(std::move(To));
+		}
 	}
-	for (int32 Index = 0; Index < A.GetNumLayers(); ++Index)
+
+	bool SameLook(const Landscape& A, const Landscape& B)
 	{
-		const LandscapeLayer& LA = A.GetLayers()[static_cast<SIZE_T>(Index)];
-		const LandscapeLayer& LB = B.GetLayers()[static_cast<SIZE_T>(Index)];
-		if (LA.r != LB.r || LA.g != LB.g || LA.b != LB.b || LA.texture != LB.texture || LA.tiling != LB.tiling)
+		if (A.GetQuadsX() != B.GetQuadsX() || A.GetQuadsY() != B.GetQuadsY() || A.GetQuadSize() != B.GetQuadSize() ||
+		    A.GetNumLayers() != B.GetNumLayers())
 		{
 			return false;
 		}
+		for (int32 Index = 0; Index < A.GetNumLayers(); ++Index)
+		{
+			const LandscapeLayer& LA = A.GetLayers()[static_cast<SIZE_T>(Index)];
+			const LandscapeLayer& LB = B.GetLayers()[static_cast<SIZE_T>(Index)];
+			if (LA.r != LB.r || LA.g != LB.g || LA.b != LB.b || LA.texture != LB.texture || LA.tiling != LB.tiling)
+			{
+				return false;
+			}
+		}
+		return true;
 	}
-	return true;
-}
 } // namespace
 
 void FLandscapeTexture::Sample(float U, float V, float Footprint, float Out[3]) const
@@ -220,7 +224,7 @@ void FLandscapeTexture::Sample(float U, float V, float Footprint, float Out[3]) 
 	// averages its pattern instead of picking texels from it.
 	const float SourceTexels = Footprint * static_cast<float>(Mips[0].Width);
 	const int32 Level = FMath::Clamp(static_cast<int32>(std::floor(std::log2(FMath::Max(SourceTexels, 1.0f)))), 0,
-									 static_cast<int32>(Mips.size()) - 1);
+	    static_cast<int32>(Mips.size()) - 1);
 	const FLandscapeImage& Mip = Mips[static_cast<SIZE_T>(Level)];
 	const float X = (U - std::floor(U)) * static_cast<float>(Mip.Width) - 0.5f;
 	const float Y = (V - std::floor(V)) * static_cast<float>(Mip.Height) - 0.5f;
@@ -228,7 +232,8 @@ void FLandscapeTexture::Sample(float U, float V, float Footprint, float Out[3]) 
 	const int32 Y0 = static_cast<int32>(std::floor(Y));
 	const float FX = X - static_cast<float>(X0);
 	const float FY = Y - static_cast<float>(Y0);
-	const auto Texel = [&Mip](int32 TX, int32 TY) {
+	const TFunction<const unsigned char*(int32, int32)> Texel = [&Mip](int32 TX, int32 TY)
+	{
 		TX = ((TX % Mip.Width) + Mip.Width) % Mip.Width;
 		TY = ((TY % Mip.Height) + Mip.Height) % Mip.Height;
 		return &Mip.Pixels[(static_cast<SIZE_T>(TY) * Mip.Width + TX) * 4];
@@ -292,11 +297,14 @@ const FLandscapeTexture* FLandscapeTextureLibrary::Find(const std::string& Textu
 {
 	if (Texture.rfind("asset:", 0) == 0)
 	{
-		const auto Revision = FLandscapeTextureLibrary::RevisionKey();
+		const std::string Revision = FLandscapeTextureLibrary::RevisionKey();
 		if (Revision != NativeRevision)
 		{
-			std::erase_if(Textures, [](const auto& Entry) { return Entry.first.rfind("asset:", 0) == 0; });
-			std::erase_if(Failed, [](const auto& Entry) { return Entry.first.rfind("asset:", 0) == 0; });
+			std::erase_if(Textures,
+			    [](const std::map<std::string, std::unique_ptr<FLandscapeTexture>>::value_type& Entry)
+			{ return Entry.first.rfind("asset:", 0) == 0; });
+			std::erase_if(Failed, [](const std::map<std::string, bool>::value_type& Entry)
+			{ return Entry.first.rfind("asset:", 0) == 0; });
 			NativeRevision = Revision;
 		}
 	}
@@ -304,17 +312,18 @@ const FLandscapeTexture* FLandscapeTextureLibrary::Find(const std::string& Textu
 	{
 		return nullptr;
 	}
-	if (const auto Found = Textures.find(Texture); Found != Textures.end())
+	if (const std::map<std::string, std::unique_ptr<FLandscapeTexture>>::iterator Found = Textures.find(Texture);
+	    Found != Textures.end())
 	{
 		return Found->second.get();
 	}
-	auto Made = std::make_unique<FLandscapeTexture>();
+	TUniquePtr<FLandscapeTexture> Made = std::make_unique<FLandscapeTexture>();
 	if (Texture.rfind("builtin:", 0) == 0)
 	{
 		const FString Name(Texture.substr(8));
 		if (std::find(GetBuiltInNames().begin(), GetBuiltInNames().end(), Name) == GetBuiltInNames().end())
 		{
-			UE_LOG(LogLandscapeTextures, Warning, "No built-in landscape texture named {}", Name);
+			GENESIS_LOG(LogLandscapeTextures, Warning, "No built-in landscape texture named {}", Name);
 			Failed[Texture] = true;
 			return nullptr;
 		}
@@ -341,7 +350,7 @@ const FLandscapeTexture* FLandscapeTextureLibrary::Find(const std::string& Textu
 					uint8 Encoded[256];
 					for (int I = 0; I < 256; ++I)
 						Encoded[I] = static_cast<uint8>(
-							FMath::Clamp(FLinearColor::LinearToSRGB(I / 255.0f) * 255.0f + 0.5f, 0.0f, 255.0f));
+						    FMath::Clamp(FLinearColor::LinearToSRGB(I / 255.0f) * 255.0f + 0.5f, 0.0f, 255.0f));
 					for (size_t I = 0; I < Image.Pixels.size(); I += 4)
 						for (int C = 0; C < 3; ++C)
 							Image.Pixels[I + C] = Encoded[Image.Pixels[I + C]];
@@ -352,7 +361,7 @@ const FLandscapeTexture* FLandscapeTextureLibrary::Find(const std::string& Textu
 			Loaded = LoadImageFile(FString(Texture), Image, Error);
 		if (!Loaded)
 		{
-			UE_LOG(LogLandscapeTextures, Warning, "Landscape texture: {}", Error);
+			GENESIS_LOG(LogLandscapeTextures, Warning, "Landscape texture: {}", Error);
 			Failed[Texture] = true;
 			return nullptr;
 		}
@@ -382,20 +391,20 @@ bool FLandscapeTextureLibrary::LoadImageFile(const FString& Path, FLandscapeImag
 		UINT Width = 0;
 		UINT Height = 0;
 		if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&Factory))) ||
-			FAILED(Factory->CreateDecoderFromFilename(Path.ToWide().c_str(), nullptr, GENERIC_READ,
-													  WICDecodeMetadataCacheOnDemand, &Decoder)) ||
-			FAILED(Decoder->GetFrame(0, &Frame)) || FAILED(Frame->GetSize(&Width, &Height)))
+		    FAILED(Factory->CreateDecoderFromFilename(
+		        Path.ToWide().c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &Decoder)) ||
+		    FAILED(Decoder->GetFrame(0, &Frame)) || FAILED(Frame->GetSize(&Width, &Height)))
 		{
 			Error = FString::Format("Can't read {} as an image", Path);
 		}
 		else if (Width < 1 || Height < 1 || Width > 8192 || Height > 8192)
 		{
-			Error = FString::Format("A landscape texture must be 1 to 8192 pixels each way ({} is {} x {})", Path,
-									Width, Height);
+			Error = FString::Format(
+			    "A landscape texture must be 1 to 8192 pixels each way ({} is {} x {})", Path, Width, Height);
 		}
 		else if (FAILED(Factory->CreateFormatConverter(&Converter)) ||
-				 FAILED(Converter->Initialize(Frame.Get(), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone,
-											  nullptr, 0.0, WICBitmapPaletteTypeCustom)))
+		    FAILED(Converter->Initialize(Frame.Get(), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr,
+		        0.0, WICBitmapPaletteTypeCustom)))
 		{
 			Error = FString::Format("Can't read {} as RGBA", Path);
 		}
@@ -405,7 +414,7 @@ bool FLandscapeTextureLibrary::LoadImageFile(const FString& Path, FLandscapeImag
 			Out.Height = static_cast<int32>(Height);
 			Out.Pixels.resize(static_cast<SIZE_T>(Width) * Height * 4);
 			bOk = SUCCEEDED(
-				Converter->CopyPixels(nullptr, Width * 4, static_cast<UINT>(Out.Pixels.size()), Out.Pixels.data()));
+			    Converter->CopyPixels(nullptr, Width * 4, static_cast<UINT>(Out.Pixels.size()), Out.Pixels.data()));
 			if (!bOk)
 			{
 				Error = FString::Format("Can't read the pixels of {}", Path);
@@ -437,7 +446,7 @@ FIntRect FLandscapeBake::Update(const std::shared_ptr<const Landscape>& Land)
 	{
 		return FIntRect();
 	}
-	const auto Revision = NativeTextureRevision(*Land);
+	const std::string Revision = NativeTextureRevision(*Land);
 	if (Revision != NativeRevision)
 	{
 		Baked.reset();
@@ -486,8 +495,7 @@ FIntRect FLandscapeBake::Update(const std::shared_ptr<const Landscape>& Land)
 		return FIntRect();
 	}
 	const FIntRect Dirty(FMath::Max(MinX - 1, 0) * PerQuad, FMath::Max(MinY - 1, 0) * PerQuad,
-						 FMath::Min(MaxX + 1, Land->GetQuadsX()) * PerQuad,
-						 FMath::Min(MaxY + 1, Land->GetQuadsY()) * PerQuad);
+	    FMath::Min(MaxX + 1, Land->GetQuadsX()) * PerQuad, FMath::Min(MaxY + 1, Land->GetQuadsY()) * PerQuad);
 	Bake(*Land, Dirty);
 	return Dirty;
 }
@@ -514,7 +522,7 @@ void FLandscapeBake::Bake(const Landscape& Land, const FIntRect& Texels)
 		const std::vector<float>* Weights;
 		const FLandscapeTexture* Texture;
 		float Color[3];
-		float Repeat;	 // repeats per landscape unit
+		float Repeat;    // repeats per landscape unit
 		float Footprint; // repeats per baked texel
 	};
 	std::vector<FLook> Looks;
@@ -531,7 +539,8 @@ void FLandscapeBake::Bake(const Landscape& Land, const FIntRect& Texels)
 		Looks.push_back(Look);
 	}
 
-	const auto BakeRows = [&](int32 FirstRow, int32 EndRow) {
+	const TFunction<void(int32, int32)> BakeRows = [&](int32 FirstRow, int32 EndRow)
+	{
 		float Sampled[3];
 		for (int32 Y = FirstRow; Y < EndRow; ++Y)
 		{
@@ -551,7 +560,7 @@ void FLandscapeBake::Bake(const Landscape& Land, const FIntRect& Texels)
 				{
 					const std::vector<float>& W = *Look.Weights;
 					const float Weight = (W[I00] * (1.0f - FX) + W[I00 + 1] * FX) * (1.0f - FY) +
-										 (W[I01] * (1.0f - FX) + W[I01 + 1] * FX) * FY;
+					    (W[I01] * (1.0f - FX) + W[I01 + 1] * FX) * FY;
 					if (Weight <= 0.0f)
 					{
 						continue;
@@ -560,7 +569,7 @@ void FLandscapeBake::Bake(const Landscape& Land, const FIntRect& Texels)
 					if (Look.Texture)
 					{
 						Look.Texture->Sample(GX * Land.GetQuadSize() * Look.Repeat,
-											 GY * Land.GetQuadSize() * Look.Repeat, Look.Footprint, Sampled);
+						    GY * Land.GetQuadSize() * Look.Repeat, Look.Footprint, Sampled);
 						if (Look.Texture->bTint)
 						{
 							for (int32 C = 0; C < 3; ++C)
@@ -593,7 +602,7 @@ void FLandscapeBake::Bake(const Landscape& Land, const FIntRect& Texels)
 	const int32 Rows = Texels.Height();
 	const int64 Work = static_cast<int64>(Rows) * Texels.Width() * FMath::Max(static_cast<int32>(Looks.size()), 1);
 	const int32 Threads =
-		Work < 262144 ? 1 : FMath::Clamp(static_cast<int32>(std::thread::hardware_concurrency()), 1, 16);
+	    Work < 262144 ? 1 : FMath::Clamp(static_cast<int32>(std::thread::hardware_concurrency()), 1, 16);
 	if (Threads == 1)
 	{
 		BakeRows(Texels.Top, Texels.Bottom);
@@ -675,7 +684,7 @@ FIntRect FLandscapeLayerImages::UpdateWeights(const std::shared_ptr<const Landsc
 			{
 				const SIZE_T Point = static_cast<SIZE_T>(Y) * PointsX + X;
 				Slice[Point * 4 + static_cast<SIZE_T>(Layer % 4)] =
-					static_cast<uint8>(FMath::Clamp(W[Point], 0.0f, 1.0f) * 255.0f + 0.5f);
+				    static_cast<uint8>(FMath::Clamp(W[Point], 0.0f, 1.0f) * 255.0f + 0.5f);
 			}
 		}
 	}
@@ -692,13 +701,13 @@ bool FLandscapeLayerImages::UpdateTextures(const Landscape& Land)
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		const LandscapeLayer* Layer =
-			Index < Land.GetNumLayers() ? &Land.GetLayers()[static_cast<SIZE_T>(Index)] : nullptr;
+		    Index < Land.GetNumLayers() ? &Land.GetLayers()[static_cast<SIZE_T>(Index)] : nullptr;
 		const FLandscapeTexture* Source = Layer ? Library.Find(Layer->texture) : nullptr;
 		Sources.push_back(Source);
 		if (Layer)
 		{
 			NewLook += Layer->texture + "|" + std::to_string(Layer->r) + "," + std::to_string(Layer->g) + "," +
-					   std::to_string(Layer->b) + (Source ? "+" : "-") + ";";
+			    std::to_string(Layer->b) + (Source ? "+" : "-") + ";";
 		}
 		if (Source)
 		{
@@ -721,11 +730,10 @@ bool FLandscapeLayerImages::UpdateTextures(const Landscape& Land)
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		const LandscapeLayer* Layer =
-			Index < Land.GetNumLayers() ? &Land.GetLayers()[static_cast<SIZE_T>(Index)] : nullptr;
+		    Index < Land.GetNumLayers() ? &Land.GetLayers()[static_cast<SIZE_T>(Index)] : nullptr;
 		const FLandscapeTexture* Source = Sources[static_cast<SIZE_T>(Index)];
 		const float Color[3] = {Layer ? static_cast<float>(Layer->r) : 255.0f,
-								Layer ? static_cast<float>(Layer->g) : 255.0f,
-								Layer ? static_cast<float>(Layer->b) : 255.0f};
+		    Layer ? static_cast<float>(Layer->g) : 255.0f, Layer ? static_cast<float>(Layer->b) : 255.0f};
 		FLandscapeTexture Slice;
 		FLandscapeImage Top;
 		Top.Width = Top.Height = TextureSize;
@@ -777,8 +785,8 @@ void FLandscapeLayerImages::GetConstants(const Landscape& Land, float Out[12])
 	for (int32 Index = 0; Index < MaxLayers; ++Index)
 	{
 		Out[4 + Index] = Index < Land.GetNumLayers()
-							 ? 1.0f / FMath::Max(Land.GetLayers()[static_cast<SIZE_T>(Index)].tiling, 1.0f)
-							 : 0.0f;
+		    ? 1.0f / FMath::Max(Land.GetLayers()[static_cast<SIZE_T>(Index)].tiling, 1.0f)
+		    : 0.0f;
 	}
 }
 
@@ -789,6 +797,6 @@ void FLandscapeTextureLibrary::SetAssetRegistry(const std::shared_ptr<FAssetRegi
 }
 std::string FLandscapeTextureLibrary::RevisionKey()
 {
-	auto Registry = AssetRegistry.lock();
+	TSharedPtr<FAssetRegistry> Registry = AssetRegistry.lock();
 	return FString::Format("{}:{}", AssetContext, Registry ? Registry->GetRevision() : 0).ToStdString();
 }

@@ -25,30 +25,52 @@ namespace
 	class FWindowsMessageDialog final : public IMessageDialog
 	{
 	public:
-		EMessageResult Show(EMessageType Type, EMessageButtons Buttons, const FString& Text, const FString& Caption) override
+		EMessageResult Show(
+		    EMessageType Type, EMessageButtons Buttons, const FString& Text, const FString& Caption) override
 		{
 			UINT Flags = MB_TASKMODAL;
 			switch (Type)
 			{
-			case EMessageType::Info: Flags |= MB_ICONINFORMATION; break;
-			case EMessageType::Warning: Flags |= MB_ICONWARNING; break;
-			case EMessageType::Error: Flags |= MB_ICONERROR; break;
-			case EMessageType::Question: Flags |= MB_ICONQUESTION; break;
+			case EMessageType::Info:
+				Flags |= MB_ICONINFORMATION;
+				break;
+			case EMessageType::Warning:
+				Flags |= MB_ICONWARNING;
+				break;
+			case EMessageType::Error:
+				Flags |= MB_ICONERROR;
+				break;
+			case EMessageType::Question:
+				Flags |= MB_ICONQUESTION;
+				break;
 			}
 			switch (Buttons)
 			{
-			case EMessageButtons::Ok: Flags |= MB_OK; break;
-			case EMessageButtons::OkCancel: Flags |= MB_OKCANCEL; break;
-			case EMessageButtons::YesNo: Flags |= MB_YESNO; break;
-			case EMessageButtons::YesNoCancel: Flags |= MB_YESNOCANCEL; break;
+			case EMessageButtons::Ok:
+				Flags |= MB_OK;
+				break;
+			case EMessageButtons::OkCancel:
+				Flags |= MB_OKCANCEL;
+				break;
+			case EMessageButtons::YesNo:
+				Flags |= MB_YESNO;
+				break;
+			case EMessageButtons::YesNoCancel:
+				Flags |= MB_YESNOCANCEL;
+				break;
 			}
 			const FString Title = Caption.IsEmpty() ? FApp::GetName() : Caption;
-			switch (MessageBoxW(GetOwner(nullptr), Text.ToWide().c_str(), Title.ToWide().c_str(), Flags))
+			switch (MessageBoxW(
+			    GetOwner(nullptr), GENESIS_TEXT(Text).ToWide().c_str(), GENESIS_TEXT(Title).ToWide().c_str(), Flags))
 			{
-			case IDOK: return EMessageResult::Ok;
-			case IDYES: return EMessageResult::Yes;
-			case IDNO: return EMessageResult::No;
-			default: break;
+			case IDOK:
+				return EMessageResult::Ok;
+			case IDYES:
+				return EMessageResult::Yes;
+			case IDNO:
+				return EMessageResult::No;
+			default:
+				break;
 			}
 			return Buttons == EMessageButtons::Ok ? EMessageResult::Ok : EMessageResult::Cancel;
 		}
@@ -81,14 +103,16 @@ namespace
 	{
 		FComScope Com;
 		ComPtr<IFileDialog> Dialog;
-		if (FAILED(CoCreateInstance(bSave ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&Dialog))))
+		if (FAILED(CoCreateInstance(bSave ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+		        IID_PPV_ARGS(&Dialog))))
 		{
 			return false;
 		}
 
 		DWORD Flags = 0;
 		Dialog->GetOptions(&Flags);
-		Flags |= FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR | (bSave ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST);
+		Flags |= FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR |
+		    (bSave ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST);
 		Dialog->SetOptions(Flags);
 		if (!Options.Title.IsEmpty())
 		{
@@ -105,7 +129,7 @@ namespace
 		}
 		for (SIZE_T Index = 0; Index < Options.Filters.size(); ++Index)
 		{
-			Specs.push_back({ Strings[Index * 2].c_str(), Strings[Index * 2 + 1].c_str() });
+			Specs.push_back({Strings[Index * 2].c_str(), Strings[Index * 2 + 1].c_str()});
 		}
 		if (!Specs.empty())
 		{
@@ -191,7 +215,7 @@ namespace
 			return RunFileDialog(true, Options, OutPath);
 		}
 	};
-}
+} // namespace
 
 TUniquePtr<IMessageDialog> FPlatformDialogs::CreateMessageDialog()
 {

@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Serialization/Json.h"
+#include "Internationalization/TextLocalization.h"
 
 #include <charconv>
 #include <cmath>
@@ -80,11 +81,16 @@ bool FJsonValue::operator==(const FJsonValue& Other) const
 	}
 	switch (Type)
 	{
-	case EJsonType::Null: return true;
-	case EJsonType::Bool: return bBool == Other.bBool;
-	case EJsonType::Number: return Number == Other.Number;
-	case EJsonType::String: return String == Other.String;
-	case EJsonType::Array: return Items == Other.Items;
+	case EJsonType::Null:
+		return true;
+	case EJsonType::Bool:
+		return bBool == Other.bBool;
+	case EJsonType::Number:
+		return Number == Other.Number;
+	case EJsonType::String:
+		return String == Other.String;
+	case EJsonType::Array:
+		return Items == Other.Items;
 	case EJsonType::Object:
 		if (Keys.size() != Other.Keys.size())
 		{
@@ -115,13 +121,27 @@ namespace
 		{
 			switch (C)
 			{
-			case '"': Out += "\\\""; break;
-			case '\\': Out += "\\\\"; break;
-			case '\n': Out += "\\n"; break;
-			case '\r': Out += "\\r"; break;
-			case '\t': Out += "\\t"; break;
-			case '\b': Out += "\\b"; break;
-			case '\f': Out += "\\f"; break;
+			case '"':
+				Out += "\\\"";
+				break;
+			case '\\':
+				Out += "\\\\";
+				break;
+			case '\n':
+				Out += "\\n";
+				break;
+			case '\r':
+				Out += "\\r";
+				break;
+			case '\t':
+				Out += "\\t";
+				break;
+			case '\b':
+				Out += "\\b";
+				break;
+			case '\f':
+				Out += "\\f";
+				break;
 			default:
 				if (static_cast<unsigned char>(C) < 0x20)
 				{
@@ -147,14 +167,18 @@ namespace
 			}
 		}
 	}
-}
+} // namespace
 
 void FJsonValue::Write(FString& Out, bool bPretty, int32 Indent) const
 {
 	switch (Type)
 	{
-	case EJsonType::Null: Out += "null"; break;
-	case EJsonType::Bool: Out += bBool ? "true" : "false"; break;
+	case EJsonType::Null:
+		Out += "null";
+		break;
+	case EJsonType::Bool:
+		Out += bBool ? "true" : "false";
+		break;
 	case EJsonType::Number:
 	{
 		if (!std::isfinite(Number))
@@ -163,11 +187,13 @@ void FJsonValue::Write(FString& Out, bool bPretty, int32 Indent) const
 			break;
 		}
 		char Buffer[32];
-		const auto Result = std::to_chars(Buffer, Buffer + sizeof(Buffer), Number);
+		const std::to_chars_result Result = std::to_chars(Buffer, Buffer + sizeof(Buffer), Number);
 		Out += std::string_view(Buffer, static_cast<SIZE_T>(Result.ptr - Buffer));
 		break;
 	}
-	case EJsonType::String: WriteString(Out, String.View()); break;
+	case EJsonType::String:
+		WriteString(Out, String.View());
+		break;
 	case EJsonType::Array:
 		if (Items.empty())
 		{
@@ -243,7 +269,7 @@ namespace
 			SkipSpace();
 			if (Pos != Text.size())
 			{
-				Error = "unexpected text after the value";
+				Error = GENESIS_TEXT("unexpected text after the value");
 				Report(OutError);
 				return {};
 			}
@@ -277,7 +303,7 @@ namespace
 
 		bool Fail(const char* Message)
 		{
-			if (Error.empty())
+			if (Error.IsEmpty())
 			{
 				Error = Message;
 				ErrorPos = Pos;
@@ -287,7 +313,8 @@ namespace
 
 		void SkipSpace()
 		{
-			while (Pos < Text.size() && (Text[Pos] == ' ' || Text[Pos] == '\t' || Text[Pos] == '\n' || Text[Pos] == '\r'))
+			while (
+			    Pos < Text.size() && (Text[Pos] == ' ' || Text[Pos] == '\t' || Text[Pos] == '\n' || Text[Pos] == '\r'))
 			{
 				++Pos;
 			}
@@ -362,12 +389,14 @@ namespace
 			{
 				++Pos;
 			}
-			while (Pos < Text.size() && ((Text[Pos] >= '0' && Text[Pos] <= '9') || Text[Pos] == '.' || Text[Pos] == 'e' || Text[Pos] == 'E' || Text[Pos] == '+' || Text[Pos] == '-'))
+			while (Pos < Text.size() &&
+			    ((Text[Pos] >= '0' && Text[Pos] <= '9') || Text[Pos] == '.' || Text[Pos] == 'e' || Text[Pos] == 'E' ||
+			        Text[Pos] == '+' || Text[Pos] == '-'))
 			{
 				++Pos;
 			}
 			double Value = 0.0;
-			const auto Result = std::from_chars(Text.data() + Start, Text.data() + Pos, Value);
+			const std::from_chars_result Result = std::from_chars(Text.data() + Start, Text.data() + Pos, Value);
 			if (Result.ec != std::errc() || Result.ptr != Text.data() + Pos)
 			{
 				Pos = Start;
@@ -388,10 +417,14 @@ namespace
 			{
 				const char H = Text[Pos++];
 				Out <<= 4;
-				if (H >= '0' && H <= '9') Out |= static_cast<uint32>(H - '0');
-				else if (H >= 'a' && H <= 'f') Out |= static_cast<uint32>(H - 'a' + 10);
-				else if (H >= 'A' && H <= 'F') Out |= static_cast<uint32>(H - 'A' + 10);
-				else return Fail("invalid \\u escape");
+				if (H >= '0' && H <= '9')
+					Out |= static_cast<uint32>(H - '0');
+				else if (H >= 'a' && H <= 'f')
+					Out |= static_cast<uint32>(H - 'a' + 10);
+				else if (H >= 'A' && H <= 'F')
+					Out |= static_cast<uint32>(H - 'A' + 10);
+				else
+					return Fail("invalid \\u escape");
 			}
 			return true;
 		}
@@ -428,14 +461,30 @@ namespace
 				const char E = Text[Pos++];
 				switch (E)
 				{
-				case '"': Result += '"'; break;
-				case '\\': Result += '\\'; break;
-				case '/': Result += '/'; break;
-				case 'b': Result += '\b'; break;
-				case 'f': Result += '\f'; break;
-				case 'n': Result += '\n'; break;
-				case 'r': Result += '\r'; break;
-				case 't': Result += '\t'; break;
+				case '"':
+					Result += '"';
+					break;
+				case '\\':
+					Result += '\\';
+					break;
+				case '/':
+					Result += '/';
+					break;
+				case 'b':
+					Result += '\b';
+					break;
+				case 'f':
+					Result += '\f';
+					break;
+				case 'n':
+					Result += '\n';
+					break;
+				case 'r':
+					Result += '\r';
+					break;
+				case 't':
+					Result += '\t';
+					break;
 				case 'u':
 				{
 					uint32 Code = 0;
@@ -552,10 +601,10 @@ namespace
 
 		std::string_view Text;
 		SIZE_T Pos = 0;
-		std::string Error;
+		FString Error;
 		SIZE_T ErrorPos = 0;
 	};
-}
+} // namespace
 
 TOptional<FJsonValue> FJsonValue::Parse(std::string_view Text, FString* OutError)
 {

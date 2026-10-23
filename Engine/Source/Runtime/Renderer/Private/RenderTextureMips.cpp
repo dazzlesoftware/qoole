@@ -1,29 +1,30 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "Renderer/RenderTextureMips.h"
+#include "Internationalization/TextLocalization.h"
 #include <cmath>
 #include <algorithm>
 
 namespace
 {
-float Linear(float V)
-{
-	return V <= 0.04045f ? V / 12.92f : std::pow((V + 0.055f) / 1.055f, 2.4f);
-}
-float Display(float V)
-{
-	return V <= 0.0031308f ? V * 12.92f : 1.055f * std::pow(V, 1 / 2.4f) - 0.055f;
-}
-uint8 Byte(float V)
-{
-	return static_cast<uint8>(std::clamp(V * 255.0f + 0.5f, 0.0f, 255.0f));
-}
+	float Linear(float V)
+	{
+		return V <= 0.04045f ? V / 12.92f : std::pow((V + 0.055f) / 1.055f, 2.4f);
+	}
+	float Display(float V)
+	{
+		return V <= 0.0031308f ? V * 12.92f : 1.055f * std::pow(V, 1 / 2.4f) - 0.055f;
+	}
+	uint8 Byte(float V)
+	{
+		return static_cast<uint8>(std::clamp(V * 255.0f + 0.5f, 0.0f, 255.0f));
+	}
 } // namespace
 bool FRenderTextureMipChain::Build(const FTextureAsset& Image, bool Normal, FRenderTextureMipChain& Out, FString& Error)
 {
 	if (Image.Width <= 0 || Image.Height <= 0 || Image.Width > 8192 || Image.Height > 8192 ||
-		Image.Pixels.size() != static_cast<size_t>(Image.Width) * Image.Height * 4)
+	    Image.Pixels.size() != static_cast<size_t>(Image.Width) * Image.Height * 4)
 	{
-		Error = "Invalid material texture dimensions or bytes.";
+		Error = GENESIS_TEXT("Invalid material texture dimensions or bytes.");
 		return false;
 	}
 	FRenderTextureMipChain M;
@@ -44,7 +45,7 @@ bool FRenderTextureMipChain::Build(const FTextureAsset& Image, bool Normal, FRen
 				for (int SY = Y * H / NH; SY < (Y + 1) * H / NH; ++SY)
 					for (int SX = X * W / NW; SX < (X + 1) * W / NW; ++SX)
 					{
-						const auto* P = &M.Pixels[Offset + (static_cast<size_t>(SY) * W + SX) * 4];
+						unsigned char const* P = &M.Pixels[Offset + (static_cast<size_t>(SY) * W + SX) * 4];
 						for (int C = 0; C < 4; ++C)
 						{
 							float V = P[C] / 255.0f;

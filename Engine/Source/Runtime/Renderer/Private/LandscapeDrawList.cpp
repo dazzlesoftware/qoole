@@ -21,67 +21,70 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 // Landscape tessellation extracted from the GPL MapCore view renderer.
 #include "Renderer/LandscapeDrawList.h"
+#include "Containers/ContainerAliases.h"
 #include <algorithm>
 #include <cmath>
 namespace
 {
-// Sutherland-Hodgman in view space. Reuses two bounded, component-local buffers.
-void ClipTriangle(const FSceneViewVolume& View, const Vector3d Input[3], std::vector<Vector3d>& Points,
-				  std::vector<Vector3d>& Scratch)
-{
-	Points.assign(Input, Input + 3);
-	for (int Plane = 0; Plane < 6 && !Points.empty(); Plane++)
+	// Sutherland-Hodgman in view space. Reuses two bounded, component-local buffers.
+	void ClipTriangle(const FSceneViewVolume& View, const Vector3d Input[3], std::vector<Vector3d>& Points,
+	    std::vector<Vector3d>& Scratch)
 	{
-		const auto Distance = [&](const Vector3d& P) {
-			const float D = View.Perspective ? P.GetY() : 1.0f;
-			switch (Plane)
-			{
-			case 0:
-				return P.GetY() - View.Minimum.GetY();
-			case 1:
-				return View.Maximum.GetY() - P.GetY();
-			case 2:
-				return P.GetX() - View.Minimum.GetX() * D;
-			case 3:
-				return View.Maximum.GetX() * D - P.GetX();
-			case 4:
-				return P.GetZ() - View.Minimum.GetZ() * D;
-			default:
-				return View.Maximum.GetZ() * D - P.GetZ();
-			}
-		};
-		Scratch.clear();
-		Vector3d Previous = Points.back();
-		float PreviousD = Distance(Previous);
-		for (const auto& Current : Points)
+		Points.assign(Input, Input + 3);
+		for (int Plane = 0; Plane < 6 && !Points.empty(); Plane++)
 		{
-			const float CurrentD = Distance(Current);
-			if ((PreviousD >= 0) != (CurrentD >= 0))
+			const TFunction<float(const Vector3d&)> Distance = [&](const Vector3d& P)
 			{
-				const float T = PreviousD / (PreviousD - CurrentD);
-				Scratch.emplace_back(Previous.GetX() + (Current.GetX() - Previous.GetX()) * T,
-									 Previous.GetY() + (Current.GetY() - Previous.GetY()) * T,
-									 Previous.GetZ() + (Current.GetZ() - Previous.GetZ()) * T);
+				const float D = View.Perspective ? P.GetY() : 1.0f;
+				switch (Plane)
+				{
+				case 0:
+					return P.GetY() - View.Minimum.GetY();
+				case 1:
+					return View.Maximum.GetY() - P.GetY();
+				case 2:
+					return P.GetX() - View.Minimum.GetX() * D;
+				case 3:
+					return View.Maximum.GetX() * D - P.GetX();
+				case 4:
+					return P.GetZ() - View.Minimum.GetZ() * D;
+				default:
+					return View.Maximum.GetZ() * D - P.GetZ();
+				}
+			};
+			Scratch.clear();
+			Vector3d Previous = Points.back();
+			float PreviousD = Distance(Previous);
+			for (const Vector3d& Current : Points)
+			{
+				const float CurrentD = Distance(Current);
+				if ((PreviousD >= 0) != (CurrentD >= 0))
+				{
+					const float T = PreviousD / (PreviousD - CurrentD);
+					Scratch.emplace_back(Previous.GetX() + (Current.GetX() - Previous.GetX()) * T,
+					    Previous.GetY() + (Current.GetY() - Previous.GetY()) * T,
+					    Previous.GetZ() + (Current.GetZ() - Previous.GetZ()) * T);
+				}
+				if (CurrentD >= 0)
+					Scratch.push_back(Current);
+				Previous = Current;
+				PreviousD = CurrentD;
 			}
-			if (CurrentD >= 0)
-				Scratch.push_back(Current);
-			Previous = Current;
-			PreviousD = CurrentD;
+			Points.swap(Scratch);
 		}
-		Points.swap(Scratch);
 	}
-}
 } // namespace
 void BuildLandscapeTriangles(const Landscape& land, const Matrix44& trans, const Matrix44& absTrans,
-							 const Vector3d& scale, const FSceneViewVolume& Volume, float ProjectionScale,
-							 float TargetPixels, ILandscapeTriangleSink& Sink, FLandscapeDrawStats& Stats)
+    const Vector3d& scale, const FSceneViewVolume& Volume, float ProjectionScale, float TargetPixels,
+    ILandscapeTriangleSink& Sink, FLandscapeDrawStats& Stats)
 {
 
 	Stats = {};
 	FLandscapeRenderPlan plan;
 	PlanLandscape(land, trans, Volume, true, ProjectionScale, 1.0f, TargetPixels, plan);
 	// Lit as static meshes are (RenderMeshSolid).
-	static const Vector3d lightDir = [] {
+	static const Vector3d lightDir = []
+	{
 		Vector3d light(0.35f, -0.5f, 0.79f);
 		light.MultVector(1.0f / light.GetMag());
 		return light;
@@ -102,8 +105,8 @@ void BuildLandscapeTriangles(const Landscape& land, const Matrix44& trans, const
 	const float invX = 1.0f / land.GetQuadsX(), invY = 1.0f / land.GetQuadsY();
 
 	FLandscapeComponentMesh component;
-	auto &xs = component.X, &ys = component.Y;
-	auto& pts = component.Points;
+	std::vector<int>&xs = component.X, &ys = component.Y;
+	std::vector<Vector3d>& pts = component.Points;
 	std::vector<Vector3d> Clipped, Scratch;
 	Clipped.reserve(12);
 	Scratch.reserve(12);
@@ -111,8 +114,11 @@ void BuildLandscapeTriangles(const Landscape& land, const Matrix44& trans, const
 	std::vector<unsigned int> cols;
 	Vector3d n, e1, e2, faceNorm;
 	FLandscapeTriangleVertex zpts[3];
-	const auto project = [](const Vector3d& pt, FLandscapeTriangleVertex& zp) { zp.Position = pt; };
-	const auto submit = [&](FLandscapeTriangleVertex vertices[3], const float shades[3], const unsigned int* colors) {
+	const TFunction<void(const Vector3d&, FLandscapeTriangleVertex&)> project =
+	    [](const Vector3d& pt, FLandscapeTriangleVertex& zp) { zp.Position = pt; };
+	const TFunction<void(FLandscapeTriangleVertex*, const float*, const unsigned int*)> submit =
+	    [&](FLandscapeTriangleVertex vertices[3], const float shades[3], const unsigned int* colors)
+	{
 		FLandscapeTriangle triangle;
 		triangle.bColored = colors != nullptr;
 		for (int i = 0; i < 3; i++)
@@ -159,7 +165,8 @@ void BuildLandscapeTriangles(const Landscape& land, const Matrix44& trans, const
 			}
 			Stats.Components++;
 
-			const auto emit = [&](size_t a, size_t b, size_t c) {
+			const TFunction<void(size_t, size_t, size_t)> emit = [&](size_t a, size_t b, size_t c)
+			{
 				const size_t idx[3] = {a, b, c};
 				const Vector3d &p0 = pts[a], &p1 = pts[b], &p2 = pts[c];
 				e1.SubVector(p1, p0);
@@ -202,12 +209,14 @@ void BuildLandscapeTriangles(const Landscape& land, const Matrix44& trans, const
 				for (int ch = 0; ch < 3; ch++)
 				{
 					const unsigned int sum =
-						((co[0] >> (8 * ch)) & 0xFF) + ((co[1] >> (8 * ch)) & 0xFF) + ((co[2] >> (8 * ch)) & 0xFF);
+					    ((co[0] >> (8 * ch)) & 0xFF) + ((co[1] >> (8 * ch)) & 0xFF) + ((co[2] >> (8 * ch)) & 0xFF);
 					meanColor |= (sum / 3) << (8 * ch);
 				}
 				const unsigned int flatColors[3] = {meanColor, meanColor, meanColor};
 				float pieceShades[3];
-				const auto locate = [&](const Vector3d& pt, FLandscapeTriangleVertex& zp, float& shade) {
+				const TFunction<void(const Vector3d&, FLandscapeTriangleVertex&, float&)> locate =
+				    [&](const Vector3d& pt, FLandscapeTriangleVertex& zp, float& shade)
+				{
 					Vector3d d0, d1, d2;
 					d0.SubVector(p1, p0);
 					d1.SubVector(p2, p0);

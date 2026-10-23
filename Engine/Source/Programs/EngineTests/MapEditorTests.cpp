@@ -7,6 +7,8 @@
 // is present).
 
 #include "TestHelpers.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 #include "UITestHelpers.h"
 
 #include "MapCoreHeaders.h"
@@ -81,7 +83,8 @@ namespace
 
 	bool Same(const Vector3d& A, const Vector3d& B)
 	{
-		return FMath::Abs(A.GetX() - B.GetX()) < 0.01f && FMath::Abs(A.GetY() - B.GetY()) < 0.01f && FMath::Abs(A.GetZ() - B.GetZ()) < 0.01f;
+		return FMath::Abs(A.GetX() - B.GetX()) < 0.01f && FMath::Abs(A.GetY() - B.GetY()) < 0.01f &&
+		    FMath::Abs(A.GetZ() - B.GetZ()) < 0.01f;
 	}
 
 	struct FTempFolder
@@ -89,7 +92,8 @@ namespace
 		std::filesystem::path Path;
 		FTempFolder()
 		{
-			Path = std::filesystem::temp_directory_path() / std::filesystem::path(FString::Format("GenesisEditorTest{}", FPlatformTime::Seconds()).ToWide());
+			Path = std::filesystem::temp_directory_path() /
+			    std::filesystem::path(FString::Format("GenesisEditorTest{}", FPlatformTime::Seconds()).ToWide());
 			std::filesystem::create_directories(Path);
 		}
 		~FTempFolder()
@@ -97,9 +101,12 @@ namespace
 			std::error_code Error;
 			std::filesystem::remove_all(Path, Error);
 		}
-		FString File(const char* Name) const { return FString::FromWide((Path / Name).wstring()); }
+		FString File(const char* Name) const
+		{
+			return FString::FromWide((Path / Name).wstring());
+		}
 	};
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -134,33 +141,33 @@ TEST_SUITE("MapEditor")
 		Object* Light = Doc->AddEntity("light", Vector3d(0.0f, 0.0f, 128.0f));
 		CHECK(Doc->CountBrushes() == 1);
 		CHECK(Doc->CountEntities() == 1);
-		CHECK(Doc->GetSelection() == TArray<Object*>{ Light });
+		CHECK(Doc->GetSelection() == TArray<Object*>{Light});
 		CHECK(Doc->IsModified());
 		CHECK(Doc->GetUndoDescription() == "Add light");
 		CHECK(Changes > 0);
 
 		// A drag: many moves, one transaction, one undo step.
-		Doc->SetSelection({ Cube });
+		Doc->SetSelection({Cube});
 		Doc->BeginTransaction("Move Object");
-		Doc->MoveObjects({ Cube }, Vector3d(16.0f, 0.0f, 0.0f));
-		Doc->MoveObjects({ Cube }, Vector3d(16.0f, 32.0f, 0.0f));
+		Doc->MoveObjects({Cube}, Vector3d(16.0f, 0.0f, 0.0f));
+		Doc->MoveObjects({Cube}, Vector3d(16.0f, 32.0f, 0.0f));
 		Doc->EndTransaction();
 		CHECK(Same(PositionOf(Cube), Vector3d(96.0f, 32.0f, 0.0f)));
 		Doc->ClearSelection();
 		Doc->Undo();
 		CHECK(Same(PositionOf(Cube), Vector3d(64.0f, 0.0f, 0.0f)));
-		CHECK(Doc->GetSelection() == TArray<Object*>{ Cube }); // as before the move
+		CHECK(Doc->GetSelection() == TArray<Object*>{Cube}); // as before the move
 		Doc->Redo();
 		CHECK(Same(PositionOf(Cube), Vector3d(96.0f, 32.0f, 0.0f)));
 
 		// Delete keeps the order of the others when undone.
 		const TArray<Object*> Before = Doc->GetObjects();
-		Doc->DeleteObjects({ Cube });
+		Doc->DeleteObjects({Cube});
 		CHECK(Doc->CountBrushes() == 0);
 		CHECK(Doc->GetSelection().empty());
 		Doc->Undo();
 		CHECK(Doc->GetObjects() == Before);
-		CHECK(Doc->GetSelection() == TArray<Object*>{ Cube });
+		CHECK(Doc->GetSelection() == TArray<Object*>{Cube});
 
 		// Undo everything: the map is unmodified again; a new edit drops redo.
 		while (Doc->CanUndo())
@@ -178,7 +185,7 @@ TEST_SUITE("MapEditor")
 	TEST_CASE("Feature panel interactions close only their own transaction")
 	{
 		EnsureMapCore();
-		auto Doc = FMapDocument::CreateNew();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		FMapPanelTransaction Interaction;
 		Doc->BeginTransaction("External edit");
 		Interaction.Begin(Doc.get(), "Slider");
@@ -197,7 +204,7 @@ TEST_SUITE("MapEditor")
 		Interaction.Begin(Doc.get(), "Own edit");
 		Interaction.End(Doc.get());
 		CHECK_FALSE(Doc->IsInTransaction());
-		auto Other = FMapDocument::CreateNew();
+		TUniquePtr<FMapDocument> Other = FMapDocument::CreateNew();
 		Interaction.Begin(Doc.get(), "Old document");
 		Other->BeginTransaction("Other document");
 		Interaction.End(Other.get());
@@ -206,8 +213,8 @@ TEST_SUITE("MapEditor")
 		Doc->CancelTransaction();
 		Other->CancelTransaction();
 		// IDs also differ across documents, even if their transaction counts match.
-		auto First = FMapDocument::CreateNew();
-		auto Second = FMapDocument::CreateNew();
+		TUniquePtr<FMapDocument> First = FMapDocument::CreateNew();
+		TUniquePtr<FMapDocument> Second = FMapDocument::CreateNew();
 		First->BeginTransaction("First");
 		Second->BeginTransaction("Second");
 		CHECK(First->GetActiveTransactionId() != Second->GetActiveTransactionId());
@@ -219,30 +226,35 @@ TEST_SUITE("MapEditor")
 	{
 		EnsureMapCore();
 		FUITestApp UI;
-		auto Doc = FMapDocument::CreateNew();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		FMapLandscapeMode Land;
 		FMapFoliageMode Leaves;
 		Land.SetDocument(Doc.get());
 		Leaves.SetDocument(Doc.get());
 		FMapFeaturePanelHost Host;
 		Host.GetDocument = [&] { return Doc.get(); };
-		auto LandscapePanel = SNew(SLandscapeEditorPanel, &Land, Host);
-		auto FoliagePanel = SNew(SFoliageEditorPanel, &Leaves, Host);
+		TSharedRef<SLandscapeEditorPanel> LandscapePanel = SNew(SLandscapeEditorPanel, &Land, Host);
+		TSharedRef<SFoliageEditorPanel> FoliagePanel = SNew(SFoliageEditorPanel, &Leaves, Host);
 		const TSharedRef<SLandscapeEditorPanel> Terrain = LandscapePanel;
 		const TSharedRef<SFoliageEditorPanel> Plants = FoliagePanel;
-		UI.AddWindow(SNew(SHorizontalBox) + SHorizontalBox::Slot()[Terrain] + SHorizontalBox::Slot()[Plants], FVector2(900, 1200));
+		UI.AddWindow(SNew(SHorizontalBox) + SHorizontalBox::Slot()[Terrain] + SHorizontalBox::Slot()[Plants],
+		    FVector2(900, 1200));
 		UI.Tick();
-		const auto Contains = [](const SWidget& Root, std::string_view Text)
+		const TFunction<bool(const SWidget&, std::string_view)> Contains =
+		    [](const SWidget& Root, std::string_view Text)
 		{
-			const auto Find = [&](auto&& Self, const SWidget& Node) -> bool
+			TFunction<bool(const SWidget&)> Find = [&](const SWidget& Node)
 			{
-				if (const auto* Block = dynamic_cast<const STextBlock*>(&Node); Block && Block->GetText().View().find(Text) != std::string_view::npos) return true;
+				if (const STextBlock* Block = dynamic_cast<const STextBlock*>(&Node);
+				    Block && Block->GetText().View().find(Text) != std::string_view::npos)
+					return true;
 				const FChildren* Children = Node.GetChildren();
 				for (int32 I = 0; I < Children->Num(); ++I)
-					if (Self(Self, Children->GetChildAt(I).Get())) return true;
+					if (Find(Children->GetChildAt(I).Get()))
+						return true;
 				return false;
 			};
-			return Find(Find, Root);
+			return Find(Root);
 		};
 		CHECK(Contains(Terrain.Get(), "Create a landscape (or select one)"));
 		CHECK(Contains(Plants.Get(), "No foliage types yet"));
@@ -276,7 +288,7 @@ TEST_SUITE("MapEditor")
 	TEST_CASE("Native actor transform records replay and reject invalid edits atomically")
 	{
 		EnsureMapCore();
-		auto Doc = FMapDocument::CreateNew();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		Object* Mesh = Doc->AddMesh("Cube", Vector3d(16, 32, 64));
 		REQUIRE(Mesh);
 		const FString Id = Mesh->GetIdentity().Actor;
@@ -316,15 +328,15 @@ TEST_SUITE("MapEditor")
 	TEST_CASE("Actor selection and scope snapshots resolve replacement hierarchy objects")
 	{
 		EnsureMapCore();
-		auto Doc = FMapDocument::CreateNew();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		Object* Mesh = Doc->AddMesh("Cube", Vector3d(0, 0, 32));
-		Object* Group = Doc->GroupObjects({ Mesh });
+		Object* Group = Doc->GroupObjects({Mesh});
 		REQUIRE(Group);
 		const FString GroupId = Group->GetIdentity().Actor;
 		const FString MeshId = Mesh->GetIdentity().Actor;
 		REQUIRE(Doc->SetScope(*Group));
-		Doc->SetSelectedActorIds({ MeshId });
-		Doc->MoveObjects({ Mesh }, Vector3d(16, 0, 0));
+		Doc->SetSelectedActorIds({MeshId});
+		Doc->MoveObjects({Mesh}, Vector3d(16, 0, 0));
 		// A content snapshot replaces descendants with equivalent copies on undo.
 		Doc->SetObjectName(Doc->GetRoot(), "Renamed World");
 		Doc->Undo();
@@ -333,44 +345,44 @@ TEST_SUITE("MapEditor")
 		REQUIRE(Doc->GetSelection().size() == 1);
 		CHECK(Doc->GetSelection()[0] != Mesh);
 		CHECK(Doc->GetSelection()[0]->GetParentPtr() == &Doc->GetScope());
-		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ MeshId });
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{MeshId});
 		Doc->Undo(); // native move resolves the replacement mesh by ID
 		CHECK(Same(PositionOf(Doc->GetSelection()[0]), Vector3d(0, 0, 0)));
 		Doc->Redo();
 		CHECK(Same(PositionOf(Doc->GetSelection()[0]), Vector3d(16, 0, 0)));
 		Doc->Redo();
 		CHECK(Doc->GetScope().GetIdentity().Actor == GroupId);
-		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ MeshId });
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{MeshId});
 	}
 
 	TEST_CASE("Actor identity selection resolves current objects and survives transaction replay")
 	{
 		EnsureMapCore();
-		auto Doc = FMapDocument::CreateNew();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		Object* First = Doc->AddEntity("light", Vector3d(0, 0, 32));
 		Object* Second = Doc->AddEntity("light", Vector3d(64, 0, 32));
 		const FString FirstId = First->GetIdentity().Actor;
 		const FString SecondId = Second->GetIdentity().Actor;
-		Doc->SetSelectedActorIds({ SecondId, FirstId, SecondId, "missing" });
-		CHECK(Doc->GetSelection() == TArray<Object*>{ Second, First });
-		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
-		Doc->MoveObjects({ First }, Vector3d(16, 0, 0));
+		Doc->SetSelectedActorIds({SecondId, FirstId, SecondId, "missing"});
+		CHECK(Doc->GetSelection() == TArray<Object*>{Second, First});
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{SecondId, FirstId});
+		Doc->MoveObjects({First}, Vector3d(16, 0, 0));
 		Doc->ClearSelection();
 		Doc->Undo();
-		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{SecondId, FirstId});
 		Doc->Redo();
-		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
-		Doc->DeleteObjects({ First });
-		Doc->SetSelectedActorIds({ FirstId });
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{SecondId, FirstId});
+		Doc->DeleteObjects({First});
+		Doc->SetSelectedActorIds({FirstId});
 		CHECK(Doc->GetSelection().empty());
 		Doc->Undo();
-		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{SecondId, FirstId});
 		Doc->BeginTransaction("Cancelled selection");
-		Doc->MoveObjects({ First }, Vector3d(8, 0, 0));
-		Doc->SetSelectedActorIds({ SecondId });
+		Doc->MoveObjects({First}, Vector3d(8, 0, 0));
+		Doc->SetSelectedActorIds({SecondId});
 		Doc->CancelTransaction();
-		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{ SecondId, FirstId });
-		Doc->SetSelectedActorIds({ Doc->GetRoot().GetIdentity().Actor });
+		CHECK(Doc->GetSelectedActorIds() == TArray<FString>{SecondId, FirstId});
+		Doc->SetSelectedActorIds({Doc->GetRoot().GetIdentity().Actor});
 		CHECK(Doc->GetSelection().empty());
 	}
 
@@ -379,7 +391,7 @@ TEST_SUITE("MapEditor")
 		EnsureMapCore();
 		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		Object* Cube = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 0.0f));
-		const TArray<Object*> Copies = Doc->DuplicateObjects({ Cube }, Vector3d(16.0f, 16.0f, 0.0f));
+		const TArray<Object*> Copies = Doc->DuplicateObjects({Cube}, Vector3d(16.0f, 16.0f, 0.0f));
 		REQUIRE(Copies.size() == 1);
 		CHECK(Copies[0] != Cube);
 		CHECK(Same(PositionOf(Copies[0]), Vector3d(16.0f, 16.0f, 0.0f)));
@@ -387,9 +399,9 @@ TEST_SUITE("MapEditor")
 		CHECK(Doc->CountBrushes() == 2);
 		Doc->Undo();
 		CHECK(Doc->CountBrushes() == 1);
-		CHECK(Doc->GetSelection() == TArray<Object*>{ Cube });
+		CHECK(Doc->GetSelection() == TArray<Object*>{Cube});
 		// The copy belongs to the redo step now; a new edit deletes it.
-		Doc->MoveObjects({ Cube }, Vector3d(0.0f, 0.0f, 8.0f));
+		Doc->MoveObjects({Cube}, Vector3d(0.0f, 0.0f, 8.0f));
 		CHECK(!Doc->CanRedo());
 	}
 
@@ -441,16 +453,16 @@ TEST_SUITE("MapEditor")
 		EnsureMapCore();
 		FTempFolder Temp;
 		const FString Source = Temp.File("textured.map");
-		const std::string Map =
-			"{\n\"classname\" \"worldspawn\"\n{\n"
-			"( 32 32 32 ) ( 32 -32 32 ) ( -32 -32 32 ) metal/floor_1 0 0 0 1 1\n"
-			"( 32 32 32 ) ( 32 32 -32 ) ( 32 -32 -32 ) metal/wall 0 0 0 1 1\n"
-			"( 32 -32 32 ) ( 32 -32 -32 ) ( -32 -32 -32 ) metal/wall 0 0 0 1 1\n"
-			"( -32 -32 32 ) ( -32 -32 -32 ) ( -32 32 -32 ) metal/wall 0 0 0 1 1\n"
-			"( -32 32 32 ) ( -32 32 -32 ) ( 32 32 -32 ) metal/wall 0 0 0 1 1\n"
-			"( -32 32 -32 ) ( -32 -32 -32 ) ( 32 -32 -32 ) metal/ceiling 0 0 0 1 1\n"
-			"}\n}\n";
-		REQUIRE(FFileHelper::SaveArrayToFile(TArrayView<const uint8>(reinterpret_cast<const uint8*>(Map.data()), Map.size()), Source));
+		const std::string Map = "{\n\"classname\" \"worldspawn\"\n{\n"
+		                        "( 32 32 32 ) ( 32 -32 32 ) ( -32 -32 32 ) metal/floor_1 0 0 0 1 1\n"
+		                        "( 32 32 32 ) ( 32 32 -32 ) ( 32 -32 -32 ) metal/wall 0 0 0 1 1\n"
+		                        "( 32 -32 32 ) ( 32 -32 -32 ) ( -32 -32 -32 ) metal/wall 0 0 0 1 1\n"
+		                        "( -32 -32 32 ) ( -32 -32 -32 ) ( -32 32 -32 ) metal/wall 0 0 0 1 1\n"
+		                        "( -32 32 32 ) ( -32 32 -32 ) ( 32 32 -32 ) metal/wall 0 0 0 1 1\n"
+		                        "( -32 32 -32 ) ( -32 -32 -32 ) ( 32 -32 -32 ) metal/ceiling 0 0 0 1 1\n"
+		                        "}\n}\n";
+		REQUIRE(FFileHelper::SaveArrayToFile(
+		    TArrayView<const uint8>(reinterpret_cast<const uint8*>(Map.data()), Map.size()), Source));
 		FString Error;
 		TUniquePtr<FMapDocument> Doc = FMapDocument::Open(Source, Error);
 		REQUIRE(Doc);
@@ -506,7 +518,9 @@ namespace
 			Doc = FMapDocument::CreateNew();
 			Client = std::make_shared<FMapViewportClient>(*Device, *Renderer, *Resources, Settings, Type);
 			Client->SetDocument(Doc.get());
-			Window = T.AddWindow(SNew(SViewport).ViewportClient(StaticCastSharedPtr<IViewportClient>(Client)), FVector2(256.0f, 256.0f)).ToSharedPtr();
+			Window = T.AddWindow(SNew(SViewport).ViewportClient(StaticCastSharedPtr<IViewportClient>(Client)),
+			              FVector2(256.0f, 256.0f))
+			             .ToSharedPtr();
 			T.Tick();
 			return true;
 		}
@@ -532,7 +546,7 @@ namespace
 			Client->RenderIfNeeded(CommandList);
 			Device->EndFrame();
 			TArray<uint8> Pixels;
-			auto* Target = static_cast<FSlateRenderTargetRHI*>(Client->GetRenderTarget().get());
+			FSlateRenderTargetRHI* Target = static_cast<FSlateRenderTargetRHI*>(Client->GetRenderTarget().get());
 			REQUIRE(Target);
 			REQUIRE(Device->ReadbackTexture(Target->GetTexture(), Pixels));
 			return Pixels;
@@ -592,7 +606,7 @@ namespace
 			MESSAGE(Problem.c_str());
 		}
 	}
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -612,7 +626,7 @@ TEST_SUITE("MapEditor")
 
 		F.T.Click(Window, F.At(Vector3d(0.0f, 0.0f, 0.0f)));
 		F.T.Tick();
-		CHECK(F.Doc->GetSelection() == TArray<Object*>{ Cube });
+		CHECK(F.Doc->GetSelection() == TArray<Object*>{Cube});
 		F.T.Click(Window, F.At(Vector3d(80.0f, 60.0f, 0.0f))); // empty space
 		F.T.Tick();
 		CHECK(F.Doc->GetSelection().empty());
@@ -631,7 +645,7 @@ TEST_SUITE("MapEditor")
 		F.T.MouseMove(Window, F.At(Vector3d(200.0f, -40.0f, 0.0f)));
 		F.T.MouseUp(Window, F.At(Vector3d(200.0f, -40.0f, 0.0f)));
 		F.T.Tick();
-		CHECK(F.Doc->GetSelection() == TArray<Object*>{ Light });
+		CHECK(F.Doc->GetSelection() == TArray<Object*>{Light});
 
 		// Drag the cube by about 70 units: it lands on the 16-unit grid.
 		F.T.Click(Window, F.At(Vector3d(0.0f, 0.0f, 0.0f)));
@@ -709,7 +723,7 @@ namespace
 		REQUIRE(Doc.GetSelectionBounds(B.Min, B.Max));
 		return B;
 	}
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -718,29 +732,29 @@ TEST_SUITE("MapEditor")
 		EnsureMapCore();
 		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		Object* Plate = Doc->AddPrefab(PrefabPath("Plate"), Vector3d(64.0f, 0.0f, 0.0f));
-		const FBounds Before = BoundsOf(*Doc, { Plate });
+		const FBounds Before = BoundsOf(*Doc, {Plate});
 		CHECK(Same(Before.Size(), Vector3d(320.0f, 320.0f, 32.0f)));
 
-		Doc->RotateObjects({ Plate }, 0, 90.0f, Vector3d(64.0f, 0.0f, 0.0f));
-		const FBounds Rotated = BoundsOf(*Doc, { Plate });
+		Doc->RotateObjects({Plate}, 0, 90.0f, Vector3d(64.0f, 0.0f, 0.0f));
+		const FBounds Rotated = BoundsOf(*Doc, {Plate});
 		CHECK(Same(Rotated.Size(), Vector3d(320.0f, 32.0f, 320.0f)));
 		CHECK(Doc->GetUndoDescription() == "Rotate");
 		Doc->Undo();
-		const FBounds Restored = BoundsOf(*Doc, { Plate });
+		const FBounds Restored = BoundsOf(*Doc, {Plate});
 		CHECK(Same(Restored.Min, Before.Min));
 		CHECK(Same(Restored.Max, Before.Max));
 		Doc->Redo();
-		CHECK(Same(BoundsOf(*Doc, { Plate }).Size(), Vector3d(320.0f, 32.0f, 320.0f)));
+		CHECK(Same(BoundsOf(*Doc, {Plate}).Size(), Vector3d(320.0f, 32.0f, 320.0f)));
 		Doc->Undo();
 
-		Doc->ScaleObjects({ Plate }, Vector3d(0.5f, 1.0f, 2.0f), Vector3d(-96.0f, 0.0f, 0.0f));
-		const FBounds Scaled = BoundsOf(*Doc, { Plate });
+		Doc->ScaleObjects({Plate}, Vector3d(0.5f, 1.0f, 2.0f), Vector3d(-96.0f, 0.0f, 0.0f));
+		const FBounds Scaled = BoundsOf(*Doc, {Plate});
 		CHECK(Same(Scaled.Size(), Vector3d(160.0f, 320.0f, 64.0f)));
 		CHECK(FMath::Abs(Scaled.Min.GetX() + 96.0f) < 0.01f); // min x was at the pivot
 		Doc->Undo();
 
 		Object* Cube = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 0.0f));
-		Doc->FlipObjects({ Cube }, 0, Vector3d(100.0f, 0.0f, 0.0f));
+		Doc->FlipObjects({Cube}, 0, Vector3d(100.0f, 0.0f, 0.0f));
 		CHECK(Same(PositionOf(Cube), Vector3d(200.0f, 0.0f, 0.0f)));
 		CHECK(Cube->GetBrush().IntegrityCheck()); // faces still face out
 		Doc->Undo();
@@ -752,7 +766,7 @@ TEST_SUITE("MapEditor")
 		EnsureMapCore();
 		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		Object* Room = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 0.0f));
-		REQUIRE(Doc->HollowObjects({ Room }, 8.0f, true));
+		REQUIRE(Doc->HollowObjects({Room}, 8.0f, true));
 		CHECK(Doc->CountBrushes() == 6);
 		CHECK(Room->GetNumChildren() == 6); // the same object, now a group of walls
 		Doc->Undo();
@@ -761,23 +775,23 @@ TEST_SUITE("MapEditor")
 
 		// A thin cutter through the cube's middle cuts it into pieces.
 		Object* Cutter = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 0.0f));
-		Doc->ScaleObjects({ Cutter }, Vector3d(0.25f, 2.0f, 2.0f), Vector3d(0.0f, 0.0f, 0.0f));
-		Doc->SetSelection({ Cutter });
+		Doc->ScaleObjects({Cutter}, Vector3d(0.25f, 2.0f, 2.0f), Vector3d(0.0f, 0.0f, 0.0f));
+		Doc->SetSelection({Cutter});
 		REQUIRE(Doc->SubtractSelection());
 		CHECK(Doc->CountBrushes() > 2);
-		CHECK(Doc->GetSelection() == TArray<Object*>{ Cutter });
+		CHECK(Doc->GetSelection() == TArray<Object*>{Cutter});
 		Doc->Undo();
 		CHECK(Doc->CountBrushes() == 2);
 
 		// The two cubes' common volume replaces them.
-		Doc->SetSelection({ Room, Cutter });
+		Doc->SetSelection({Room, Cutter});
 		REQUIRE(Doc->IntersectSelection());
 		CHECK(Doc->CountBrushes() == 1);
 		const FBounds Common = BoundsOf(*Doc, Doc->GetObjects());
 		CHECK(Same(Common.Size(), Vector3d(16.0f, 64.0f, 64.0f)));
 		Doc->Undo();
 		CHECK(Doc->CountBrushes() == 2);
-		CHECK(Doc->GetObjects() == TArray<Object*>{ Room, Cutter });
+		CHECK(Doc->GetObjects() == TArray<Object*>{Room, Cutter});
 	}
 
 	TEST_CASE("A doorway subtracted from a hollowed room, and undone")
@@ -786,14 +800,14 @@ TEST_SUITE("MapEditor")
 		FTestLogCapture Log;
 		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		Object* Room = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 128.0f));
-		Doc->ScaleObjects({ Room }, Vector3d(8.0f, 8.0f, 4.0f), Vector3d(0.0f, 0.0f, 128.0f));
-		REQUIRE(Doc->HollowObjects({ Room }, 16.0f, true));
+		Doc->ScaleObjects({Room}, Vector3d(8.0f, 8.0f, 4.0f), Vector3d(0.0f, 0.0f, 128.0f));
+		REQUIRE(Doc->HollowObjects({Room}, 16.0f, true));
 		CHECK(Doc->CountBrushes() == 6);
 		Object* Door = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(248.0f, 0.0f, 64.0f));
-		Doc->ScaleObjects({ Door }, Vector3d(1.0f, 1.5f, 1.5f), Vector3d(248.0f, 0.0f, 64.0f));
-		Doc->SetSelection({ Door });
+		Doc->ScaleObjects({Door}, Vector3d(1.0f, 1.5f, 1.5f), Vector3d(248.0f, 0.0f, 64.0f));
+		Doc->SetSelection({Door});
 		REQUIRE(Doc->SubtractSelection());
-		Doc->DeleteObjects({ Door });
+		Doc->DeleteObjects({Door});
 		CHECK(Doc->CountBrushes() > 6); // the wall with the doorway is in pieces
 		while (Doc->CanUndo())
 		{
@@ -819,18 +833,18 @@ TEST_SUITE("MapEditor")
 		Object* Cube = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 0.0f));
 		const Plane AtX16(Vector3d(1.0f, 0.0f, 0.0f), Vector3d(16.0f, 0.0f, 0.0f));
 
-		REQUIRE(Doc->ClipObjects({ Cube }, AtX16, EMapClip::KeepBack));
-		FBounds B = BoundsOf(*Doc, { Cube });
+		REQUIRE(Doc->ClipObjects({Cube}, AtX16, EMapClip::KeepBack));
+		FBounds B = BoundsOf(*Doc, {Cube});
 		CHECK(FMath::Abs(B.Max.GetX() - 16.0f) < 0.01f);
 		CHECK(FMath::Abs(B.Min.GetX() + 32.0f) < 0.01f);
 		Doc->Undo();
 
-		REQUIRE(Doc->ClipObjects({ Cube }, AtX16, EMapClip::KeepFront));
-		B = BoundsOf(*Doc, { Cube });
+		REQUIRE(Doc->ClipObjects({Cube}, AtX16, EMapClip::KeepFront));
+		B = BoundsOf(*Doc, {Cube});
 		CHECK(FMath::Abs(B.Min.GetX() - 16.0f) < 0.01f);
 		Doc->Undo();
 
-		REQUIRE(Doc->ClipObjects({ Cube }, AtX16, EMapClip::Split));
+		REQUIRE(Doc->ClipObjects({Cube}, AtX16, EMapClip::Split));
 		CHECK(Doc->CountBrushes() == 2);
 		CHECK(Doc->GetSelection().size() == 2);
 		Doc->Undo();
@@ -838,10 +852,10 @@ TEST_SUITE("MapEditor")
 
 		// A plane past the brush clips all of it away: the object goes.
 		const Plane Beyond(Vector3d(1.0f, 0.0f, 0.0f), Vector3d(-100.0f, 0.0f, 0.0f));
-		REQUIRE(Doc->ClipObjects({ Cube }, Beyond, EMapClip::KeepBack));
+		REQUIRE(Doc->ClipObjects({Cube}, Beyond, EMapClip::KeepBack));
 		CHECK(Doc->GetObjects().empty());
 		Doc->Undo();
-		CHECK(Doc->GetObjects() == TArray<Object*>{ Cube });
+		CHECK(Doc->GetObjects() == TArray<Object*>{Cube});
 	}
 
 	TEST_CASE("Groups keep their members in place, scope into them, and ungroup")
@@ -850,49 +864,49 @@ TEST_SUITE("MapEditor")
 		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		Object* A = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(-64.0f, 0.0f, 0.0f));
 		Object* B = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(64.0f, 32.0f, 0.0f));
-		const FBounds Before = BoundsOf(*Doc, { A, B });
+		const FBounds Before = BoundsOf(*Doc, {A, B});
 
-		Object* Group = Doc->GroupObjects({ A, B });
+		Object* Group = Doc->GroupObjects({A, B});
 		REQUIRE(Group);
 		CHECK(FMapDocument::IsGroup(*Group));
-		CHECK(Doc->GetObjects() == TArray<Object*>{ Group });
-		CHECK(Doc->GetSelection() == TArray<Object*>{ Group });
-		const FBounds Grouped = BoundsOf(*Doc, { Group });
+		CHECK(Doc->GetObjects() == TArray<Object*>{Group});
+		CHECK(Doc->GetSelection() == TArray<Object*>{Group});
+		const FBounds Grouped = BoundsOf(*Doc, {Group});
 		CHECK(Same(Grouped.Min, Before.Min));
 		CHECK(Same(Grouped.Max, Before.Max));
 
 		// Moving the group moves its members; edits inside it are in its space.
-		Doc->MoveObjects({ Group }, Vector3d(0.0f, 0.0f, 16.0f));
+		Doc->MoveObjects({Group}, Vector3d(0.0f, 0.0f, 16.0f));
 		REQUIRE(Doc->SetScope(*Group));
-		CHECK(Doc->GetObjects() == TArray<Object*>{ A, B });
+		CHECK(Doc->GetObjects() == TArray<Object*>{A, B});
 		CHECK(Doc->GetSelection().empty());
-		Doc->SetSelection({ A });
-		Doc->MoveObjects({ A }, Vector3d(8.0f, 0.0f, 0.0f));
+		Doc->SetSelection({A});
+		Doc->MoveObjects({A}, Vector3d(8.0f, 0.0f, 0.0f));
 		Doc->ScopeUp();
 		CHECK(&Doc->GetScope() == &Doc->GetRoot());
-		CHECK(Doc->GetSelection() == TArray<Object*>{ Group });
+		CHECK(Doc->GetSelection() == TArray<Object*>{Group});
 
-		REQUIRE(Doc->UngroupObjects({ Group }));
-		CHECK(Doc->GetObjects() == TArray<Object*>{ A, B });
-		const FBounds Ungrouped = BoundsOf(*Doc, { A, B });
+		REQUIRE(Doc->UngroupObjects({Group}));
+		CHECK(Doc->GetObjects() == TArray<Object*>{A, B});
+		const FBounds Ungrouped = BoundsOf(*Doc, {A, B});
 		CHECK(Same(Ungrouped.Min, Vector3d(Before.Min.GetX() + 8.0f, Before.Min.GetY(), Before.Min.GetZ() + 16.0f)));
 
 		// Undo back through the ungroup and the move made inside the group.
 		Doc->Undo();
-		CHECK(Doc->GetObjects() == TArray<Object*>{ Group });
+		CHECK(Doc->GetObjects() == TArray<Object*>{Group});
 		Doc->Undo();
 		CHECK(&Doc->GetScope() == Group); // that step was made in the group
 		Doc->Undo();
 		Doc->Undo();
 		CHECK(&Doc->GetScope() == &Doc->GetRoot());
-		CHECK(Doc->GetObjects() == TArray<Object*>{ A, B });
-		CHECK(Same(BoundsOf(*Doc, { A, B }).Min, Before.Min));
+		CHECK(Doc->GetObjects() == TArray<Object*>{A, B});
+		CHECK(Same(BoundsOf(*Doc, {A, B}).Min, Before.Min));
 		while (Doc->CanRedo())
 		{
 			Doc->Redo();
 		}
-		CHECK(Doc->GetObjects() == TArray<Object*>{ A, B });
-		CHECK(Same(BoundsOf(*Doc, { A, B }).Min, Ungrouped.Min));
+		CHECK(Doc->GetObjects() == TArray<Object*>{A, B});
+		CHECK(Same(BoundsOf(*Doc, {A, B}).Min, Ungrouped.Min));
 	}
 
 	TEST_CASE("Names, entity keys and textures are undoable properties")
@@ -903,9 +917,9 @@ TEST_SUITE("MapEditor")
 		Object* Light = Doc->AddEntity("light", Vector3d(0.0f, 0.0f, 64.0f));
 		Object* Cube = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 0.0f));
 
-		Doc->SetEntityKey({ Light }, "light", "450");
+		Doc->SetEntityKey({Light}, "light", "450");
 		CHECK(FString(Light->GetEntityPtr()->GetKey("light")) == "450");
-		Doc->SetEntityKey({ Light }, "light", "");
+		Doc->SetEntityKey({Light}, "light", "");
 		CHECK(Light->GetEntityPtr()->GetKey("light") == nullptr);
 		Doc->Undo();
 		CHECK(FString(Light->GetEntityPtr()->GetKey("light")) == "450");
@@ -915,7 +929,7 @@ TEST_SUITE("MapEditor")
 		Doc->Undo();
 		CHECK(FString(Cube->GetObjName()) != "Pillar");
 
-		Doc->SetTexture({ Cube }, "stone/wall_02");
+		Doc->SetTexture({Cube}, "stone/wall_02");
 		CHECK(FString(Cube->GetBrush().GetFaceTexturePtr(0)->GetTName()) == "stone/wall_02");
 		FString Error;
 		const FString Out = Temp.File("tex.map");
@@ -940,7 +954,7 @@ TEST_SUITE("MapEditor")
 		F.Doc->SelectAll();
 		F.Client->FrameSelection();
 		F.T.Tick();
-		const auto Drag = [&](const Vector3d& From, const Vector3d& To)
+		const TFunction<void(const Vector3d&, const Vector3d&)> Drag = [&](const Vector3d& From, const Vector3d& To)
 		{
 			F.T.MouseDown(Window, F.At(From));
 			F.T.MouseMove(Window, F.At(From) + (F.At(To) - F.At(From)) * 0.3f);
@@ -961,7 +975,7 @@ TEST_SUITE("MapEditor")
 		CHECK(Same(PositionOf(B), Vector3d(128.0f, 0.0f, 0.0f)));
 
 		// Scale A to twice its width from its left side.
-		F.Doc->SetSelection({ A });
+		F.Doc->SetSelection({A});
 		F.Settings.Tool = EMapTool::Scale;
 		Drag(Vector3d(32.0f, 0.0f, 0.0f), Vector3d(96.0f, 0.0f, 0.0f));
 		Vector3d Min, Max;
@@ -971,7 +985,7 @@ TEST_SUITE("MapEditor")
 		F.Doc->Undo();
 
 		// Clip A along a line through its middle; Enter keeps one side.
-		F.Doc->SetSelection({ A });
+		F.Doc->SetSelection({A});
 		F.Settings.Tool = EMapTool::Clip;
 		Drag(Vector3d(0.0f, -80.0f, 0.0f), Vector3d(0.0f, 80.0f, 0.0f));
 		F.T.Key(EKey::Enter);
@@ -983,7 +997,7 @@ TEST_SUITE("MapEditor")
 
 		// Drag a vertical edge of A out to (64, 64) with the edge tool (the
 		// brush stays convex; a single corner pulled out would not).
-		F.Doc->SetSelection({ A });
+		F.Doc->SetSelection({A});
 		F.Settings.Tool = EMapTool::Edge;
 		F.Render(); // picking dots uses what the view computed when it drew
 		Drag(Vector3d(32.0f, 32.0f, 0.0f), Vector3d(64.0f, 64.0f, 0.0f));
@@ -996,7 +1010,7 @@ TEST_SUITE("MapEditor")
 
 		// Entering a group keeps everything where it was on screen.
 		const FVector2 AOnScreen = F.At(PositionOf(A));
-		Object* Group = F.Doc->GroupObjects({ A, B });
+		Object* Group = F.Doc->GroupObjects({A, B});
 		REQUIRE(F.Doc->SetScope(*Group));
 		F.T.Tick();
 		const FVector2 AInGroup = F.At(PositionOf(A)); // A's position is now in the group's space
@@ -1004,10 +1018,10 @@ TEST_SUITE("MapEditor")
 		CHECK(FMath::Abs(AInGroup.Y - AOnScreen.Y) < 0.5f);
 		F.T.Click(Window, AInGroup);
 		F.T.Tick();
-		CHECK(F.Doc->GetSelection() == TArray<Object*>{ A });
+		CHECK(F.Doc->GetSelection() == TArray<Object*>{A});
 		F.Doc->ScopeUp();
 		F.T.Tick();
-		CHECK(F.Doc->GetSelection() == TArray<Object*>{ Group });
+		CHECK(F.Doc->GetSelection() == TArray<Object*>{Group});
 	}
 
 	TEST_CASE("Map objects show their name, position, texture and typed entity keys as properties")
@@ -1018,7 +1032,7 @@ TEST_SUITE("MapEditor")
 		FMapObjectProperties Props(*Doc, *Light);
 		TArray<FPropertyDesc> Descs;
 		Props.GetProperties(Descs);
-		const auto Find = [&](const char* Name) -> const FPropertyDesc*
+		const TFunction<const FPropertyDesc*(const char*)> Find = [&](const char* Name) -> const FPropertyDesc*
 		{
 			for (const FPropertyDesc& Desc : Descs)
 			{
@@ -1050,7 +1064,7 @@ TEST_SUITE("MapEditor")
 		Props.SetValue("Flag:spawnflags:1", true);
 		CHECK(FString(Light->GetEntityPtr()->GetKey("spawnflags")) == "1");
 		CHECK(std::get<bool>(Props.GetValue("Flag:spawnflags:1")));
-		Props.SetValue("Position", FPropertyVector3{ 32.0f, 32.0f, 64.0f });
+		Props.SetValue("Position", FPropertyVector3{32.0f, 32.0f, 64.0f});
 		CHECK(Same(PositionOf(Light), Vector3d(32.0f, 32.0f, 64.0f)));
 		Doc->Undo();
 		CHECK(Same(PositionOf(Light), Vector3d(16.0f, 32.0f, 64.0f)));
@@ -1058,7 +1072,7 @@ TEST_SUITE("MapEditor")
 		CHECK(Light->GetEntityPtr()->GetKey("spawnflags") == nullptr);
 
 		// Keys the class does not define appear as text.
-		Doc->SetEntityKey({ Light }, "_shadow", "1");
+		Doc->SetEntityKey({Light}, "_shadow", "1");
 		Descs.clear();
 		Props.GetProperties(Descs);
 		REQUIRE(Find("Key:_shadow"));
@@ -1084,9 +1098,10 @@ TEST_SUITE("MapEditor")
 		Object* Cube = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(0.0f, 0.0f, 0.0f));
 		TSharedPtr<SPropertyGrid> Grid;
 		T.AddWindow(SAssignNew(Grid, SPropertyGrid)
-			.OnBeginTransaction([&](const FString& Description) { Doc->BeginTransaction(Description); })
-			.OnEndTransaction([&] { Doc->EndTransaction(); }), FVector2(320.0f, 480.0f));
-		const auto Show = [&](TArray<Object*> Objects)
+		                .OnBeginTransaction([&](const FString& Description) { Doc->BeginTransaction(Description); })
+		                .OnEndTransaction([&] { Doc->EndTransaction(); }),
+		    FVector2(320.0f, 480.0f));
+		const TFunction<void(TArray<Object*>)> Show = [&](TArray<Object*> Objects)
 		{
 			TArray<TSharedRef<IPropertySource>> Sources;
 			for (Object* Obj : Objects)
@@ -1097,16 +1112,16 @@ TEST_SUITE("MapEditor")
 			T.Tick();
 			T.Tick();
 		};
-		Show({ Light });
-		Show({ Cube });
-		Show({ Light, Cube });
-		Doc->RotateObjects({ Cube }, 2, 45.0f, Vector3d(0.0f, 0.0f, 0.0f));
+		Show({Light});
+		Show({Cube});
+		Show({Light, Cube});
+		Doc->RotateObjects({Cube}, 2, 45.0f, Vector3d(0.0f, 0.0f, 0.0f));
 		T.Tick();
-		Show({ Cube });
-		Doc->RotateObjects({ Cube }, 2, 45.0f, Vector3d(0.0f, 0.0f, 0.0f));
+		Show({Cube});
+		Doc->RotateObjects({Cube}, 2, 45.0f, Vector3d(0.0f, 0.0f, 0.0f));
 		T.Tick();
 		Grid->SetPropertyValue("Key:light", int32(600));
-		Show({ Light });
+		Show({Light});
 		Grid->SetPropertyValue("Key:light", int32(600));
 		CHECK(FString(Light->GetEntityPtr()->GetKey("light")) == "600");
 	}
@@ -1132,10 +1147,10 @@ TEST_SUITE("MapEditor")
 		Doc->BeginBrushEdit(*Cube, "Move Face");
 		Doc->MoveBrushFace(*Top, Vector3d(0.0f, 0.0f, 32.0f));
 		CHECK(Doc->EndBrushEdit());
-		CHECK(Same(BoundsOf(*Doc, { Cube }).Size(), Vector3d(64.0f, 64.0f, 96.0f)));
+		CHECK(Same(BoundsOf(*Doc, {Cube}).Size(), Vector3d(64.0f, 64.0f, 96.0f)));
 		CHECK(Doc->GetUndoDescription() == "Move Face");
 		Doc->Undo();
-		CHECK(Same(BoundsOf(*Doc, { Cube }).Size(), Vector3d(64.0f, 64.0f, 64.0f)));
+		CHECK(Same(BoundsOf(*Doc, {Cube}).Size(), Vector3d(64.0f, 64.0f, 64.0f)));
 
 		// A corner pushed through the brush makes it concave: refused.
 		Geometry& Again = Cube->GetBrush();
@@ -1152,7 +1167,7 @@ TEST_SUITE("MapEditor")
 		Doc->MoveBrushVertex(Corner, Vector3d(-96.0f, -96.0f, -96.0f));
 		CHECK(!Doc->EndBrushEdit());
 		CHECK(!Doc->IsInTransaction());
-		CHECK(Same(BoundsOf(*Doc, { Cube }).Size(), Vector3d(64.0f, 64.0f, 64.0f)));
+		CHECK(Same(BoundsOf(*Doc, {Cube}).Size(), Vector3d(64.0f, 64.0f, 64.0f)));
 		CHECK(Doc->GetUndoDescription() != "Move Vertex");
 	}
 }
@@ -1166,7 +1181,7 @@ TEST_SUITE("MapEditor")
 	{
 		EnsureMapCore();
 		const std::vector<std::string>& Names = StaticMesh::GetBasicShapeNames();
-		CHECK(Names == std::vector<std::string>{ "Cube", "Sphere", "Cylinder", "Cone", "Plane" });
+		CHECK(Names == std::vector<std::string>{"Cube", "Sphere", "Cylinder", "Cone", "Plane"});
 		for (const std::string& Name : Names)
 		{
 			const std::shared_ptr<const StaticMesh> Mesh = StaticMesh::Find(Name.c_str());
@@ -1206,10 +1221,10 @@ TEST_SUITE("MapEditor")
 		CHECK(Doc->CountMeshes() == 1);
 		CHECK(Doc->CountBrushes() == 0);
 		CHECK(Doc->GetUndoDescription() == "Add Cube");
-		CHECK(Same(BoundsOf(*Doc, { Cube }).Size(), Vector3d(128.0f, 128.0f, 128.0f)));
+		CHECK(Same(BoundsOf(*Doc, {Cube}).Size(), Vector3d(128.0f, 128.0f, 128.0f)));
 
 		const Vector3d Center(64.0f, 0.0f, 0.0f);
-		Doc->RotateObjects({ Cube }, 2, 30.0f, Center);
+		Doc->RotateObjects({Cube}, 2, 30.0f, Center);
 		CHECK(Cube->HasMesh()); // not baked into a brush
 		CHECK(Same(PositionOf(Cube), Center));
 		const Vector3d Turned = FMapDocument::GetMeshRotation(*Cube);
@@ -1217,13 +1232,13 @@ TEST_SUITE("MapEditor")
 		CHECK(FMath::Abs(Turned.GetX()) < 0.05f);
 		CHECK(FMath::Abs(Turned.GetY()) < 0.05f);
 
-		Doc->ScaleObjects({ Cube }, Vector3d(2.0f, 2.0f, 2.0f), Center);
+		Doc->ScaleObjects({Cube}, Vector3d(2.0f, 2.0f, 2.0f), Center);
 		CHECK(Same(Cube->GetScale(), Vector3d(2.0f, 2.0f, 2.0f)));
-		CHECK(FMath::Abs(BoundsOf(*Doc, { Cube }).Size().GetZ() - 256.0f) < 0.05f);
+		CHECK(FMath::Abs(BoundsOf(*Doc, {Cube}).Size().GetZ() - 256.0f) < 0.05f);
 
-		Doc->FlipObjects({ Cube }, 2, Center);
+		Doc->FlipObjects({Cube}, 2, Center);
 		CHECK(Cube->HasMesh());
-		CHECK(FMath::Abs(BoundsOf(*Doc, { Cube }).Size().GetZ() - 256.0f) < 0.05f);
+		CHECK(FMath::Abs(BoundsOf(*Doc, {Cube}).Size().GetZ() - 256.0f) < 0.05f);
 
 		Doc->Undo(); // flip
 		Doc->Undo(); // scale
@@ -1250,19 +1265,19 @@ TEST_SUITE("MapEditor")
 		{
 			Names.push_back(Desc.DisplayName);
 		}
-		CHECK(Names == TArray<FString>{ "Name", "Location", "Rotation", "Scale", "Static Mesh" });
+		CHECK(Names == TArray<FString>{"Name", "Location", "Rotation", "Scale", "Static Mesh"});
 
 		// A rotation set in degrees reads back the same (roll, pitch, yaw).
-		Props.SetValue("Rotation", FPropertyVector3{ 10.0f, 20.0f, 30.0f });
+		Props.SetValue("Rotation", FPropertyVector3{10.0f, 20.0f, 30.0f});
 		const FPropertyVector3 Rotation = std::get<FPropertyVector3>(Props.GetValue("Rotation"));
 		CHECK(FMath::Abs(Rotation.X - 10.0f) < 0.05f);
 		CHECK(FMath::Abs(Rotation.Y - 20.0f) < 0.05f);
 		CHECK(FMath::Abs(Rotation.Z - 30.0f) < 0.05f);
 		CHECK(Doc->GetUndoDescription() == "Rotate");
 
-		Props.SetValue("Scale", FPropertyVector3{ 1.0f, 2.0f, 3.0f });
+		Props.SetValue("Scale", FPropertyVector3{1.0f, 2.0f, 3.0f});
 		CHECK(Same(Mesh->GetScale(), Vector3d(1.0f, 2.0f, 3.0f)));
-		Props.SetValue("Position", FPropertyVector3{ 16.0f, 32.0f, 48.0f });
+		Props.SetValue("Position", FPropertyVector3{16.0f, 32.0f, 48.0f});
 		CHECK(Same(PositionOf(Mesh), Vector3d(16.0f, 32.0f, 48.0f)));
 
 		Props.SetValue("StaticMesh", static_cast<int32>(1));
@@ -1325,25 +1340,25 @@ TEST_SUITE("MapEditor")
 		REQUIRE(Mesh);
 
 		// A mesh is no cutter, and is not cut.
-		Doc->SetSelection({ Mesh });
+		Doc->SetSelection({Mesh});
 		CHECK(!Doc->SubtractSelection());
 		CHECK(Doc->CountBrushes() == 1);
-		Doc->SetSelection({ Brush });
+		Doc->SetSelection({Brush});
 		Doc->SubtractSelection();
 		CHECK(Mesh->HasMesh());
 		CHECK(Doc->CountMeshes() == 1);
 
 		const Plane AtX0(Vector3d(1.0f, 0.0f, 0.0f), Vector3d(0.0f, 0.0f, 0.0f));
-		CHECK(!Doc->ClipObjects({ Mesh }, AtX0, EMapClip::KeepBack));
-		CHECK(!Doc->HollowObjects({ Mesh }, 8.0f, true));
+		CHECK(!Doc->ClipObjects({Mesh}, AtX0, EMapClip::KeepBack));
+		CHECK(!Doc->HollowObjects({Mesh}, 8.0f, true));
 		CHECK(Doc->CountMeshes() == 1);
 
 		// In a group with a brush, the clip cuts the brush and keeps the mesh.
 		Object* Other = Doc->AddPrefab(PrefabPath("Cube"), Vector3d(200.0f, 0.0f, 0.0f));
-		Object* Group = Doc->GroupObjects({ Other, Mesh });
+		Object* Group = Doc->GroupObjects({Other, Mesh});
 		REQUIRE(Group);
 		const Plane AtX200(Vector3d(1.0f, 0.0f, 0.0f), Vector3d(200.0f, 0.0f, 0.0f));
-		CHECK(Doc->ClipObjects({ Group }, AtX200, EMapClip::KeepBack));
+		CHECK(Doc->ClipObjects({Group}, AtX200, EMapClip::KeepBack));
 		CHECK(Doc->CountMeshes() == 1);
 		CHECK(Mesh->HasMesh());
 		CHECK(Log.Problems.empty());
@@ -1396,7 +1411,6 @@ TEST_SUITE("MapEditor")
 // ---------------------------------------------------------------------------
 // Landscapes: heightfields sculpted in the Landscape mode.
 
-
 namespace
 {
 	float HeightAt(const Object& Land, int32 X, int32 Y)
@@ -1415,7 +1429,7 @@ namespace
 		}
 		return true;
 	}
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -1437,13 +1451,14 @@ TEST_SUITE("MapEditor")
 		REQUIRE(Bumped);
 		CHECK(Bumped->GetHeight(2, 1) == 10.0f);
 		CHECK(FMath::Abs(Bumped->SampleHeight(16.0f, 0.0f) - 5.0f) < 0.01f); // halfway to the next point
-		CHECK(Bumped->SampleHeight(1000.0f, 1000.0f) == 0.0f);                 // clamped at the edge
+		CHECK(Bumped->SampleHeight(1000.0f, 1000.0f) == 0.0f);               // clamped at the edge
 		CHECK(!Field.WithHeights(std::vector<float>(3, 0.0f)));
 		CHECK(Field.GetHeight(2, 1) == 0.0f); // the original never changes
 
 		// The mesh follows the heights: a ray down hits the bump's top.
 		float Depth = 0.0f;
-		REQUIRE(Bumped->GetMesh()->HitMesh(Line(Vector3d(0.0f, 0.0f, 100.0f), Vector3d(0.0f, 0.0f, -1.0f)), 0.0f, 1000.0f, Depth));
+		REQUIRE(Bumped->GetMesh()->HitMesh(
+		    Line(Vector3d(0.0f, 0.0f, 100.0f), Vector3d(0.0f, 0.0f, -1.0f)), 0.0f, 1000.0f, Depth));
 		CHECK(FMath::Abs(Depth - 90.0f) < 0.01f);
 	}
 
@@ -1484,9 +1499,9 @@ TEST_SUITE("MapEditor")
 		Mode.EndStroke();
 		CHECK(!Doc->IsInTransaction());
 		const float Raised = HeightAt(*Land, 16, 16);
-		CHECK(Raised > 40.0f); // 256 units a second at full strength, 11 steps of 1/60 s
+		CHECK(Raised > 40.0f);                       // 256 units a second at full strength, 11 steps of 1/60 s
 		CHECK(HeightAt(*Land, 16 + 3, 16) < Raised); // falloff
-		CHECK(HeightAt(*Land, 0, 0) == 0.0f);         // outside the brush
+		CHECK(HeightAt(*Land, 0, 0) == 0.0f);        // outside the brush
 		CHECK(Doc->GetUndoDescription() == "Landscape Sculpt");
 		Doc->Undo();
 		CHECK(AllFlat(*Land));
@@ -1640,9 +1655,9 @@ TEST_SUITE("MapEditor")
 		CHECK(!Field.GetMesh()->HasVertexColors());
 		LandscapeLayer Red = Field.MakeLayer("Red", 255, 0, 0);
 		CHECK(Red.weights.size() == 9);
-		Red.weights[4] = 1.0f;  // the middle, all red
-		Red.weights[0] = 0.5f;  // a corner, half
-		const std::shared_ptr<const Landscape> Painted = Field.WithLayers({ Red });
+		Red.weights[4] = 1.0f; // the middle, all red
+		Red.weights[0] = 0.5f; // a corner, half
+		const std::shared_ptr<const Landscape> Painted = Field.WithLayers({Red});
 		REQUIRE(Painted);
 		CHECK(Painted->GetNumLayers() == 1);
 		CHECK(Painted->GetWeight(0, 1, 1) == 1.0f);
@@ -1660,7 +1675,7 @@ TEST_SUITE("MapEditor")
 		// Weights must match the grid.
 		LandscapeLayer Short = Red;
 		Short.weights.resize(3);
-		CHECK(!Field.WithLayers({ Short }));
+		CHECK(!Field.WithLayers({Short}));
 	}
 
 	TEST_CASE("Painting a layer makes the others give way, erasing takes it off, and layers are undoable")
@@ -1755,7 +1770,7 @@ TEST_SUITE("MapEditor")
 		}
 		LandscapeLayer Snow = Land->GetLandscape().MakeLayer("Snow", 240, 240, 250);
 		Snow.weights[3] = 0.5f;
-		Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({ Sand, Snow }), "Paint");
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({Sand, Snow}), "Paint");
 		FString Error;
 		const FString Qle = Temp.File("layers.qle");
 		REQUIRE(Doc->Save(Qle, Error));
@@ -1848,7 +1863,7 @@ namespace
 		REQUIRE(File.Open(Path, EFileOpenMode::Write));
 		REQUIRE(File.Write(Bytes.data(), static_cast<int64>(Bytes.size())) == static_cast<int64>(Bytes.size()));
 	}
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -1999,7 +2014,7 @@ TEST_SUITE("MapEditor")
 		FHeightmap Map;
 		REQUIRE(FHeightmap::Load(Png, Map, Error));
 		CHECK(Map.Width == 11);
-		CHECK(Map.At(10, 0) == 65535);  // the top row is +Y: full grass at the right
+		CHECK(Map.At(10, 0) == 65535); // the top row is +Y: full grass at the right
 		CHECK(Map.At(10, 10) == 128 * 257);
 		CHECK(!Mode.ExportWeightmap(*Land, 5, Png, Error));
 
@@ -2012,7 +2027,8 @@ TEST_SUITE("MapEditor")
 			for (int32 X = 0; X <= 10; ++X)
 			{
 				CHECK(After.GetWeight(0, X, Y) + After.GetWeight(1, X, Y) <= 1.0001f);
-				CHECK(std::fabs((After.GetWeight(1, X, Y)) - (Layers[0].weights[static_cast<SIZE_T>(Y) * 11 + X])) <= 1.0 / 255.0 + 1e-4);
+				CHECK(std::fabs((After.GetWeight(1, X, Y)) - (Layers[0].weights[static_cast<SIZE_T>(Y) * 11 + X])) <=
+				    1.0 / 255.0 + 1e-4);
 			}
 		}
 		CHECK(After.GetWeight(0, 10, 10) == 0.0f); // Rock is all of it there
@@ -2049,7 +2065,11 @@ namespace
 		const int32 RowBytes = (Width * 3 + 3) & ~3;
 		const uint32 DataSize = static_cast<uint32>(RowBytes * Height);
 		TArray<uint8> Bytes(54 + DataSize, 0);
-		const auto Put32 = [&Bytes](SIZE_T At, uint32 V) { for (int32 I = 0; I < 4; ++I) Bytes[At + I] = static_cast<uint8>(V >> (8 * I)); };
+		const TFunction<void(SIZE_T, uint32)> Put32 = [&Bytes](SIZE_T At, uint32 V)
+		{
+			for (int32 I = 0; I < 4; ++I)
+				Bytes[At + I] = static_cast<uint8>(V >> (8 * I));
+		};
 		Bytes[0] = 'B';
 		Bytes[1] = 'M';
 		Put32(2, 54 + DataSize);
@@ -2077,19 +2097,20 @@ namespace
 	}
 
 	// One layer over all of a landscape.
-	std::shared_ptr<const Landscape> Covered(const Landscape& Land, const char* Name, FColor Color, const std::string& Texture, float Tiling = 512.0f)
+	std::shared_ptr<const Landscape> Covered(
+	    const Landscape& Land, const char* Name, FColor Color, const std::string& Texture, float Tiling = 512.0f)
 	{
 		LandscapeLayer Layer = Land.MakeLayer(Name, Color.R, Color.G, Color.B);
 		Layer.texture = Texture;
 		Layer.tiling = Tiling;
 		std::fill(Layer.weights.begin(), Layer.weights.end(), 1.0f);
-		return Land.WithLayers({ Layer });
+		return Land.WithLayers({Layer});
 	}
 
 	// The image's mean color, and how much it varies.
 	void Stats(const FLandscapeBake& Bake, float Mean[3], float& Spread)
 	{
-		double Sum[3] = { 0, 0, 0 };
+		double Sum[3] = {0, 0, 0};
 		double Squares = 0;
 		const SIZE_T Count = static_cast<SIZE_T>(Bake.GetWidth()) * Bake.GetHeight();
 		for (SIZE_T I = 0; I < Count; ++I)
@@ -2104,9 +2125,10 @@ namespace
 		{
 			Mean[C] = static_cast<float>(Sum[C] / static_cast<double>(Count));
 		}
-		Spread = static_cast<float>(std::sqrt(FMath::Max(Squares / static_cast<double>(Count) - static_cast<double>(Mean[1]) * Mean[1], 0.0)));
+		Spread = static_cast<float>(
+		    std::sqrt(FMath::Max(Squares / static_cast<double>(Count) - static_cast<double>(Mean[1]) * Mean[1], 0.0)));
 	}
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -2117,7 +2139,8 @@ TEST_SUITE("MapEditor")
 		for (const FString& Name : FLandscapeTextureLibrary::GetBuiltInNames())
 		{
 			CAPTURE(Name);
-			const FLandscapeTexture* Texture = Library.Find(std::string(FLandscapeTextureLibrary::BuiltIn(Name).View()));
+			const FLandscapeTexture* Texture =
+			    Library.Find(std::string(FLandscapeTextureLibrary::BuiltIn(Name).View()));
 			REQUIRE(Texture);
 			CHECK(Texture->bTint);
 			CHECK(Texture->Mips.front().Width == 256);
@@ -2148,7 +2171,8 @@ TEST_SUITE("MapEditor")
 
 		// Grass all over: the grass color on average, with detail in it.
 		FLandscapeBake Bake;
-		const std::shared_ptr<const Landscape> Grass = Covered(Field, "Grass", FColor(92, 146, 62), "builtin:Grass", 128.0f);
+		const std::shared_ptr<const Landscape> Grass =
+		    Covered(Field, "Grass", FColor(92, 146, 62), "builtin:Grass", 128.0f);
 		REQUIRE(FLandscapeTextureLibrary::IsTextured(*Grass));
 		const FIntRect All = Bake.Update(Grass);
 		CHECK(All == FIntRect(0, 0, 256, 128));
@@ -2163,12 +2187,12 @@ TEST_SUITE("MapEditor")
 
 		// A plain-colored layer is flat; where none is painted, the ground's color.
 		LandscapeLayer Plain = Field.MakeLayer("Red", 200, 20, 20);
-		for (const SIZE_T Corner : { SIZE_T(0), SIZE_T(1), SIZE_T(17), SIZE_T(18) })
+		for (const SIZE_T Corner : {SIZE_T(0), SIZE_T(1), SIZE_T(17), SIZE_T(18)})
 		{
 			Plain.weights[Corner] = 1.0f; // all of quad 0
 		}
 		FLandscapeBake PlainBake;
-		PlainBake.Update(Field.WithLayers({ Plain }));
+		PlainBake.Update(Field.WithLayers({Plain}));
 		CHECK(PlainBake.GetTexel(0, 0) == FColor(200, 20, 20, 255));
 		unsigned char R, G, B;
 		Landscape::GetBaseColor(R, G, B);
@@ -2177,12 +2201,13 @@ TEST_SUITE("MapEditor")
 		// An image file, as it is: a 2 x 1 red and blue, repeating every 64
 		// units (two quads), so each quad is one color.
 		const FString Bmp = Temp.File("stripes.bmp");
-		WriteBmp(Bmp, 2, 1, { FColor(255, 0, 0), FColor(0, 0, 255) });
-		const std::shared_ptr<const Landscape> Striped = Covered(Field, "Stripes", FColor(255, 255, 255), std::string(Bmp.View()), 64.0f);
+		WriteBmp(Bmp, 2, 1, {FColor(255, 0, 0), FColor(0, 0, 255)});
+		const std::shared_ptr<const Landscape> Striped =
+		    Covered(Field, "Stripes", FColor(255, 255, 255), std::string(Bmp.View()), 64.0f);
 		FLandscapeBake ImageBake;
 		ImageBake.Update(Striped);
-		const FColor Left = ImageBake.GetTexel(8, 8);    // the middle of quad 0
-		const FColor Right = ImageBake.GetTexel(24, 8);  // of quad 1
+		const FColor Left = ImageBake.GetTexel(8, 8);   // the middle of quad 0
+		const FColor Right = ImageBake.GetTexel(24, 8); // of quad 1
 		CHECK(Left.R > 200);
 		CHECK(Left.B < 60);
 		CHECK(Right.B > 200);
@@ -2260,7 +2285,7 @@ TEST_SUITE("MapEditor")
 		Moss.texture = "C:/Art Work/moss tile.png";
 		Moss.tiling = 300.0f;
 		LandscapeLayer Plain = Land->GetLandscape().MakeLayer("Plain", 1, 2, 3);
-		Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({ Moss, Plain }), "Paint");
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({Moss, Plain}), "Paint");
 		FString Error;
 		const FString Qle = Temp.File("textures.qle");
 		REQUIRE(Doc->Save(Qle, Error));
@@ -2286,7 +2311,7 @@ TEST_SUITE("MapEditor")
 
 	TEST_CASE("Textured landscapes draw with their baked image (D3D12 and Vulkan)")
 	{
-		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		for (const ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			CAPTURE(ToString(Backend));
 			FTestLogCapture Log;
@@ -2389,9 +2414,15 @@ namespace
 			Doc->SetLandscape(*Land, Field.WithHeights(Heights), "Set");
 		}
 
-		float H(int32 X, int32 Y) const { return Land->GetLandscape().GetHeight(X, Y); }
+		float H(int32 X, int32 Y) const
+		{
+			return Land->GetLandscape().GetHeight(X, Y);
+		}
 		// The grid point's place in scope space.
-		Vector3d At(int32 X, int32 Y) const { return Land->GetLandscape().GetPoint(X, Y); }
+		Vector3d At(int32 X, int32 Y) const
+		{
+			return Land->GetLandscape().GetPoint(X, Y);
+		}
 
 		void Stroke(const Vector3d& Point, float Seconds, bool bInvert = false)
 		{
@@ -2403,7 +2434,7 @@ namespace
 			Mode.EndStroke();
 		}
 	};
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -2442,8 +2473,8 @@ TEST_SUITE("MapEditor")
 		F.Mode.bFlattenToTarget = true;
 		F.Mode.FlattenTarget = 20.0f;
 		F.Stroke(F.At(16, 16), 1.0f);
-		CHECK(F.H(0, 5) == doctest::Approx(20.0f).epsilon(0.01));  // was -100: raised
-		CHECK(F.H(32, 5) == doctest::Approx(100.0f));               // above: left alone
+		CHECK(F.H(0, 5) == doctest::Approx(20.0f).epsilon(0.01)); // was -100: raised
+		CHECK(F.H(32, 5) == doctest::Approx(100.0f));             // above: left alone
 		CHECK(F.Doc->GetUndoDescription() == "Landscape Flatten");
 		F.Doc->Undo();
 		CHECK(F.H(0, 5) == doctest::Approx(-100.0f));
@@ -2595,7 +2626,8 @@ namespace
 		{
 			for (int32 X = 0; X <= QuadsX; ++X)
 			{
-				Heights.push_back(Amplitude * std::sin(X * 0.7f) * std::cos(Y * 0.5f) + Amplitude * 0.5f * std::sin(X * 2.3f + Y * 1.7f));
+				Heights.push_back(Amplitude * std::sin(X * 0.7f) * std::cos(Y * 0.5f) +
+				    Amplitude * 0.5f * std::sin(X * 2.3f + Y * 1.7f));
 			}
 		}
 		return Landscape::Create(QuadsX, QuadsY, 32.0f, Heights);
@@ -2614,7 +2646,7 @@ namespace
 			}
 			Land = F.Doc->AddLandscape(Hills(Quads, Quads), Vector3d(0.0f, 0.0f, 0.0f));
 			REQUIRE(Land);
-			F.Doc->SetSelection({ Land });
+			F.Doc->SetSelection({Land});
 			F.Client->FrameSelection();
 			F.Doc->ClearSelection();
 			F.Client->SetViewMode(EMapViewMode::Lit);
@@ -2632,7 +2664,7 @@ namespace
 			return Pixels;
 		}
 	};
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -2651,7 +2683,7 @@ TEST_SUITE("MapEditor")
 
 		const StaticMesh& Mesh = *Land->GetMesh();
 		uint32 Seed = 7;
-		const auto Random = [&Seed](float Lo, float Hi)
+		const TFunction<float(float, float)> Random = [&Seed](float Lo, float Hi)
 		{
 			Seed = Seed * 1664525u + 1013904223u;
 			return Lo + (Hi - Lo) * static_cast<float>(Seed >> 8) / 16777216.0f;
@@ -2660,7 +2692,8 @@ TEST_SUITE("MapEditor")
 		for (int32 Ray = 0; Ray < 400; ++Ray)
 		{
 			// From above, from below and from the side, at all angles.
-			const Vector3d Origin(Random(-800.0f, 800.0f), Random(-500.0f, 500.0f), Ray % 3 == 0 ? -300.0f : Random(100.0f, 600.0f));
+			const Vector3d Origin(
+			    Random(-800.0f, 800.0f), Random(-500.0f, 500.0f), Ray % 3 == 0 ? -300.0f : Random(100.0f, 600.0f));
 			const Vector3d Toward(Random(-640.0f, 640.0f), Random(-384.0f, 384.0f), Random(-60.0f, 60.0f));
 			Vector3d Direction(Toward);
 			Direction.SubVector(Origin);
@@ -2700,16 +2733,17 @@ TEST_SUITE("MapEditor")
 		const int32 Full = Triangles;
 		View::landscapeDetailPixels = Detail;
 		const TArray<uint8> Pixels = V.Draw(Triangles, Components);
-		CHECK(Components == 64);           // framed: all of it in view
+		CHECK(Components == 64); // framed: all of it in view
 		CHECK(Full > 60000);
-		CHECK(Triangles < Full / 8);       // far ground at a fraction
+		CHECK(Triangles < Full / 8); // far ground at a fraction
 		CHECK(Triangles > 500);
 		MESSAGE("full ", Full, " triangles, with levels ", Triangles);
 
 		// Inside the landscape's outline every pixel is ground: no crack
 		// shows the background through.
 		const FColor Background = PixelAt(V.F.Render(), 0, 0);
-		const Vector3d Corners[4] = { { -3600.0f, -3600.0f, 0.0f }, { 3600.0f, -3600.0f, 0.0f }, { 3600.0f, 3600.0f, 0.0f }, { -3600.0f, 3600.0f, 0.0f } };
+		const Vector3d Corners[4] = {
+		    {-3600.0f, -3600.0f, 0.0f}, {3600.0f, -3600.0f, 0.0f}, {3600.0f, 3600.0f, 0.0f}, {-3600.0f, 3600.0f, 0.0f}};
 		FVector2 Screen[4];
 		for (int32 I = 0; I < 4; ++I)
 		{
@@ -2748,7 +2782,7 @@ TEST_SUITE("MapEditor")
 		// most of it is behind or beside the camera.
 		Object* Cube = V.F.Doc->AddMesh("Cube", Vector3d(3900.0f, 3900.0f, 64.0f));
 		REQUIRE(Cube);
-		V.F.Doc->SetSelection({ Cube });
+		V.F.Doc->SetSelection({Cube});
 		V.F.Client->FrameSelection();
 		V.F.Doc->ClearSelection();
 		int32 Triangles = 0, Components = 0;
@@ -2816,7 +2850,7 @@ namespace
 		const double Mean = Sum / Count;
 		return static_cast<float>(std::sqrt(FMath::Max(Squares / Count - Mean * Mean, 0.0)));
 	}
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -2879,7 +2913,7 @@ TEST_SUITE("MapEditor")
 
 	TEST_CASE("Landscape layers blended on the GPU are sharper up close than baked ones (D3D12 and Vulkan)")
 	{
-		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		for (const ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			CAPTURE(ToString(Backend));
 			FTestLogCapture Log;
@@ -2902,13 +2936,14 @@ TEST_SUITE("MapEditor")
 			}
 			const FString Bmp = Temp.File("checker.bmp");
 			WriteBmp(Bmp, 64, 64, Checker);
-			Object* Land = F.Doc->AddLandscape(Covered(Landscape(8, 8, 256.0f), "Checker", FColor(255, 255, 255), std::string(Bmp.View()), 64.0f),
-				Vector3d(0.0f, 0.0f, 0.0f));
+			Object* Land = F.Doc->AddLandscape(
+			    Covered(Landscape(8, 8, 256.0f), "Checker", FColor(255, 255, 255), std::string(Bmp.View()), 64.0f),
+			    Vector3d(0.0f, 0.0f, 0.0f));
 			REQUIRE(Land);
 			// Close over its middle: framed on a cube there, which then goes.
 			Object* Marker = F.Doc->AddMesh("Cube", Vector3d(0.0f, 0.0f, 64.0f));
 			REQUIRE(Marker);
-			F.Doc->SetSelection({ Marker });
+			F.Doc->SetSelection({Marker});
 			F.Client->FrameSelection();
 			F.Doc->Undo();
 			F.Client->SetViewMode(EMapViewMode::Unlit);
@@ -2933,7 +2968,6 @@ TEST_SUITE("MapEditor")
 
 // ---------------------------------------------------------------------------
 // Foliage.
-
 
 namespace
 {
@@ -2976,9 +3010,12 @@ namespace
 			Mode.EndStroke();
 		}
 
-		const Foliage& Leaves() { return Mode.GetFoliageObject()->GetFoliage(); }
+		const Foliage& Leaves()
+		{
+			return Mode.GetFoliageObject()->GetFoliage();
+		}
 	};
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -3023,7 +3060,8 @@ TEST_SUITE("MapEditor")
 		B.type = 1;
 		B.position.NewVector(-50.0f, 0.0f, 0.0f);
 		B.up.NewVector(1.0f, 0.0f, 1.0f); // leaning 45 degrees toward +x
-		const auto Leaves = std::make_shared<Foliage>(std::vector<FoliageType>{ Bush, Tree }, std::vector<FoliageInstance>{ A, B });
+		const TSharedPtr<Foliage> Leaves =
+		    std::make_shared<Foliage>(std::vector<FoliageType>{Bush, Tree}, std::vector<FoliageInstance>{A, B});
 		CHECK(Leaves->GetNumInstances() == 2);
 		CHECK(Leaves->CountInstances(1) == 1);
 		REQUIRE(Leaves->GetMesh(0));
@@ -3042,7 +3080,7 @@ TEST_SUITE("MapEditor")
 		REQUIRE(Leaves->GetBounds(Low, High));
 		CHECK(High.GetZ() > 30.0f);
 		// Removing the first type drops its instances; the second moves up.
-		const std::shared_ptr<const Foliage> Fewer = Leaves->WithTypes({ Tree }, { 1 });
+		const std::shared_ptr<const Foliage> Fewer = Leaves->WithTypes({Tree}, {1});
 		CHECK(Fewer->GetNumTypes() == 1);
 		REQUIRE(Fewer->GetNumInstances() == 1);
 		CHECK(Fewer->GetInstances()[0].type == 0);
@@ -3086,7 +3124,8 @@ TEST_SUITE("MapEditor")
 		CHECK(Count < Expected * 1.1f);
 		for (const FoliageInstance& Instance : F.Leaves().GetInstances())
 		{
-			const float R = std::sqrt(Instance.position.GetX() * Instance.position.GetX() + Instance.position.GetY() * Instance.position.GetY());
+			const float R = std::sqrt(Instance.position.GetX() * Instance.position.GetX() +
+			    Instance.position.GetY() * Instance.position.GetY());
 			CHECK(R <= 256.5f);
 			CHECK(std::fabs(Instance.position.GetZ()) < 0.5f); // on the flat ground
 			CHECK(Instance.scale >= 0.7f);
@@ -3124,7 +3163,8 @@ TEST_SUITE("MapEditor")
 			{
 				if (All[J].type == 0)
 				{
-					const float Dx = All[I].position.GetX() - All[J].position.GetX(), Dy = All[I].position.GetY() - All[J].position.GetY();
+					const float Dx = All[I].position.GetX() - All[J].position.GetX(),
+					            Dy = All[I].position.GetY() - All[J].position.GetY();
 					CHECK(Dx * Dx + Dy * Dy >= 220.0f * 220.0f);
 				}
 			}
@@ -3181,7 +3221,8 @@ TEST_SUITE("MapEditor")
 		CHECK(Raised > 100.0f);
 		for (const FoliageInstance& Instance : F.Leaves().GetInstances())
 		{
-			const float Ground = F.Land->GetLandscape().SampleHeight(Instance.position.GetX(), Instance.position.GetY());
+			const float Ground =
+			    F.Land->GetLandscape().SampleHeight(Instance.position.GetX(), Instance.position.GetY());
 			CHECK(std::fabs(Instance.position.GetZ() - Ground) < 0.5f);
 		}
 		// One undo step puts both back.
@@ -3192,7 +3233,7 @@ TEST_SUITE("MapEditor")
 
 	TEST_CASE("Foliage is drawn (D3D12 and Vulkan), culled past its distance, and not picked")
 	{
-		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		for (const ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			CAPTURE(std::string(ToString(Backend)));
 			FTestLogCapture Log;
@@ -3204,7 +3245,7 @@ TEST_SUITE("MapEditor")
 			}
 			Object* Land = F.Doc->AddLandscape(16, 16, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
 			REQUIRE(Land);
-			F.Doc->SetSelection({ Land });
+			F.Doc->SetSelection({Land});
 			F.Client->FrameSelection();
 			F.Doc->ClearSelection();
 			F.Client->SetViewMode(EMapViewMode::Lit);
@@ -3242,7 +3283,8 @@ TEST_SUITE("MapEditor")
 			{
 				for (int32 DX = -6; DX <= 6; ++DX)
 				{
-					const FColor C = PixelAt(Pixels, static_cast<int32>(Beside.X) + DX, static_cast<int32>(Beside.Y) + DY);
+					const FColor C =
+					    PixelAt(Pixels, static_cast<int32>(Beside.X) + DX, static_cast<int32>(Beside.Y) + DY);
 					Green += C.G > C.R + 20 && C.G > C.B + 20 ? 1 : 0;
 					++Seen;
 				}
@@ -3275,7 +3317,7 @@ TEST_SUITE("MapEditor")
 {
 	TEST_CASE("Instanced foliage looks as the triangles View makes would, and is quicker (D3D12 and Vulkan)")
 	{
-		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		for (const ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			CAPTURE(std::string(ToString(Backend)));
 			FTestLogCapture Log;
@@ -3287,7 +3329,7 @@ TEST_SUITE("MapEditor")
 			}
 			Object* Land = F.Doc->AddLandscape(32, 32, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
 			REQUIRE(Land);
-			F.Doc->SetSelection({ Land });
+			F.Doc->SetSelection({Land});
 			F.Client->FrameSelection();
 			F.Doc->ClearSelection();
 			F.Client->SetViewMode(EMapViewMode::Lit);
@@ -3295,7 +3337,7 @@ TEST_SUITE("MapEditor")
 			// Trees, bushes, rocks and grass all over it.
 			FMapFoliageMode Mode;
 			Mode.SetDocument(F.Doc.get());
-			for (const char* Name : { "Tree", "Bush", "Rock", "Grass" })
+			for (const char* Name : {"Tree", "Bush", "Rock", "Grass"})
 			{
 				REQUIRE(Mode.AddType(Name));
 			}
@@ -3326,17 +3368,19 @@ TEST_SUITE("MapEditor")
 				for (int32 X = 0; X < 256; ++X)
 				{
 					const FColor A = PixelAt(Triangles, X, Y), B = PixelAt(Instanced, X, Y);
-					const int32 Diff = std::abs(int32(A.R) - int32(B.R)) + std::abs(int32(A.G) - int32(B.G)) + std::abs(int32(A.B) - int32(B.B));
+					const int32 Diff = std::abs(int32(A.R) - int32(B.R)) + std::abs(int32(A.G) - int32(B.G)) +
+					    std::abs(int32(A.B) - int32(B.B));
 					Close += Diff <= 12 ? 1 : 0;
 					++Total;
 				}
 			}
-			MESSAGE(std::string(ToString(Backend)), ": ", Instances, " instances, ", Close * 100 / Total, "% of pixels alike");
+			MESSAGE(std::string(ToString(Backend)), ": ", Instances, " instances, ", Close * 100 / Total,
+			    "% of pixels alike");
 			CHECK(Close > Total * 9 / 10);
 
 			// And quicker to draw.
 			// (Frames as the editor draws them: no reading the picture back.)
-			const auto Time = [&F](bool bInstanced)
+			const TFunction<double(bool)> Time = [&F](bool bInstanced)
 			{
 				F.Resources->bInstanceMeshes = bInstanced;
 				F.Render();
@@ -3354,7 +3398,8 @@ TEST_SUITE("MapEditor")
 			};
 			const double Cpu = Time(false);
 			const double Gpu = Time(true);
-			MESSAGE(std::string(ToString(Backend)), ": a frame as triangles ", Cpu * 1000.0, " ms, instanced ", Gpu * 1000.0, " ms");
+			MESSAGE(std::string(ToString(Backend)), ": a frame as triangles ", Cpu * 1000.0, " ms, instanced ",
+			    Gpu * 1000.0, " ms");
 			// (Software rasterizers, as tests use, spend the time filling
 			// pixels either way: instanced is no slower there.)
 			CHECK(Gpu < Cpu * 1.2);
@@ -3379,7 +3424,7 @@ TEST_SUITE("MapEditor")
 		}
 		Object* Land = F.Doc->AddLandscape(64, 64, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
 		REQUIRE(Land);
-		F.Doc->SetSelection({ Land });
+		F.Doc->SetSelection({Land});
 		F.Client->FrameSelection();
 		F.Doc->ClearSelection();
 		F.Client->SetViewMode(EMapViewMode::Lit);
@@ -3406,7 +3451,7 @@ TEST_SUITE("MapEditor")
 		Mode.EndStroke();
 		const int32 Instances = Mode.GetFoliageObject()->GetFoliage().GetNumInstances();
 		REQUIRE(Instances > 20000);
-		const auto Time = [&F](bool bInstanced)
+		const TFunction<double(bool)> Time = [&F](bool bInstanced)
 		{
 			F.Resources->bInstanceMeshes = bInstanced;
 			F.Render();
@@ -3425,8 +3470,8 @@ TEST_SUITE("MapEditor")
 		const double Cpu = Time(false);
 		View::foliageInstancesDrawn = 0;
 		const double Gpu = Time(true);
-		MESSAGE(Instances, " instances (", View::foliageInstancesDrawn / 11, " drawn a frame): as triangles ", Cpu * 1000.0, " ms a frame, instanced ",
-			Gpu * 1000.0, " ms");
+		MESSAGE(Instances, " instances (", View::foliageInstancesDrawn / 11, " drawn a frame): as triangles ",
+		    Cpu * 1000.0, " ms a frame, instanced ", Gpu * 1000.0, " ms");
 		CHECK(Gpu * 2.0 < Cpu);
 	}
 }
@@ -3444,7 +3489,7 @@ namespace
 		Point.falloff = Falloff;
 		return Point;
 	}
-}
+} // namespace
 
 TEST_SUITE("MapEditor")
 {
@@ -3452,7 +3497,8 @@ TEST_SUITE("MapEditor")
 	{
 		EnsureMapCore();
 		LandscapeSpline Spline;
-		Spline.points = { SplinePoint(0.0f, 0.0f, 0.0f, 100.0f), SplinePoint(500.0f, 200.0f, 50.0f, 300.0f), SplinePoint(1000.0f, 0.0f, 0.0f, 100.0f) };
+		Spline.points = {SplinePoint(0.0f, 0.0f, 0.0f, 100.0f), SplinePoint(500.0f, 200.0f, 50.0f, 300.0f),
+		    SplinePoint(1000.0f, 0.0f, 0.0f, 100.0f)};
 		std::vector<LandscapeSpline::Sample> Samples;
 		Spline.SampleCurve(10.0f, Samples);
 		REQUIRE(Samples.size() > 100);
@@ -3501,9 +3547,10 @@ TEST_SUITE("MapEditor")
 		REQUIRE(Mode.AddLayer(*Land)); // Rock
 		// A road at height 20 across the middle, 128 wide, fading over 128.
 		LandscapeSpline Road;
-		Road.points = { SplinePoint(-800.0f, 0.0f, 20.0f), SplinePoint(0.0f, 0.0f, 20.0f), SplinePoint(800.0f, 0.0f, 20.0f) };
+		Road.points = {
+		    SplinePoint(-800.0f, 0.0f, 20.0f), SplinePoint(0.0f, 0.0f, 20.0f), SplinePoint(800.0f, 0.0f, 20.0f)};
 		Road.layer = "Rock";
-		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({ Road }), "Road");
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({Road}), "Road");
 		REQUIRE(Mode.ApplySplines(*Land));
 		CHECK(Doc->GetUndoDescription() == "Apply Splines to Landscape");
 		const Landscape& After = Land->GetLandscape();
@@ -3525,7 +3572,7 @@ TEST_SUITE("MapEditor")
 		// Raise only: ground above the road stays.
 		Doc->Undo();
 		Road.lowerTerrain = false;
-		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({ Road }), "Road");
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({Road}), "Road");
 		REQUIRE(Mode.ApplySplines(*Land));
 		for (int32 X = 10; X <= 54; ++X)
 		{
@@ -3629,7 +3676,7 @@ TEST_SUITE("MapEditor")
 		F.Settings.EditorMode = &Mode;
 		F.Render();
 		const TSharedRef<SWindow> Window = ToSharedRef(F.Window);
-		const auto CtrlClick = [&](const Vector3d& At)
+		const TFunction<void(const Vector3d&)> CtrlClick = [&](const Vector3d& At)
 		{
 			F.T.SetModifiers(false, true);
 			F.T.MouseMove(Window, F.At(At));
@@ -3696,7 +3743,7 @@ TEST_SUITE("MapEditor")
 		EnsureMapCore();
 		LandscapeSpline Spline;
 		Spline.mesh = "Road";
-		Spline.points = { SplinePoint(0.0f, 0.0f, 10.0f, 300.0f), SplinePoint(1000.0f, 0.0f, 10.0f, 300.0f) };
+		Spline.points = {SplinePoint(0.0f, 0.0f, 10.0f, 300.0f), SplinePoint(1000.0f, 0.0f, 10.0f, 300.0f)};
 		const std::shared_ptr<const StaticMesh> Straight = Landscape::BuildSplineMesh(Spline);
 		REQUIRE(Straight);
 		const std::shared_ptr<const StaticMesh> Road = StaticMesh::Find("Road");
@@ -3722,7 +3769,8 @@ TEST_SUITE("MapEditor")
 		CHECK(Up / Count > 0.95f);
 
 		// Round a bend, every vertex stays on the road's band about the curve.
-		Spline.points = { SplinePoint(0.0f, 0.0f, 0.0f, 200.0f), SplinePoint(800.0f, 0.0f, 0.0f, 200.0f), SplinePoint(800.0f, 800.0f, 0.0f, 200.0f) };
+		Spline.points = {SplinePoint(0.0f, 0.0f, 0.0f, 200.0f), SplinePoint(800.0f, 0.0f, 0.0f, 200.0f),
+		    SplinePoint(800.0f, 800.0f, 0.0f, 200.0f)};
 		const std::shared_ptr<const StaticMesh> Bent = Landscape::BuildSplineMesh(Spline);
 		REQUIRE(Bent);
 		std::vector<LandscapeSpline::Sample> Samples;
@@ -3757,12 +3805,13 @@ TEST_SUITE("MapEditor")
 		Fence.meshFitWidth = false;
 		Fence.meshScale = 1.5f;
 		Fence.meshZOffset = 4.0f;
-		Fence.points = { SplinePoint(-300.0f, 0.0f, 0.0f), SplinePoint(300.0f, 100.0f, 0.0f) };
-		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({ Fence }), "Fence");
+		Fence.points = {SplinePoint(-300.0f, 0.0f, 0.0f), SplinePoint(300.0f, 100.0f, 0.0f)};
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({Fence}), "Fence");
 		const std::shared_ptr<const StaticMesh> Built = Land->GetLandscape().GetSplineMeshes()[0];
 		REQUIRE(Built);
 		// Sculpting: the same mesh, not made again.
-		const std::shared_ptr<const Landscape> Raised = Land->GetLandscape().WithHeights(std::vector<float>(33 * 33, 50.0f));
+		const std::shared_ptr<const Landscape> Raised =
+		    Land->GetLandscape().WithHeights(std::vector<float>(33 * 33, 50.0f));
 		CHECK(Raised->GetSplineMeshes()[0] == Built);
 		// The fence's top (110 tall, 1.5 times, 4 up) is in the bounds.
 		Vector3d Low, High;
@@ -3792,7 +3841,7 @@ TEST_SUITE("MapEditor")
 
 	TEST_CASE("A road spline's mesh is drawn on the landscape (D3D12 and Vulkan)")
 	{
-		for (const ERHIBackend Backend : { ERHIBackend::D3D12, ERHIBackend::Vulkan })
+		for (const ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			CAPTURE(std::string(ToString(Backend)));
 			FTestLogCapture Log;
@@ -3804,7 +3853,7 @@ TEST_SUITE("MapEditor")
 			}
 			Object* Land = F.Doc->AddLandscape(32, 32, 32.0f, Vector3d(0.0f, 0.0f, 0.0f));
 			REQUIRE(Land);
-			F.Doc->SetSelection({ Land });
+			F.Doc->SetSelection({Land});
 			F.Client->FrameSelection();
 			F.Doc->ClearSelection();
 			F.Client->SetViewMode(EMapViewMode::Lit);
@@ -3815,8 +3864,8 @@ TEST_SUITE("MapEditor")
 			const FColor Ground = PixelAt(F.Render(), X, Y);
 			LandscapeSpline Road;
 			Road.mesh = "Road";
-			Road.points = { SplinePoint(-480.0f, 300.0f, 0.0f, 200.0f), SplinePoint(480.0f, 300.0f, 0.0f, 200.0f) };
-			F.Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({ Road }), "Road");
+			Road.points = {SplinePoint(-480.0f, 300.0f, 0.0f, 200.0f), SplinePoint(480.0f, 300.0f, 0.0f, 200.0f)};
+			F.Doc->SetLandscape(*Land, Land->GetLandscape().WithSplines({Road}), "Road");
 			const FColor Asphalt = PixelAt(F.Render(), X, Y);
 			CHECK(Asphalt != Ground);
 			// Grey and dark: the road's.
@@ -3836,9 +3885,10 @@ TEST_SUITE("MapEditor")
 	{
 		EnsureMapCore();
 		LandscapeSpline Spline;
-		Spline.points = { SplinePoint(0.0f, 0.0f, 0.0f), SplinePoint(400.0f, 0.0f, 0.0f), SplinePoint(800.0f, 400.0f, 0.0f) };
-		CHECK(Same(Spline.GetTangent(1), Vector3d(400.0f, 200.0f, 0.0f)));  // half of next - previous
-		CHECK(Same(Spline.GetTangent(0), Vector3d(200.0f, 0.0f, 0.0f)));    // the ends repeat
+		Spline.points = {
+		    SplinePoint(0.0f, 0.0f, 0.0f), SplinePoint(400.0f, 0.0f, 0.0f), SplinePoint(800.0f, 400.0f, 0.0f)};
+		CHECK(Same(Spline.GetTangent(1), Vector3d(400.0f, 200.0f, 0.0f))); // half of next - previous
+		CHECK(Same(Spline.GetTangent(0), Vector3d(200.0f, 0.0f, 0.0f)));   // the ends repeat
 		// Halfway between the first two points, Catmull-Rom's own value.
 		std::vector<LandscapeSpline::Sample> Samples;
 		Spline.SampleCurve(1000.0f, Samples); // a step a segment: t = 0, then the next point
@@ -3992,7 +4042,7 @@ TEST_SUITE("MapEditor")
 		F.Settings.EditorMode = &Mode;
 		F.Render();
 		const TSharedRef<SWindow> Window = ToSharedRef(F.Window);
-		const auto Click = [&](const Vector3d& At, bool bCtrl)
+		const TFunction<void(const Vector3d&, bool)> Click = [&](const Vector3d& At, bool bCtrl)
 		{
 			F.T.SetModifiers(false, bCtrl);
 			F.T.MouseMove(Window, F.At(At));
@@ -4039,362 +4089,639 @@ TEST_SUITE("MapEditor")
 
 TEST_SUITE("MeshMaterials")
 {
- TEST_CASE("Material mip chains filter sRGB colors and normalize normals including odd edges")
- {
-  FString Error; FTextureAsset Texture; Texture.Width=3; Texture.Height=1;
-  Texture.Pixels={0,0,0,255, 0,0,0,255, 255,255,255,255}; FMapMaterialMipChain Mips;
-  REQUIRE(FMapMaterialMipChain::Build(Texture,false,Mips,Error)); CHECK(Mips.Levels==2); REQUIRE(Mips.Pixels.size()==16);
-  CHECK(Mips.Pixels[12]>=155); CHECK(Mips.Pixels[12]<=157); // linear 1/3 encoded as sRGB
-  Texture.bSRGB=false; REQUIRE(FMapMaterialMipChain::Build(Texture,false,Mips,Error)); CHECK(Mips.Pixels[12]==85);
-  Texture.Width=2; Texture.Pixels={255,128,128,255, 128,255,128,255};
-  REQUIRE(FMapMaterialMipChain::Build(Texture,true,Mips,Error));
-  CHECK(Mips.Pixels[8]>210); CHECK(Mips.Pixels[9]>210); CHECK(Mips.Pixels[10]>=127); CHECK(Mips.Pixels[10]<=130);
-  const auto Bytes=Mips.Pixels; Texture.Width=0; CHECK_FALSE(FMapMaterialMipChain::Build(Texture,false,Mips,Error)); CHECK(Mips.Pixels==Bytes);
- }
- TEST_CASE("Native material normals use the full inverse transpose under mirrored and sheared transforms")
- {
-  auto Asset=std::make_shared<FLoadedMeshAsset>(); Asset->Data.Mesh=StaticMesh::Find("Cube"); Asset->DisplayMesh=Asset->Data.Mesh;
-  Object Obj; Obj.SetMeshAsset(Asset); FMapDraw Draw;
-  Matrix44 Parent, Rotation, Child, ToView;
-  Parent.SetScale(Vector3d(-2,0.5f,3)); Rotation.SetRotateZ(0.4f); Parent.Multiply(Rotation);
-  Child.SetRotateY(0.7f); ToView.SetTranslation(Vector3d(0,500,0)); ToView.Multiply(Parent); ToView.Multiply(Child);
-  REQUIRE(Draw.ZBufMaterialMesh(Obj,ToView)); const auto& Vertices=Draw.GetMaterialVertices(); REQUIRE_FALSE(Vertices.empty());
-  for(size_t I=0; I<Vertices.size(); I+=3) {
-   Vector3d P[3]; for(int K=0; K<3; ++K) P[K].NewVector(Vertices[I+K].Position[0],Vertices[I+K].Position[1],Vertices[I+K].Position[2]);
-   Vector3d Edge; Edge.SubVector(P[1],P[0]).Normalize();
-   Vector3d N(Vertices[I].Normal[0],Vertices[I].Normal[1],Vertices[I].Normal[2]);
-   CHECK(std::abs(N.DotVector(Edge))<0.0001f); CHECK(N.GetMag()==doctest::Approx(1.0f));
-  }
- }
- TEST_CASE("Native mesh UV textures PBR surfaces and normal maps render on D3D12 and Vulkan")
- {
-  TArray<uint8> D3DUnlit;
-  for(auto Backend:{ERHIBackend::D3D12,ERHIBackend::Vulkan}) {
-   CAPTURE(std::string(ToString(Backend))); FTestLogCapture Log; FViewFixture F;
-   if(!F.Create(Backend,EMapViewType::Perspective)) { MESSAGE("Device unavailable"); continue; }
-   F.Settings.bShowGrid=false; auto Flags=F.Client->GetShowFlags(); Flags.bAxes=false; Flags.bViewportStats=false; F.Client->SetShowFlags(Flags);
-   auto Asset=std::make_shared<FLoadedMeshAsset>(); Asset->Data.Mesh=StaticMesh::Find("Cube"); Asset->DisplayMesh=Asset->Data.Mesh; Asset->Material=FMaterialAsset{};
-   FTextureAsset Texture; Texture.Width=Texture.Height=32; Texture.Pixels.resize(32*32*4);
-   for(int Y=0; Y<32; ++Y) for(int X=0; X<32; ++X) {
-    const FColor Colors[4]={FColor(240,20,20),FColor(20,240,20),FColor(20,20,240),FColor(240,240,20)};
-    const auto C=Colors[(Y>=16?2:0)+(X>=16?1:0)]; const size_t I=(Y*32+X)*4;
-    Texture.Pixels[I]=C.R; Texture.Pixels[I+1]=C.G; Texture.Pixels[I+2]=C.B; Texture.Pixels[I+3]=255;
-   }
-   Asset->Texture=Texture; auto* Obj=F.Doc->AddMesh("Cube",Vector3d()); REQUIRE(Obj); Obj->SetMeshAsset(Asset); F.Client->FrameSelection(); F.Doc->ClearSelection(); F.Client->SetViewMode(EMapViewMode::Unlit);
-   const auto Unlit=F.Render();
-   const auto Sample=[&](const TArray<uint8>& Pixels,const Vector3d& Point) { const auto P=F.At(Point); return PixelAt(Pixels,static_cast<int>(P.X),static_cast<int>(P.Y)); };
-   auto Red=Sample(Unlit,Vector3d(-32,-64,32)), Green=Sample(Unlit,Vector3d(32,-64,32)), Blue=Sample(Unlit,Vector3d(-32,-64,-32));
-   CHECK(Red.R > 200);
-   CHECK(Red.G < 50);
-   CHECK(Green.G > 200);
-   CHECK(Green.R < 50);
-   CHECK(Blue.B > 200);
-   CHECK(Blue.R < 50);
-   // Alpha combines texture and factor, masks write depth only for surviving pixels.
-   auto AlphaAsset = std::make_shared<FLoadedMeshAsset>(*Asset);
-   AlphaAsset->Material->BaseColor[3] = 0;
-   Obj->SetMeshAsset(AlphaAsset);
-   CHECK(F.Render() == Unlit); // opaque ignores alpha
-   AlphaAsset = std::make_shared<FLoadedMeshAsset>(*AlphaAsset);
-   AlphaAsset->Material->BlendMode = EMaterialBlendMode::Translucent;
-   Obj->SetMeshAsset(AlphaAsset);
-   const auto Empty = F.Render();
-   auto Half = std::make_shared<FLoadedMeshAsset>(*AlphaAsset);
-   Half->Material->BaseColor[3] = 0.5f;
-   Obj->SetMeshAsset(Half);
-   const auto Blended = F.Render();
-   const auto Background = Sample(Empty, Vector3d(-32, -64, 32));
-   const auto Mixed = Sample(Blended, Vector3d(-32, -64, 32));
-   CHECK(std::abs(int(Mixed.R) - (int(Red.R) + int(Background.R)) / 2) <= 3);
-   CHECK(std::abs(int(Mixed.G) - (int(Red.G) + int(Background.G)) / 2) <= 3);
-   auto Mask = std::make_shared<FLoadedMeshAsset>(*Half);
-   Mask->Material->BlendMode = EMaterialBlendMode::Masked;
-   Mask->Material->OpacityMaskClip = 0.6f;
-   Obj->SetMeshAsset(Mask);
-   CHECK(F.Render() == Empty);
-   Mask = std::make_shared<FLoadedMeshAsset>(*Mask);
-   Mask->Material->OpacityMaskClip = 0.4f;
-   Obj->SetMeshAsset(Mask);
-   CHECK(F.Render() == Unlit);
-   auto TextureAlpha = std::make_shared<FLoadedMeshAsset>(*Mask);
-   for (size_t I = 3; I < TextureAlpha->Texture->Pixels.size(); I += 4)
-	   TextureAlpha->Texture->Pixels[I] = 0;
-   Obj->SetMeshAsset(TextureAlpha);
-   CHECK(F.Render() == Empty);
-   Obj->SetMeshAsset(Asset);
-   // Native material and legacy faces share the depth buffer, irrespective of draw order.
-   Vector3d Away = F.Client->GetPlacementPoint();
-   Away.Normalize();
-   auto* Back = F.Doc->AddMesh("Cube", Away.MultVector(200.0f));
-   F.Doc->ClearSelection();
-   const auto Occluded = F.Render();
-   CHECK(Sample(Occluded, Vector3d(-32, -64, 32)) == Red);
-   Obj->SetMeshAsset(AlphaAsset);
-   const auto BehindPixel = Sample(F.Render(), Vector3d(-32, -64, 32));
-   Obj->SetMeshAsset(Half);
-   const auto OverOpaque = Sample(F.Render(), Vector3d(-32, -64, 32));
-   CHECK(std::abs(int(OverOpaque.R) - (int(Red.R) + int(BehindPixel.R)) / 2) <= 3);
-   auto Cutout = std::make_shared<FLoadedMeshAsset>(*Mask);
-   Cutout->Material->OpacityMaskClip = 0.6f;
-   Obj->SetMeshAsset(Cutout);
-   CHECK(Sample(F.Render(), Vector3d(-32, -64, 32)) == BehindPixel);
-   Obj->SetMeshAsset(Asset);
-   F.Doc->DeleteObjects({Back});
-   if (Backend == ERHIBackend::D3D12)
-	   D3DUnlit = Unlit;
-   else if (D3DUnlit.size() == Unlit.size())
-   {
-	   int Different = 0;
-	   for (size_t I = 0; I < Unlit.size(); I += 4)
-		   if (std::abs(int(Unlit[I]) - int(D3DUnlit[I])) > 3)
-			   ++Different;
-	   CHECK(Different < 800);
-   }
-   // Mirrored/nonuniform geometry still samples its local UVs and keeps its outward faces.
-   Obj->SetScale(Vector3d(-2, 1, 0.5f));
-   const auto Mirrored = F.Render();
-   Green = Sample(Mirrored, Vector3d(-64, -64, 16));
-   CHECK(Green.G > 200);
-   CHECK(Green.R < 50);
-   Obj->SetScale(Vector3d(1, 1, 1));
-   F.Client->SetViewMode(EMapViewMode::Lit);
-   const auto Lit = F.Render();
-   CHECK(Lit != Unlit);
-   auto Normal = std::make_shared<FLoadedMeshAsset>(*Asset);
-   FTextureAsset Tilt;
-   Tilt.Width = Tilt.Height = 1;
-   Tilt.Pixels = {25, 128, 200, 255};
-   Normal->NormalTexture = Tilt;
-   Obj->SetMeshAsset(Normal);
-   const auto Bumped = F.Render();
-   int NormalChanges = 0;
-   for (size_t I = 0; I < Lit.size(); I += 4)
-	   if (std::abs(int(Lit[I]) - int(Bumped[I])) > 8)
-		   ++NormalChanges;
-   CHECK(NormalChanges > 100);
-   F.Client->SetViewMode(EMapViewMode::Unlit);
-   CHECK(F.Render() == Unlit); // normals and light do not affect Unlit
-   // A linear data texture must not be decoded as sRGB; its display value is brighter.
-   auto Linear = std::make_shared<FLoadedMeshAsset>(*Asset);
-   FTextureAsset Gray;
-   Gray.Width = Gray.Height = 1;
-   Gray.Pixels = {128, 128, 128, 255};
-   Gray.bSRGB = false;
-   Linear->Texture = Gray;
-   Obj->SetMeshAsset(Linear);
-   auto GrayPixel = Sample(F.Render(), Vector3d(-32, -64, 32));
-   CHECK(GrayPixel.R >= 186);
-   CHECK(GrayPixel.R <= 190);
-   Gray.bSRGB = true;
-   auto SRGB = std::make_shared<FLoadedMeshAsset>(*Linear);
-   SRGB->Texture = Gray;
-   Obj->SetMeshAsset(SRGB);
-   GrayPixel = Sample(F.Render(), Vector3d(-32, -64, 32));
-   CHECK(GrayPixel.R >= 127);
-   CHECK(GrayPixel.R <= 129);
-   Gray.Width = 2;
-   Gray.Pixels = {0, 0, 0, 255, 255, 255, 255, 255};
-   auto Filtered = std::make_shared<FLoadedMeshAsset>(*SRGB);
-   Filtered->Texture = Gray;
-   Obj->SetMeshAsset(Filtered);
-   GrayPixel = Sample(F.Render(), Vector3d(0, -64, 32));
-   CHECK(GrayPixel.R > 175);
-   CHECK(GrayPixel.R < 202); // decode before interpolation, not after
+	TEST_CASE("Material mip chains filter sRGB colors and normalize normals including odd edges")
+	{
+		FString Error;
+		FTextureAsset Texture;
+		Texture.Width = 3;
+		Texture.Height = 1;
+		Texture.Pixels = {0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255};
+		FMapMaterialMipChain Mips;
+		REQUIRE(FMapMaterialMipChain::Build(Texture, false, Mips, Error));
+		CHECK(Mips.Levels == 2);
+		REQUIRE(Mips.Pixels.size() == 16);
+		CHECK(Mips.Pixels[12] >= 155);
+		CHECK(Mips.Pixels[12] <= 157); // linear 1/3 encoded as sRGB
+		Texture.bSRGB = false;
+		REQUIRE(FMapMaterialMipChain::Build(Texture, false, Mips, Error));
+		CHECK(Mips.Pixels[12] == 85);
+		Texture.Width = 2;
+		Texture.Pixels = {255, 128, 128, 255, 128, 255, 128, 255};
+		REQUIRE(FMapMaterialMipChain::Build(Texture, true, Mips, Error));
+		CHECK(Mips.Pixels[8] > 210);
+		CHECK(Mips.Pixels[9] > 210);
+		CHECK(Mips.Pixels[10] >= 127);
+		CHECK(Mips.Pixels[10] <= 130);
+		const TArray<uint8> Bytes = Mips.Pixels;
+		Texture.Width = 0;
+		CHECK_FALSE(FMapMaterialMipChain::Build(Texture, false, Mips, Error));
+		CHECK(Mips.Pixels == Bytes);
+	}
+	TEST_CASE("Native material normals use the full inverse transpose under mirrored and sheared transforms")
+	{
+		TSharedPtr<FLoadedMeshAsset> Asset = std::make_shared<FLoadedMeshAsset>();
+		Asset->Data.Mesh = StaticMesh::Find("Cube");
+		Asset->DisplayMesh = Asset->Data.Mesh;
+		Object Obj;
+		Obj.SetMeshAsset(Asset);
+		FMapDraw Draw;
+		Matrix44 Parent, Rotation, Child, ToView;
+		Parent.SetScale(Vector3d(-2, 0.5f, 3));
+		Rotation.SetRotateZ(0.4f);
+		Parent.Multiply(Rotation);
+		Child.SetRotateY(0.7f);
+		ToView.SetTranslation(Vector3d(0, 500, 0));
+		ToView.Multiply(Parent);
+		ToView.Multiply(Child);
+		REQUIRE(Draw.ZBufMaterialMesh(Obj, ToView));
+		const TArray<FMapMaterialVertex>& Vertices = Draw.GetMaterialVertices();
+		REQUIRE_FALSE(Vertices.empty());
+		for (size_t I = 0; I < Vertices.size(); I += 3)
+		{
+			Vector3d P[3];
+			for (int K = 0; K < 3; ++K)
+				P[K].NewVector(Vertices[I + K].Position[0], Vertices[I + K].Position[1], Vertices[I + K].Position[2]);
+			Vector3d Edge;
+			Edge.SubVector(P[1], P[0]).Normalize();
+			Vector3d N(Vertices[I].Normal[0], Vertices[I].Normal[1], Vertices[I].Normal[2]);
+			CHECK(std::abs(N.DotVector(Edge)) < 0.0001f);
+			CHECK(N.GetMag() == doctest::Approx(1.0f));
+		}
+	}
+	TEST_CASE("Native mesh UV textures PBR surfaces and normal maps render on D3D12 and Vulkan")
+	{
+		TArray<uint8> D3DUnlit;
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		{
+			CAPTURE(std::string(ToString(Backend)));
+			FTestLogCapture Log;
+			FViewFixture F;
+			if (!F.Create(Backend, EMapViewType::Perspective))
+			{
+				MESSAGE("Device unavailable");
+				continue;
+			}
+			F.Settings.bShowGrid = false;
+			FMapShowFlags Flags = F.Client->GetShowFlags();
+			Flags.bAxes = false;
+			Flags.bViewportStats = false;
+			F.Client->SetShowFlags(Flags);
+			TSharedPtr<FLoadedMeshAsset> Asset = std::make_shared<FLoadedMeshAsset>();
+			Asset->Data.Mesh = StaticMesh::Find("Cube");
+			Asset->DisplayMesh = Asset->Data.Mesh;
+			Asset->Material = FMaterialAsset{};
+			FTextureAsset Texture;
+			Texture.Width = Texture.Height = 32;
+			Texture.Pixels.resize(32 * 32 * 4);
+			for (int Y = 0; Y < 32; ++Y)
+				for (int X = 0; X < 32; ++X)
+				{
+					const FColor Colors[4] = {
+					    FColor(240, 20, 20), FColor(20, 240, 20), FColor(20, 20, 240), FColor(240, 240, 20)};
+					const FColor C = Colors[(Y >= 16 ? 2 : 0) + (X >= 16 ? 1 : 0)];
+					const size_t I = (Y * 32 + X) * 4;
+					Texture.Pixels[I] = C.R;
+					Texture.Pixels[I + 1] = C.G;
+					Texture.Pixels[I + 2] = C.B;
+					Texture.Pixels[I + 3] = 255;
+				}
+			Asset->Texture = Texture;
+			Object* Obj = F.Doc->AddMesh("Cube", Vector3d());
+			REQUIRE(Obj);
+			Obj->SetMeshAsset(Asset);
+			F.Client->FrameSelection();
+			F.Doc->ClearSelection();
+			F.Client->SetViewMode(EMapViewMode::Unlit);
+			const TArray<uint8> Unlit = F.Render();
+			const TFunction<FColor(const TArray<uint8>&, const Vector3d&)> Sample =
+			    [&](const TArray<uint8>& Pixels, const Vector3d& Point)
+			{
+				const FVector2 P = F.At(Point);
+				return PixelAt(Pixels, static_cast<int>(P.X), static_cast<int>(P.Y));
+			};
+			FColor Red = Sample(Unlit, Vector3d(-32, -64, 32)), Green = Sample(Unlit, Vector3d(32, -64, 32)),
+			       Blue = Sample(Unlit, Vector3d(-32, -64, -32));
+			CHECK(Red.R > 200);
+			CHECK(Red.G < 50);
+			CHECK(Green.G > 200);
+			CHECK(Green.R < 50);
+			CHECK(Blue.B > 200);
+			CHECK(Blue.R < 50);
+			// Alpha combines texture and factor, masks write depth only for surviving pixels.
+			TSharedPtr<FLoadedMeshAsset> AlphaAsset = std::make_shared<FLoadedMeshAsset>(*Asset);
+			AlphaAsset->Material->BaseColor[3] = 0;
+			Obj->SetMeshAsset(AlphaAsset);
+			CHECK(F.Render() == Unlit); // opaque ignores alpha
+			AlphaAsset = std::make_shared<FLoadedMeshAsset>(*AlphaAsset);
+			AlphaAsset->Material->BlendMode = EMaterialBlendMode::Translucent;
+			Obj->SetMeshAsset(AlphaAsset);
+			const TArray<uint8> Empty = F.Render();
+			TSharedPtr<FLoadedMeshAsset> Half = std::make_shared<FLoadedMeshAsset>(*AlphaAsset);
+			Half->Material->BaseColor[3] = 0.5f;
+			Obj->SetMeshAsset(Half);
+			const TArray<uint8> Blended = F.Render();
+			const FColor Background = Sample(Empty, Vector3d(-32, -64, 32));
+			const FColor Mixed = Sample(Blended, Vector3d(-32, -64, 32));
+			CHECK(std::abs(int(Mixed.R) - (int(Red.R) + int(Background.R)) / 2) <= 3);
+			CHECK(std::abs(int(Mixed.G) - (int(Red.G) + int(Background.G)) / 2) <= 3);
+			TSharedPtr<FLoadedMeshAsset> Mask = std::make_shared<FLoadedMeshAsset>(*Half);
+			Mask->Material->BlendMode = EMaterialBlendMode::Masked;
+			Mask->Material->OpacityMaskClip = 0.6f;
+			Obj->SetMeshAsset(Mask);
+			CHECK(F.Render() == Empty);
+			Mask = std::make_shared<FLoadedMeshAsset>(*Mask);
+			Mask->Material->OpacityMaskClip = 0.4f;
+			Obj->SetMeshAsset(Mask);
+			CHECK(F.Render() == Unlit);
+			TSharedPtr<FLoadedMeshAsset> TextureAlpha = std::make_shared<FLoadedMeshAsset>(*Mask);
+			for (size_t I = 3; I < TextureAlpha->Texture->Pixels.size(); I += 4)
+				TextureAlpha->Texture->Pixels[I] = 0;
+			Obj->SetMeshAsset(TextureAlpha);
+			CHECK(F.Render() == Empty);
+			Obj->SetMeshAsset(Asset);
+			// Native material and legacy faces share the depth buffer, irrespective of draw order.
+			Vector3d Away = F.Client->GetPlacementPoint();
+			Away.Normalize();
+			Object* Back = F.Doc->AddMesh("Cube", Away.MultVector(200.0f));
+			F.Doc->ClearSelection();
+			const TArray<uint8> Occluded = F.Render();
+			CHECK(Sample(Occluded, Vector3d(-32, -64, 32)) == Red);
+			Obj->SetMeshAsset(AlphaAsset);
+			const FColor BehindPixel = Sample(F.Render(), Vector3d(-32, -64, 32));
+			Obj->SetMeshAsset(Half);
+			const FColor OverOpaque = Sample(F.Render(), Vector3d(-32, -64, 32));
+			CHECK(std::abs(int(OverOpaque.R) - (int(Red.R) + int(BehindPixel.R)) / 2) <= 3);
+			TSharedPtr<FLoadedMeshAsset> Cutout = std::make_shared<FLoadedMeshAsset>(*Mask);
+			Cutout->Material->OpacityMaskClip = 0.6f;
+			Obj->SetMeshAsset(Cutout);
+			CHECK(Sample(F.Render(), Vector3d(-32, -64, 32)) == BehindPixel);
+			Obj->SetMeshAsset(Asset);
+			F.Doc->DeleteObjects({Back});
+			if (Backend == ERHIBackend::D3D12)
+				D3DUnlit = Unlit;
+			else if (D3DUnlit.size() == Unlit.size())
+			{
+				int Different = 0;
+				for (size_t I = 0; I < Unlit.size(); I += 4)
+					if (std::abs(int(Unlit[I]) - int(D3DUnlit[I])) > 3)
+						++Different;
+				CHECK(Different < 800);
+			}
+			// Mirrored/nonuniform geometry still samples its local UVs and keeps its outward faces.
+			Obj->SetScale(Vector3d(-2, 1, 0.5f));
+			const TArray<uint8> Mirrored = F.Render();
+			Green = Sample(Mirrored, Vector3d(-64, -64, 16));
+			CHECK(Green.G > 200);
+			CHECK(Green.R < 50);
+			Obj->SetScale(Vector3d(1, 1, 1));
+			F.Client->SetViewMode(EMapViewMode::Lit);
+			const TArray<uint8> Lit = F.Render();
+			CHECK(Lit != Unlit);
+			TSharedPtr<FLoadedMeshAsset> Normal = std::make_shared<FLoadedMeshAsset>(*Asset);
+			FTextureAsset Tilt;
+			Tilt.Width = Tilt.Height = 1;
+			Tilt.Pixels = {25, 128, 200, 255};
+			Normal->NormalTexture = Tilt;
+			Obj->SetMeshAsset(Normal);
+			const TArray<uint8> Bumped = F.Render();
+			int NormalChanges = 0;
+			for (size_t I = 0; I < Lit.size(); I += 4)
+				if (std::abs(int(Lit[I]) - int(Bumped[I])) > 8)
+					++NormalChanges;
+			CHECK(NormalChanges > 100);
+			F.Client->SetViewMode(EMapViewMode::Unlit);
+			CHECK(F.Render() == Unlit); // normals and light do not affect Unlit
+			// A linear data texture must not be decoded as sRGB; its display value is brighter.
+			TSharedPtr<FLoadedMeshAsset> Linear = std::make_shared<FLoadedMeshAsset>(*Asset);
+			FTextureAsset Gray;
+			Gray.Width = Gray.Height = 1;
+			Gray.Pixels = {128, 128, 128, 255};
+			Gray.bSRGB = false;
+			Linear->Texture = Gray;
+			Obj->SetMeshAsset(Linear);
+			FColor GrayPixel = Sample(F.Render(), Vector3d(-32, -64, 32));
+			CHECK(GrayPixel.R >= 186);
+			CHECK(GrayPixel.R <= 190);
+			Gray.bSRGB = true;
+			TSharedPtr<FLoadedMeshAsset> SRGB = std::make_shared<FLoadedMeshAsset>(*Linear);
+			SRGB->Texture = Gray;
+			Obj->SetMeshAsset(SRGB);
+			GrayPixel = Sample(F.Render(), Vector3d(-32, -64, 32));
+			CHECK(GrayPixel.R >= 127);
+			CHECK(GrayPixel.R <= 129);
+			Gray.Width = 2;
+			Gray.Pixels = {0, 0, 0, 255, 255, 255, 255, 255};
+			TSharedPtr<FLoadedMeshAsset> Filtered = std::make_shared<FLoadedMeshAsset>(*SRGB);
+			Filtered->Texture = Gray;
+			Obj->SetMeshAsset(Filtered);
+			GrayPixel = Sample(F.Render(), Vector3d(0, -64, 32));
+			CHECK(GrayPixel.R > 175);
+			CHECK(GrayPixel.R < 202); // decode before interpolation, not after
 
-   auto Sphere = std::make_shared<FLoadedMeshAsset>();
-   Sphere->Data.Mesh = StaticMesh::Find("Sphere");
-   Sphere->DisplayMesh = Sphere->Data.Mesh;
-   Sphere->Material = FMaterialAsset{};
-   Sphere->Material->Roughness = 0.08f;
-   Sphere->Material->Metallic = 1.0f;
-   Obj->SetMeshAsset(Sphere);
-   F.Doc->SetSelection({Obj});
-   F.Client->FrameSelection();
-   F.Doc->ClearSelection();
-   F.Client->SetViewMode(EMapViewMode::Lit);
-   const auto Smooth = F.Render();
-   auto Rough = std::make_shared<FLoadedMeshAsset>(*Sphere);
-   Rough->Material->Roughness = 0.9f;
-   Obj->SetMeshAsset(Rough);
-   const auto RoughPixels = F.Render();
-   auto Metal=std::make_shared<FLoadedMeshAsset>(*Rough); Metal->Material->Metallic=0; Obj->SetMeshAsset(Metal); const auto MetalPixels=F.Render();
-   int RoughChanges=0,MetalChanges=0; for(size_t I=0; I<Smooth.size(); I+=4) { RoughChanges+=std::abs(int(Smooth[I])-int(RoughPixels[I]))>4; MetalChanges+=std::abs(int(RoughPixels[I])-int(MetalPixels[I]))>4; }
-   CHECK(RoughChanges>50); CHECK(MetalChanges>100);
-	// Clip attributes on the GPU when a triangle crosses the camera/near plane.
-	Vector3d Camera,Direction; REQUIRE(F.Client->GetCursorRay(FVector2(128,128),Camera,Direction));
-	Vector3d Right; Right.CrossVector(Direction,Vector3d(0,0,1)).Normalize(); Vector3d Up; Up.CrossVector(Right,Direction).Normalize();
-	auto CrossMesh=std::make_shared<StaticMesh>("Near crossing");
-	Vector3d P0=Camera, P1=Camera, P2=Camera, Offset;
-	Offset=Direction; P0.AddVector(Offset.MultVector(-5)); Offset=Up; P0.AddVector(Offset.MultVector(30));
-	Offset=Direction; P1.AddVector(Offset.MultVector(40)); P2.AddVector(Offset); Offset=Right; P1.AddVector(Offset.MultVector(-50)); Offset=Right; P2.AddVector(Offset.MultVector(50));
-	Offset=Up; P1.AddVector(Offset.MultVector(-30)); Offset=Up; P2.AddVector(Offset.MultVector(-30));
-	CrossMesh->AddVertex(P0); CrossMesh->AddVertex(P1); CrossMesh->AddVertex(P2); CrossMesh->AddFlatTriangle(0,1,2); CrossMesh->AddFlatTriangle(0,2,1); CrossMesh->Finish();
-	const float UV0[3][2]={{0.5f,0},{0,1},{1,1}}, UV1[3][2]={{0.5f,0},{1,1},{0,1}}; CrossMesh->SetTriangleUVs(0,UV0); CrossMesh->SetTriangleUVs(1,UV1);
-	auto Crossing=std::make_shared<FLoadedMeshAsset>(*Asset); Crossing->Data.Mesh=CrossMesh; Crossing->DisplayMesh=CrossMesh; Obj->SetMeshAsset(Crossing); F.Client->SetViewMode(EMapViewMode::Unlit);
-	const auto Clipped=F.Render(); int Colored=0; for(size_t I=0; I<Clipped.size(); I+=4) Colored+=Clipped[I]>160 || Clipped[I+1]>160 || Clipped[I+2]>160;
-	CHECK(Colored>1000);
-   CHECK(Log.Problems.empty());
-  }
- }
+			TSharedPtr<FLoadedMeshAsset> Sphere = std::make_shared<FLoadedMeshAsset>();
+			Sphere->Data.Mesh = StaticMesh::Find("Sphere");
+			Sphere->DisplayMesh = Sphere->Data.Mesh;
+			Sphere->Material = FMaterialAsset{};
+			Sphere->Material->Roughness = 0.08f;
+			Sphere->Material->Metallic = 1.0f;
+			Obj->SetMeshAsset(Sphere);
+			F.Doc->SetSelection({Obj});
+			F.Client->FrameSelection();
+			F.Doc->ClearSelection();
+			F.Client->SetViewMode(EMapViewMode::Lit);
+			const TArray<uint8> Smooth = F.Render();
+			TSharedPtr<FLoadedMeshAsset> Rough = std::make_shared<FLoadedMeshAsset>(*Sphere);
+			Rough->Material->Roughness = 0.9f;
+			Obj->SetMeshAsset(Rough);
+			const TArray<uint8> RoughPixels = F.Render();
+			TSharedPtr<FLoadedMeshAsset> Metal = std::make_shared<FLoadedMeshAsset>(*Rough);
+			Metal->Material->Metallic = 0;
+			Obj->SetMeshAsset(Metal);
+			const TArray<uint8> MetalPixels = F.Render();
+			int RoughChanges = 0, MetalChanges = 0;
+			for (size_t I = 0; I < Smooth.size(); I += 4)
+			{
+				RoughChanges += std::abs(int(Smooth[I]) - int(RoughPixels[I])) > 4;
+				MetalChanges += std::abs(int(RoughPixels[I]) - int(MetalPixels[I])) > 4;
+			}
+			CHECK(RoughChanges > 50);
+			CHECK(MetalChanges > 100);
+			// Clip attributes on the GPU when a triangle crosses the camera/near plane.
+			Vector3d Camera, Direction;
+			REQUIRE(F.Client->GetCursorRay(FVector2(128, 128), Camera, Direction));
+			Vector3d Right;
+			Right.CrossVector(Direction, Vector3d(0, 0, 1)).Normalize();
+			Vector3d Up;
+			Up.CrossVector(Right, Direction).Normalize();
+			TSharedPtr<StaticMesh> CrossMesh = std::make_shared<StaticMesh>("Near crossing");
+			Vector3d P0 = Camera, P1 = Camera, P2 = Camera, Offset;
+			Offset = Direction;
+			P0.AddVector(Offset.MultVector(-5));
+			Offset = Up;
+			P0.AddVector(Offset.MultVector(30));
+			Offset = Direction;
+			P1.AddVector(Offset.MultVector(40));
+			P2.AddVector(Offset);
+			Offset = Right;
+			P1.AddVector(Offset.MultVector(-50));
+			Offset = Right;
+			P2.AddVector(Offset.MultVector(50));
+			Offset = Up;
+			P1.AddVector(Offset.MultVector(-30));
+			Offset = Up;
+			P2.AddVector(Offset.MultVector(-30));
+			CrossMesh->AddVertex(P0);
+			CrossMesh->AddVertex(P1);
+			CrossMesh->AddVertex(P2);
+			CrossMesh->AddFlatTriangle(0, 1, 2);
+			CrossMesh->AddFlatTriangle(0, 2, 1);
+			CrossMesh->Finish();
+			const float UV0[3][2] = {{0.5f, 0}, {0, 1}, {1, 1}}, UV1[3][2] = {{0.5f, 0}, {1, 1}, {0, 1}};
+			CrossMesh->SetTriangleUVs(0, UV0);
+			CrossMesh->SetTriangleUVs(1, UV1);
+			TSharedPtr<FLoadedMeshAsset> Crossing = std::make_shared<FLoadedMeshAsset>(*Asset);
+			Crossing->Data.Mesh = CrossMesh;
+			Crossing->DisplayMesh = CrossMesh;
+			Obj->SetMeshAsset(Crossing);
+			F.Client->SetViewMode(EMapViewMode::Unlit);
+			const TArray<uint8> Clipped = F.Render();
+			int Colored = 0;
+			for (size_t I = 0; I < Clipped.size(); I += 4)
+				Colored += Clipped[I] > 160 || Clipped[I + 1] > 160 || Clipped[I + 2] > 160;
+			CHECK(Colored > 1000);
+			CHECK(Log.Problems.empty());
+		}
+	}
 }
 
 TEST_SUITE("MapPackages")
 {
 	TEST_CASE("Native asset dependencies survive map save reopen material undo and prefab placement")
 	{
-		EnsureMapCore(); FTempFolder Temp; FString Error;
-		auto Registry=std::make_shared<FAssetRegistry>();
-		REQUIRE(Registry->SetMounts({{"/Game",FString::FromWide(Temp.Path.wstring())}},Error));
-		struct FRestore { std::shared_ptr<FAssetRegistry> Old=FMapAssetLibrary::GetRegistry(); ~FRestore(){ FMapAssetLibrary::SetRegistry(Old); } } Restore;
+		EnsureMapCore();
+		FTempFolder Temp;
+		FString Error;
+		TSharedPtr<FAssetRegistry> Registry = std::make_shared<FAssetRegistry>();
+		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+		struct FRestore
+		{
+			std::shared_ptr<FAssetRegistry> Old = FMapAssetLibrary::GetRegistry();
+			~FRestore()
+			{
+				FMapAssetLibrary::SetRegistry(Old);
+			}
+		} Restore;
 		FMapAssetLibrary::SetRegistry(Registry);
-		FTextureAsset Texture; Texture.Width=Texture.Height=1; Texture.Pixels={30,100,200,255}; FAssetPackage T,M,S,N;
-		FTextureAsset NormalMap; NormalMap.Width=NormalMap.Height=1; NormalMap.Pixels={128,128,255,255};
-		REQUIRE(FRenderAssetCodec::EncodeTexture(NormalMap,N,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Normal.asset"),N,Error));
-		REQUIRE(FRenderAssetCodec::EncodeTexture(Texture,T,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Texture.asset"),T,Error));
-		FMaterialAsset Material; Material.BaseColor[0]=0.25f; Material.BaseColorTexture={T.Id,"/Game/Texture"};
-		Material.NormalTexture={N.Id,"/Game/Normal"};
-		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material,M,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Material.asset"),M,Error));
-		REQUIRE(FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Cube"),{}},S,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"),S,Error)); REQUIRE(Registry->Scan());
-		auto Doc=FMapDocument::CreateNew(); auto* Mesh=Doc->AddMeshAsset({S.Id,"/Game/Mesh"},Vector3d(10,20,30),Error); REQUIRE_MESSAGE(Mesh,*Error);
-		const auto ActorId=Mesh->GetIdentity().Actor;
-		REQUIRE(Doc->SetMeshMaterial(*Mesh,{M.Id,"/Game/Material"},Error)); REQUIRE(Mesh->GetMeshAsset()->Material); CHECK(Mesh->GetMesh().HasVertexColors());
-		CHECK((Mesh->GetMesh().GetVertexColor(0)&255)==64); REQUIRE(Mesh->GetMeshAsset()->Texture); CHECK(Mesh->GetMeshAsset()->Texture->Pixels==Texture.Pixels);
-		REQUIRE(Mesh->GetMeshAsset()->NormalTexture); CHECK(Mesh->GetMeshAsset()->NormalTexture->Pixels==NormalMap.Pixels);
-		Doc->Undo(); CHECK_FALSE(Mesh->GetMeshAsset()->Material); Doc->Redo(); REQUIRE(Mesh->GetMeshAsset()->Material); CHECK(Mesh->GetIdentity().Actor==ActorId);
-		auto* Land=Doc->AddLandscape(4,4,16,Vector3d()); REQUIRE(Land); auto Layer=Land->GetLandscape().MakeLayer("Native",255,255,255);
-		Layer.texture=FMapAssetLibrary::TextureToken({T.Id,"/Game/Texture"}).ToStdString(); Layer.weights.assign(25,1); Doc->SetLandscape(*Land,Land->GetLandscape().WithLayers({Layer}));
-		const auto* Image=FLandscapeTextureLibrary::Get().Find(Layer.texture); REQUIRE(Image); CHECK(Image->Mips[0].Pixels==Texture.Pixels);
-		const auto Shared=FMapAssetLibrary::LoadMesh({S.Id,"/Game/Mesh"},{M.Id,"/Game/Material"},Error); CHECK(Shared==Mesh->GetMeshAsset());
-		FLandscapeBake Bake; FLandscapeLayerImages GPU; Bake.Update(Land->GetLandscapePtr()); REQUIRE(GPU.UpdateTextures(Land->GetLandscape()));
-		Texture.Pixels[0]=90; REQUIRE(FRenderAssetCodec::EncodeTexture(Texture,T,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Texture.asset"),T,Error)); REQUIRE(Registry->Scan());
-		REQUIRE_FALSE(Bake.Update(Land->GetLandscapePtr()).IsEmpty()); CHECK(Bake.GetTexel(0,0).R==90); CHECK(GPU.UpdateTextures(Land->GetLandscape()));
-		const auto File=Temp.File("World.gmap"); REQUIRE_MESSAGE(Doc->Save(File,Error),*Error); FAssetPackage P; REQUIRE(FAssetPackageStore::Load(File,P,Error)); CHECK(P.Dependencies.size()==3);
-		CHECK_FALSE(Doc->Save(Temp.File("Legacy.qle"),Error)); CHECK_FALSE(Doc->SavePrefab({Mesh},Temp.File("LegacyPrefab.qle"),Error));
-		auto Back=FMapDocument::Open(File,Error); REQUIRE_MESSAGE(Back,*Error); CHECK(Back->GetObjects()[0]->GetIdentity().Actor==ActorId);
-		REQUIRE(Back->GetObjects()[0]->GetMeshAsset()); CHECK(Back->GetObjects()[0]->GetMeshAsset()->Source.Id==S.Id); CHECK(Back->GetObjects()[0]->GetMeshAsset()->MaterialOverride.Id==M.Id);
-		REQUIRE(Doc->SavePrefab({Mesh},Temp.File("Prefab.asset"),Error)); auto* Placed=Doc->AddPrefab(Temp.File("Prefab.asset"),Vector3d(),&Error); REQUIRE_MESSAGE(Placed,*Error); CHECK(Placed->GetChild(0).GetMeshAsset()->Source.Id==S.Id);
+		FTextureAsset Texture;
+		Texture.Width = Texture.Height = 1;
+		Texture.Pixels = {30, 100, 200, 255};
+		FAssetPackage T, M, S, N;
+		FTextureAsset NormalMap;
+		NormalMap.Width = NormalMap.Height = 1;
+		NormalMap.Pixels = {128, 128, 255, 255};
+		REQUIRE(FRenderAssetCodec::EncodeTexture(NormalMap, N, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Normal.asset"), N, Error));
+		REQUIRE(FRenderAssetCodec::EncodeTexture(Texture, T, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Texture.asset"), T, Error));
+		FMaterialAsset Material;
+		Material.BaseColor[0] = 0.25f;
+		Material.BaseColorTexture = {T.Id, "/Game/Texture"};
+		Material.NormalTexture = {N.Id, "/Game/Normal"};
+		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, M, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Material.asset"), M, Error));
+		REQUIRE(FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Cube"), {}}, S, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"), S, Error));
+		REQUIRE(Registry->Scan());
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Mesh = Doc->AddMeshAsset({S.Id, "/Game/Mesh"}, Vector3d(10, 20, 30), Error);
+		REQUIRE_MESSAGE(Mesh, *Error);
+		const FString ActorId = Mesh->GetIdentity().Actor;
+		REQUIRE(Doc->SetMeshMaterial(*Mesh, {M.Id, "/Game/Material"}, Error));
+		REQUIRE(Mesh->GetMeshAsset()->Material);
+		CHECK(Mesh->GetMesh().HasVertexColors());
+		CHECK((Mesh->GetMesh().GetVertexColor(0) & 255) == 64);
+		REQUIRE(Mesh->GetMeshAsset()->Texture);
+		CHECK(Mesh->GetMeshAsset()->Texture->Pixels == Texture.Pixels);
+		REQUIRE(Mesh->GetMeshAsset()->NormalTexture);
+		CHECK(Mesh->GetMeshAsset()->NormalTexture->Pixels == NormalMap.Pixels);
+		Doc->Undo();
+		CHECK_FALSE(Mesh->GetMeshAsset()->Material);
+		Doc->Redo();
+		REQUIRE(Mesh->GetMeshAsset()->Material);
+		CHECK(Mesh->GetIdentity().Actor == ActorId);
+		Object* Land = Doc->AddLandscape(4, 4, 16, Vector3d());
+		REQUIRE(Land);
+		LandscapeLayer Layer = Land->GetLandscape().MakeLayer("Native", 255, 255, 255);
+		Layer.texture = FMapAssetLibrary::TextureToken({T.Id, "/Game/Texture"}).ToStdString();
+		Layer.weights.assign(25, 1);
+		Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({Layer}));
+		const FLandscapeTexture* Image = FLandscapeTextureLibrary::Get().Find(Layer.texture);
+		REQUIRE(Image);
+		CHECK(Image->Mips[0].Pixels == Texture.Pixels);
+		const std::shared_ptr<const FLoadedMeshAsset> Shared =
+		    FMapAssetLibrary::LoadMesh({S.Id, "/Game/Mesh"}, {M.Id, "/Game/Material"}, Error);
+		CHECK(Shared == Mesh->GetMeshAsset());
+		FLandscapeBake Bake;
+		FLandscapeLayerImages GPU;
+		Bake.Update(Land->GetLandscapePtr());
+		REQUIRE(GPU.UpdateTextures(Land->GetLandscape()));
+		Texture.Pixels[0] = 90;
+		REQUIRE(FRenderAssetCodec::EncodeTexture(Texture, T, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Texture.asset"), T, Error));
+		REQUIRE(Registry->Scan());
+		REQUIRE_FALSE(Bake.Update(Land->GetLandscapePtr()).IsEmpty());
+		CHECK(Bake.GetTexel(0, 0).R == 90);
+		CHECK(GPU.UpdateTextures(Land->GetLandscape()));
+		const FString File = Temp.File("World.gmap");
+		REQUIRE_MESSAGE(Doc->Save(File, Error), *Error);
+		FAssetPackage P;
+		REQUIRE(FAssetPackageStore::Load(File, P, Error));
+		CHECK(P.Dependencies.size() == 3);
+		CHECK_FALSE(Doc->Save(Temp.File("Legacy.qle"), Error));
+		CHECK_FALSE(Doc->SavePrefab({Mesh}, Temp.File("LegacyPrefab.qle"), Error));
+		TUniquePtr<FMapDocument> Back = FMapDocument::Open(File, Error);
+		REQUIRE_MESSAGE(Back, *Error);
+		CHECK(Back->GetObjects()[0]->GetIdentity().Actor == ActorId);
+		REQUIRE(Back->GetObjects()[0]->GetMeshAsset());
+		CHECK(Back->GetObjects()[0]->GetMeshAsset()->Source.Id == S.Id);
+		CHECK(Back->GetObjects()[0]->GetMeshAsset()->MaterialOverride.Id == M.Id);
+		REQUIRE(Doc->SavePrefab({Mesh}, Temp.File("Prefab.asset"), Error));
+		Object* Placed = Doc->AddPrefab(Temp.File("Prefab.asset"), Vector3d(), &Error);
+		REQUIRE_MESSAGE(Placed, *Error);
+		CHECK(Placed->GetChild(0).GetMeshAsset()->Source.Id == S.Id);
 		// UUIDs are authoritative even when the old path now names another package.
-		S.Id=FAssetId::New(); REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"),S,Error)); REQUIRE(Registry->Scan()); CHECK_FALSE(FMapDocument::Open(File,Error)); CHECK_FALSE(Error.IsEmpty());
+		S.Id = FAssetId::New();
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"), S, Error));
+		REQUIRE(Registry->Scan());
+		CHECK_FALSE(FMapDocument::Open(File, Error));
+		CHECK_FALSE(Error.IsEmpty());
 	}
 
 	TEST_CASE("OBJ geometry import preserves UVs normals and rejects invalid files")
 	{
-		FTempFolder Temp; FString Error; const auto File=Temp.File("Triangle.obj");
-		REQUIRE(FFile::WriteAllText(File,"v 0 0 0\nv 2 0 0\nv 0 3 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf -3/1/1 -2/2/1 -1/3/1\n"));
-		FStaticMeshAsset Mesh; REQUIRE_MESSAGE(FMapAssetImport::ReadObj(File,Mesh,Error),*Error); CHECK(Mesh.Mesh->GetNumVertices()==3); CHECK(Mesh.Mesh->GetTriangles()[0].uv[2][1]==1);
-		REQUIRE(FMapAssetImport::ImportMesh(File,Temp.File("Triangle.asset"),Error));
-		const auto Folder=Temp.File("Imported"); std::filesystem::create_directory(std::filesystem::path(Folder.ToWide()));
-		FUITestApp App; const auto Browser=SNew(SContentBrowser).Roots(TArray<FContentBrowserRoot>{{"Content",Folder}}).InitialPath(Folder); App.AddWindow(Browser);
-		REQUIRE(Browser->ImportFile(File)); REQUIRE(Browser->ImportFile(File)); App.Tick();
-		const auto Imported=FString::FromWide((Temp.Path/"Imported"/"Triangle.asset").wstring());
-		CHECK(Browser->GetAssetType(Imported)==EContentAssetType::StaticMesh); CHECK(std::filesystem::exists(Temp.Path/"Imported"/"Triangle2.asset"));
-		FHeightmap Image; Image.Width=Image.Height=2; Image.Samples={0,65535,32768,1000}; REQUIRE(Image.Save(Temp.File("Pixels.png"),Error,8));
-		REQUIRE(Browser->ImportFile(Temp.File("Pixels.png"))); App.Tick();
-		FAssetPackage Texture; REQUIRE(FAssetPackageStore::Load(FString::FromWide((Temp.Path/"Imported"/"Pixels.asset").wstring()),Texture,Error));
-		FTextureAsset Pixels; REQUIRE(FRenderAssetCodec::DecodeTexture(Texture,Pixels,Error)); CHECK(Pixels.Width==2); CHECK(Pixels.Pixels.size()==16);
-		const auto NewMaterial=Browser->CreateMaterial(); REQUIRE_FALSE(NewMaterial.IsEmpty()); App.Tick(); CHECK(Browser->GetAssetType(NewMaterial)==EContentAssetType::Material);
-		REQUIRE(FFile::WriteAllText(File,"v 0 0 0\nf 1 2 3\n")); CHECK_FALSE(FMapAssetImport::ReadObj(File,Mesh,Error)); CHECK(Mesh.Mesh->GetNumVertices()==3);
-		REQUIRE(FFile::WriteAllText(File,"v 0 0 0\nv 1 0 0\nv 2 0 0\nf 1 2 3\n")); CHECK_FALSE(FMapAssetImport::ReadObj(File,Mesh,Error));
+		FTempFolder Temp;
+		FString Error;
+		const FString File = Temp.File("Triangle.obj");
+		REQUIRE(FFile::WriteAllText(
+		    File, "v 0 0 0\nv 2 0 0\nv 0 3 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf -3/1/1 -2/2/1 -1/3/1\n"));
+		FStaticMeshAsset Mesh;
+		REQUIRE_MESSAGE(FMapAssetImport::ReadObj(File, Mesh, Error), *Error);
+		CHECK(Mesh.Mesh->GetNumVertices() == 3);
+		CHECK(Mesh.Mesh->GetTriangles()[0].uv[2][1] == 1);
+		REQUIRE(FMapAssetImport::ImportMesh(File, Temp.File("Triangle.asset"), Error));
+		const FString Folder = Temp.File("Imported");
+		std::filesystem::create_directory(std::filesystem::path(Folder.ToWide()));
+		FUITestApp App;
+		const TSharedRef<SContentBrowser> Browser =
+		    SNew(SContentBrowser).Roots(TArray<FContentBrowserRoot>{{"Content", Folder}}).InitialPath(Folder);
+		App.AddWindow(Browser);
+		REQUIRE(Browser->ImportFile(File));
+		REQUIRE(Browser->ImportFile(File));
+		App.Tick();
+		const FString Imported = FString::FromWide((Temp.Path / "Imported" / "Triangle.asset").wstring());
+		CHECK(Browser->GetAssetType(Imported) == EContentAssetType::StaticMesh);
+		CHECK(std::filesystem::exists(Temp.Path / "Imported" / "Triangle2.asset"));
+		FHeightmap Image;
+		Image.Width = Image.Height = 2;
+		Image.Samples = {0, 65535, 32768, 1000};
+		REQUIRE(Image.Save(Temp.File("Pixels.png"), Error, 8));
+		REQUIRE(Browser->ImportFile(Temp.File("Pixels.png")));
+		App.Tick();
+		FAssetPackage Texture;
+		REQUIRE(FAssetPackageStore::Load(
+		    FString::FromWide((Temp.Path / "Imported" / "Pixels.asset").wstring()), Texture, Error));
+		FTextureAsset Pixels;
+		REQUIRE(FRenderAssetCodec::DecodeTexture(Texture, Pixels, Error));
+		CHECK(Pixels.Width == 2);
+		CHECK(Pixels.Pixels.size() == 16);
+		const FString NewMaterial = Browser->CreateMaterial();
+		REQUIRE_FALSE(NewMaterial.IsEmpty());
+		App.Tick();
+		CHECK(Browser->GetAssetType(NewMaterial) == EContentAssetType::Material);
+		REQUIRE(FFile::WriteAllText(File, "v 0 0 0\nf 1 2 3\n"));
+		CHECK_FALSE(FMapAssetImport::ReadObj(File, Mesh, Error));
+		CHECK(Mesh.Mesh->GetNumVertices() == 3);
+		REQUIRE(FFile::WriteAllText(File, "v 0 0 0\nv 1 0 0\nv 2 0 0\nf 1 2 3\n"));
+		CHECK_FALSE(FMapAssetImport::ReadObj(File, Mesh, Error));
 	}
 	TEST_CASE("Native scene identities persist while duplicate and prefab instances receive new identities")
 	{
-		EnsureMapCore(); FTempFolder Temp; FString Error;
-		auto Doc = FMapDocument::CreateNew();
-		auto* Mesh = Doc->AddMesh("Cube", Vector3d(10,20,30)); REQUIRE(Mesh);
-		const auto Id = Mesh->GetIdentity();
-		Object Snapshot(*Mesh); CHECK(Snapshot.GetIdentity().Actor == Id.Actor);
-		auto Copies = Doc->DuplicateObjects({Mesh}, Vector3d(100,0,0)); REQUIRE(Copies.size() == 1);
-		const auto CopyId = Copies[0]->GetIdentity();
-		CHECK(CopyId.Actor != Id.Actor); CHECK(CopyId.Transform != Id.Transform); CHECK(CopyId.Payload != Id.Payload);
-		Doc->Undo(); Doc->Redo(); CHECK(Copies[0]->GetIdentity().Actor == CopyId.Actor);
-		const auto Asset = Temp.File("Cube.asset"); REQUIRE(Doc->SavePrefab({Mesh}, Asset, Error));
-		auto* First = Doc->AddPrefab(Asset, Vector3d(), &Error); REQUIRE_MESSAGE(First, *Error);
-		auto* Second = Doc->AddPrefab(Asset, Vector3d(), &Error); REQUIRE_MESSAGE(Second, *Error);
+		EnsureMapCore();
+		FTempFolder Temp;
+		FString Error;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Mesh = Doc->AddMesh("Cube", Vector3d(10, 20, 30));
+		REQUIRE(Mesh);
+		const FActorIdentity Id = Mesh->GetIdentity();
+		Object Snapshot(*Mesh);
+		CHECK(Snapshot.GetIdentity().Actor == Id.Actor);
+		TArray<Object*> Copies = Doc->DuplicateObjects({Mesh}, Vector3d(100, 0, 0));
+		REQUIRE(Copies.size() == 1);
+		const FActorIdentity CopyId = Copies[0]->GetIdentity();
+		CHECK(CopyId.Actor != Id.Actor);
+		CHECK(CopyId.Transform != Id.Transform);
+		CHECK(CopyId.Payload != Id.Payload);
+		Doc->Undo();
+		Doc->Redo();
+		CHECK(Copies[0]->GetIdentity().Actor == CopyId.Actor);
+		const FString Asset = Temp.File("Cube.asset");
+		REQUIRE(Doc->SavePrefab({Mesh}, Asset, Error));
+		Object* First = Doc->AddPrefab(Asset, Vector3d(), &Error);
+		REQUIRE_MESSAGE(First, *Error);
+		Object* Second = Doc->AddPrefab(Asset, Vector3d(), &Error);
+		REQUIRE_MESSAGE(Second, *Error);
 		CHECK(First->GetIdentity().Actor != Second->GetIdentity().Actor);
 		CHECK(First->GetChild(0).GetIdentity().Actor != Second->GetChild(0).GetIdentity().Actor);
 		CHECK(First->GetChild(0).GetIdentity().Actor != Id.Actor);
-		const auto File = Temp.File("Scene.gmap"); REQUIRE_MESSAGE(Doc->Save(File, Error), *Error);
-		FAssetPackage Package; REQUIRE(FAssetPackageStore::Load(File, Package, Error));
-		CHECK(Package.SchemaVersion == 3); CHECK_FALSE(Package.Exports.Contains("Root"));
-		auto World = FWorld::FromJson(Package.Exports.Get("Scene"), Error); REQUIRE_MESSAGE(World, *Error);
-		const auto* Actor = World->FindActor(Id.Actor); REQUIRE(Actor);
-		CHECK(Actor->Root.Id == Id.Transform); REQUIRE(Actor->Components.size() == 1); CHECK(Actor->Components[0].Id == Id.Payload);
-		auto Back = FMapDocument::Open(File, Error); REQUIRE_MESSAGE(Back, *Error);
+		const FString File = Temp.File("Scene.gmap");
+		REQUIRE_MESSAGE(Doc->Save(File, Error), *Error);
+		FAssetPackage Package;
+		REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+		CHECK(Package.SchemaVersion == 3);
+		CHECK_FALSE(Package.Exports.Contains("Root"));
+		TOptional<FWorld> World = FWorld::FromJson(Package.Exports.Get("Scene"), Error);
+		REQUIRE_MESSAGE(World, *Error);
+		const FActor* Actor = World->FindActor(Id.Actor);
+		REQUIRE(Actor);
+		CHECK(Actor->Root.Id == Id.Transform);
+		REQUIRE(Actor->Components.size() == 1);
+		CHECK(Actor->Components[0].Id == Id.Payload);
+		TUniquePtr<FMapDocument> Back = FMapDocument::Open(File, Error);
+		REQUIRE_MESSAGE(Back, *Error);
 		CHECK(Back->GetRoot().GetIdentity().Actor == Doc->GetRoot().GetIdentity().Actor);
-		bool Found = false; for (auto* Obj : Back->GetObjects()) if (Obj->GetIdentity().Actor == Id.Actor)
-		{ Found = true; CHECK(Obj->GetIdentity().Payload == Id.Payload); CHECK(Same(Obj->GetPosition(), Mesh->GetPosition())); }
+		bool Found = false;
+		for (Object* Obj : Back->GetObjects())
+			if (Obj->GetIdentity().Actor == Id.Actor)
+			{
+				Found = true;
+				CHECK(Obj->GetIdentity().Payload == Id.Payload);
+				CHECK(Same(Obj->GetPosition(), Mesh->GetPosition()));
+			}
 		CHECK(Found);
 	}
 
 	TEST_CASE("Landscape content undo retains actor and component identities")
 	{
-		EnsureMapCore(); auto Doc = FMapDocument::CreateNew();
-		auto* Land = Doc->AddLandscape(4,4,16,Vector3d()); REQUIRE(Land);
-		const auto Id = Land->GetIdentity(); auto Heights = Land->GetLandscape().GetHeights(); Heights[0] = 10;
+		EnsureMapCore();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Land = Doc->AddLandscape(4, 4, 16, Vector3d());
+		REQUIRE(Land);
+		const FActorIdentity Id = Land->GetIdentity();
+		std::vector<float> Heights = Land->GetLandscape().GetHeights();
+		Heights[0] = 10;
 		Doc->SetLandscape(*Land, Land->GetLandscape().WithHeights(Heights));
-		CHECK(Land->GetIdentity().Actor == Id.Actor); Doc->Undo();
-		CHECK(Land->GetIdentity().Payload == Id.Payload); Doc->Redo();
-		CHECK(Land->GetIdentity().Actor == Id.Actor); CHECK(Land->GetLandscape().GetHeights()[0] == 10);
+		CHECK(Land->GetIdentity().Actor == Id.Actor);
+		Doc->Undo();
+		CHECK(Land->GetIdentity().Payload == Id.Payload);
+		Doc->Redo();
+		CHECK(Land->GetIdentity().Actor == Id.Actor);
+		CHECK(Land->GetLandscape().GetHeights()[0] == 10);
 	}
 	TEST_CASE("Nested copy insertion renews identities while grouping and undo keep original members")
 	{
-		EnsureMapCore(); auto Doc = FMapDocument::CreateNew();
-		auto* A = Doc->AddMesh("Cube", Vector3d()); auto* B = Doc->AddMesh("Sphere", Vector3d(100,0,0)); REQUIRE(A); REQUIRE(B);
-		const auto AId = A->GetIdentity().Actor, BId = B->GetIdentity().Actor;
-		auto* Group = Doc->GroupObjects({A,B}); REQUIRE(Group); const auto GroupId = Group->GetIdentity().Actor;
-		CHECK(A->GetIdentity().Actor == AId); Doc->Undo(); CHECK(B->GetIdentity().Actor == BId); Doc->Redo();
+		EnsureMapCore();
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* A = Doc->AddMesh("Cube", Vector3d());
+		Object* B = Doc->AddMesh("Sphere", Vector3d(100, 0, 0));
+		REQUIRE(A);
+		REQUIRE(B);
+		const FString AId = A->GetIdentity().Actor, BId = B->GetIdentity().Actor;
+		Object* Group = Doc->GroupObjects({A, B});
+		REQUIRE(Group);
+		const FString GroupId = Group->GetIdentity().Actor;
+		CHECK(A->GetIdentity().Actor == AId);
+		Doc->Undo();
+		CHECK(B->GetIdentity().Actor == BId);
+		Doc->Redo();
 		CHECK(Group->GetIdentity().Actor == GroupId);
-		auto* Copy = new Object(*Group); Doc->AddObjects({Copy});
-		CHECK(Copy->GetIdentity().Actor != GroupId); CHECK(Copy->GetChild(0).GetIdentity().Actor != AId);
-		const auto CopyId = Copy->GetIdentity().Actor; Doc->Undo(); Doc->Redo(); CHECK(Copy->GetIdentity().Actor == CopyId);
+		Object* Copy = new Object(*Group);
+		Doc->AddObjects({Copy});
+		CHECK(Copy->GetIdentity().Actor != GroupId);
+		CHECK(Copy->GetChild(0).GetIdentity().Actor != AId);
+		const FString CopyId = Copy->GetIdentity().Actor;
+		Doc->Undo();
+		Doc->Redo();
+		CHECK(Copy->GetIdentity().Actor == CopyId);
 	}
 
 	TEST_CASE("Version one native maps upgrade on save without losing payloads")
 	{
-		EnsureMapCore(); FTempFolder Temp; FString Error; auto Doc = FMapDocument::CreateNew();
-		REQUIRE(Doc->AddMesh("Sphere", Vector3d(1,2,3))); const auto File = Temp.File("OldNative.gmap");
-		REQUIRE(Doc->Save(File, Error)); FAssetPackage Package; REQUIRE(FAssetPackageStore::Load(File, Package, Error));
-		auto World = FWorld::FromJson(Package.Exports.Get("Scene"), Error); REQUIRE(World);
-		FJsonValue Legacy; REQUIRE(FMapWorldAdapter::ToLegacy(*World, Legacy, Error));
+		EnsureMapCore();
+		FTempFolder Temp;
+		FString Error;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		REQUIRE(Doc->AddMesh("Sphere", Vector3d(1, 2, 3)));
+		const FString File = Temp.File("OldNative.gmap");
+		REQUIRE(Doc->Save(File, Error));
+		FAssetPackage Package;
+		REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+		TOptional<FWorld> World = FWorld::FromJson(Package.Exports.Get("Scene"), Error);
+		REQUIRE(World);
+		FJsonValue Legacy;
+		REQUIRE(FMapWorldAdapter::ToLegacy(*World, Legacy, Error));
 		// Old files predate persistent IDs. The loader creates them on import.
-		auto WithoutIds = [&](auto&& Self, const FJsonValue& Node) -> FJsonValue
+		TFunction<FJsonValue(const FJsonValue&)> WithoutIds = [&](const FJsonValue& Node)
 		{
-			auto Out = FJsonValue::MakeObject();
-			for (const auto& Key : Node.GetKeys()) if (Key != "Identity" && Key != "Children") Out[Key.View()] = Node.Get(Key.View());
-			Out["Children"] = FJsonValue::MakeArray(); for (const auto& Child : Node.Get("Children").GetItems()) Out["Children"].Push(Self(Self, Child)); return Out;
+			FJsonValue Out = FJsonValue::MakeObject();
+			for (const FString& Key : Node.GetKeys())
+				if (Key != "Identity" && Key != "Children")
+					Out[Key.View()] = Node.Get(Key.View());
+			Out["Children"] = FJsonValue::MakeArray();
+			for (const FJsonValue& Child : Node.Get("Children").GetItems())
+				Out["Children"].Push(WithoutIds(Child));
+			return Out;
 		};
-		const auto GameSet = Package.Exports.Get("GameSet");
-		Package.SchemaVersion = 1; Package.Exports = FJsonValue::MakeObject(); Package.Exports["GameSet"] = GameSet; Package.Exports["Root"] = WithoutIds(WithoutIds, Legacy);
+		const FJsonValue GameSet = Package.Exports.Get("GameSet");
+		Package.SchemaVersion = 1;
+		Package.Exports = FJsonValue::MakeObject();
+		Package.Exports["GameSet"] = GameSet;
+		Package.Exports["Root"] = WithoutIds(Legacy);
 		REQUIRE(FAssetPackageStore::Save(File, Package, Error));
-		auto Back = FMapDocument::Open(File, Error); REQUIRE_MESSAGE(Back, *Error); CHECK(Back->IsModified()); CHECK(Back->CountMeshes() == 1);
-		const auto ActorId = Back->GetObjects()[0]->GetIdentity().Actor;
-		REQUIRE(Back->Save(File, Error)); REQUIRE(FAssetPackageStore::Load(File, Package, Error)); CHECK(Package.SchemaVersion == 3);
-		auto Again = FMapDocument::Open(File, Error); REQUIRE(Again); CHECK_FALSE(Again->IsModified()); CHECK(Again->GetObjects()[0]->GetIdentity().Actor == ActorId);
+		TUniquePtr<FMapDocument> Back = FMapDocument::Open(File, Error);
+		REQUIRE_MESSAGE(Back, *Error);
+		CHECK(Back->IsModified());
+		CHECK(Back->CountMeshes() == 1);
+		const FString ActorId = Back->GetObjects()[0]->GetIdentity().Actor;
+		REQUIRE(Back->Save(File, Error));
+		REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+		CHECK(Package.SchemaVersion == 3);
+		TUniquePtr<FMapDocument> Again = FMapDocument::Open(File, Error);
+		REQUIRE(Again);
+		CHECK_FALSE(Again->IsModified());
+		CHECK(Again->GetObjects()[0]->GetIdentity().Actor == ActorId);
 	}
 
 	TEST_CASE("The editor rejects runtime components it cannot preserve")
 	{
-		FString Error; FWorld World; auto Actor = FActor::New("RuntimeActor");
-		Actor.Components.push_back(FActorComponent::New("Game.Custom")); REQUIRE(World.AddActor(Actor, Error));
-		FJsonValue Legacy; CHECK_FALSE(FMapWorldAdapter::ToLegacy(World, Legacy, Error)); CHECK(Error.Contains("component"));
+		FString Error;
+		FWorld World;
+		FActor Actor = FActor::New("RuntimeActor");
+		Actor.Components.push_back(FActorComponent::New("Game.Custom"));
+		REQUIRE(World.AddActor(Actor, Error));
+		FJsonValue Legacy;
+		CHECK_FALSE(FMapWorldAdapter::ToLegacy(World, Legacy, Error));
+		CHECK(Error.Contains("component"));
 	}
 	TEST_CASE("Content Browser imports native packages with their sidecars and hides payload files")
 	{
-		EnsureMapCore(); FTempFolder Temp; FString Error;
-		auto Doc = FMapDocument::CreateNew();
+		EnsureMapCore();
+		FTempFolder Temp;
+		FString Error;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
 		REQUIRE(Doc->AddLandscape(4, 4, 16, Vector3d()));
-		const auto Source = Temp.File("Source.gmap");
+		const FString Source = Temp.File("Source.gmap");
 		REQUIRE(Doc->Save(Source, Error));
-		const auto TargetDir = Temp.File("Imported");
+		const FString TargetDir = Temp.File("Imported");
 		std::filesystem::create_directory(std::filesystem::path(TargetDir.ToWide()));
 		FUITestApp App;
-		const auto Browser = SNew(SContentBrowser)
-			.Roots(TArray<FContentBrowserRoot>{ { "Content", TargetDir } }).InitialPath(TargetDir);
+		const TSharedRef<SContentBrowser> Browser =
+		    SNew(SContentBrowser).Roots(TArray<FContentBrowserRoot>{{"Content", TargetDir}}).InitialPath(TargetDir);
 		App.AddWindow(Browser);
 		REQUIRE(Browser->ImportFile(Source));
 		App.Tick();
-		const auto Imported = FString::FromWide((std::filesystem::path(TargetDir.ToWide()) / "Source.gmap").wstring());
-		auto Back = FMapDocument::Open(Imported, Error);
+		const FString Imported =
+		    FString::FromWide((std::filesystem::path(TargetDir.ToWide()) / "Source.gmap").wstring());
+		TUniquePtr<FMapDocument> Back = FMapDocument::Open(Imported, Error);
 		REQUIRE_MESSAGE(Back, *Error);
 		CHECK(Back->CountMeshes() == 1);
 		FAssetPackage OriginalPackage, CopiedPackage;
@@ -4405,286 +4732,397 @@ TEST_SUITE("MapPackages")
 		CHECK(Browser->GetAssetType(Imported) == EContentAssetType::Map);
 	}
 
- TEST_CASE("Native worlds preserve brushes actors landscape layers splines and foliage")
- {
-  EnsureMapCore();
-  FTempFolder Temp;
-  auto Doc = FMapDocument::CreateNew();
-  REQUIRE(Doc->AddPrefab(PrefabPath("Cube"), Vector3d(40, 80, 120)));
-  REQUIRE(Doc->AddEntity("light", Vector3d(100, 200, 300)));
-  auto* Mesh = Doc->AddMesh("Sphere", Vector3d(3, 4, 5));
-  REQUIRE(Mesh);
-  Mesh->SetScale(Vector3d(2, 3, 4));
-  Mesh->SetOrientation(SphrVector(0.2f, 0.3f, 0.4f));
-  auto* Terrain = Doc->AddLandscape(8, 12, 32, Vector3d(10, 20, 30));
-  REQUIRE(Terrain);
-  auto Heights = Terrain->GetLandscape().GetHeights();
-  for (size_t I = 0; I < Heights.size(); ++I) Heights[I] = static_cast<float>(I) * 0.123456f;
-  auto Layer = Terrain->GetLandscape().MakeLayer("Grass", 10, 20, 30);
-  Layer.texture = "builtin:Grass";
-  Layer.tiling = 192;
-  for (size_t I = 0; I < Layer.weights.size(); ++I) Layer.weights[I] = static_cast<float>(I % 5) / 5;
-  LandscapeSpline Road;
-  Road.mesh = "Road";
-  LandscapeSplinePoint Point;
-  Point.position = Vector3d(100, 20, 30); Point.autoTangent = false;
-  Point.tangent = Vector3d(30, 40, 50); Point.joint = 7;
-  Road.points.push_back(Point);
-  Point.position = Vector3d(300, 100, 40); Point.autoTangent = true; Point.joint = -1;
-  Road.points.push_back(Point);
-  Doc->SetLandscape(*Terrain, Landscape::Create(8, 12, 32, Heights, {Layer}, {Road}));
-  FoliageType Type; Type.name = "Tree"; Type.mesh = "Tree"; Type.alignToNormal = true; Type.density = 15;
-  FoliageInstance Instance; Instance.position = Vector3d(90, 80, 70); Instance.yaw = 0.6f; Instance.scale = 1.1f;
-  REQUIRE(Doc->AddFoliage(std::make_shared<Foliage>(std::vector<FoliageType>{Type}, std::vector<FoliageInstance>{Instance})));
-  FString Error;
-  const auto File = Temp.File("World.gmap");
-  REQUIRE_MESSAGE(Doc->Save(File, Error), *Error);
-  CHECK_FALSE(Doc->IsModified());
-  auto Back = FMapDocument::Open(File, Error);
-  REQUIRE_MESSAGE(Back, *Error);
-  CHECK_FALSE(Back->IsModified());
-  CHECK(Back->CountBrushes() == Doc->CountBrushes());
-  CHECK(Back->CountEntities() == Doc->CountEntities());
-  CHECK(Back->CountMeshes() == Doc->CountMeshes());
-  bool FoundLand = false, FoundFoliage = false, FoundMesh = false;
-  for (Object* Obj : Back->GetObjects())
-  {
-   if (Obj->HasLandscape())
-   {
-    FoundLand = true;
-    const auto& L = Obj->GetLandscape();
-    CHECK(L.GetHeights() == Heights);
-    REQUIRE(L.GetLayers().size() == 1);
-    CHECK(L.GetLayers()[0].weights == Layer.weights);
-    CHECK(L.GetLayers()[0].texture == Layer.texture);
-    CHECK(L.GetLayers()[0].tiling == Layer.tiling);
-    REQUIRE(L.GetSplines().size() == 1);
-    CHECK(L.GetSplines()[0].mesh == "Road");
-    CHECK(L.GetSplines()[0].points[0].joint == 7);
-    CHECK_FALSE(L.GetSplines()[0].points[0].autoTangent);
-    CHECK(Same(L.GetSplines()[0].points[0].tangent, Vector3d(30,40,50)));
-    CHECK(Same(Obj->GetPosition(), Terrain->GetPosition()));
-   }
-   else if (Obj->HasMesh())
-   {
-    FoundMesh = true;
-    CHECK(Same(Obj->GetScale(), Mesh->GetScale()));
-    CHECK(Obj->GetOrientation().GetRoll() == doctest::Approx(0.4f));
-   }
-   if (Obj->HasFoliage())
-   {
-    FoundFoliage = true;
-    REQUIRE(Obj->GetFoliage().GetInstances().size() == 1);
-    CHECK(Obj->GetFoliage().GetTypes()[0] == Type);
-    CHECK(Same(Obj->GetFoliage().GetInstances()[0].position, Instance.position));
-   }
-  }
-  CHECK(FoundLand); CHECK(FoundMesh); CHECK(FoundFoliage);
-  FAssetPackage Package;
-  REQUIRE(FAssetPackageStore::Load(File, Package, Error));
-  const auto Id = Package.Id;
-  REQUIRE(Back->Save(File, Error));
-  REQUIRE(FAssetPackageStore::Load(File, Package, Error));
-  CHECK(Package.Id == Id);
-  REQUIRE(Back->Save(Temp.File("Copy.gmap"), Error));
-  REQUIRE(FAssetPackageStore::Load(Temp.File("Copy.gmap"), Package, Error));
-  CHECK(Package.Id != Id);
- }
+	TEST_CASE("Native worlds preserve brushes actors landscape layers splines and foliage")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		REQUIRE(Doc->AddPrefab(PrefabPath("Cube"), Vector3d(40, 80, 120)));
+		REQUIRE(Doc->AddEntity("light", Vector3d(100, 200, 300)));
+		Object* Mesh = Doc->AddMesh("Sphere", Vector3d(3, 4, 5));
+		REQUIRE(Mesh);
+		Mesh->SetScale(Vector3d(2, 3, 4));
+		Mesh->SetOrientation(SphrVector(0.2f, 0.3f, 0.4f));
+		Object* Terrain = Doc->AddLandscape(8, 12, 32, Vector3d(10, 20, 30));
+		REQUIRE(Terrain);
+		std::vector<float> Heights = Terrain->GetLandscape().GetHeights();
+		for (size_t I = 0; I < Heights.size(); ++I)
+			Heights[I] = static_cast<float>(I) * 0.123456f;
+		LandscapeLayer Layer = Terrain->GetLandscape().MakeLayer("Grass", 10, 20, 30);
+		Layer.texture = "builtin:Grass";
+		Layer.tiling = 192;
+		for (size_t I = 0; I < Layer.weights.size(); ++I)
+			Layer.weights[I] = static_cast<float>(I % 5) / 5;
+		LandscapeSpline Road;
+		Road.mesh = "Road";
+		LandscapeSplinePoint Point;
+		Point.position = Vector3d(100, 20, 30);
+		Point.autoTangent = false;
+		Point.tangent = Vector3d(30, 40, 50);
+		Point.joint = 7;
+		Road.points.push_back(Point);
+		Point.position = Vector3d(300, 100, 40);
+		Point.autoTangent = true;
+		Point.joint = -1;
+		Road.points.push_back(Point);
+		Doc->SetLandscape(*Terrain, Landscape::Create(8, 12, 32, Heights, {Layer}, {Road}));
+		FoliageType Type;
+		Type.name = "Tree";
+		Type.mesh = "Tree";
+		Type.alignToNormal = true;
+		Type.density = 15;
+		FoliageInstance Instance;
+		Instance.position = Vector3d(90, 80, 70);
+		Instance.yaw = 0.6f;
+		Instance.scale = 1.1f;
+		REQUIRE(Doc->AddFoliage(
+		    std::make_shared<Foliage>(std::vector<FoliageType>{Type}, std::vector<FoliageInstance>{Instance})));
+		FString Error;
+		const FString File = Temp.File("World.gmap");
+		REQUIRE_MESSAGE(Doc->Save(File, Error), *Error);
+		CHECK_FALSE(Doc->IsModified());
+		TUniquePtr<FMapDocument> Back = FMapDocument::Open(File, Error);
+		REQUIRE_MESSAGE(Back, *Error);
+		CHECK_FALSE(Back->IsModified());
+		CHECK(Back->CountBrushes() == Doc->CountBrushes());
+		CHECK(Back->CountEntities() == Doc->CountEntities());
+		CHECK(Back->CountMeshes() == Doc->CountMeshes());
+		bool FoundLand = false, FoundFoliage = false, FoundMesh = false;
+		for (Object* Obj : Back->GetObjects())
+		{
+			if (Obj->HasLandscape())
+			{
+				FoundLand = true;
+				const Landscape& L = Obj->GetLandscape();
+				CHECK(L.GetHeights() == Heights);
+				REQUIRE(L.GetLayers().size() == 1);
+				CHECK(L.GetLayers()[0].weights == Layer.weights);
+				CHECK(L.GetLayers()[0].texture == Layer.texture);
+				CHECK(L.GetLayers()[0].tiling == Layer.tiling);
+				REQUIRE(L.GetSplines().size() == 1);
+				CHECK(L.GetSplines()[0].mesh == "Road");
+				CHECK(L.GetSplines()[0].points[0].joint == 7);
+				CHECK_FALSE(L.GetSplines()[0].points[0].autoTangent);
+				CHECK(Same(L.GetSplines()[0].points[0].tangent, Vector3d(30, 40, 50)));
+				CHECK(Same(Obj->GetPosition(), Terrain->GetPosition()));
+			}
+			else if (Obj->HasMesh())
+			{
+				FoundMesh = true;
+				CHECK(Same(Obj->GetScale(), Mesh->GetScale()));
+				CHECK(Obj->GetOrientation().GetRoll() == doctest::Approx(0.4f));
+			}
+			if (Obj->HasFoliage())
+			{
+				FoundFoliage = true;
+				REQUIRE(Obj->GetFoliage().GetInstances().size() == 1);
+				CHECK(Obj->GetFoliage().GetTypes()[0] == Type);
+				CHECK(Same(Obj->GetFoliage().GetInstances()[0].position, Instance.position));
+			}
+		}
+		CHECK(FoundLand);
+		CHECK(FoundMesh);
+		CHECK(FoundFoliage);
+		FAssetPackage Package;
+		REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+		const FString Id = Package.Id;
+		REQUIRE(Back->Save(File, Error));
+		REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+		CHECK(Package.Id == Id);
+		REQUIRE(Back->Save(Temp.File("Copy.gmap"), Error));
+		REQUIRE(FAssetPackageStore::Load(Temp.File("Copy.gmap"), Package, Error));
+		CHECK(Package.Id != Id);
+	}
 
- TEST_CASE("Native prefab assets can be placed and legacy maps choose a native save path")
- {
-  EnsureMapCore(); FTempFolder Temp; FString Error;
-  auto Doc = FMapDocument::CreateNew();
-  auto* Mesh = Doc->AddMesh("Cube", Vector3d(10,20,30));
-  REQUIRE(Mesh);
-  const auto Asset = Temp.File("Building.asset");
-  REQUIRE_MESSAGE(Doc->SavePrefab({Mesh}, Asset, Error), *Error);
-  auto* Placed = Doc->AddPrefab(Asset, Vector3d(100,200,300), &Error);
-  REQUIRE_MESSAGE(Placed, *Error);
-  REQUIRE(Placed->GetNumChildren() == 1);
-  CHECK(Placed->GetChild(0).HasMesh());
-  CHECK(Same(Placed->GetPosition(), Vector3d(100,200,300)));
-  REQUIRE(Doc->Save(Temp.File("Old.qle"), Error));
-  auto Legacy = FMapDocument::Open(Temp.File("Old.qle"), Error);
-  REQUIRE(Legacy);
-  CHECK(Legacy->GetPath() == Temp.File("Old.gmap"));
-  CHECK(Legacy->IsModified());
-  REQUIRE(Legacy->Save(Legacy->GetPath(), Error));
-  CHECK(FFile::Exists(Temp.File("Old.qle")));
-  auto SecondImport = FMapDocument::Open(Temp.File("Old.qle"), Error);
-  REQUIRE(SecondImport);
-  CHECK(SecondImport->GetPath().IsEmpty()); // Save As protects the existing native map
- }
+	TEST_CASE("Native prefab assets can be placed and legacy maps choose a native save path")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		FString Error;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Mesh = Doc->AddMesh("Cube", Vector3d(10, 20, 30));
+		REQUIRE(Mesh);
+		const FString Asset = Temp.File("Building.asset");
+		REQUIRE_MESSAGE(Doc->SavePrefab({Mesh}, Asset, Error), *Error);
+		Object* Placed = Doc->AddPrefab(Asset, Vector3d(100, 200, 300), &Error);
+		REQUIRE_MESSAGE(Placed, *Error);
+		REQUIRE(Placed->GetNumChildren() == 1);
+		CHECK(Placed->GetChild(0).HasMesh());
+		CHECK(Same(Placed->GetPosition(), Vector3d(100, 200, 300)));
+		REQUIRE(Doc->Save(Temp.File("Old.qle"), Error));
+		TUniquePtr<FMapDocument> Legacy = FMapDocument::Open(Temp.File("Old.qle"), Error);
+		REQUIRE(Legacy);
+		CHECK(Legacy->GetPath() == Temp.File("Old.gmap"));
+		CHECK(Legacy->IsModified());
+		REQUIRE(Legacy->Save(Legacy->GetPath(), Error));
+		CHECK(FFile::Exists(Temp.File("Old.qle")));
+		TUniquePtr<FMapDocument> SecondImport = FMapDocument::Open(Temp.File("Old.qle"), Error);
+		REQUIRE(SecondImport);
+		CHECK(SecondImport->GetPath().IsEmpty()); // Save As protects the existing native map
+	}
 
- TEST_CASE("World schema rejects invalid bulk references and leaf hierarchies")
- {
-  EnsureMapCore(); FTempFolder Temp; FString Error;
-  auto Doc = FMapDocument::CreateNew();
-  REQUIRE(Doc->AddLandscape(4,4,16,Vector3d()));
-  const auto File = Temp.File("World.gmap");
-  REQUIRE(Doc->Save(File, Error));
-  FAssetPackage Package;
-  REQUIRE(FAssetPackageStore::Load(File, Package, Error));
-  Package.Exports["Scene"]["Actors"][1]["Components"][0]["Properties"]["Data"]["Heights"]["Offset"] = 1000000;
-  REQUIRE(FAssetPackageStore::Save(File, Package, Error));
-  CHECK_FALSE(FMapDocument::Open(File, Error));
-  CHECK(Error.Contains("bulk range"));
- }
+	TEST_CASE("World schema rejects invalid bulk references and leaf hierarchies")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		FString Error;
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		REQUIRE(Doc->AddLandscape(4, 4, 16, Vector3d()));
+		const FString File = Temp.File("World.gmap");
+		REQUIRE(Doc->Save(File, Error));
+		FAssetPackage Package;
+		REQUIRE(FAssetPackageStore::Load(File, Package, Error));
+		Package.Exports["Scene"]["Actors"][1]["Components"][0]["Properties"]["Data"]["Heights"]["Offset"] = 1000000;
+		REQUIRE(FAssetPackageStore::Save(File, Package, Error));
+		CHECK_FALSE(FMapDocument::Open(File, Error));
+		CHECK(Error.Contains("bulk range"));
+	}
 }
 
 TEST_SUITE("ContentRegistry")
 {
- TEST_CASE("Content browser right click creates folders through its popup at scaled DPI")
- {
-  FTempFolder Temp;
-  FUITestApp App(1.5f);
-  const auto Directory = FString::FromWide(Temp.Path.wstring());
-  const auto Browser = SNew(SContentBrowser).Roots(TArray<FContentBrowserRoot>{{"Content", Directory}}).InitialPath(Directory);
-  const auto Window = App.AddWindow(Browser, FVector2(800, 500));
-  App.Tick(); App.Tick();
-  // Empty tile area: the input must bubble through the scroll and wrap boxes.
-  const FVector2 Position(450, 220);
-  App.Click(Window, Position, EMouseButton::Right);
-  REQUIRE(App.GetApp().AnyMenusVisible());
-  App.Click(Window, Position + FVector2(30, 15)); // first entry: New Folder
-  CHECK_FALSE(App.GetApp().AnyMenusVisible());
-  CHECK(std::filesystem::is_directory(Temp.Path / "NewFolder"));
-  CHECK(Browser->GetSelectedPath() == Temp.File("NewFolder"));
-  App.Tick(); App.Tick();
-  CHECK(Browser->GetItems().size() == 1);
-  App.Click(Window, Position, EMouseButton::Right);
-  REQUIRE(App.GetApp().AnyMenusVisible());
-  App.Click(Window, Position + FVector2(30, 15));
-  CHECK(std::filesystem::is_directory(Temp.Path / "NewFolder2"));
-  Browser->SetPath({}); App.Tick(); App.Tick();
-  App.Click(Window, Position, EMouseButton::Right);
-  REQUIRE(App.GetApp().AnyMenusVisible());
-  App.Click(Window, Position + FVector2(30, 15));
-  CHECK(Browser->GetPath().IsEmpty());
-  CHECK_FALSE(std::filesystem::exists(Temp.Path / "NewFolder3"));
-  App.GetApp().DismissAllMenus();
- }
+	TEST_CASE("Content browser right click creates folders through its popup at scaled DPI")
+	{
+		FTempFolder Temp;
+		FUITestApp App(1.5f);
+		const FString Directory = FString::FromWide(Temp.Path.wstring());
+		const TSharedRef<SContentBrowser> Browser =
+		    SNew(SContentBrowser).Roots(TArray<FContentBrowserRoot>{{"Content", Directory}}).InitialPath(Directory);
+		const TSharedRef<SWindow> Window = App.AddWindow(Browser, FVector2(800, 500));
+		App.Tick();
+		App.Tick();
+		// Empty tile area: the input must bubble through the scroll and wrap boxes.
+		const FVector2 Position(450, 220);
+		App.Click(Window, Position, EMouseButton::Right);
+		REQUIRE(App.GetApp().AnyMenusVisible());
+		App.Click(Window, Position + FVector2(30, 15)); // first entry: New Folder
+		CHECK_FALSE(App.GetApp().AnyMenusVisible());
+		CHECK(std::filesystem::is_directory(Temp.Path / "NewFolder"));
+		CHECK(Browser->GetSelectedPath() == Temp.File("NewFolder"));
+		App.Tick();
+		App.Tick();
+		CHECK(Browser->GetItems().size() == 1);
+		App.Click(Window, Position, EMouseButton::Right);
+		REQUIRE(App.GetApp().AnyMenusVisible());
+		App.Click(Window, Position + FVector2(30, 15));
+		CHECK(std::filesystem::is_directory(Temp.Path / "NewFolder2"));
+		Browser->SetPath({});
+		App.Tick();
+		App.Tick();
+		App.Click(Window, Position, EMouseButton::Right);
+		REQUIRE(App.GetApp().AnyMenusVisible());
+		App.Click(Window, Position + FVector2(30, 15));
+		CHECK(Browser->GetPath().IsEmpty());
+		CHECK_FALSE(std::filesystem::exists(Temp.Path / "NewFolder3"));
+		App.GetApp().DismissAllMenus();
+	}
 
- TEST_CASE("Shared browsers distinguish native schemas and refresh together")
- {
-  FTempFolder Temp; FString Error;
-  const auto Directory = FString::FromWide(Temp.Path.wstring());
-  auto Registry = std::make_shared<FAssetRegistry>();
-  REQUIRE(Registry->SetMounts({ { "/Game", Directory } }, Error));
-  REQUIRE(Registry->Scan());
-  FUITestApp App;
-  const auto A = SNew(SContentBrowser).Roots(TArray<FContentBrowserRoot>{ { "Content", Directory } }).Registry(Registry).InitialPath(Directory);
-  const auto B = SNew(SContentBrowser).Roots(TArray<FContentBrowserRoot>{ { "Content", Directory } }).Registry(Registry).InitialPath(Directory);
-  App.AddWindow(A); App.AddWindow(B);
-  CHECK(A->GetItems().empty()); CHECK(B->GetItems().empty());
-  FAssetPackage Prefab, Material, World;
-  Prefab.Schema = "Genesis.Prefab";
-  Material.Schema = "Genesis.Material";
-  World.Schema = "Genesis.World"; World.Kind = EAssetPackageKind::Map;
-  REQUIRE(FAssetPackageStore::Save(Temp.File("House.asset"), Prefab, Error));
-  REQUIRE(FAssetPackageStore::Save(Temp.File("Grass.asset"), Material, Error));
-  REQUIRE(FAssetPackageStore::Save(Temp.File("Main.gmap"), World, Error));
-  A->Refresh(); App.Tick(); App.Tick();
-  REQUIRE(A->GetItems().size() == 3); REQUIRE(B->GetItems().size() == 3);
-  CHECK(A->GetAssetType(Temp.File("House.asset")) == EContentAssetType::Prefab);
-  CHECK(A->GetAssetType(Temp.File("Grass.asset")) == EContentAssetType::Material);
-  CHECK(A->GetAssetType(Temp.File("Main.gmap")) == EContentAssetType::Map);
-  for (const auto& Item : B->GetItems())
-  {
-   CHECK_FALSE(Item.PackageId.IsEmpty());
-   CHECK(Item.PackagePath.StartsWith("/Game/"));
-   CHECK_FALSE(Item.Schema.IsEmpty());
-  }
-  // A raw duplicate gets flagged in every browser instead of placed as a prefab.
-  REQUIRE(FAssetPackageStore::Save(Temp.File("HouseCopy.asset"), Prefab, Error));
-  B->Refresh(); App.Tick(); App.Tick();
-  CHECK(A->GetAssetType(Temp.File("House.asset")) == EContentAssetType::InvalidPackage);
-  CHECK(B->GetAssetType(Temp.File("HouseCopy.asset")) == EContentAssetType::InvalidPackage);
-  REQUIRE(Registry->GetIssues().size() == 2);
- }
+	TEST_CASE("Shared browsers distinguish native schemas and refresh together")
+	{
+		FTempFolder Temp;
+		FString Error;
+		const FString Directory = FString::FromWide(Temp.Path.wstring());
+		TSharedPtr<FAssetRegistry> Registry = std::make_shared<FAssetRegistry>();
+		REQUIRE(Registry->SetMounts({{"/Game", Directory}}, Error));
+		REQUIRE(Registry->Scan());
+		FUITestApp App;
+		const TSharedRef<SContentBrowser> A = SNew(SContentBrowser)
+		                                          .Roots(TArray<FContentBrowserRoot>{{"Content", Directory}})
+		                                          .Registry(Registry)
+		                                          .InitialPath(Directory);
+		const TSharedRef<SContentBrowser> B = SNew(SContentBrowser)
+		                                          .Roots(TArray<FContentBrowserRoot>{{"Content", Directory}})
+		                                          .Registry(Registry)
+		                                          .InitialPath(Directory);
+		App.AddWindow(A);
+		App.AddWindow(B);
+		CHECK(A->GetItems().empty());
+		CHECK(B->GetItems().empty());
+		FAssetPackage Prefab, Material, World;
+		Prefab.Schema = "Genesis.Prefab";
+		Material.Schema = "Genesis.Material";
+		World.Schema = "Genesis.World";
+		World.Kind = EAssetPackageKind::Map;
+		REQUIRE(FAssetPackageStore::Save(Temp.File("House.asset"), Prefab, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Grass.asset"), Material, Error));
+		REQUIRE(FAssetPackageStore::Save(Temp.File("Main.gmap"), World, Error));
+		A->Refresh();
+		App.Tick();
+		App.Tick();
+		REQUIRE(A->GetItems().size() == 3);
+		REQUIRE(B->GetItems().size() == 3);
+		CHECK(A->GetAssetType(Temp.File("House.asset")) == EContentAssetType::Prefab);
+		CHECK(A->GetAssetType(Temp.File("Grass.asset")) == EContentAssetType::Material);
+		CHECK(A->GetAssetType(Temp.File("Main.gmap")) == EContentAssetType::Map);
+		for (const FContentBrowserItem& Item : B->GetItems())
+		{
+			CHECK_FALSE(Item.PackageId.IsEmpty());
+			CHECK(Item.PackagePath.StartsWith("/Game/"));
+			CHECK_FALSE(Item.Schema.IsEmpty());
+		}
+		// A raw duplicate gets flagged in every browser instead of placed as a prefab.
+		REQUIRE(FAssetPackageStore::Save(Temp.File("HouseCopy.asset"), Prefab, Error));
+		B->Refresh();
+		App.Tick();
+		App.Tick();
+		CHECK(A->GetAssetType(Temp.File("House.asset")) == EContentAssetType::InvalidPackage);
+		CHECK(B->GetAssetType(Temp.File("HouseCopy.asset")) == EContentAssetType::InvalidPackage);
+		REQUIRE(Registry->GetIssues().size() == 2);
+	}
 
- TEST_CASE("Invalid packages cannot activate and stale prefab identities cannot place replacements")
- {
-  EnsureMapCore(); FTempFolder Temp; FString Error;
-  FUITestApp App;
-  int Activations = 0;
-  const auto Directory = FString::FromWide(Temp.Path.wstring());
-  REQUIRE(FFile::WriteAllText(Temp.File("Broken.asset"), "invalid"));
-  const auto Browser = SNew(SContentBrowser).Roots(TArray<FContentBrowserRoot>{ { "Content", Directory } }).InitialPath(Directory)
-   .OnAssetActivated([&Activations](const FContentBrowserItem&) { ++Activations; });
-  App.AddWindow(Browser);
-  REQUIRE(Browser->GetItems().size() == 1);
-  CHECK(Browser->GetItems()[0].Type == EContentAssetType::InvalidPackage);
-  CHECK_FALSE(Browser->GetItems()[0].Error.IsEmpty());
-  Browser->Activate(Browser->GetItems()[0]);
-  CHECK(Activations == 0);
-  auto Doc = FMapDocument::CreateNew();
-  auto* Mesh = Doc->AddMesh("Cube", Vector3d()); REQUIRE(Mesh);
-  const auto File = Temp.File("Prefab.asset");
-  REQUIRE(Doc->SavePrefab({Mesh}, File, Error));
-  FAssetPackageMetadata First; REQUIRE(FAssetPackageStore::ReadMetadata(File, First, Error));
-  REQUIRE(Doc->SavePrefab({Mesh}, File, Error));
-  FAssetPackageMetadata Updated; REQUIRE(FAssetPackageStore::ReadMetadata(File, Updated, Error));
-  CHECK(Updated.Id == First.Id); // ordinary updates preserve existing references
-  FAssetPackage Replacement; REQUIRE(FAssetPackageStore::Load(File, Replacement, Error));
-  Replacement.Id.Empty(); // simulate an external replacement with a different asset
-  REQUIRE(FAssetPackageStore::Save(File, Replacement, Error));
-  const auto Before = Doc->GetObjects().size();
-  CHECK_FALSE(Doc->AddPrefab(File, Vector3d(), &Error, First.Id));
-  CHECK(Error.Contains("identity changed"));
-  CHECK(Doc->GetObjects().size() == Before);
-  FAssetPackageMetadata Second; REQUIRE(FAssetPackageStore::ReadMetadata(File, Second, Error));
-  CHECK(Doc->AddPrefab(File, Vector3d(), &Error, Second.Id));
-  FAssetPackage Material; Material.Schema = "Genesis.Material";
-  const auto OtherFile = Temp.File("Material.asset");
-  REQUIRE(FAssetPackageStore::Save(OtherFile, Material, Error));
-  CHECK_FALSE(Doc->SavePrefab({Mesh}, OtherFile, Error));
-  FAssetPackageMetadata StillMaterial; REQUIRE(FAssetPackageStore::ReadMetadata(OtherFile, StillMaterial, Error));
-  CHECK(StillMaterial.Id == Material.Id);
-  CHECK(StillMaterial.Schema == "Genesis.Material");
- }
+	TEST_CASE("Invalid packages cannot activate and stale prefab identities cannot place replacements")
+	{
+		EnsureMapCore();
+		FTempFolder Temp;
+		FString Error;
+		FUITestApp App;
+		int Activations = 0;
+		const FString Directory = FString::FromWide(Temp.Path.wstring());
+		REQUIRE(FFile::WriteAllText(Temp.File("Broken.asset"), "invalid"));
+		const TSharedRef<SContentBrowser> Browser =
+		    SNew(SContentBrowser)
+		        .Roots(TArray<FContentBrowserRoot>{{"Content", Directory}})
+		        .InitialPath(Directory)
+		        .OnAssetActivated([&Activations](const FContentBrowserItem&) { ++Activations; });
+		App.AddWindow(Browser);
+		REQUIRE(Browser->GetItems().size() == 1);
+		CHECK(Browser->GetItems()[0].Type == EContentAssetType::InvalidPackage);
+		CHECK_FALSE(Browser->GetItems()[0].Error.IsEmpty());
+		Browser->Activate(Browser->GetItems()[0]);
+		CHECK(Activations == 0);
+		TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+		Object* Mesh = Doc->AddMesh("Cube", Vector3d());
+		REQUIRE(Mesh);
+		const FString File = Temp.File("Prefab.asset");
+		REQUIRE(Doc->SavePrefab({Mesh}, File, Error));
+		FAssetPackageMetadata First;
+		REQUIRE(FAssetPackageStore::ReadMetadata(File, First, Error));
+		REQUIRE(Doc->SavePrefab({Mesh}, File, Error));
+		FAssetPackageMetadata Updated;
+		REQUIRE(FAssetPackageStore::ReadMetadata(File, Updated, Error));
+		CHECK(Updated.Id == First.Id); // ordinary updates preserve existing references
+		FAssetPackage Replacement;
+		REQUIRE(FAssetPackageStore::Load(File, Replacement, Error));
+		Replacement.Id.Empty(); // simulate an external replacement with a different asset
+		REQUIRE(FAssetPackageStore::Save(File, Replacement, Error));
+		const unsigned long long Before = Doc->GetObjects().size();
+		CHECK_FALSE(Doc->AddPrefab(File, Vector3d(), &Error, First.Id));
+		CHECK(Error.Contains("identity changed"));
+		CHECK(Doc->GetObjects().size() == Before);
+		FAssetPackageMetadata Second;
+		REQUIRE(FAssetPackageStore::ReadMetadata(File, Second, Error));
+		CHECK(Doc->AddPrefab(File, Vector3d(), &Error, Second.Id));
+		FAssetPackage Material;
+		Material.Schema = "Genesis.Material";
+		const FString OtherFile = Temp.File("Material.asset");
+		REQUIRE(FAssetPackageStore::Save(OtherFile, Material, Error));
+		CHECK_FALSE(Doc->SavePrefab({Mesh}, OtherFile, Error));
+		FAssetPackageMetadata StillMaterial;
+		REQUIRE(FAssetPackageStore::ReadMetadata(OtherFile, StillMaterial, Error));
+		CHECK(StillMaterial.Id == Material.Id);
+		CHECK(StillMaterial.Schema == "Genesis.Material");
+	}
 }
 
-TEST_CASE("Per-slot overrides preserve defaults undo identities and native world references" * doctest::test_suite("MapPackages"))
+TEST_CASE("Per-slot overrides preserve defaults undo identities and native world references" *
+    doctest::test_suite("MapPackages"))
 {
- EnsureMapCore(); FTempFolder Temp; FString Error;
- auto Registry=std::make_shared<FAssetRegistry>(); REQUIRE(Registry->SetMounts({{"/Game",FString::FromWide(Temp.Path.wstring())}},Error));
- struct FRestoreSlots { std::shared_ptr<FAssetRegistry> Old=FMapAssetLibrary::GetRegistry(); ~FRestoreSlots(){ FMapAssetLibrary::SetRegistry(Old); } } Restore;
- FMapAssetLibrary::SetRegistry(Registry);
- FMaterialAsset Red,Blue; Red.BaseColor[1]=Red.BaseColor[2]=0; Blue.BaseColor[0]=Blue.BaseColor[1]=0;
- FAssetPackage A,B,M; REQUIRE(FRenderAssetCodec::EncodeMaterial(Red,A,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Red.asset"),A,Error));
- REQUIRE(FRenderAssetCodec::EncodeMaterial(Blue,B,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Blue.asset"),B,Error));
- const FAssetReference RedRef{A.Id,"/Game/Red"},BlueRef{B.Id,"/Game/Blue"};
- FStaticMeshAsset Source{StaticMesh::Find("Cube"),RedRef,{BlueRef}};
- REQUIRE(FRenderAssetCodec::EncodeMesh(Source,M,Error)); REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"),M,Error)); REQUIRE(Registry->Scan());
- auto Doc=FMapDocument::CreateNew(); auto* Obj=Doc->AddMeshAsset({M.Id,"/Game/Mesh"},Vector3d(),Error); REQUIRE_MESSAGE(Obj,*Error); const auto Id=Obj->GetIdentity();
- REQUIRE(Obj->GetMeshAsset()->GetSlot(1).Material); CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2]==1);
- REQUIRE(Doc->SetMeshMaterial(*Obj,RedRef,Error,1)); CHECK(Obj->GetMeshAsset()->MaterialOverride.IsNull()); CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].Id==A.Id);
- Doc->Undo(); CHECK(Obj->GetMeshAsset()->AdditionalOverrides.empty()); Doc->Redo(); CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2]==0);
- REQUIRE(Doc->SetMeshMaterial(*Obj,BlueRef,Error,0)); CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].Id==A.Id);
- CHECK_FALSE(Doc->SetMeshMaterial(*Obj,BlueRef,Error,2)); CHECK_FALSE(Doc->SetMeshMaterial(*Obj,BlueRef,Error,-1));
- FMapObjectProperties Props(*Doc,*Obj); TArray<FPropertyDesc> Descs; Props.GetProperties(Descs); CHECK(std::get<FString>(Props.GetValue(FName("StaticMesh")))=="/Game/Mesh");
- const auto Override=Obj->GetMeshAsset(); Props.SetValue(FName("MaterialSlot:1"),int32(0)); CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].IsNull()); CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2]==1); Doc->Undo(); CHECK(Obj->GetMeshAsset()==Override);
- const auto File=Temp.File("Slots.gmap"); REQUIRE(Doc->Save(File,Error)); auto Back=FMapDocument::Open(File,Error); REQUIRE_MESSAGE(Back,*Error);
- const auto Loaded=Back->GetObjects()[0]->GetMeshAsset(); REQUIRE(Loaded); CHECK(Loaded->MaterialOverride.Id==B.Id); CHECK(Loaded->AdditionalOverrides[0].Id==A.Id); CHECK(Back->GetObjects()[0]->GetIdentity().Actor==Id.Actor);
- REQUIRE(Doc->SavePrefab({Obj},Temp.File("Slots.asset"),Error)); auto* Placed=Doc->AddPrefab(Temp.File("Slots.asset"),Vector3d(),&Error); REQUIRE_MESSAGE(Placed,*Error); CHECK(Placed->GetChild(0).GetMeshAsset()->AdditionalOverrides[0].Id==A.Id);
- // A v2 scene upgrades without replacing persistent identities.
- FAssetPackage World; REQUIRE(FAssetPackageStore::Load(File,World,Error)); World.SchemaVersion=2; REQUIRE(FAssetPackageStore::Save(Temp.File("Old.gmap"),World,Error));
- auto Old=FMapDocument::Open(Temp.File("Old.gmap"),Error); REQUIRE(Old); CHECK(Old->IsModified()); CHECK(Old->GetObjects()[0]->GetIdentity().Actor==Id.Actor);
- // Slot overrides keep authoritative UUID resolution and distinct cache entries.
- const auto Default=FMapAssetLibrary::LoadMesh({M.Id,"/Game/Mesh"},BlueRef,Error); CHECK(Default!=Loaded);
- auto BadRef=RedRef; BadRef.Id=FAssetId::New(); const auto Before=Obj->GetMeshAsset(); CHECK_FALSE(Doc->SetMeshMaterial(*Obj,BadRef,Error,1)); CHECK(Obj->GetMeshAsset()==Before);
- FLoadedMeshAsset Invalid;
- CHECK_FALSE(FRenderAssetLoader(*Registry).LoadMesh({M.Id, "/Game/Mesh"}, Invalid, Error, {}, {{}, {}}));
+	EnsureMapCore();
+	FTempFolder Temp;
+	FString Error;
+	TSharedPtr<FAssetRegistry> Registry = std::make_shared<FAssetRegistry>();
+	REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+	struct FRestoreSlots
+	{
+		std::shared_ptr<FAssetRegistry> Old = FMapAssetLibrary::GetRegistry();
+		~FRestoreSlots()
+		{
+			FMapAssetLibrary::SetRegistry(Old);
+		}
+	} Restore;
+	FMapAssetLibrary::SetRegistry(Registry);
+	FMaterialAsset Red, Blue;
+	Red.BaseColor[1] = Red.BaseColor[2] = 0;
+	Blue.BaseColor[0] = Blue.BaseColor[1] = 0;
+	FAssetPackage A, B, M;
+	REQUIRE(FRenderAssetCodec::EncodeMaterial(Red, A, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Red.asset"), A, Error));
+	REQUIRE(FRenderAssetCodec::EncodeMaterial(Blue, B, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Blue.asset"), B, Error));
+	const FAssetReference RedRef{A.Id, "/Game/Red"}, BlueRef{B.Id, "/Game/Blue"};
+	FStaticMeshAsset Source{StaticMesh::Find("Cube"), RedRef, {BlueRef}};
+	REQUIRE(FRenderAssetCodec::EncodeMesh(Source, M, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"), M, Error));
+	REQUIRE(Registry->Scan());
+	TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+	Object* Obj = Doc->AddMeshAsset({M.Id, "/Game/Mesh"}, Vector3d(), Error);
+	REQUIRE_MESSAGE(Obj, *Error);
+	const FActorIdentity Id = Obj->GetIdentity();
+	REQUIRE(Obj->GetMeshAsset()->GetSlot(1).Material);
+	CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2] == 1);
+	REQUIRE(Doc->SetMeshMaterial(*Obj, RedRef, Error, 1));
+	CHECK(Obj->GetMeshAsset()->MaterialOverride.IsNull());
+	CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].Id == A.Id);
+	Doc->Undo();
+	CHECK(Obj->GetMeshAsset()->AdditionalOverrides.empty());
+	Doc->Redo();
+	CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2] == 0);
+	REQUIRE(Doc->SetMeshMaterial(*Obj, BlueRef, Error, 0));
+	CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].Id == A.Id);
+	CHECK_FALSE(Doc->SetMeshMaterial(*Obj, BlueRef, Error, 2));
+	CHECK_FALSE(Doc->SetMeshMaterial(*Obj, BlueRef, Error, -1));
+	FMapObjectProperties Props(*Doc, *Obj);
+	TArray<FPropertyDesc> Descs;
+	Props.GetProperties(Descs);
+	CHECK(std::get<FString>(Props.GetValue(FName("StaticMesh"))) == "/Game/Mesh");
+	const std::shared_ptr<const FLoadedMeshAsset> Override = Obj->GetMeshAsset();
+	Props.SetValue(FName("MaterialSlot:1"), int32(0));
+	CHECK(Obj->GetMeshAsset()->AdditionalOverrides[0].IsNull());
+	CHECK(Obj->GetMeshAsset()->GetSlot(1).Material->BaseColor[2] == 1);
+	Doc->Undo();
+	CHECK(Obj->GetMeshAsset() == Override);
+	const FString File = Temp.File("Slots.gmap");
+	REQUIRE(Doc->Save(File, Error));
+	TUniquePtr<FMapDocument> Back = FMapDocument::Open(File, Error);
+	REQUIRE_MESSAGE(Back, *Error);
+	const std::shared_ptr<const FLoadedMeshAsset> Loaded = Back->GetObjects()[0]->GetMeshAsset();
+	REQUIRE(Loaded);
+	CHECK(Loaded->MaterialOverride.Id == B.Id);
+	CHECK(Loaded->AdditionalOverrides[0].Id == A.Id);
+	CHECK(Back->GetObjects()[0]->GetIdentity().Actor == Id.Actor);
+	REQUIRE(Doc->SavePrefab({Obj}, Temp.File("Slots.asset"), Error));
+	Object* Placed = Doc->AddPrefab(Temp.File("Slots.asset"), Vector3d(), &Error);
+	REQUIRE_MESSAGE(Placed, *Error);
+	CHECK(Placed->GetChild(0).GetMeshAsset()->AdditionalOverrides[0].Id == A.Id);
+	// A v2 scene upgrades without replacing persistent identities.
+	FAssetPackage World;
+	REQUIRE(FAssetPackageStore::Load(File, World, Error));
+	World.SchemaVersion = 2;
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Old.gmap"), World, Error));
+	TUniquePtr<FMapDocument> Old = FMapDocument::Open(Temp.File("Old.gmap"), Error);
+	REQUIRE(Old);
+	CHECK(Old->IsModified());
+	CHECK(Old->GetObjects()[0]->GetIdentity().Actor == Id.Actor);
+	// Slot overrides keep authoritative UUID resolution and distinct cache entries.
+	const std::shared_ptr<const FLoadedMeshAsset> Default =
+	    FMapAssetLibrary::LoadMesh({M.Id, "/Game/Mesh"}, BlueRef, Error);
+	CHECK(Default != Loaded);
+	FAssetReference BadRef = RedRef;
+	BadRef.Id = FAssetId::New();
+	const std::shared_ptr<const FLoadedMeshAsset> Before = Obj->GetMeshAsset();
+	CHECK_FALSE(Doc->SetMeshMaterial(*Obj, BadRef, Error, 1));
+	CHECK(Obj->GetMeshAsset() == Before);
+	FLoadedMeshAsset Invalid;
+	CHECK_FALSE(FRenderAssetLoader(*Registry).LoadMesh({M.Id, "/Game/Mesh"}, Invalid, Error, {}, {{}, {}}));
 }
 
 TEST_CASE("OBJ usemtl groups become persistent material slots" * doctest::test_suite("MapPackages"))
 {
 	FTempFolder Temp;
 	FString Error;
-	const auto File = Temp.File("Grouped.obj");
+	const FString File = Temp.File("Grouped.obj");
 	const FString Text =
-		"v 0 0 0\nv 1 0 0\nv 0 1 0\nusemtl Body\nf 1 2 3\nusemtl Trim\nf 3 2 1\nusemtl Body\nf 1 2 3\n";
+	    "v 0 0 0\nv 1 0 0\nv 0 1 0\nusemtl Body\nf 1 2 3\nusemtl Trim\nf 3 2 1\nusemtl Body\nf 1 2 3\n";
 	REQUIRE(FFile::WriteAllText(File, Text));
 	FStaticMeshAsset Mesh;
 	REQUIRE_MESSAGE(FMapAssetImport::ReadObj(File, Mesh, Error), *Error);
@@ -4707,9 +5145,9 @@ TEST_CASE("OBJ usemtl groups become persistent material slots" * doctest::test_s
 }
 
 TEST_CASE("Mesh slots independently render textures masks and translucency on both backends" *
-		  doctest::test_suite("MeshMaterials"))
+    doctest::test_suite("MeshMaterials"))
 {
-	for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+	for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 	{
 		CAPTURE(std::string(ToString(Backend)));
 		FTestLogCapture Log;
@@ -4720,15 +5158,15 @@ TEST_CASE("Mesh slots independently render textures masks and translucency on bo
 			continue;
 		}
 		F.Settings.bShowGrid = false;
-		auto Flags = F.Client->GetShowFlags();
+		FMapShowFlags Flags = F.Client->GetShowFlags();
 		Flags.bAxes = false;
 		Flags.bViewportStats = false;
 		F.Client->SetShowFlags(Flags);
-		const auto Cube = StaticMesh::Find("Cube");
-		auto Mesh = std::make_shared<StaticMesh>("Multi slot cube");
+		const std::shared_ptr<const StaticMesh> Cube = StaticMesh::Find("Cube");
+		TSharedPtr<StaticMesh> Mesh = std::make_shared<StaticMesh>("Multi slot cube");
 		for (int I = 0; I < Cube->GetNumVertices(); ++I)
 			Mesh->AddVertex(Cube->GetVertex(I));
-		for (const auto& T : Cube->GetTriangles())
+		for (const StaticMesh::Triangle& T : Cube->GetTriangles())
 		{
 			Mesh->AddTriangle(T.v[0], T.v[1], T.v[2], T.norm[0], T.norm[1], T.norm[2]);
 			const int I = static_cast<int>(Mesh->GetTriangles().size()) - 1;
@@ -4736,7 +5174,7 @@ TEST_CASE("Mesh slots independently render textures masks and translucency on bo
 			Mesh->SetTriangleMaterial(I, T.norm[0].GetY() < -0.5f ? 1 : 0);
 		}
 		Mesh->Finish();
-		auto Asset = std::make_shared<FLoadedMeshAsset>();
+		TSharedPtr<FLoadedMeshAsset> Asset = std::make_shared<FLoadedMeshAsset>();
 		Asset->Data.Mesh = Mesh;
 		Asset->Data.AdditionalMaterials.resize(1);
 		Asset->DisplayMesh = Mesh;
@@ -4748,35 +5186,37 @@ TEST_CASE("Mesh slots independently render textures masks and translucency on bo
 		Green.Width = Green.Height = 1;
 		Green.Pixels = {0, 255, 0, 255};
 		Asset->AdditionalSlots[0].Texture = Green;
-		auto* Obj = F.Doc->AddMesh("Cube", Vector3d());
+		Object* Obj = F.Doc->AddMesh("Cube", Vector3d());
 		REQUIRE(Obj);
 		Obj->SetMeshAsset(Asset);
 		F.Client->FrameSelection();
 		F.Doc->ClearSelection();
 		F.Client->SetViewMode(EMapViewMode::Unlit);
-		auto Sample = [&](const TArray<uint8>& Pixels, const Vector3d& Point) {
-			const auto P = F.At(Point);
+		TFunction<FColor(const TArray<uint8>&, const Vector3d&)> Sample =
+		    [&](const TArray<uint8>& Pixels, const Vector3d& Point)
+		{
+			const FVector2 P = F.At(Point);
 			return PixelAt(Pixels, static_cast<int>(P.X), static_cast<int>(P.Y));
 		};
 		const Vector3d Front(-32, -64, 32), Top(-20, -10, 64);
-		const auto Opaque = F.Render();
-		const auto FrontColor = Sample(Opaque, Front), TopColor = Sample(Opaque, Top);
+		const TArray<uint8> Opaque = F.Render();
+		const FColor FrontColor = Sample(Opaque, Front), TopColor = Sample(Opaque, Top);
 		CHECK(FrontColor.G > 240);
 		CHECK(FrontColor.R < 10);
 		CHECK(TopColor.R > 240);
 		CHECK(TopColor.G < 10);
-		auto Hole = std::make_shared<FLoadedMeshAsset>(*Asset);
+		TSharedPtr<FLoadedMeshAsset> Hole = std::make_shared<FLoadedMeshAsset>(*Asset);
 		Hole->AdditionalSlots[0].Material->BlendMode = EMaterialBlendMode::Translucent;
 		Hole->AdditionalSlots[0].Material->BaseColor[3] = 0;
 		Obj->SetMeshAsset(Hole);
-		const auto Background = F.Render();
+		const TArray<uint8> Background = F.Render();
 		CHECK(Sample(Background, Top) == TopColor);
-		auto Half = std::make_shared<FLoadedMeshAsset>(*Hole);
+		TSharedPtr<FLoadedMeshAsset> Half = std::make_shared<FLoadedMeshAsset>(*Hole);
 		Half->AdditionalSlots[0].Material->BaseColor[3] = 0.5f;
 		Obj->SetMeshAsset(Half);
-		const auto Mixed = Sample(F.Render(), Front), Bg = Sample(Background, Front);
+		const FColor Mixed = Sample(F.Render(), Front), Bg = Sample(Background, Front);
 		CHECK(std::abs(int(Mixed.G) - (int(FrontColor.G) + int(Bg.G)) / 2) <= 3);
-		auto Mask = std::make_shared<FLoadedMeshAsset>(*Half);
+		TSharedPtr<FLoadedMeshAsset> Mask = std::make_shared<FLoadedMeshAsset>(*Half);
 		Mask->AdditionalSlots[0].Material->BlendMode = EMaterialBlendMode::Masked;
 		Mask->AdditionalSlots[0].Material->OpacityMaskClip = 0.6f;
 		Obj->SetMeshAsset(Mask);
@@ -4790,22 +5230,22 @@ TEST_CASE("Mesh slots independently render textures masks and translucency on bo
 }
 
 TEST_CASE("Mesh editor saves defaults and reimports named slots without changing identity" *
-		  doctest::test_suite("MeshAssetEditor"))
+    doctest::test_suite("MeshAssetEditor"))
 {
 	EnsureMapCore();
 	FTempFolder Temp;
 	FString Error;
 	FAssetRegistry Registry;
 	REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
-	const auto Source = Temp.File("Source.obj"), Target = Temp.File("Mesh.asset");
+	const FString Source = Temp.File("Source.obj"), Target = Temp.File("Mesh.asset");
 	const FString Vertices = "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
 	REQUIRE(FFile::WriteAllText(Source, Vertices + "usemtl Body\nf 1 2 3\nusemtl Trim\nf 3 2 1\n"));
 	REQUIRE(FMapAssetImport::ImportMesh(Source, Target, Error));
 	REQUIRE(Registry.Scan());
-	const auto* Data = Registry.FindByPath("/Game/Mesh");
+	const FAssetData* Data = Registry.FindByPath("/Game/Mesh");
 	REQUIRE(Data);
-	const auto Ref = Data->GetReference();
-	auto Edit = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	const FAssetReference Ref = Data->GetReference();
+	TUniquePtr<FMeshAssetEditSession> Edit = FMeshAssetEditSession::Open(Registry, Ref, Error);
 	REQUIRE_MESSAGE(Edit, *Error);
 	CHECK_FALSE(Edit->IsDirty());
 	CHECK(Edit->GetSourceFile() == Source);
@@ -4825,7 +5265,7 @@ TEST_CASE("Mesh editor saves defaults and reimports named slots without changing
 	REQUIRE(Edit->Save(Registry, Error));
 	CHECK_FALSE(Edit->IsDirty());
 	REQUIRE(Registry.Scan());
-	auto Other = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	TUniquePtr<FMeshAssetEditSession> Other = FMeshAssetEditSession::Open(Registry, Ref, Error);
 	REQUIRE(Other);
 	CHECK(Other->GetMesh().GetMaterial(1).Id == MP.Id);
 	// Group order changes, one group disappears, and a new group is appended.
@@ -4855,16 +5295,16 @@ TEST_CASE("Mesh editor saves defaults and reimports named slots without changing
 	REQUIRE(FRenderAssetCodec::DecodeMesh(Back, Mesh, Error));
 	CHECK(Mesh.GetNumMaterials() == 3);
 	REQUIRE(Registry.Scan());
-	auto Reopened = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	TUniquePtr<FMeshAssetEditSession> Reopened = FMeshAssetEditSession::Open(Registry, Ref, Error);
 	REQUIRE(Reopened);
-	const auto Geometry = Reopened->GetMesh().Mesh;
+	const std::shared_ptr<const StaticMesh> Geometry = Reopened->GetMesh().Mesh;
 	REQUIRE(FFile::WriteAllText(Source, "this is invalid OBJ\n"));
 	CHECK_FALSE(Reopened->Reimport(Source, Error));
 	CHECK(Reopened->GetMesh().Mesh == Geometry);
 	CHECK_FALSE(Reopened->IsDirty());
 	CHECK_FALSE(Reopened->SetMaterial(9, Mat, Registry, Error));
 	CHECK_FALSE(Reopened->SetMaterial(-1, Mat, Registry, Error));
-	auto Stale = Mat;
+	FAssetReference Stale = Mat;
 	Stale.Id = FAssetId::New();
 	CHECK_FALSE(Reopened->SetMaterial(1, Stale, Registry, Error));
 	CHECK(Reopened->GetMesh().GetMaterial(1).Id == MP.Id);
@@ -4875,12 +5315,12 @@ TEST_CASE("Mesh editor saves defaults and reimports named slots without changing
 }
 
 TEST_CASE("Mesh draft refresh keeps placed transforms identities and actor overrides" *
-		  doctest::test_suite("MeshAssetEditor"))
+    doctest::test_suite("MeshAssetEditor"))
 {
 	EnsureMapCore();
 	FTempFolder Temp;
 	FString Error;
-	auto Registry = std::make_shared<FAssetRegistry>();
+	TSharedPtr<FAssetRegistry> Registry = std::make_shared<FAssetRegistry>();
 	REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 	struct FRestoreMeshEdit
 	{
@@ -4904,15 +5344,15 @@ TEST_CASE("Mesh draft refresh keeps placed transforms identities and actor overr
 	REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"), M, Error));
 	REQUIRE(Registry->Scan());
 	const FAssetReference MeshRef{M.Id, "/Game/Mesh"};
-	auto Doc = FMapDocument::CreateNew();
-	auto* First = Doc->AddMeshAsset(MeshRef, Vector3d(10, 20, 30), Error);
-	auto* Second = Doc->AddMeshAsset(MeshRef, Vector3d(-10, 30, 50), Error);
+	TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+	Object* First = Doc->AddMeshAsset(MeshRef, Vector3d(10, 20, 30), Error);
+	Object* Second = Doc->AddMeshAsset(MeshRef, Vector3d(-10, 30, 50), Error);
 	REQUIRE(First);
 	REQUIRE(Second);
 	REQUIRE(Doc->SetMeshMaterial(*Second, BlueRef, Error, 1));
-	const auto Id = Second->GetIdentity();
-	const auto Before = First->GetMeshAsset();
-	auto Edit = FMeshAssetEditSession::Open(*Registry, MeshRef, Error);
+	const FActorIdentity Id = Second->GetIdentity();
+	const std::shared_ptr<const FLoadedMeshAsset> Before = First->GetMeshAsset();
+	TUniquePtr<FMeshAssetEditSession> Edit = FMeshAssetEditSession::Open(*Registry, MeshRef, Error);
 	REQUIRE(Edit);
 	REQUIRE(Edit->SetMaterial(0, BlueRef, *Registry, Error));
 	REQUIRE(Edit->Save(*Registry, Error));
@@ -4931,20 +5371,20 @@ TEST_CASE("Mesh draft refresh keeps placed transforms identities and actor overr
 	B.Id = FAssetId::New();
 	REQUIRE(FAssetPackageStore::Save(Temp.File("Blue.asset"), B, Error));
 	REQUIRE(Registry->Scan());
-	const auto Kept = First->GetMeshAsset();
+	const std::shared_ptr<const FLoadedMeshAsset> Kept = First->GetMeshAsset();
 	CHECK_FALSE(Doc->ReloadMeshAsset(MeshRef, Error));
 	CHECK(First->GetMeshAsset() == Kept);
 }
 
 TEST_CASE("Reimport rejects ambiguous and overflowing slots without replacing its draft" *
-		  doctest::test_suite("MeshAssetEditor"))
+    doctest::test_suite("MeshAssetEditor"))
 {
 	EnsureMapCore();
 	FTempFolder Temp;
 	FString Error;
 	FAssetRegistry Registry;
 	REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
-	const auto Source = Temp.File("Source.obj"), Target = Temp.File("Mesh.asset");
+	const FString Source = Temp.File("Source.obj"), Target = Temp.File("Mesh.asset");
 	REQUIRE(FFile::WriteAllText(Source, "v 0 0 0\nv 1 0 0\nv 0 1 0\nusemtl New\nf 1 2 3\n"));
 	FStaticMeshAsset Mesh{StaticMesh::Find("Cube"), {}, TArray<FAssetReference>(63)};
 	for (int I = 0; I < 64; ++I)
@@ -4953,10 +5393,10 @@ TEST_CASE("Reimport rejects ambiguous and overflowing slots without replacing it
 	REQUIRE(FRenderAssetCodec::EncodeMesh(Mesh, P, Error));
 	REQUIRE(FAssetPackageStore::Save(Target, P, Error));
 	REQUIRE(Registry.Scan());
-	const auto Ref = Registry.FindByPath("/Game/Mesh")->GetReference();
-	auto Edit = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	const FAssetReference Ref = Registry.FindByPath("/Game/Mesh")->GetReference();
+	TUniquePtr<FMeshAssetEditSession> Edit = FMeshAssetEditSession::Open(Registry, Ref, Error);
 	REQUIRE(Edit);
-	const auto Before = Edit->GetMesh().Mesh;
+	const std::shared_ptr<const StaticMesh> Before = Edit->GetMesh().Mesh;
 	CHECK_FALSE(Edit->Reimport(Source, Error));
 	CHECK(Edit->GetMesh().Mesh == Before);
 	CHECK(Edit->GetMesh().GetNumMaterials() == 64);
@@ -4991,20 +5431,20 @@ TEST_CASE("Reimport rejects ambiguous and overflowing slots without replacing it
 	REQUIRE(Registry.Scan());
 	CHECK_FALSE(Edit->Save(Registry, Error));
 	CHECK_FALSE(FFile::Exists(Target));
-	auto Moved = FMeshAssetEditSession::Open(Registry, Ref, Error);
+	TUniquePtr<FMeshAssetEditSession> Moved = FMeshAssetEditSession::Open(Registry, Ref, Error);
 	REQUIRE(Moved);
 	CHECK(Moved->GetSourceFile() == Source);
 }
 
 TEST_CASE("Texture preview preserves pixels and distinguishes color alpha and data channels" *
-		  doctest::test_suite("TextureAssetEditor"))
+    doctest::test_suite("TextureAssetEditor"))
 {
 	FString Error;
 	FTextureAsset T;
 	T.Width = T.Height = 1;
 	T.Pixels = {128, 64, 255, 128};
 	FTextureAsset Out;
-	const auto Pixels = T.Pixels;
+	const TArray<uint8> Pixels = T.Pixels;
 	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGB, Out, Error));
 	CHECK(Out.Pixels[0] == 128);
 	CHECK(Out.Pixels[1] == 64);
@@ -5042,30 +5482,30 @@ TEST_CASE("Texture preview preserves pixels and distinguishes color alpha and da
 	REQUIRE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGBA, Out, Error));
 	CHECK(Out.Width == 2048);
 	CHECK(Out.Height == 1);
-	const auto Kept = Out.Pixels;
+	const TArray<uint8> Kept = Out.Pixels;
 	T.Pixels.pop_back();
 	CHECK_FALSE(BuildTextureAssetPreview(T, ETexturePreviewChannel::RGBA, Out, Error));
 	CHECK(Out.Pixels == Kept);
 }
 
 TEST_CASE("Texture reimport and saves preserve identity source color setting and reject stale editors" *
-		  doctest::test_suite("TextureAssetEditor"))
+    doctest::test_suite("TextureAssetEditor"))
 {
 	EnsureMapCore();
 	FTempFolder Temp;
 	FString Error;
 	FAssetRegistry Registry;
 	REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
-	const auto Image = Temp.File("Image.png"), Target = Temp.File("Texture.asset");
+	const FString Image = Temp.File("Image.png"), Target = Temp.File("Texture.asset");
 	FHeightmap Source;
 	Source.Width = Source.Height = 2;
 	Source.Samples = {0, 65535, 32768, 1000};
 	REQUIRE(Source.Save(Image, Error, 8));
 	REQUIRE(FMapAssetImport::ImportTexture(Image, Target, Error));
 	REQUIRE(Registry.Scan());
-	const auto Ref = Registry.FindByPath("/Game/Texture")->GetReference();
-	auto Edit = FTextureAssetEditSession::Open(Registry, Ref, Error);
-	auto Other = FTextureAssetEditSession::Open(Registry, Ref, Error);
+	const FAssetReference Ref = Registry.FindByPath("/Game/Texture")->GetReference();
+	TUniquePtr<FTextureAssetEditSession> Edit = FTextureAssetEditSession::Open(Registry, Ref, Error);
+	TUniquePtr<FTextureAssetEditSession> Other = FTextureAssetEditSession::Open(Registry, Ref, Error);
 	REQUIRE(Edit);
 	REQUIRE(Other);
 	CHECK(Edit->GetSourceFile() == Image);
@@ -5098,7 +5538,7 @@ TEST_CASE("Texture reimport and saves preserve identity source color setting and
 	Other->SetSRGB(false);
 	CHECK_FALSE(Other->Save(Registry, Error));
 	CHECK(Other->IsDirty());
-	const auto Kept = Edit->GetTexture().Pixels;
+	const TArray<uint8> Kept = Edit->GetTexture().Pixels;
 	CHECK_FALSE(Edit->Reimport(Temp.File("Missing.png"), Error));
 	CHECK(Edit->GetTexture().Pixels == Kept);
 	CHECK_FALSE(Edit->IsDirty());
@@ -5109,12 +5549,12 @@ TEST_CASE("Texture reimport and saves preserve identity source color setting and
 }
 
 TEST_CASE("Texture saves refresh mesh dependencies and landscape caches without changing references" *
-		  doctest::test_suite("TextureAssetEditor"))
+    doctest::test_suite("TextureAssetEditor"))
 {
 	EnsureMapCore();
 	FTempFolder Temp;
 	FString Error;
-	auto Registry = std::make_shared<FAssetRegistry>();
+	TSharedPtr<FAssetRegistry> Registry = std::make_shared<FAssetRegistry>();
 	REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 	struct FRestoreTextureEdit
 	{
@@ -5139,23 +5579,23 @@ TEST_CASE("Texture saves refresh mesh dependencies and landscape caches without 
 	REQUIRE(FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Cube"), {M.Id, "/Game/Material"}}, S, Error));
 	REQUIRE(FAssetPackageStore::Save(Temp.File("Mesh.asset"), S, Error));
 	REQUIRE(Registry->Scan());
-	auto Doc = FMapDocument::CreateNew();
-	auto* Obj = Doc->AddMeshAsset({S.Id, "/Game/Mesh"}, Vector3d(1, 2, 3), Error);
+	TUniquePtr<FMapDocument> Doc = FMapDocument::CreateNew();
+	Object* Obj = Doc->AddMeshAsset({S.Id, "/Game/Mesh"}, Vector3d(1, 2, 3), Error);
 	REQUIRE(Obj);
-	const auto Id = Obj->GetIdentity();
-	const auto Before = Obj->GetMeshAsset();
-	auto* Land = Doc->AddLandscape(4, 4, 16, Vector3d());
+	const FActorIdentity Id = Obj->GetIdentity();
+	const std::shared_ptr<const FLoadedMeshAsset> Before = Obj->GetMeshAsset();
+	Object* Land = Doc->AddLandscape(4, 4, 16, Vector3d());
 	REQUIRE(Land);
-	auto Layer = Land->GetLandscape().MakeLayer("Native", 255, 255, 255);
+	LandscapeLayer Layer = Land->GetLandscape().MakeLayer("Native", 255, 255, 255);
 	Layer.texture = FMapAssetLibrary::TextureToken(Tex).ToStdString();
 	Layer.weights.assign(25, 1);
 	Doc->SetLandscape(*Land, Land->GetLandscape().WithLayers({Layer}));
-	const auto* OldImage = FLandscapeTextureLibrary::Get().Find(Layer.texture);
+	const FLandscapeTexture* OldImage = FLandscapeTextureLibrary::Get().Find(Layer.texture);
 	REQUIRE(OldImage);
 	CHECK(OldImage->Mips[0].Pixels[0] == 128);
-	auto Edit = FTextureAssetEditSession::Open(*Registry, Tex, Error);
+	TUniquePtr<FTextureAssetEditSession> Edit = FTextureAssetEditSession::Open(*Registry, Tex, Error);
 	REQUIRE(Edit);
-	const auto File = Temp.File("Changed.png");
+	const FString File = Temp.File("Changed.png");
 	FHeightmap Image;
 	Image.Width = Image.Height = 2;
 	Image.Samples = {25700, 25700, 25700, 25700};
@@ -5170,9 +5610,10 @@ TEST_CASE("Texture saves refresh mesh dependencies and landscape caches without 
 	CHECK(Obj->GetIdentity().Actor == Id.Actor);
 	CHECK(Obj->GetPosition() == Vector3d(1, 2, 3));
 	CHECK(Obj->GetMeshAsset()->Material->BaseColorTexture.Id == Tex.Id);
-	const auto* Updated = FLandscapeTextureLibrary::Get().Find(Layer.texture);
+	const FLandscapeTexture* Updated = FLandscapeTextureLibrary::Get().Find(Layer.texture);
 	REQUIRE(Updated);
-	CHECK(Updated->Mips[0].Pixels[0] >= 167); CHECK(Updated->Mips[0].Pixels[0] <= 169);
+	CHECK(Updated->Mips[0].Pixels[0] >= 167);
+	CHECK(Updated->Mips[0].Pixels[0] <= 169);
 	Doc->Undo();
 	CHECK(Obj->GetMeshAsset() == Before);
 	Doc->Redo();

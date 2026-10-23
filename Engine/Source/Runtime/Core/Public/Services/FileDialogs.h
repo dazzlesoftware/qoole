@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // File and folder pickers, replacing CDirDialog and CFileDialog.
 
 #include "Containers/ContainerAliases.h"
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
 
 // One entry of a picker's file type list, e.g. { "Maps", "*.qle;*.map" }.
 struct FFileTypeFilter
@@ -35,7 +35,7 @@ struct FFileTypeFilter
 struct FFileDialogOptions
 {
 	FString Title;
-	FString InitialPath;          // a folder, or a file (its folder and name are used)
+	FString InitialPath; // a folder, or a file (its folder and name are used)
 	TArray<FFileTypeFilter> Filters;
 	FString DefaultExtension;     // added to typed names without one (save), without the dot
 	void* ParentWindow = nullptr; // native window handle; null means the active window
@@ -48,9 +48,19 @@ public:
 
 	// Each returns false if the user cancelled. Paths are UTF-8.
 	virtual bool BrowseForFolder(const FString& Title, FString& OutPath) = 0;
-	virtual bool OpenFile(const FFileDialogOptions& Options, FString& OutPath) { (void)Options; (void)OutPath; return false; }
+	virtual bool OpenFile(const FFileDialogOptions& Options, FString& OutPath)
+	{
+		(void)Options;
+		(void)OutPath;
+		return false;
+	}
 	// Asks before replacing an existing file.
-	virtual bool SaveFile(const FFileDialogOptions& Options, FString& OutPath) { (void)Options; (void)OutPath; return false; }
+	virtual bool SaveFile(const FFileDialogOptions& Options, FString& OutPath)
+	{
+		(void)Options;
+		(void)OutPath;
+		return false;
+	}
 };
 
 // Default without a UI: every dialog is cancelled.

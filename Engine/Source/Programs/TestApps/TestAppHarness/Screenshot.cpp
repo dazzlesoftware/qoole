@@ -23,13 +23,12 @@ namespace
 		ComPtr<IWICStream> Stream;
 		ComPtr<IWICBitmapEncoder> Encoder;
 		ComPtr<IWICBitmapFrameEncode> Frame;
-		if (FAILED(Factory->CreateStream(&Stream))
-			|| FAILED(Stream->InitializeFromFilename(Path.ToWide().c_str(), GENERIC_WRITE))
-			|| FAILED(Factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &Encoder))
-			|| FAILED(Encoder->Initialize(Stream.Get(), WICBitmapEncoderNoCache))
-			|| FAILED(Encoder->CreateNewFrame(&Frame, nullptr))
-			|| FAILED(Frame->Initialize(nullptr))
-			|| FAILED(Frame->SetSize(static_cast<UINT>(Width), static_cast<UINT>(Height))))
+		if (FAILED(Factory->CreateStream(&Stream)) ||
+		    FAILED(Stream->InitializeFromFilename(Path.ToWide().c_str(), GENERIC_WRITE)) ||
+		    FAILED(Factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &Encoder)) ||
+		    FAILED(Encoder->Initialize(Stream.Get(), WICBitmapEncoderNoCache)) ||
+		    FAILED(Encoder->CreateNewFrame(&Frame, nullptr)) || FAILED(Frame->Initialize(nullptr)) ||
+		    FAILED(Frame->SetSize(static_cast<UINT>(Width), static_cast<UINT>(Height))))
 		{
 			return false;
 		}
@@ -49,21 +48,23 @@ namespace
 				memcpy(&Bgr[SIZE_T(Y) * Stride + SIZE_T(X) * 3], &Bgra[(SIZE_T(Y) * Width + X) * 4], 3);
 			}
 		}
-		if (FAILED(Frame->WritePixels(static_cast<UINT>(Height), Stride, static_cast<UINT>(Bgr.size()), Bgr.data()))
-			|| FAILED(Frame->Commit()) || FAILED(Encoder->Commit()))
+		if (FAILED(Frame->WritePixels(static_cast<UINT>(Height), Stride, static_cast<UINT>(Bgr.size()), Bgr.data())) ||
+		    FAILED(Frame->Commit()) || FAILED(Encoder->Commit()))
 		{
 			return false;
 		}
 		return true;
 	}
-}
+} // namespace
 
 bool SaveRgbaToPng(const FString& Path, int32 Width, int32 Height, const TArray<uint8>& Pixels)
 {
-	if(Width<=0 || Height<=0 || Pixels.size()!=static_cast<size_t>(Width)*Height*4) return false;
-	auto Bgra=Pixels;
-	for(size_t I=0;I<Bgra.size();I+=4) std::swap(Bgra[I],Bgra[I+2]);
-	return SavePng(Path,Width,Height,Bgra);
+	if (Width <= 0 || Height <= 0 || Pixels.size() != static_cast<size_t>(Width) * Height * 4)
+		return false;
+	TArray<uint8> Bgra = Pixels;
+	for (size_t I = 0; I < Bgra.size(); I += 4)
+		std::swap(Bgra[I], Bgra[I + 2]);
+	return SavePng(Path, Width, Height, Bgra);
 }
 
 bool CaptureWindowClientToPng(void* NativeHandle, const FString& Path)
@@ -81,7 +82,7 @@ bool CaptureWindowClientToPng(void* NativeHandle, const FString& Path)
 	// Copy what is on screen: the composed result of the swapchain, exactly
 	// as the user sees it. (PrintWindow cannot reliably read flip-model
 	// swapchains.) The window must be visible and on top.
-	POINT Origin{ 0, 0 };
+	POINT Origin{0, 0};
 	ClientToScreen(Hwnd, &Origin);
 	const HDC ScreenDC = GetDC(nullptr);
 	const HDC MemoryDC = CreateCompatibleDC(ScreenDC);
@@ -98,7 +99,8 @@ bool CaptureWindowClientToPng(void* NativeHandle, const FString& Path)
 	Info.bmiHeader.biCompression = BI_RGB;
 	TArray<uint8> Pixels(SIZE_T(Width) * Height * 4);
 	SelectObject(MemoryDC, Old);
-	bOk = bOk && GetDIBits(MemoryDC, Bitmap, 0, static_cast<UINT>(Height), Pixels.data(), &Info, DIB_RGB_COLORS) == Height;
+	bOk = bOk &&
+	    GetDIBits(MemoryDC, Bitmap, 0, static_cast<UINT>(Height), Pixels.data(), &Info, DIB_RGB_COLORS) == Height;
 
 	DeleteObject(Bitmap);
 	DeleteDC(MemoryDC);

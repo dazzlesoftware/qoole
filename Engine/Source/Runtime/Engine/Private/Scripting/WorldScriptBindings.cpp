@@ -1,287 +1,371 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "Scripting/WorldScriptBindings.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
+#include "Internationalization/TextLocalization.h"
 #include "World/World.h"
 #include "Logging/Log.h"
-#include <stdexcept>
+#include "Misc/ValidationContext.h"
 DEFINE_LOG_CATEGORY(LogScript, Log);
 namespace
 {
-using J = FJsonValue;
-J MatrixJson(const Matrix44& M)
-{
-	auto Result = J::MakeArray();
-	for (int R = 0; R < 4; ++R)
-		for (int C = 0; C < 4; ++C)
-			Result.Push(M.GetMatrix(R, C));
-	return Result;
-}
-void Require(bool Valid, const char* Message)
-{
-	if (!Valid)
-		throw std::runtime_error(Message);
-}
-std::shared_ptr<FWorld> GetWorld(const std::weak_ptr<FWorld>& Weak)
-{
-	auto World = Weak.lock();
-	Require(World != nullptr, "Script world has expired.");
-	return World;
-}
-const FActor& Actor(const FWorld& World, const FString& Id)
-{
-	auto* Found = World.FindActor(Id);
-	Require(Found != nullptr, "Actor is missing.");
-	return *Found;
-}
-bool Replace(FWorld& World, const J& Value, FString& Error)
-{
-	auto Candidate = FWorld::FromJson(Value, Error);
-	if (!Candidate)
-		return false;
-	World = std::move(*Candidate);
-	Error.Empty();
-	return true;
-}
-template <class F> bool EditActor(FWorld& World, const FString& Id, F&& Edit, FString& Error)
-{
-	auto Value = World.ToJson();
-	auto& Actors = Value["Actors"];
-	for (int I = 0; I < Actors.Num(); ++I)
-		if (Actors[I].Get("Id").AsString() == Id)
+	using J = FJsonValue;
+	J MatrixJson(const Matrix44& M)
+	{
+		FJsonValue Result = J::MakeArray();
+		for (int R = 0; R < 4; ++R)
+			for (int C = 0; C < 4; ++C)
+				Result.Push(M.GetMatrix(R, C));
+		return Result;
+	}
+	std::shared_ptr<FWorld> GetWorld(FValidationContext& Validation, const std::weak_ptr<FWorld>& Weak)
+	{
+		TSharedPtr<FWorld> World = Weak.lock();
+		if (!Validation.Check(World != nullptr, GENESIS_TEXT("Script world has expired.")))
 		{
-			Edit(Actors[I]);
-			return Replace(World, Value, Error);
+			return {};
 		}
-	Error = "Actor is missing.";
-	return false;
-}
+		return World;
+	}
+	const FActor* Actor(FValidationContext& Validation, const FWorld& World, const FString& Id)
+	{
+		const FActor* Found = World.FindActor(Id);
+		if (!Validation.Check(Found != nullptr, GENESIS_TEXT("Actor is missing.")))
+		{
+			return {};
+		}
+		return Found;
+	}
+	bool Replace(FWorld& World, const J& Value, FString& Error)
+	{
+		TOptional<FWorld> Candidate = FWorld::FromJson(Value, Error);
+		if (!Candidate)
+			return false;
+		World = std::move(*Candidate);
+		Error.Empty();
+		return true;
+	}
+	template <class F>
+	bool EditActor(FValidationContext& Validation, FWorld& World, const FString& Id, F&& Edit, FString& Error)
+	{
+		FJsonValue Value = World.ToJson();
+		FJsonValue& Actors = Value["Actors"];
+		for (int I = 0; I < Actors.Num(); ++I)
+			if (Actors[I].Get("Id").AsString() == Id)
+			{
+				Edit(Actors[I]);
+				if (!Validation.IsValid())
+				{
+					return false;
+				}
+				return Replace(World, Value, Error);
+			}
+		Error = GENESIS_TEXT("Actor is missing.");
+		return false;
+	}
 } // namespace
-bool RegisterCoreScriptBindings(FScriptBindingRegistry& Registry, FString& Error,
-								std::function<void(const FString&)> Log)
+bool RegisterCoreScriptBindings(
+    FScriptBindingRegistry& Registry, FString& Error, std::function<void(const FString&)> Log)
 {
 	TArray<FScriptBinding> Batch;
-	Batch.push_back({"API.Describe",
-					 "API.Read",
-					 false,
-					 {},
-					 EJsonType::Object,
-					 [&Registry](const J&, J& Result, FString&) {
-						 Result = Registry.Describe();
-						 return true;
-					 }});
-	Batch.push_back({"Log.Write",
-					 "Log.Write",
-					 false,
-					 {{"Message", EJsonType::String, true}},
-					 EJsonType::Null,
-					 [Log = std::move(Log)](const J& A, J& R, FString&) {
-						 const auto Message = A.Get("Message").AsString();
-						 if (Log)
-							 Log(Message);
-						 else
-							 UE_LOG(LogScript, Display, "{}", Message);
-						 R = {};
-						 return true;
-					 }});
+	Batch.push_back(
+	    {"API.Describe", "API.Read", false, {}, EJsonType::Object, [&Registry](const J&, J& Result, FString&) -> bool
+	{
+		Result = Registry.Describe();
+		return true;
+	}});
+	Batch.push_back({"Log.Write", "Log.Write", false, {{"Message", EJsonType::String, true}}, EJsonType::Null,
+	    [Log = std::move(Log)](const J& A, J& R, FString&) -> bool
+	{
+		const FString Message = A.Get("Message").AsString();
+		if (Log)
+			Log(Message);
+		else
+			GENESIS_LOG(LogScript, Display, "{}", Message);
+		R = {};
+		return true;
+	}});
 	return Registry.RegisterBatch(std::move(Batch), Error);
+}
+using FBindingCallback = TFunction<bool(FWorld&, const J&, J&, FString&)>;
+static void AddBinding(TArray<FScriptBinding>& Batch, const std::weak_ptr<FWorld>& Weak, const char* Name, bool Write,
+    TArray<FScriptArgument> Arguments, EJsonType Type, const FBindingCallback& Function)
+{
+	Batch.push_back({Name, Write ? "World.Write" : "World.Read", false, std::move(Arguments), Type,
+	    [Weak, Function, Write](const J& A, J& R, FString& E) -> bool
+	{
+		FValidationContext Validation(E);
+		std::shared_ptr<FWorld> World = GetWorld(Validation, Weak);
+		if (!Validation.IsValid())
+		{
+			return false;
+		}
+		if (!Write)
+			return Function(*World, A, R, E);
+		FWorld Candidate = *World;
+		if (!Function(Candidate, A, R, E) || !ValidateScriptValue(R, E))
+			return false;
+		*World = std::move(Candidate);
+		return true;
+	}});
 }
 bool RegisterWorldScriptBindings(FScriptBindingRegistry& Registry, std::weak_ptr<FWorld> Weak, FString& Error)
 {
 	TArray<FScriptBinding> Batch;
-	const auto Add = [&](const char* Name, bool Write, TArray<FScriptArgument> Arguments, EJsonType Type,
-						 auto Function) {
-		Batch.push_back({Name, Write ? "World.Write" : "World.Read", false, std::move(Arguments), Type,
-						 [Weak, Function, Write](const J& A, J& R, FString& E) {
-							 auto World = GetWorld(Weak);
-							 if (!Write)
-								 return Function(*World, A, R, E);
-							 auto Candidate = *World;
-							 if (!Function(Candidate, A, R, E) || !ValidateScriptValue(R, E))
-								 return false;
-							 *World = std::move(Candidate);
-							 return true;
-						 }});
-	};
-	Add("World.Serialize", false, {}, EJsonType::Object, [](FWorld& W, const J&, J& R, FString&) {
+	AddBinding(Batch, Weak, "World.Serialize", false, {}, EJsonType::Object,
+	    [](FWorld& W, const J&, J& R, FString&) -> bool
+	{
 		R = W.ToJson();
 		return true;
 	});
-	Add("World.Replace", true, {{"World", EJsonType::Object}}, EJsonType::Bool,
-		[](FWorld& W, const J& A, J& R, FString& E) {
-			if (!Replace(W, A.Get("World"), E))
-				return false;
-			R = true;
-			return true;
-		});
-	Add("World.GetActors", false, {}, EJsonType::Array, [](FWorld& W, const J&, J& R, FString&) {
+	AddBinding(Batch, Weak, "World.Replace", true, {{"World", EJsonType::Object}}, EJsonType::Bool,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		if (!Replace(W, A.Get("World"), E))
+			return false;
+		R = true;
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.GetActors", false, {}, EJsonType::Array,
+	    [](FWorld& W, const J&, J& R, FString&) -> bool
+	{
 		R = J::MakeArray();
-		for (const auto& A : W.GetActors())
+		for (const FActor& A : W.GetActors())
 			R.Push(A.ToJson());
 		return true;
 	});
-	Add("World.FindActor", false, {{"ActorId", EJsonType::String}}, EJsonType::Object,
-		[](FWorld& W, const J& A, J& R, FString&) {
-			R = Actor(W, A.Get("ActorId").AsString()).ToJson();
-			return true;
-		});
-	Add("World.FindComponent", false, {{"ActorId", EJsonType::String}, {"ComponentId", EJsonType::String}},
-		EJsonType::Object, [](FWorld& W, const J& A, J& R, FString&) {
-			const auto& Owner = Actor(W, A.Get("ActorId").AsString());
-			auto* C = W.FindComponent(Owner.Id, A.Get("ComponentId").AsString());
-			Require(C != nullptr, "Component is missing.");
-			R = C->ToJson();
-			if (C->Id == Owner.Root.Id)
-				R["Transform"] = Owner.Root.Transform.ToJson();
-			return true;
-		});
-	Add("World.Resolve", false, {{"ActorId", EJsonType::String}, {"ComponentId", EJsonType::String, false}},
-		EJsonType::Object, [](FWorld& W, const J& A, J& R, FString& E) {
-			const FActor* Owner = nullptr;
-			const FActorComponent* C = nullptr;
-			if (!W.Resolve({A.Get("ActorId").AsString(), A.Get("ComponentId").AsString()}, Owner, C, E))
+	AddBinding(Batch, Weak, "World.FindActor", false, {{"ActorId", EJsonType::String}}, EJsonType::Object,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FValidationContext Validation(E);
+		const FActor* ActorObject = Actor(Validation, W, A.Get("ActorId").AsString());
+		if (!Validation.IsValid())
+		{
+			return false;
+		}
+		R = (*ActorObject).ToJson();
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.FindComponent", false,
+	    {{"ActorId", EJsonType::String}, {"ComponentId", EJsonType::String}}, EJsonType::Object,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FValidationContext Validation(E);
+		const FActor* ActorObject = Actor(Validation, W, A.Get("ActorId").AsString());
+		if (!Validation.IsValid())
+		{
+			return false;
+		}
+		const FActor& Owner = (*ActorObject);
+		const FActorComponent* C = W.FindComponent(Owner.Id, A.Get("ComponentId").AsString());
+		if (!Validation.Check(C != nullptr, GENESIS_TEXT("Component is missing.")))
+		{
+			return false;
+		}
+
+		R = C->ToJson();
+		if (C->Id == Owner.Root.Id)
+			R["Transform"] = Owner.Root.Transform.ToJson();
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.Resolve", false,
+	    {{"ActorId", EJsonType::String}, {"ComponentId", EJsonType::String, false}}, EJsonType::Object,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		const FActor* Owner = nullptr;
+		const FActorComponent* C = nullptr;
+		if (!W.Resolve({A.Get("ActorId").AsString(), A.Get("ComponentId").AsString()}, Owner, C, E))
+			return false;
+		R = J::MakeObject();
+		R["Actor"] = Owner->ToJson();
+		R["Component"] = C ? C->ToJson() : J();
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.SpawnActor", true,
+	    {{"Name", EJsonType::String}, {"Transform", EJsonType::Object, false}, {"ParentId", EJsonType::String, false}},
+	    EJsonType::Object, [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FActor New = FActor::New(A.Get("Name").AsString());
+		if (A.Contains("Transform"))
+		{
+			TOptional<FTransform3D> T = FTransform3D::FromJson(A.Get("Transform"), E);
+			if (!T)
 				return false;
-			R = J::MakeObject();
-			R["Actor"] = Owner->ToJson();
-			R["Component"] = C ? C->ToJson() : J();
-			return true;
-		});
-	Add("World.SpawnActor", true,
-		{{"Name", EJsonType::String},
-		 {"Transform", EJsonType::Object, false},
-		 {"ParentId", EJsonType::String, false}},
-		EJsonType::Object, [](FWorld& W, const J& A, J& R, FString& E) {
-			auto New = FActor::New(A.Get("Name").AsString());
-			if (A.Contains("Transform"))
+			New.Root.Transform = *T;
+		}
+		New.ParentId = A.Get("ParentId").AsString();
+		R = New.ToJson();
+		return W.AddActor(std::move(New), E);
+	});
+	AddBinding(Batch, Weak, "World.AddActor", true, {{"Actor", EJsonType::Object}}, EJsonType::String,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FJsonValue Value = W.ToJson();
+		Value["Actors"].Push(A.Get("Actor"));
+		if (!Replace(W, Value, E))
+			return false;
+		R = A.Get("Actor").Get("Id");
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.AddComponent", true,
+	    {{"ActorId", EJsonType::String}, {"Component", EJsonType::Object}}, EJsonType::String,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FValidationContext Validation(E);
+		FJsonValue C = A.Get("Component");
+		if (!C.Contains("Id"))
+			C["Id"] = FAssetId::New();
+		if (!C.Contains("Properties"))
+			C["Properties"] = J::MakeObject();
+		if (!C.Contains("References"))
+			C["References"] = J::MakeArray();
+		if (!C.Contains("Assets"))
+			C["Assets"] = J::MakeArray();
+		if (!EditActor(Validation, W, A.Get("ActorId").AsString(), [&](J& Owner) { Owner["Components"].Push(C); }, E))
+			return false;
+		if (!Validation.IsValid())
+		{
+			return false;
+		}
+		R = C.Get("Id");
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.SetComponent", true,
+	    {{"ActorId", EJsonType::String}, {"Component", EJsonType::Object}}, EJsonType::Bool,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FValidationContext Validation(E);
+		const FJsonValue C = A.Get("Component");
+		const FString Id = C.Get("Id").AsString();
+		const bool OK = EditActor(Validation, W, A.Get("ActorId").AsString(), [&](J& Owner)
+		{
+			if (Owner.Get("Root").Get("Id").AsString() == Id)
 			{
-				auto T = FTransform3D::FromJson(A.Get("Transform"), E);
-				if (!T)
-					return false;
-				New.Root.Transform = *T;
+				Owner["Root"] = C;
+				return;
 			}
-			New.ParentId = A.Get("ParentId").AsString();
-			R = New.ToJson();
-			return W.AddActor(std::move(New), E);
-		});
-	Add("World.AddActor", true, {{"Actor", EJsonType::Object}}, EJsonType::String,
-		[](FWorld& W, const J& A, J& R, FString& E) {
-			auto Value = W.ToJson();
-			Value["Actors"].Push(A.Get("Actor"));
-			if (!Replace(W, Value, E))
-				return false;
-			R = A.Get("Actor").Get("Id");
-			return true;
-		});
-	Add("World.AddComponent", true, {{"ActorId", EJsonType::String}, {"Component", EJsonType::Object}},
-		EJsonType::String, [](FWorld& W, const J& A, J& R, FString& E) {
-			auto C = A.Get("Component");
-			if (!C.Contains("Id"))
-				C["Id"] = FAssetId::New();
-			if (!C.Contains("Properties"))
-				C["Properties"] = J::MakeObject();
-			if (!C.Contains("References"))
-				C["References"] = J::MakeArray();
-			if (!C.Contains("Assets"))
-				C["Assets"] = J::MakeArray();
-			if (!EditActor(W, A.Get("ActorId").AsString(), [&](J& Owner) { Owner["Components"].Push(C); }, E))
-				return false;
-			R = C.Get("Id");
-			return true;
-		});
-	Add("World.SetComponent", true, {{"ActorId", EJsonType::String}, {"Component", EJsonType::Object}},
-		EJsonType::Bool, [](FWorld& W, const J& A, J& R, FString& E) {
-			const auto C = A.Get("Component");
-			const auto Id = C.Get("Id").AsString();
-			const bool OK = EditActor(
-				W, A.Get("ActorId").AsString(),
-				[&](J& Owner) {
-					if (Owner.Get("Root").Get("Id").AsString() == Id)
-					{
-						Owner["Root"] = C;
-						return;
-					}
-					auto& Cs = Owner["Components"];
-					for (int I = 0; I < Cs.Num(); ++I)
-						if (Cs[I].Get("Id").AsString() == Id)
-						{
-							Cs[I] = C;
-							return;
-						}
-					throw std::runtime_error("Component is missing.");
-				},
-				E);
-			R = true;
-			return OK;
-		});
-	Add("World.RemoveComponent", true, {{"ActorId", EJsonType::String}, {"ComponentId", EJsonType::String}},
-		EJsonType::Bool, [](FWorld& W, const J& A, J& R, FString& E) {
-			const auto Id = A.Get("ComponentId").AsString();
-			const bool OK = EditActor(
-				W, A.Get("ActorId").AsString(),
-				[&](J& Owner) {
-					Require(Owner.Get("Root").Get("Id").AsString() != Id,
-							"Cannot remove an actor root component.");
-					auto Cs = J::MakeArray();
-					bool Found = false;
-					for (const auto& C : Owner.Get("Components").GetItems())
-						if (C.Get("Id").AsString() == Id)
-							Found = true;
-						else
-							Cs.Push(C);
-					Require(Found, "Component is missing.");
-					Owner["Components"] = Cs;
-				},
-				E);
-			R = true;
-			return OK;
-		});
-	Add("World.SetActorName", true, {{"ActorId", EJsonType::String}, {"Name", EJsonType::String}},
-		EJsonType::Bool, [](FWorld& W, const J& A, J& R, FString& E) {
-			const bool OK = EditActor(
-				W, A.Get("ActorId").AsString(), [&](J& Owner) { Owner["Name"] = A.Get("Name"); }, E);
-			R = true;
-			return OK;
-		});
-	Add("World.GetLocalTransform", false, {{"ActorId", EJsonType::String}}, EJsonType::Object,
-		[](FWorld& W, const J& A, J& R, FString&) {
-			R = Actor(W, A.Get("ActorId").AsString()).Root.Transform.ToJson();
-			return true;
-		});
-	Add("World.SetTransform", true, {{"ActorId", EJsonType::String}, {"Transform", EJsonType::Object}},
-		EJsonType::Bool, [](FWorld& W, const J& A, J& R, FString& E) {
-			auto T = FTransform3D::FromJson(A.Get("Transform"), E);
-			if (!T || !W.SetTransform(A.Get("ActorId").AsString(), *T, E))
-				return false;
-			R = true;
-			return true;
-		});
-	Add("World.SetParent", true, {{"ActorId", EJsonType::String}, {"ParentId", EJsonType::String}},
-		EJsonType::Bool, [](FWorld& W, const J& A, J& R, FString& E) {
-			if (!W.SetParent(A.Get("ActorId").AsString(), A.Get("ParentId").AsString(), E))
-				return false;
-			R = true;
-			return true;
-		});
-	Add("World.GetWorldTransform", false, {{"ActorId", EJsonType::String}}, EJsonType::Array,
-		[](FWorld& W, const J& A, J& R, FString& E) {
-			Matrix44 M;
-			if (!W.GetWorldTransform(A.Get("ActorId").AsString(), M, E))
-				return false;
-			R = MatrixJson(M);
-			return true;
-		});
-	Add("World.DestroyActor", true, {{"ActorId", EJsonType::String}}, EJsonType::Bool,
-		[](FWorld& W, const J& A, J& R, FString& E) {
-			if (!W.RemoveActor(A.Get("ActorId").AsString(), E))
-				return false;
-			R = true;
-			return true;
-		});
-	Add("World.DuplicateActor", true, {{"ActorId", EJsonType::String}}, EJsonType::String,
-		[](FWorld& W, const J& A, J& R, FString& E) {
-			FString Id;
-			if (!W.DuplicateActor(A.Get("ActorId").AsString(), Id, E))
-				return false;
-			R = Id;
-			return true;
-		});
+			FJsonValue& Cs = Owner["Components"];
+			for (int I = 0; I < Cs.Num(); ++I)
+				if (Cs[I].Get("Id").AsString() == Id)
+				{
+					Cs[I] = C;
+					return;
+				}
+			{
+				Validation.Fail(GENESIS_TEXT("Component is missing."));
+				return;
+			}
+		}, E);
+		if (!Validation.IsValid())
+		{
+			return false;
+		}
+		R = true;
+		return OK;
+	});
+	AddBinding(Batch, Weak, "World.RemoveComponent", true,
+	    {{"ActorId", EJsonType::String}, {"ComponentId", EJsonType::String}}, EJsonType::Bool,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FValidationContext Validation(E);
+		const FString Id = A.Get("ComponentId").AsString();
+		const bool OK = EditActor(Validation, W, A.Get("ActorId").AsString(), [&](J& Owner)
+		{
+			if (!Validation.Check(Owner.Get("Root").Get("Id").AsString() != Id,
+			        GENESIS_TEXT("Cannot remove an actor root component.")))
+			{
+				return;
+			}
+
+			FJsonValue Cs = J::MakeArray();
+			bool Found = false;
+			for (const FJsonValue& C : Owner.Get("Components").GetItems())
+				if (C.Get("Id").AsString() == Id)
+					Found = true;
+				else
+					Cs.Push(C);
+			if (!Validation.Check(Found, GENESIS_TEXT("Component is missing.")))
+			{
+				return;
+			}
+
+			Owner["Components"] = Cs;
+		}, E);
+		if (!Validation.IsValid())
+		{
+			return false;
+		}
+		R = true;
+		return OK;
+	});
+	AddBinding(Batch, Weak, "World.SetActorName", true, {{"ActorId", EJsonType::String}, {"Name", EJsonType::String}},
+	    EJsonType::Bool, [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FValidationContext Validation(E);
+		const bool OK =
+		    EditActor(Validation, W, A.Get("ActorId").AsString(), [&](J& Owner) { Owner["Name"] = A.Get("Name"); }, E);
+		if (!Validation.IsValid())
+		{
+			return false;
+		}
+		R = true;
+		return OK;
+	});
+	AddBinding(Batch, Weak, "World.GetLocalTransform", false, {{"ActorId", EJsonType::String}}, EJsonType::Object,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FValidationContext Validation(E);
+		const FActor* ActorObject = Actor(Validation, W, A.Get("ActorId").AsString());
+		if (!Validation.IsValid())
+		{
+			return false;
+		}
+		R = (*ActorObject).Root.Transform.ToJson();
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.SetTransform", true,
+	    {{"ActorId", EJsonType::String}, {"Transform", EJsonType::Object}}, EJsonType::Bool,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		TOptional<FTransform3D> T = FTransform3D::FromJson(A.Get("Transform"), E);
+		if (!T || !W.SetTransform(A.Get("ActorId").AsString(), *T, E))
+			return false;
+		R = true;
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.SetParent", true, {{"ActorId", EJsonType::String}, {"ParentId", EJsonType::String}},
+	    EJsonType::Bool, [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		if (!W.SetParent(A.Get("ActorId").AsString(), A.Get("ParentId").AsString(), E))
+			return false;
+		R = true;
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.GetWorldTransform", false, {{"ActorId", EJsonType::String}}, EJsonType::Array,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		Matrix44 M;
+		if (!W.GetWorldTransform(A.Get("ActorId").AsString(), M, E))
+			return false;
+		R = MatrixJson(M);
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.DestroyActor", true, {{"ActorId", EJsonType::String}}, EJsonType::Bool,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		if (!W.RemoveActor(A.Get("ActorId").AsString(), E))
+			return false;
+		R = true;
+		return true;
+	});
+	AddBinding(Batch, Weak, "World.DuplicateActor", true, {{"ActorId", EJsonType::String}}, EJsonType::String,
+	    [](FWorld& W, const J& A, J& R, FString& E) -> bool
+	{
+		FString Id;
+		if (!W.DuplicateActor(A.Get("ActorId").AsString(), Id, E))
+			return false;
+		R = Id;
+		return true;
+	});
 	return Registry.RegisterBatch(std::move(Batch), Error);
 }

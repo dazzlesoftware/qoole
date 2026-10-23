@@ -3,6 +3,8 @@
 // Headless tests of the virtualized list and tree views.
 
 #include "UITestHelpers.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Views/SListView.h"
@@ -18,7 +20,7 @@ namespace
 
 	FNodePtr MakeNode(const char* Name, TArray<FNodePtr> Children = {})
 	{
-		auto Node = std::make_shared<FNode>();
+		std::shared_ptr<FNode> Node = std::make_shared<FNode>();
 		Node->Name = Name;
 		Node->Children = std::move(Children);
 		return Node;
@@ -39,15 +41,17 @@ namespace
 				Items.push_back(I);
 			}
 			T.AddWindow(SAssignNew(List, SListView<int32>)
-				.ListItemsSource(&Items)
-				.SelectionMode(Mode)
-				.OnGenerateRow([this](int32 Item, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
-				{
-					++Generated;
-					return SNew(STableRow<int32>, Owner).Padding(FMargin(0.0f))[SNew(SBox).HeightOverride(TOptional<float>(20.0f))[SNew(STextBlock).Text(FString::Format("Row {}", Item))]];
-				})
-				.OnSelectionChanged([this](int32 Item, ESelectInfo) { SelectionEvents.push_back(Item); }),
-				FVector2(200.0f, 100.0f));
+			                .ListItemsSource(&Items)
+			                .SelectionMode(Mode)
+			                .OnGenerateRow(
+			                    [this](int32 Item, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
+			{
+				++Generated;
+				return SNew(STableRow<int32>, Owner)
+				    .Padding(FMargin(0.0f))[SNew(SBox).HeightOverride(
+				        TOptional<float>(20.0f))[SNew(STextBlock).Text(FString::Format("Row {}", Item))]];
+			}).OnSelectionChanged([this](int32 Item, ESelectInfo) { SelectionEvents.push_back(Item); }),
+			    FVector2(200.0f, 100.0f));
 		}
 
 		TSharedRef<SWidget> Row(int32 Item) const
@@ -57,7 +61,7 @@ namespace
 			return R->AsWidget();
 		}
 	};
-}
+} // namespace
 
 TEST_SUITE("UIViews")
 {
@@ -99,7 +103,7 @@ TEST_SUITE("UIViews")
 		{
 			F.T.Key(EKey::Down);
 		}
-		CHECK(F.List->GetSelectedItems() == TArray<int32>{ 7 });
+		CHECK(F.List->GetSelectedItems() == TArray<int32>{7});
 		CHECK(FUITestApp::RectOf(*F.Row(7)).Bottom <= 100.01f);
 		CHECK(FUITestApp::RectOf(*F.Row(7)).Top >= 0.0f);
 		F.T.Key(EKey::End);
@@ -119,7 +123,7 @@ TEST_SUITE("UIViews")
 		F.T.SetModifiers(true, false);
 		F.T.ClickWidget(*F.Row(4));
 		F.T.SetModifiers(false, false);
-		CHECK(F.List->GetSelectedItems() == TArray<int32>{ 3, 4 }); // Shift extends from the last Ctrl-click
+		CHECK(F.List->GetSelectedItems() == TArray<int32>{3, 4}); // Shift extends from the last Ctrl-click
 		F.T.Key(EKey::A, false, true);
 		CHECK(F.List->GetNumItemsSelected() == 20);
 	}
@@ -128,22 +132,22 @@ TEST_SUITE("UIViews")
 	{
 		FUITestApp T;
 		TArray<FNodePtr> Roots{
-			MakeNode("A", { MakeNode("A1"), MakeNode("A2", { MakeNode("A2a") }) }),
-			MakeNode("B"),
+		    MakeNode("A", {MakeNode("A1"), MakeNode("A2", {MakeNode("A2a")})}),
+		    MakeNode("B"),
 		};
 		TSharedPtr<STreeView<FNodePtr>> Tree;
 		TArray<TPair<FString, bool>> Expansions;
-		T.AddWindow(SAssignNew(Tree, STreeView<FNodePtr>)
-			.TreeItemsSource(&Roots)
-			.OnGetChildren([](FNodePtr Node, TArray<FNodePtr>& Out) { Out = Node->Children; })
-			.OnExpansionChanged([&](FNodePtr Node, bool bExpanded) { Expansions.push_back({ Node->Name, bExpanded }); })
-			.OnGenerateRow([](FNodePtr Node, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
-			{
-				return SNew(STableRow<FNodePtr>, Owner)[SNew(STextBlock).Text(Node->Name)];
-			}),
-			FVector2(200.0f, 300.0f));
+		T.AddWindow(
+		    SAssignNew(Tree, STreeView<FNodePtr>)
+		        .TreeItemsSource(&Roots)
+		        .OnGetChildren([](FNodePtr Node, TArray<FNodePtr>& Out) { Out = Node->Children; })
+		        .OnExpansionChanged(
+		            [&](FNodePtr Node, bool bExpanded) { Expansions.push_back({Node->Name, bExpanded}); })
+		        .OnGenerateRow([](FNodePtr Node, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
+		{ return SNew(STableRow<FNodePtr>, Owner)[SNew(STextBlock).Text(Node->Name)]; }),
+		    FVector2(200.0f, 300.0f));
 
-		const auto Names = [&Tree]()
+		const TFunction<TArray<FString>()> Names = [&Tree]()
 		{
 			TArray<FString> Result;
 			for (const FNodePtr& Node : Tree->GetLinearizedItems())
@@ -152,25 +156,27 @@ TEST_SUITE("UIViews")
 			}
 			return Result;
 		};
-		CHECK(Names() == TArray<FString>{ "A", "B" });
+		CHECK(Names() == TArray<FString>{"A", "B"});
 
 		Tree->SetSelection(Roots[0]);
 		T.GetApp().SetKeyboardFocus(Tree);
 		T.Key(EKey::Right); // expand A
-		CHECK(Names() == TArray<FString>{ "A", "A1", "A2", "B" });
+		CHECK(Names() == TArray<FString>{"A", "A1", "A2", "B"});
 		T.Key(EKey::Right); // to A1
 		CHECK(Tree->GetSelectedItems()[0]->Name == "A1");
 		T.Key(EKey::Down);
 		T.Key(EKey::Right); // expand A2
-		CHECK(Names() == TArray<FString>{ "A", "A1", "A2", "A2a", "B" });
+		CHECK(Names() == TArray<FString>{"A", "A1", "A2", "A2a", "B"});
 
 		// Children are indented.
 		const TSharedPtr<ITableRow> RowA = Tree->WidgetFromItem(Roots[0]);
 		const TSharedPtr<ITableRow> RowA2a = Tree->WidgetFromItem(Roots[0]->Children[1]->Children[0]);
 		REQUIRE(RowA);
 		REQUIRE(RowA2a);
-		const TSharedRef<SWidget> TextA = RowA->AsWidget()->GetArrangedChildren()[0].Widget->GetArrangedChildren().back().Widget;
-		const TSharedRef<SWidget> TextA2a = RowA2a->AsWidget()->GetArrangedChildren()[0].Widget->GetArrangedChildren().back().Widget;
+		const TSharedRef<SWidget> TextA =
+		    RowA->AsWidget()->GetArrangedChildren()[0].Widget->GetArrangedChildren().back().Widget;
+		const TSharedRef<SWidget> TextA2a =
+		    RowA2a->AsWidget()->GetArrangedChildren()[0].Widget->GetArrangedChildren().back().Widget;
 		CHECK(FUITestApp::RectOf(*TextA2a).Left == doctest::Approx(FUITestApp::RectOf(*TextA).Left + 28.0f));
 
 		// Left on a child goes to its parent, Left again collapses it.
@@ -178,13 +184,14 @@ TEST_SUITE("UIViews")
 		T.Key(EKey::Left);
 		CHECK(Tree->GetSelectedItems()[0]->Name == "A2");
 		T.Key(EKey::Left);
-		CHECK(Names() == TArray<FString>{ "A", "A1", "A2", "B" });
+		CHECK(Names() == TArray<FString>{"A", "A1", "A2", "B"});
 
 		// Clicking the expander of A collapses it.
-		const TSharedRef<SWidget> ExpanderA = RowA->AsWidget()->GetArrangedChildren()[0].Widget->GetArrangedChildren()[1].Widget;
+		const TSharedRef<SWidget> ExpanderA =
+		    RowA->AsWidget()->GetArrangedChildren()[0].Widget->GetArrangedChildren()[1].Widget;
 		T.ClickWidget(*ExpanderA);
-		CHECK(Names() == TArray<FString>{ "A", "B" });
-		CHECK(Expansions.back() == TPair<FString, bool>{ "A", false });
+		CHECK(Names() == TArray<FString>{"A", "B"});
+		CHECK(Expansions.back() == TPair<FString, bool>{"A", false});
 	}
 
 	TEST_CASE("Rows can be dragged and dropped onto other rows")
@@ -197,31 +204,32 @@ TEST_SUITE("UIViews")
 		};
 
 		FUITestApp T;
-		TArray<int32> Items{ 0, 1, 2, 3 };
+		TArray<int32> Items{0, 1, 2, 3};
 		TArray<TPair<int32, int32>> Drops;
 		TSharedPtr<SListView<int32>> List;
 		const TSharedRef<SWindow> Window = T.AddWindow(SAssignNew(List, SListView<int32>)
-			.ListItemsSource(&Items)
-			.OnGenerateRow([&](int32 Item, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
+		        .ListItemsSource(&Items)
+		        .OnGenerateRow([&](int32 Item, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
+		{
+			return SNew(STableRow<int32>, Owner)
+			    .OnDragDetected(
+			        [Item](const FGeometry&, const FPointerEvent&)
 			{
-				return SNew(STableRow<int32>, Owner)
-					.OnDragDetected([Item](const FGeometry&, const FPointerEvent&)
-					{
-						auto Op = std::make_shared<FRowDrag>();
-						Op->Item = Item;
-						return FReply::Handled().BeginDragDrop(TSharedRef<FDragDropOperation>(StaticCastSharedPtr<FDragDropOperation>(Op)));
-					})
-					.OnDrop([&Drops, Item](const FDragDropEvent& Event)
-					{
-						if (const TSharedPtr<FRowDrag> Op = Event.GetOperationAs<FRowDrag>())
-						{
-							Drops.push_back({ Op->Item, Item });
-							return FReply::Handled();
-						}
-						return FReply::Unhandled();
-					})
-					[SNew(STextBlock).Text(FString::Format("Item {}", Item))];
-			}));
+				TSharedPtr<FRowDrag> Op = std::make_shared<FRowDrag>();
+				Op->Item = Item;
+				return FReply::Handled().BeginDragDrop(
+				    TSharedRef<FDragDropOperation>(StaticCastSharedPtr<FDragDropOperation>(Op)));
+			})
+			    .OnDrop([&Drops, Item](const FDragDropEvent& Event)
+			{
+				if (const TSharedPtr<FRowDrag> Op = Event.GetOperationAs<FRowDrag>())
+				{
+					Drops.push_back({Op->Item, Item});
+					return FReply::Handled();
+				}
+				return FReply::Unhandled();
+			})[SNew(STextBlock).Text(FString::Format("Item {}", Item))];
+		}));
 
 		const FVector2 From = FUITestApp::CenterOf(*List->WidgetFromItem(0)->AsWidget());
 		const FVector2 To = FUITestApp::CenterOf(*List->WidgetFromItem(2)->AsWidget());
@@ -233,6 +241,6 @@ TEST_SUITE("UIViews")
 		T.MouseMove(Window, To);
 		T.MouseUp(Window, To);
 		T.Tick();
-		CHECK(Drops == TArray<TPair<int32, int32>>{ { 0, 2 } });
+		CHECK(Drops == TArray<TPair<int32, int32>>{{0, 2}});
 	}
 }

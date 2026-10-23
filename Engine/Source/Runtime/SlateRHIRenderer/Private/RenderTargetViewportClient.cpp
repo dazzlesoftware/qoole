@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "RenderTargetViewportClient.h"
+#include "Templates/SharedPointer.h"
 
 void FRenderTargetViewportClient::OnResize(FIntPoint PixelSize)
 {

@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "SlateRHIRenderer.h"
+#include "Templates/SharedPointer.h"
 
 FSlateRHIRenderer::~FSlateRHIRenderer()
 {
@@ -25,13 +26,14 @@ void FSlateRHIRenderer::ResizeViewport(const IPlatformWindow& Window, FIntPoint 
 {
 	if (FRHISwapChain* SwapChain = FindSwapChain(Window))
 	{
-		SwapChain->Resize(static_cast<uint32>(FMath::Max(0, PixelSize.X)), static_cast<uint32>(FMath::Max(0, PixelSize.Y)));
+		SwapChain->Resize(
+		    static_cast<uint32>(FMath::Max(0, PixelSize.X)), static_cast<uint32>(FMath::Max(0, PixelSize.Y)));
 	}
 }
 
 void FSlateRHIRenderer::DestroyViewport(const IPlatformWindow& Window)
 {
-	auto It = Viewports.find(&Window);
+	TMap<const IPlatformWindow*, FViewport>::iterator It = Viewports.find(&Window);
 	if (It != Viewports.end())
 	{
 		Device.WaitIdle();
@@ -41,14 +43,14 @@ void FSlateRHIRenderer::DestroyViewport(const IPlatformWindow& Window)
 
 FRHISwapChain* FSlateRHIRenderer::FindSwapChain(const IPlatformWindow& Window) const
 {
-	auto It = Viewports.find(&Window);
+	TMap<const IPlatformWindow*, FViewport>::const_iterator It = Viewports.find(&Window);
 	return It == Viewports.end() ? nullptr : It->second.SwapChain.get();
 }
 
 const FSlateRenderStats& FSlateRHIRenderer::GetStats(const IPlatformWindow& Window) const
 {
 	static const FSlateRenderStats None;
-	auto It = Viewports.find(&Window);
+	TMap<const IPlatformWindow*, FViewport>::const_iterator It = Viewports.find(&Window);
 	return It == Viewports.end() ? None : It->second.Stats;
 }
 
@@ -63,7 +65,8 @@ void FSlateRHIRenderer::DrawWindows(TArrayView<const FWindowDrawRequest> Request
 	Renderer.BeginFrame();
 	OnBeginFrame.Broadcast(CommandList);
 	std::erase_if(ViewportClients, [](const TWeakPtr<FRenderTargetViewportClient>& C) { return C.expired(); });
-	for (const TWeakPtr<FRenderTargetViewportClient>& Weak : TArray<TWeakPtr<FRenderTargetViewportClient>>(ViewportClients))
+	for (const TWeakPtr<FRenderTargetViewportClient>& Weak :
+	    TArray<TWeakPtr<FRenderTargetViewportClient>>(ViewportClients))
 	{
 		if (const TSharedPtr<FRenderTargetViewportClient> Client = Weak.lock())
 		{
@@ -72,7 +75,7 @@ void FSlateRHIRenderer::DrawWindows(TArrayView<const FWindowDrawRequest> Request
 	}
 	for (const FWindowDrawRequest& Request : Requests)
 	{
-		auto It = Viewports.find(Request.Window);
+		TMap<const IPlatformWindow*, FViewport>::iterator It = Viewports.find(Request.Window);
 		if (It == Viewports.end() || !It->second.SwapChain || !It->second.SwapChain->IsDrawable())
 		{
 			continue;

@@ -5,6 +5,7 @@
 // runs when a Vulkan driver is present and is skipped otherwise.
 
 #include "TestHelpers.h"
+#include "Containers/ContainerAliases.h"
 
 #include "RHI.h"
 #include "SlateRHIRenderingPolicy.h"
@@ -25,12 +26,13 @@ namespace
 
 	bool Near(FColor A, FColor B, int32 Tolerance = 3)
 	{
-		return FMath::Abs(int32(A.R) - B.R) <= Tolerance && FMath::Abs(int32(A.G) - B.G) <= Tolerance
-			&& FMath::Abs(int32(A.B) - B.B) <= Tolerance && FMath::Abs(int32(A.A) - B.A) <= Tolerance;
+		return FMath::Abs(int32(A.R) - B.R) <= Tolerance && FMath::Abs(int32(A.G) - B.G) <= Tolerance &&
+		    FMath::Abs(int32(A.B) - B.B) <= Tolerance && FMath::Abs(int32(A.A) - B.A) <= Tolerance;
 	}
 
 	// Renders the list into a Size x Size target and reads it back.
-	TOptional<FPixels> RenderOffscreen(ERHIBackend Backend, int32 Size, const TFunction<void(FSlateWindowElementList&, FSlateRHIRenderingPolicy&)>& Build)
+	TOptional<FPixels> RenderOffscreen(ERHIBackend Backend, int32 Size,
+	    const TFunction<void(FSlateWindowElementList&, FSlateRHIRenderingPolicy&)>& Build)
 	{
 		FRHIDeviceDesc Desc;
 		Desc.Backend = Backend;
@@ -46,7 +48,7 @@ namespace
 		const TSharedRef<FSlateRenderTargetRHI> Target = Renderer.CreateRenderTarget(Size, Size, "Test target");
 
 		FSlateWindowElementList List;
-		List.SetViewportSize({ Size, Size });
+		List.SetViewportSize({Size, Size});
 		Build(List, Renderer);
 
 		FRHICommandList& CommandList = Device->BeginFrame();
@@ -65,27 +67,30 @@ namespace
 		FTestLogCapture Log;
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const auto Checker = MakeShared<FSlateTextureData>(2, 2, TArray<uint8>{
-			255, 0, 0, 255,   0, 255, 0, 255,
-			0, 0, 255, 255,   255, 255, 255, 255 });
+		const TSharedRef<FSlateTextureData> Checker = MakeShared<FSlateTextureData>(
+		    2, 2, TArray<uint8>{255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255});
 
-		const TOptional<FPixels> Result = RenderOffscreen(Backend, 128, [&](FSlateWindowElementList& List, FSlateRHIRenderingPolicy&)
+		const TOptional<FPixels> Result =
+		    RenderOffscreen(Backend, 128, [&](FSlateWindowElementList& List, FSlateRHIRenderingPolicy&)
 		{
-			List.AddSolidBox(0, FPaintGeometry::Make({ 0.0f, 0.0f }, { 32.0f, 32.0f }, 1.0f), FColor(200, 100, 50));
+			List.AddSolidBox(0, FPaintGeometry::Make({0.0f, 0.0f}, {32.0f, 32.0f}, 1.0f), FColor(200, 100, 50));
 			// Two layers: the later layer must cover the earlier one.
-			List.AddSolidBox(2, FPaintGeometry::Make({ 40.0f, 0.0f }, { 20.0f, 20.0f }, 1.0f), FColor::Green());
-			List.AddSolidBox(1, FPaintGeometry::Make({ 40.0f, 0.0f }, { 20.0f, 20.0f }, 1.0f), FColor::Red());
+			List.AddSolidBox(2, FPaintGeometry::Make({40.0f, 0.0f}, {20.0f, 20.0f}, 1.0f), FColor::Green());
+			List.AddSolidBox(1, FPaintGeometry::Make({40.0f, 0.0f}, {20.0f, 20.0f}, 1.0f), FColor::Red());
 			// A rounded box: filled center, transparent corner.
-			List.AddRoundedBox(0, FPaintGeometry::Make({ 64.0f, 0.0f }, { 64.0f, 32.0f }, 1.0f), FColor::Blue(), 12.0f, FColor::White(), 2.0f);
+			List.AddRoundedBox(0, FPaintGeometry::Make({64.0f, 0.0f}, {64.0f, 32.0f}, 1.0f), FColor::Blue(), 12.0f,
+			    FColor::White(), 2.0f);
 			// Clipped box: only the left half survives.
 			List.PushClipPixels(FIntRect(0, 40, 16, 72));
-			List.AddSolidBox(0, FPaintGeometry::Make({ 0.0f, 40.0f }, { 32.0f, 32.0f }, 1.0f), FColor::White());
+			List.AddSolidBox(0, FPaintGeometry::Make({0.0f, 40.0f}, {32.0f, 32.0f}, 1.0f), FColor::White());
 			List.PopClip();
 			// Image stretched 16x: four solid quadrants (point-like in the middles).
-			List.AddBox(0, FPaintGeometry::Make({ 64.0f, 64.0f }, { 64.0f, 64.0f }, 1.0f), FBrush::FromImage(Checker));
+			List.AddBox(0, FPaintGeometry::Make({64.0f, 64.0f}, {64.0f, 64.0f}, 1.0f), FBrush::FromImage(Checker));
 			// Text.
-			const auto Shaped = Fonts.Cache.ShapeText("Hg", FSlateFontInfo(Fonts.Latin, 24.0f), 1.0f);
-			List.AddText(0, FPaintGeometry::Make({ 0.0f, 80.0f }, Shaped->GetLogicalSize(), 1.0f), Shaped, FColor::White());
+			const TSharedRef<const FShapedGlyphSequence> Shaped =
+			    Fonts.Cache.ShapeText("Hg", FSlateFontInfo(Fonts.Latin, 24.0f), 1.0f);
+			List.AddText(
+			    0, FPaintGeometry::Make({0.0f, 80.0f}, Shaped->GetLogicalSize(), 1.0f), Shaped, FColor::White());
 		});
 		if (!Result)
 		{
@@ -95,12 +100,12 @@ namespace
 		const FPixels& P = *Result;
 		CHECK(Near(P.At(16, 16), FColor(200, 100, 50)));
 		CHECK(Near(P.At(50, 10), FColor::Green()));
-		CHECK(Near(P.At(96, 16), FColor::Blue()));          // rounded box fill
-		CHECK(Near(P.At(96, 1), FColor::White(), 40));      // its 2px outline
-		CHECK(Near(P.At(64, 0), FColor::Black()));          // outside the rounded corner
-		CHECK(Near(P.At(8, 56), FColor::White()));          // inside the clip
-		CHECK(Near(P.At(24, 56), FColor::Black()));         // clipped away
-		CHECK(Near(P.At(70, 70), FColor::Red(), 8));        // image quadrants
+		CHECK(Near(P.At(96, 16), FColor::Blue()));     // rounded box fill
+		CHECK(Near(P.At(96, 1), FColor::White(), 40)); // its 2px outline
+		CHECK(Near(P.At(64, 0), FColor::Black()));     // outside the rounded corner
+		CHECK(Near(P.At(8, 56), FColor::White()));     // inside the clip
+		CHECK(Near(P.At(24, 56), FColor::Black()));    // clipped away
+		CHECK(Near(P.At(70, 70), FColor::Red(), 8));   // image quadrants
 		CHECK(Near(P.At(122, 70), FColor::Green(), 8));
 		CHECK(Near(P.At(70, 122), FColor::Blue(), 8));
 		CHECK(Near(P.At(122, 122), FColor::White(), 8));
@@ -121,7 +126,7 @@ namespace
 			MESSAGE(Problem.c_str());
 		}
 	}
-}
+} // namespace
 
 TEST_SUITE("GPU")
 {

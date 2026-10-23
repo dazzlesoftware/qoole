@@ -15,15 +15,15 @@ bool STextureAssetPreview::Update(const FTextureAsset& Texture, ETexturePreviewC
 	return true;
 }
 int32 STextureAssetPreview::OnPaint(const FPaintArgs&, const FGeometry& G, const FRect&, FSlateWindowElementList& Out,
-									int32 Layer, const FWidgetStyle&) const
+    int32 Layer, const FWidgetStyle&) const
 {
 	Out.AddSolidBox(Layer, G.ToPaintGeometry(), FColor(24, 26, 30));
 	if (Image)
 	{
 		const FVector2 Size(static_cast<float>(Image->GetWidth()), static_cast<float>(Image->GetHeight()));
-		const auto Area = G.GetLocalSize();
+		const FVector2 Area = G.GetLocalSize();
 		const float Scale = FMath::Min(Area.X / Size.X, Area.Y / Size.Y) * Zoom;
-		const auto Draw = Size * Scale;
+		const FVector2 Draw = Size * Scale;
 		Out.AddBox(Layer + 1, G.ToPaintGeometry((Area - Draw) * 0.5f + Pan, Draw), FBrush::FromImage(Image));
 	}
 	return Layer + 1;
@@ -46,7 +46,7 @@ FReply STextureAssetPreview::OnMouseMove(const FGeometry& G, const FPointerEvent
 {
 	if (!bPanning)
 		return FReply::Unhandled();
-	const auto Point = G.AbsoluteToLocal(E.GetAbsolutePosition());
+	const FVector2 Point = G.AbsoluteToLocal(E.GetAbsolutePosition());
 	Pan += Point - Last;
 	Last = Point;
 	Invalidate(EInvalidateWidgetReason::Paint);

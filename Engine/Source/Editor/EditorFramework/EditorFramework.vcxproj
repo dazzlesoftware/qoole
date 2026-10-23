@@ -59,4 +59,5 @@
       <Project>{3F5319A7-A0BC-4053-83E8-316D4FFD074A}</Project>
     </ProjectReference>
   </ItemGroup>
+<ItemGroup><ClInclude Include="Public\Widgets\FeaturePanelWidgets.h" /></ItemGroup>
 </Project>

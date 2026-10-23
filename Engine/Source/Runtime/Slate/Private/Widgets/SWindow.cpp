@@ -163,7 +163,7 @@ bool SWindow::UpdateLayout()
 	}
 	if (NeedsLayout())
 	{
-		UE_LOG(LogSlate, Verbose, "Window \"{}\" layout did not settle in {} passes", Title, MaxPasses);
+		GENESIS_LOG(LogSlate, Verbose, "Window \"{}\" layout did not settle in {} passes", Title, MaxPasses);
 	}
 	return true;
 }
@@ -200,13 +200,14 @@ void SWindow::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChil
 		const FVector2 Desired = FVector2::Min(Widget->GetDesiredSize(), Size);
 		// Keep popups inside the window.
 		const FVector2 Position(FMath::Clamp(Slot.Position.X, 0.0f, FMath::Max(0.0f, Size.X - Desired.X)),
-			FMath::Clamp(Slot.Position.Y, 0.0f, FMath::Max(0.0f, Size.Y - Desired.Y)));
-		ArrangedChildren.AddWidget(Widget->GetVisibility(), FArrangedWidget(Widget, AllottedGeometry.MakeChild(Position, Desired)));
+		    FMath::Clamp(Slot.Position.Y, 0.0f, FMath::Max(0.0f, Size.Y - Desired.Y)));
+		ArrangedChildren.AddWidget(
+		    Widget->GetVisibility(), FArrangedWidget(Widget, AllottedGeometry.MakeChild(Position, Desired)));
 	}
 }
 
-int32 SWindow::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SWindow::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	OutDrawElements.AddSolidBox(LayerId, Geometry.ToPaintGeometry(), GetBackgroundColor());
 	int32 MaxLayer = LayerId;
@@ -217,7 +218,8 @@ int32 SWindow::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const 
 	}
 	if (!bUseOSBorder && Type == EWindowType::Normal && Style->Outline.IsVisible())
 	{
-		Style->Outline.Paint(OutDrawElements, ++MaxLayer, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
+		Style->Outline.Paint(
+		    OutDrawElements, ++MaxLayer, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 	}
 	return MaxLayer;
 }
@@ -232,7 +234,7 @@ TArray<TSharedRef<SWidget>> SWindow::HitTestAt(FVector2 PixelPosition)
 EWindowZone SWindow::GetWindowZoneForPoint(FVector2 PixelPosition)
 {
 	const TArray<TSharedRef<SWidget>> Path = HitTestAt(PixelPosition);
-	for (auto It = Path.rbegin(); It != Path.rend(); ++It)
+	for (TArray<TSharedRef<SWidget>>::const_reverse_iterator It = Path.rbegin(); It != Path.rend(); ++It)
 	{
 		const EWindowZone Zone = (*It)->GetWindowZoneOverride();
 		if (Zone != EWindowZone::Unspecified)

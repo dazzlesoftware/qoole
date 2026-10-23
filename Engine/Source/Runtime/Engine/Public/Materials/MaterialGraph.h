@@ -87,7 +87,7 @@ struct FMaterialNode
 	FString ParameterName;
 	FString ParameterGroup;
 	FString Description; // editor annotation; excluded from shader semantics
-	uint8 Mask = 7;		 // RGBA bits
+	uint8 Mask = 7;      // RGBA bits
 	bool bNormalTexture = false;
 	float X = 0, Y = 0; // editor-only layout; excluded from shader source
 };
@@ -142,10 +142,12 @@ const char* MaterialInputName(EMaterialExpression, int);
 // by editor/toolchain adapters, never compiled by the shipped renderer.
 class FMaterialGraphCompiler
 {
-  public:
+public:
 	static constexpr int MaxNodes = 256, MaxTextures = 12;
 	static bool Compile(const FMaterialGraph&, FMaterialGraphProgram&, FString& Error);
 	static bool ExpandFunctions(const FMaterialGraph&, FMaterialGraph&, FString& Error);
+	// Convenience for bounded editor snapshots; returns null on invalid structure.
 	static FJsonValue Encode(const FMaterialGraph&);
+	static bool Encode(const FMaterialGraph&, FJsonValue& Out, FString& Error);
 	static bool Decode(const FJsonValue&, FMaterialGraph&, FString& Error, bool ValidateSemantics = true);
 };

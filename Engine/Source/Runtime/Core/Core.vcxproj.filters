@@ -54,7 +54,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Private\Containers\UnrealString.cpp">
+    <ClCompile Include="Private\Containers\String.cpp">
       <Filter>Private\Containers</Filter>
     </ClCompile>
     <ClCompile Include="Private\Containers\Name.cpp">
@@ -90,7 +90,7 @@
     <ClInclude Include="Public\Containers\ContainerAliases.h">
       <Filter>Public\Containers</Filter>
     </ClInclude>
-    <ClInclude Include="Public\Containers\UnrealString.h">
+    <ClInclude Include="Public\Containers\String.h">
       <Filter>Public\Containers</Filter>
     </ClInclude>
     <ClInclude Include="Public\Containers\Name.h">

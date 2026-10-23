@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapEditorEnvironment.h"
+#include "Internationalization/TextLocalization.h"
 #include "AssetPackage.h"
 
 #include "MapEditorPrivate.h"
@@ -32,9 +33,10 @@ namespace
 	{
 		std::error_code Error;
 		const SIZE_T First = Out.size();
-		for (const auto& Entry : std::filesystem::directory_iterator(Dir, Error))
+		for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(Dir, Error))
 		{
-			if (!Entry.is_regular_file() || (Entry.path().extension() != L".qle" && Entry.path().extension() != L".asset"))
+			if (!Entry.is_regular_file() ||
+			    (Entry.path().extension() != L".qle" && Entry.path().extension() != L".asset"))
 			{
 				continue;
 			}
@@ -42,19 +44,24 @@ namespace
 			{
 				FAssetPackageMetadata Metadata;
 				FString PackageError;
-				if (!FAssetPackageStore::ReadMetadata(FString::FromWide(Entry.path().wstring()), Metadata, PackageError) ||
-					Metadata.Kind != EAssetPackageKind::Asset || Metadata.Schema != "Genesis.Prefab" || (Metadata.SchemaVersion < 1 || Metadata.SchemaVersion > 3)) continue;
+				if (!FAssetPackageStore::ReadMetadata(
+				        FString::FromWide(Entry.path().wstring()), Metadata, PackageError) ||
+				    Metadata.Kind != EAssetPackageKind::Asset || Metadata.Schema != "Genesis.Prefab" ||
+				    (Metadata.SchemaVersion < 1 || Metadata.SchemaVersion > 3))
+					continue;
 			}
 			FString Name = FString::FromWide(Entry.path().stem().wstring());
 			if (!Name.IsEmpty())
 			{
 				Name = Name.Left(1).ToUpper() + Name.Mid(1);
 			}
-			Out.push_back({ Name, FString::FromWide(Entry.path().wstring()), bUser });
+			Out.push_back({Name, FString::FromWide(Entry.path().wstring()), bUser});
 		}
-		std::sort(Out.begin() + static_cast<std::ptrdiff_t>(First), Out.end(), [](const auto& A, const auto& B) { return A.Name.View() < B.Name.View(); });
+		std::sort(Out.begin() + static_cast<std::ptrdiff_t>(First), Out.end(),
+		    [](const TArray<FMapEditorEnvironment::FPrefab>::value_type& A,
+		        const TArray<FMapEditorEnvironment::FPrefab>::value_type& B) { return A.Name.View() < B.Name.View(); });
 	}
-}
+} // namespace
 
 bool FMapEditorEnvironment::Startup(const FStartupOptions& Options)
 {
@@ -127,7 +134,8 @@ const FMapGameSet* FMapEditorEnvironment::FindGameSet(const FString& Game, const
 {
 	for (const FMapGameSet& Set : Env().GameSets)
 	{
-		if (Set.Game.Equals(Game.View(), ESearchCase::IgnoreCase) && Set.EntFile.Equals(EntFile.View(), ESearchCase::IgnoreCase))
+		if (Set.Game.Equals(Game.View(), ESearchCase::IgnoreCase) &&
+		    Set.EntFile.Equals(EntFile.View(), ESearchCase::IgnoreCase))
 		{
 			return &Set;
 		}
@@ -144,7 +152,7 @@ bool FMapEditorEnvironment::Activate(const FMapGameSet& GameSet, FString* OutErr
 	{
 		if (OutError)
 		{
-			*OutError = FString::Format("The game \"{}\" is not available.", GameSet.Game);
+			*OutError = FTextLocalization::Format("The game \"{}\" is not available.", GameSet.Game);
 		}
 		return false;
 	}
@@ -153,7 +161,7 @@ bool FMapEditorEnvironment::Activate(const FMapGameSet& GameSet, FString* OutErr
 	{
 		if (OutError)
 		{
-			*OutError = FString::Format("{} could not be set up (its game folder is needed).", GameSet.Game);
+			*OutError = FTextLocalization::Format("{} could not be set up (its game folder is needed).", GameSet.Game);
 		}
 		return false;
 	}
@@ -163,13 +171,14 @@ bool FMapEditorEnvironment::Activate(const FMapGameSet& GameSet, FString* OutErr
 	E.Active = INDEX_NONE;
 	for (SIZE_T Index = 0; Index < E.GameSets.size(); ++Index)
 	{
-		if (&E.GameSets[Index] == &GameSet || (E.GameSets[Index].Game == GameSet.Game && E.GameSets[Index].EntFile == GameSet.EntFile))
+		if (&E.GameSets[Index] == &GameSet ||
+		    (E.GameSets[Index].Game == GameSet.Game && E.GameSets[Index].EntFile == GameSet.EntFile))
 		{
 			E.Active = static_cast<int32>(Index);
 			break;
 		}
 	}
-	UE_LOG(LogMapEditor, Display, "Game set: {}", GameSet.Name);
+	GENESIS_LOG(LogMapEditor, Display, "Game set: {}", GameSet.Name);
 	return true;
 }
 

@@ -5,8 +5,9 @@
 #pragma once
 
 #include "CoreTypes.h"
+#include "Internationalization/TextLocalization.h"
 #include "Containers/ContainerAliases.h"
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
 #include "Containers/Name.h"
 #include "Delegates/Delegate.h"
 #include "HAL/PlatformMisc.h"

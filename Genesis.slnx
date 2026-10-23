@@ -40,6 +40,7 @@
     <Project Path="Engine/Source/Programs/GenesisTests/GenesisTests.vcxproj" Id="bbc47c09-d18a-47f5-9486-7c1db20ceb88" />
   </Folder>
   <Folder Name="/Programs/TestApps/">
+    <Project Path="Engine/Source/Programs/TestApps/GenesisEditorTest/GenesisEditorTest.vcxproj" Id="dc1e6e72-b19d-487e-9f33-daaf63d96317" />
     <Project Path="Engine/Source/Programs/TestApps/TestAppHarness/TestAppHarness.vcxproj" Id="9d3e5a41-7c2b-4f6e-a1d8-3b5c7e9f0a12" />
     <Project Path="Engine/Source/Programs/TestApps/UIRenderTest/UIRenderTest.vcxproj" Id="6cb829c8-a4b9-41d6-acf1-c669b7804411" />
     <Project Path="Engine/Source/Programs/TestApps/UIButtonsTest/UIButtonsTest.vcxproj" Id="1a26a887-09ce-4922-b02a-92f875c4cea0" />

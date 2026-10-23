@@ -41,11 +41,12 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Private\Containers\UnrealString.cpp" />
+    <ClCompile Include="Private\Containers\String.cpp" />
     <ClCompile Include="Private\Containers\Name.cpp" />
     <ClCompile Include="Private\HAL\File.cpp" />
     <ClCompile Include="Private\HAL\WindowsPlatformMisc.cpp" />
     <ClCompile Include="Private\Logging\Log.cpp" />
+    <ClCompile Include="Private\Internationalization\TextLocalization.cpp" />
     <ClCompile Include="Private\Math\Color.cpp" />
     <ClCompile Include="Private\Misc\App.cpp" />
     <ClCompile Include="Private\Misc\AssertionMacros.cpp" />
@@ -58,9 +59,10 @@
     <ClInclude Include="Private\Misc\StringFormat.h" />
     <ClInclude Include="Private\Windows\WindowsPlatform.h" />
     <ClInclude Include="Public\Containers\ContainerAliases.h" />
-    <ClInclude Include="Public\Containers\UnrealString.h" />
+    <ClInclude Include="Public\Containers\String.h" />
     <ClInclude Include="Public\Containers\Name.h" />
     <ClInclude Include="Public\CoreMinimal.h" />
+    <ClInclude Include="Public\Internationalization\TextLocalization.h" />
     <ClInclude Include="Public\CoreTypes.h" />
     <ClInclude Include="Public\Delegates\Delegate.h" />
     <ClInclude Include="Public\HAL\File.h" />
@@ -73,6 +75,8 @@
     <ClInclude Include="Public\Math\Transform2D.h" />
     <ClInclude Include="Public\Math\Vector2.h" />
     <ClInclude Include="Public\Misc\App.h" />
+    <ClInclude Include="Public\Misc\ScopeExit.h" />
+    <ClInclude Include="Public\Misc\ValidationContext.h" />
     <ClInclude Include="Public\Misc\AssertionMacros.h" />
     <ClInclude Include="Public\Serialization\Json.h" />
     <ClInclude Include="Public\Services\ConfigStore.h" />

@@ -19,3 +19,12 @@
   preserving the same runtime/editor/compiler separation.
 - Update project files, solution registration, includes and documentation when
   moving source. Preserve existing user work and serialized asset compatibility.
+## Coding and audit requirements
+
+- Use explicit types; do not introduce `auto`, including generic lambda parameters.
+- Use Genesis API branding (`GENESIS_LOG`, `GENESIS_BUILD_DEBUG`); do not introduce Unreal product prefixes. Slate names and the corresponding module layout are retained.
+- Put tests and test harness implementation under `Engine/Source/Programs`, separate from runtime and editor modules.
+- Localize display strings through Core's internationalization service. Keep serialized keys, asset identities, paths, shader source and protocol tokens invariant.
+- Use explicit error results for expected validation failures. Preserve exception barriers where foreign runtimes or external callbacks require them until their contracts are changed safely.
+- Use the repository `.clang-format` for first-party C++ changes. Do not reformat vendored source.
+- Give shared validation limits and configurable defaults meaningful names in their owning feature module.

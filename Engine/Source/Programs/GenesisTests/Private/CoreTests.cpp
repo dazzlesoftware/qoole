@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "doctest.h"
+#include "Templates/SharedPointer.h"
 #include "TestUtils.h"
 
 #include "CoreMinimal.h"
@@ -29,7 +30,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 TEST_CASE("FString holds UTF-8 and converts at the platform boundary")
 {
 	const FString Text(u8"Café 世界");
-	CHECK(Text.Len() == 12);	// bytes, not characters
+	CHECK(Text.Len() == 12); // bytes, not characters
 	CHECK(FString::FromWide(Text.ToWide()) == Text);
 	CHECK(Text.ToWide() == L"Café 世界");
 
@@ -54,7 +55,7 @@ TEST_CASE("FString holds UTF-8 and converts at the platform boundary")
 
 TEST_CASE("Containers and smart pointers are the standard ones")
 {
-	TArray<int32> Numbers = { 3, 1, 2 };
+	TArray<int32> Numbers = {3, 1, 2};
 	CHECK(Numbers.size() == 3);
 	TSharedPtr<int32> Shared = MakeShared<int32>(5);
 	TWeakPtr<int32> Weak = Shared;
@@ -73,7 +74,10 @@ TEST_CASE("FLog passes text to output devices without changing it")
 	struct FCaptureDevice : FOutputDevice
 	{
 		FString Captured;
-		void Serialize(const FLogCategory&, ELogVerbosity, std::string_view Message) override { Captured += Message; }
+		void Serialize(const FLogCategory&, ELogVerbosity, std::string_view Message) override
+		{
+			Captured += Message;
+		}
 	} Sink;
 
 	FLog::AddDevice(&Sink);
@@ -118,7 +122,8 @@ TEST_CASE("FFile reads, writes and deletes read-only files")
 
 TEST_CASE("Services fall back to UI-free defaults")
 {
-	CHECK(FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo, "Extract?") == EMessageResult::No);
+	CHECK(FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo, "Extract?") ==
+	    EMessageResult::No);
 	CHECK(FServices::GetMessageDialog().Show(EMessageType::Error, EMessageButtons::Ok, "Error") == EMessageResult::Ok);
 
 	FString Folder = "unchanged";
@@ -133,12 +138,17 @@ TEST_CASE("Services fall back to UI-free defaults")
 
 	struct FAlwaysYes : IMessageDialog
 	{
-		EMessageResult Show(EMessageType, EMessageButtons, const FString&, const FString&) override { return EMessageResult::Yes; }
+		EMessageResult Show(EMessageType, EMessageButtons, const FString&, const FString&) override
+		{
+			return EMessageResult::Yes;
+		}
 	} Yes;
 	FServices::SetMessageDialog(&Yes);
-	CHECK(FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo, "Extract?") == EMessageResult::Yes);
+	CHECK(FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo, "Extract?") ==
+	    EMessageResult::Yes);
 	FServices::SetMessageDialog(nullptr);
-	CHECK(FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo, "Extract?") == EMessageResult::No);
+	CHECK(FServices::GetMessageDialog().Show(EMessageType::Question, EMessageButtons::YesNo, "Extract?") ==
+	    EMessageResult::No);
 }
 
 TEST_CASE("FApp knows its name and exit requests")

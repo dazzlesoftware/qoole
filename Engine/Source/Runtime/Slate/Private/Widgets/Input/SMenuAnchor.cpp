@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Widgets/Input/SMenuAnchor.h"
+#include "Templates/SharedPointer.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/Layout/SBox.h"
@@ -33,8 +34,8 @@ bool SToolTip::IsEmpty() const
 	return !bHasCustomContent && Text.Get().IsEmpty();
 }
 
-int32 SToolTip::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SToolTip::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	Style->Background.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 	return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, MakeChildStyle(InWidgetStyle));
@@ -62,7 +63,8 @@ bool SMenuAnchor::IsOpen() const
 	return Pinned && !Pinned->IsDismissed();
 }
 
-FVector2 SMenuAnchor::ComputePopupPosition(const FGeometry& AnchorGeometry, float WindowScale, FVector2 WindowSize, FVector2 PopupSize, EMenuPlacement Placement)
+FVector2 SMenuAnchor::ComputePopupPosition(const FGeometry& AnchorGeometry, float WindowScale, FVector2 WindowSize,
+    FVector2 PopupSize, EMenuPlacement Placement)
 {
 	const FRect Anchor = AnchorGeometry.GetLayoutBoundingRect().Scale(1.0f / WindowScale);
 	FVector2 Position;
@@ -99,8 +101,9 @@ FVector2 SMenuAnchor::ComputePopupPosition(const FGeometry& AnchorGeometry, floa
 		break;
 	}
 	// Below-type placements open upwards when there is no room below.
-	if ((Placement == EMenuPlacement::BelowAnchor || Placement == EMenuPlacement::ComboBox || Placement == EMenuPlacement::CenteredBelowAnchor)
-		&& Position.Y + PopupSize.Y > WindowSize.Y && Anchor.Top - PopupSize.Y >= 0.0f)
+	if ((Placement == EMenuPlacement::BelowAnchor || Placement == EMenuPlacement::ComboBox ||
+	        Placement == EMenuPlacement::CenteredBelowAnchor) &&
+	    Position.Y + PopupSize.Y > WindowSize.Y && Anchor.Top - PopupSize.Y >= 0.0f)
 	{
 		Position.Y = Anchor.Top - PopupSize.Y;
 	}
@@ -136,13 +139,15 @@ void SMenuAnchor::SetIsOpen(bool bOpen, bool bFocusMenu)
 		Content = SNew(SBox).MinDesiredWidth(TOptional<float>(AnchorWidth))[ToSharedRef(Content)];
 	}
 
-	const TSharedRef<IMenu> NewMenu = App.PushMenu(SharedThis(this), ToSharedRef(Content), FVector2::Zero(), bFocusMenu && bFocusMenuOnOpen);
+	const TSharedRef<IMenu> NewMenu =
+	    App.PushMenu(SharedThis(this), ToSharedRef(Content), FVector2::Zero(), bFocusMenu && bFocusMenuOnOpen);
 	// Place it now that the menu (with its background) can be measured.
 	const TSharedRef<SWidget> Host = NewMenu->GetContent();
 	Host->Measure(Window->GetScale());
 	const TSharedPtr<SWidget> PlaceAgainst = PlacementWidget.lock();
 	const FGeometry& AnchorGeometry = PlaceAgainst ? PlaceAgainst->GetCachedGeometry() : GetCachedGeometry();
-	const FVector2 Position = ComputePopupPosition(AnchorGeometry, Window->GetScale(), Window->GetLogicalSize(), Host->GetDesiredSize(), Placement);
+	const FVector2 Position = ComputePopupPosition(
+	    AnchorGeometry, Window->GetScale(), Window->GetLogicalSize(), Host->GetDesiredSize(), Placement);
 	Window->MovePopup(Host.Get(), Position);
 
 	Menu = NewMenu.ToSharedPtr();
@@ -177,11 +182,17 @@ namespace
 		void Construct(const FArguments&) {}
 
 	protected:
-		FVector2 ComputeDesiredSize(float) const override { return FVector2(10.0f, 10.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		FVector2 ComputeDesiredSize(float) const override
+		{
+			return FVector2(10.0f, 10.0f);
+		}
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out,
+		    int32 LayerId, const FWidgetStyle& Style) const override
 		{
 			const FVector2 C = Geometry.Size * 0.5f;
-			Out.AddLines(LayerId, Geometry.ToPaintGeometry(), { C + FVector2(-3.5f, -1.5f), C + FVector2(0.0f, 2.0f), C + FVector2(3.5f, -1.5f) }, Style.GetForegroundColor(), 1.5f);
+			Out.AddLines(LayerId, Geometry.ToPaintGeometry(),
+			    {C + FVector2(-3.5f, -1.5f), C + FVector2(0.0f, 2.0f), C + FVector2(3.5f, -1.5f)},
+			    Style.GetForegroundColor(), 1.5f);
 			return LayerId;
 		}
 	};
@@ -191,28 +202,38 @@ namespace
 	{
 	public:
 		SLATE_BEGIN_ARGS(SCheckMark)
-			SLATE_ATTRIBUTE(ECheckBoxState, State, ECheckBoxState::Unchecked)
+		SLATE_ATTRIBUTE(ECheckBoxState, State, ECheckBoxState::Unchecked)
 		SLATE_END_ARGS()
-		void Construct(const FArguments& Args) { State.Assign(Args._State); }
+		void Construct(const FArguments& Args)
+		{
+			State.Assign(Args._State);
+		}
 
 	protected:
-		FVector2 ComputeDesiredSize(float) const override { return FVector2(14.0f, 14.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		FVector2 ComputeDesiredSize(float) const override
+		{
+			return FVector2(14.0f, 14.0f);
+		}
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out,
+		    int32 LayerId, const FWidgetStyle& Style) const override
 		{
 			const float S = Geometry.Size.Y;
 			if (State.Get() == ECheckBoxState::Checked)
 			{
-				Out.AddLines(LayerId, Geometry.ToPaintGeometry(), { FVector2(S * 0.18f, S * 0.52f), FVector2(S * 0.42f, S * 0.76f), FVector2(S * 0.84f, S * 0.28f) }, Style.GetForegroundColor(), 1.6f);
+				Out.AddLines(LayerId, Geometry.ToPaintGeometry(),
+				    {FVector2(S * 0.18f, S * 0.52f), FVector2(S * 0.42f, S * 0.76f), FVector2(S * 0.84f, S * 0.28f)},
+				    Style.GetForegroundColor(), 1.6f);
 			}
 			else if (State.Get() == ECheckBoxState::Undetermined)
 			{
-				Out.AddLines(LayerId, Geometry.ToPaintGeometry(), { FVector2(S * 0.25f, S * 0.5f), FVector2(S * 0.75f, S * 0.5f) }, Style.GetForegroundColor(), 1.6f);
+				Out.AddLines(LayerId, Geometry.ToPaintGeometry(),
+				    {FVector2(S * 0.25f, S * 0.5f), FVector2(S * 0.75f, S * 0.5f)}, Style.GetForegroundColor(), 1.6f);
 			}
 			return LayerId;
 		}
 
 	private:
-		TWidgetAttribute<ECheckBoxState, EInvalidateWidgetReason::Paint> State{ *this, ECheckBoxState::Unchecked };
+		TWidgetAttribute<ECheckBoxState, EInvalidateWidgetReason::Paint> State{*this, ECheckBoxState::Unchecked};
 	};
 
 	// A small right-pointing chevron (submenu entries).
@@ -224,15 +245,21 @@ namespace
 		void Construct(const FArguments&) {}
 
 	protected:
-		FVector2 ComputeDesiredSize(float) const override { return FVector2(10.0f, 10.0f); }
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+		FVector2 ComputeDesiredSize(float) const override
+		{
+			return FVector2(10.0f, 10.0f);
+		}
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out,
+		    int32 LayerId, const FWidgetStyle& Style) const override
 		{
 			const FVector2 C = Geometry.Size * 0.5f;
-			Out.AddLines(LayerId, Geometry.ToPaintGeometry(), { C + FVector2(-1.5f, -3.5f), C + FVector2(2.0f, 0.0f), C + FVector2(-1.5f, 3.5f) }, Style.GetForegroundColor(), 1.5f);
+			Out.AddLines(LayerId, Geometry.ToPaintGeometry(),
+			    {C + FVector2(-1.5f, -3.5f), C + FVector2(2.0f, 0.0f), C + FVector2(-1.5f, 3.5f)},
+			    Style.GetForegroundColor(), 1.5f);
 			return LayerId;
 		}
 	};
-}
+} // namespace
 
 void SComboButton::Construct(const FArguments& Args)
 {
@@ -241,34 +268,26 @@ void SComboButton::Construct(const FArguments& Args)
 	{
 		ButtonContent = SNew(STextBlock).Text(Args._Text.IsSet() ? Args._Text : TAttribute<FString>(""));
 	}
-	const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox) + SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[ToSharedRef(ButtonContent)];
+	const TSharedRef<SHorizontalBox> Row =
+	    SNew(SHorizontalBox) + SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[ToSharedRef(ButtonContent)];
 	if (Args._HasDownArrow)
 	{
 		Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))[SNew(SDownArrow)];
 	}
 
-	ChildSlot
-	[
-		SAssignNew(Anchor, SMenuAnchor)
-		.Placement(Args._Placement)
-		.MenuContent(Args._MenuContent.Widget ? ToSharedRef(Args._MenuContent.Widget) : SNullWidget::NullWidget())
-		.OnGetMenuContent(Args._OnGetMenuContent)
-		.OnMenuOpenChanged(Args._OnMenuOpenChanged)
-		[
-			SAssignNew(Button, SButton)
-			.ButtonStyle(Args._ButtonStyle)
-			.IsFocusable(Args._IsFocusable)
-			.HAlign(HAlign_Fill)
-			.OnClicked([this]()
-			{
-				Anchor->SetIsOpen(!Anchor->IsOpen());
-				return FReply::Handled();
-			})
-			[
-				Row
-			]
-		]
-	];
+	ChildSlot[SAssignNew(Anchor, SMenuAnchor)
+	        .Placement(Args._Placement)
+	        .MenuContent(Args._MenuContent.Widget ? ToSharedRef(Args._MenuContent.Widget) : SNullWidget::NullWidget())
+	        .OnGetMenuContent(Args._OnGetMenuContent)
+	        .OnMenuOpenChanged(Args._OnMenuOpenChanged)[SAssignNew(Button, SButton)
+	                .ButtonStyle(Args._ButtonStyle)
+	                .IsFocusable(Args._IsFocusable)
+	                .HAlign(HAlign_Fill)
+	                .OnClicked([this]()
+	{
+		Anchor->SetIsOpen(!Anchor->IsOpen());
+		return FReply::Handled();
+	})[Row]]];
 }
 
 // ---------------------------------------------------------------------------
@@ -282,19 +301,28 @@ void SMenuEntry::Construct(const FArguments& Args)
 	if (Args._ShowCheck)
 	{
 		const TAttribute<ECheckBoxState> CheckState = Args._CheckState;
-		Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 6.0f, 0.0f))[SNew(SCheckMark).State(CheckState)];
+		Row->AddSlot()
+		    .AutoWidth()
+		    .VAlign(VAlign_Center)
+		    .Padding(FMargin(0.0f, 0.0f, 6.0f, 0.0f))[SNew(SCheckMark).State(CheckState)];
 	}
 	Row->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).Text(Args._Text)];
 	if (Args._InputGesture.IsSet())
 	{
-		Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(24.0f, 0.0f, 0.0f, 0.0f))
-			[SNew(STextBlock).Text(Args._InputGesture).ColorAndOpacity(FSlateColor(EStyleColor::ForegroundSecondary))];
+		Row->AddSlot()
+		    .AutoWidth()
+		    .VAlign(VAlign_Center)
+		    .Padding(FMargin(24.0f, 0.0f, 0.0f, 0.0f))[SNew(STextBlock)
+		            .Text(Args._InputGesture)
+		            .ColorAndOpacity(FSlateColor(EStyleColor::ForegroundSecondary))];
 	}
 	TSharedRef<SWidget> Content = Row;
 	if (Args._SubMenu.Widget || Args._OnGetSubMenu.IsBound())
 	{
 		Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(16.0f, 0.0f, 0.0f, 0.0f))[SNew(SRightArrow)];
-		SAssignNew(SubMenuAnchor, SMenuAnchor).Placement(EMenuPlacement::RightOfAnchor).OnGetMenuContent(Args._OnGetSubMenu)[Row];
+		SAssignNew(SubMenuAnchor, SMenuAnchor)
+		    .Placement(EMenuPlacement::RightOfAnchor)
+		    .OnGetMenuContent(Args._OnGetSubMenu)[Row];
 		if (Args._SubMenu.Widget)
 		{
 			SubMenuAnchor->SetMenuContent(ToSharedRef(Args._SubMenu.Widget));
@@ -304,8 +332,8 @@ void SMenuEntry::Construct(const FArguments& Args)
 
 	SButton::FArguments ButtonArgs;
 	ButtonArgs.ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FMenuStyle>("Menu").Item)
-		.HAlign(HAlign_Fill)
-		.OnClicked(this, &SMenuEntry::HandleClicked);
+	    .HAlign(HAlign_Fill)
+	    .OnClicked(this, &SMenuEntry::HandleClicked);
 	ButtonArgs._Content.Widget = Content.ToSharedPtr();
 	SButton::Construct(ButtonArgs);
 	if (SubMenuAnchor)

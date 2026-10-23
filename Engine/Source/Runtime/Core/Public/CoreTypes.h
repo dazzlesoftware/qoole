@@ -21,19 +21,19 @@ using SIZE_T = std::size_t;
 inline constexpr int32 INDEX_NONE = -1;
 
 #if defined(_WIN32)
-	#define PLATFORM_WINDOWS 1
+#define PLATFORM_WINDOWS 1
 #else
-	#define PLATFORM_WINDOWS 0
+#define PLATFORM_WINDOWS 0
 #endif
 
 // Engine.props sets this; the projects that keep their own settings (MapCore,
 // GenesisTests) follow the usual NDEBUG convention.
-#ifndef UE_BUILD_DEBUG
-	#ifdef NDEBUG
-		#define UE_BUILD_DEBUG 0
-	#else
-		#define UE_BUILD_DEBUG 1
-	#endif
+#ifndef GENESIS_BUILD_DEBUG
+#ifdef NDEBUG
+#define GENESIS_BUILD_DEBUG 0
+#else
+#define GENESIS_BUILD_DEBUG 1
+#endif
 #endif
 
 #define LIKELY(x) (!!(x))

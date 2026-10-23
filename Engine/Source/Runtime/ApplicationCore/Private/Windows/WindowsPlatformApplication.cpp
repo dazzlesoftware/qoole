@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Windows/WindowsPlatformApplication.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include <ShellScalingApi.h>
 #include <shellapi.h>
@@ -39,10 +41,14 @@ namespace
 			const UINT ScanCode = (LParam >> 16) & 0xFF;
 			return MapVirtualKeyW(ScanCode, MAPVK_VSC_TO_VK_EX) == VK_RSHIFT ? EKey::RightShift : EKey::LeftShift;
 		}
-		case VK_CONTROL: return bExtended ? EKey::RightControl : EKey::LeftControl;
-		case VK_MENU: return bExtended ? EKey::RightAlt : EKey::LeftAlt;
-		case VK_RETURN: return EKey::Enter;
-		default: break;
+		case VK_CONTROL:
+			return bExtended ? EKey::RightControl : EKey::LeftControl;
+		case VK_MENU:
+			return bExtended ? EKey::RightAlt : EKey::LeftAlt;
+		case VK_RETURN:
+			return EKey::Enter;
+		default:
+			break;
 		}
 		if (VirtualKey > 0 && VirtualKey < 0xFF)
 		{
@@ -62,14 +68,22 @@ namespace
 		const bool bRight = Pos.X >= Size.X - Border;
 		const bool bTop = Pos.Y < Border;
 		const bool bBottom = Pos.Y >= Size.Y - Border;
-		if (bTop && bLeft) return EWindowZone::TopLeftBorder;
-		if (bTop && bRight) return EWindowZone::TopRightBorder;
-		if (bBottom && bLeft) return EWindowZone::BottomLeftBorder;
-		if (bBottom && bRight) return EWindowZone::BottomRightBorder;
-		if (bTop) return EWindowZone::TopBorder;
-		if (bBottom) return EWindowZone::BottomBorder;
-		if (bLeft) return EWindowZone::LeftBorder;
-		if (bRight) return EWindowZone::RightBorder;
+		if (bTop && bLeft)
+			return EWindowZone::TopLeftBorder;
+		if (bTop && bRight)
+			return EWindowZone::TopRightBorder;
+		if (bBottom && bLeft)
+			return EWindowZone::BottomLeftBorder;
+		if (bBottom && bRight)
+			return EWindowZone::BottomRightBorder;
+		if (bTop)
+			return EWindowZone::TopBorder;
+		if (bBottom)
+			return EWindowZone::BottomBorder;
+		if (bLeft)
+			return EWindowZone::LeftBorder;
+		if (bRight)
+			return EWindowZone::RightBorder;
 		return EWindowZone::ClientArea;
 	}
 
@@ -77,21 +91,36 @@ namespace
 	{
 		switch (Zone)
 		{
-		case EWindowZone::NotInWindow: return HTNOWHERE;
-		case EWindowZone::TitleBar: return HTCAPTION;
-		case EWindowZone::TopLeftBorder: return HTTOPLEFT;
-		case EWindowZone::TopBorder: return HTTOP;
-		case EWindowZone::TopRightBorder: return HTTOPRIGHT;
-		case EWindowZone::LeftBorder: return HTLEFT;
-		case EWindowZone::RightBorder: return HTRIGHT;
-		case EWindowZone::BottomLeftBorder: return HTBOTTOMLEFT;
-		case EWindowZone::BottomBorder: return HTBOTTOM;
-		case EWindowZone::BottomRightBorder: return HTBOTTOMRIGHT;
-		case EWindowZone::MinimizeButton: return HTMINBUTTON;
-		case EWindowZone::MaximizeButton: return HTMAXBUTTON;
-		case EWindowZone::CloseButton: return HTCLOSE;
-		case EWindowZone::SysMenu: return HTSYSMENU;
-		default: return HTCLIENT;
+		case EWindowZone::NotInWindow:
+			return HTNOWHERE;
+		case EWindowZone::TitleBar:
+			return HTCAPTION;
+		case EWindowZone::TopLeftBorder:
+			return HTTOPLEFT;
+		case EWindowZone::TopBorder:
+			return HTTOP;
+		case EWindowZone::TopRightBorder:
+			return HTTOPRIGHT;
+		case EWindowZone::LeftBorder:
+			return HTLEFT;
+		case EWindowZone::RightBorder:
+			return HTRIGHT;
+		case EWindowZone::BottomLeftBorder:
+			return HTBOTTOMLEFT;
+		case EWindowZone::BottomBorder:
+			return HTBOTTOM;
+		case EWindowZone::BottomRightBorder:
+			return HTBOTTOMRIGHT;
+		case EWindowZone::MinimizeButton:
+			return HTMINBUTTON;
+		case EWindowZone::MaximizeButton:
+			return HTMAXBUTTON;
+		case EWindowZone::CloseButton:
+			return HTCLOSE;
+		case EWindowZone::SysMenu:
+			return HTSYSMENU;
+		default:
+			return HTCLIENT;
 		}
 	}
 
@@ -108,10 +137,12 @@ namespace
 
 	float ApplyTriggerThreshold(BYTE Value)
 	{
-		return Value <= XINPUT_GAMEPAD_TRIGGER_THRESHOLD ? 0.0f
-			: static_cast<float>(Value - XINPUT_GAMEPAD_TRIGGER_THRESHOLD) / (255.0f - XINPUT_GAMEPAD_TRIGGER_THRESHOLD);
+		return Value <= XINPUT_GAMEPAD_TRIGGER_THRESHOLD
+		    ? 0.0f
+		    : static_cast<float>(Value - XINPUT_GAMEPAD_TRIGGER_THRESHOLD) /
+		        (255.0f - XINPUT_GAMEPAD_TRIGGER_THRESHOLD);
 	}
-}
+} // namespace
 
 TSharedRef<IPlatformApplication> CreatePlatformApplication()
 {
@@ -123,7 +154,7 @@ TSharedRef<IPlatformApplication> CreatePlatformApplication()
 
 FWindowsCursor::FWindowsCursor()
 {
-	const auto Load = [](LPCWSTR Id) { return LoadCursorW(nullptr, Id); };
+	const TFunction<HCURSOR(LPCWSTR)> Load = [](LPCWSTR Id) { return LoadCursorW(nullptr, Id); };
 	Cursors[static_cast<int32>(EMouseCursor::None)] = nullptr;
 	Cursors[static_cast<int32>(EMouseCursor::Default)] = Load(IDC_ARROW);
 	Cursors[static_cast<int32>(EMouseCursor::TextEditBeam)] = Load(IDC_IBEAM);
@@ -172,7 +203,7 @@ void FWindowsCursor::Lock(const FIntRect* ScreenBounds)
 {
 	if (ScreenBounds)
 	{
-		const RECT Rect{ ScreenBounds->Left, ScreenBounds->Top, ScreenBounds->Right, ScreenBounds->Bottom };
+		const RECT Rect{ScreenBounds->Left, ScreenBounds->Top, ScreenBounds->Right, ScreenBounds->Bottom};
 		ClipCursor(&Rect);
 	}
 	else
@@ -192,10 +223,11 @@ FWindowsApplication::FWindowsApplication()
 	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 	if (!AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
 	{
-		UE_LOG(LogApplicationCore, Warning, "Process is not per-monitor DPI aware (v2); text may be blurry on high-DPI monitors");
+		GENESIS_LOG(LogApplicationCore, Warning,
+		    "Process is not per-monitor DPI aware (v2); text may be blurry on high-DPI monitors");
 	}
 
-	WNDCLASSEXW Class{ sizeof(WNDCLASSEXW) };
+	WNDCLASSEXW Class{sizeof(WNDCLASSEXW)};
 	Class.style = CS_DBLCLKS;
 	Class.lpfnWndProc = &FWindowsApplication::WndProc;
 	Class.hInstance = GetModuleHandleW(nullptr);
@@ -209,7 +241,7 @@ FWindowsApplication::FWindowsApplication()
 	Class.lpszClassName = GetWindowClassName();
 	if (!RegisterClassExW(&Class) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
 	{
-		UE_LOG(LogApplicationCore, Error, "RegisterClassEx failed ({})", GetLastError());
+		GENESIS_LOG(LogApplicationCore, Error, "RegisterClassEx failed ({})", GetLastError());
 	}
 }
 
@@ -222,7 +254,7 @@ FWindowsApplication::~FWindowsApplication()
 
 TSharedRef<IPlatformWindow> FWindowsApplication::MakeWindow(const FWindowDesc& Desc)
 {
-	auto Window = std::make_shared<FWindowsWindow>(*this, Desc);
+	TSharedPtr<FWindowsWindow> Window = std::make_shared<FWindowsWindow>(*this, Desc);
 	Windows.push_back(TSharedRef<FWindowsWindow>(Window));
 	if (!Window->Initialize())
 	{
@@ -296,7 +328,7 @@ namespace
 		}
 		return static_cast<int32>(Cursor - *Text);
 	}
-}
+} // namespace
 
 void FWindowsTextInputMethodSystem::ActivateContext(const TSharedRef<ITextInputMethodContext>& Context)
 {
@@ -362,13 +394,13 @@ void FWindowsTextInputMethodSystem::PositionCandidateWindow(HWND Hwnd) const
 	const FIntRect Caret = Active->GetCaretRect();
 	COMPOSITIONFORM Composition{};
 	Composition.dwStyle = CFS_POINT;
-	Composition.ptCurrentPos = POINT{ Caret.Left, Caret.Top };
+	Composition.ptCurrentPos = POINT{Caret.Left, Caret.Top};
 	ImmSetCompositionWindow(Imc, &Composition);
 	CANDIDATEFORM Candidate{};
 	Candidate.dwIndex = 0;
 	Candidate.dwStyle = CFS_EXCLUDE;
-	Candidate.ptCurrentPos = POINT{ Caret.Left, Caret.Bottom };
-	Candidate.rcArea = RECT{ Caret.Left, Caret.Top, Caret.Right, Caret.Bottom };
+	Candidate.ptCurrentPos = POINT{Caret.Left, Caret.Bottom};
+	Candidate.rcArea = RECT{Caret.Left, Caret.Top, Caret.Right, Caret.Bottom};
 	ImmSetCandidateWindow(Imc, &Candidate);
 	ImmReleaseContext(Hwnd, Imc);
 }
@@ -411,9 +443,10 @@ bool FWindowsApplication::ProcessImeMessage(FWindowsWindow& Window, HWND Hwnd, U
 		}
 		if (LParam & GCS_COMPSTR)
 		{
-			FDeferredMessage Message{ Window.weak_from_this(), WM_IME_COMPOSITION, 0, 0, 0, 0 };
+			FDeferredMessage Message{Window.weak_from_this(), WM_IME_COMPOSITION, 0, 0, 0, 0};
 			Message.Text = GetCompositionString(Imc, GCS_COMPSTR);
-			const LONG CursorPos = (LParam & GCS_CURSORPOS) ? ImmGetCompositionStringW(Imc, GCS_CURSORPOS, nullptr, 0) : -1;
+			const LONG CursorPos =
+			    (LParam & GCS_CURSORPOS) ? ImmGetCompositionStringW(Imc, GCS_CURSORPOS, nullptr, 0) : -1;
 			Message.X = CursorPos >= 0 ? Utf16IndexToUtf8(Message.Text, CursorPos) : Message.Text.Len();
 			DeferredMessages.push_back(std::move(Message));
 		}
@@ -431,7 +464,7 @@ bool FWindowsApplication::ProcessImeMessage(FWindowsWindow& Window, HWND Hwnd, U
 
 void FWindowsApplication::Defer(FWindowsWindow& Window, UINT Msg, WPARAM WParam, LPARAM LParam, int32 X, int32 Y)
 {
-	DeferredMessages.push_back({ Window.weak_from_this(), Msg, WParam, LParam, X, Y });
+	DeferredMessages.push_back({Window.weak_from_this(), Msg, WParam, LParam, X, Y});
 }
 
 void FWindowsApplication::ProcessDeferredMessage(const FDeferredMessage& Message)
@@ -469,7 +502,8 @@ void FWindowsApplication::ProcessDeferredMessage(const FDeferredMessage& Message
 	case WM_IME_COMPOSITION:
 	case WM_IME_ENDCOMPOSITION:
 		// Deferred so composition stays ordered with the characters around it.
-		if (ITextInputMethodContext* Context = WindowPtr ? TextInputMethod.GetContextFor(WindowPtr->GetHwnd()) : nullptr)
+		if (ITextInputMethodContext* Context =
+		        WindowPtr ? TextInputMethod.GetContextFor(WindowPtr->GetHwnd()) : nullptr)
 		{
 			if (Message.Msg == WM_IME_STARTCOMPOSITION)
 			{
@@ -498,20 +532,51 @@ void FWindowsApplication::ProcessDeferredMessage(const FDeferredMessage& Message
 
 	switch (Message.Msg)
 	{
-	case WM_LBUTTONDOWN: Handler.OnMouseDown(Window, EMouseButton::Left, Pos); break;
-	case WM_RBUTTONDOWN: Handler.OnMouseDown(Window, EMouseButton::Right, Pos); break;
-	case WM_MBUTTONDOWN: Handler.OnMouseDown(Window, EMouseButton::Middle, Pos); break;
-	case WM_XBUTTONDOWN: Handler.OnMouseDown(Window, GET_XBUTTON_WPARAM(Message.WParam) == XBUTTON1 ? EMouseButton::Thumb1 : EMouseButton::Thumb2, Pos); break;
-	case WM_LBUTTONUP: Handler.OnMouseUp(Window, EMouseButton::Left, Pos); break;
-	case WM_RBUTTONUP: Handler.OnMouseUp(Window, EMouseButton::Right, Pos); break;
-	case WM_MBUTTONUP: Handler.OnMouseUp(Window, EMouseButton::Middle, Pos); break;
-	case WM_XBUTTONUP: Handler.OnMouseUp(Window, GET_XBUTTON_WPARAM(Message.WParam) == XBUTTON1 ? EMouseButton::Thumb1 : EMouseButton::Thumb2, Pos); break;
-	case WM_LBUTTONDBLCLK: Handler.OnMouseDoubleClick(Window, EMouseButton::Left, Pos); break;
-	case WM_RBUTTONDBLCLK: Handler.OnMouseDoubleClick(Window, EMouseButton::Right, Pos); break;
-	case WM_MBUTTONDBLCLK: Handler.OnMouseDoubleClick(Window, EMouseButton::Middle, Pos); break;
-	case WM_XBUTTONDBLCLK: Handler.OnMouseDoubleClick(Window, GET_XBUTTON_WPARAM(Message.WParam) == XBUTTON1 ? EMouseButton::Thumb1 : EMouseButton::Thumb2, Pos); break;
-	case WM_MOUSEMOVE: Handler.OnMouseMove(Window, Pos); break;
-	case WM_MOUSELEAVE: Handler.OnMouseLeave(Window); break;
+	case WM_LBUTTONDOWN:
+		Handler.OnMouseDown(Window, EMouseButton::Left, Pos);
+		break;
+	case WM_RBUTTONDOWN:
+		Handler.OnMouseDown(Window, EMouseButton::Right, Pos);
+		break;
+	case WM_MBUTTONDOWN:
+		Handler.OnMouseDown(Window, EMouseButton::Middle, Pos);
+		break;
+	case WM_XBUTTONDOWN:
+		Handler.OnMouseDown(
+		    Window, GET_XBUTTON_WPARAM(Message.WParam) == XBUTTON1 ? EMouseButton::Thumb1 : EMouseButton::Thumb2, Pos);
+		break;
+	case WM_LBUTTONUP:
+		Handler.OnMouseUp(Window, EMouseButton::Left, Pos);
+		break;
+	case WM_RBUTTONUP:
+		Handler.OnMouseUp(Window, EMouseButton::Right, Pos);
+		break;
+	case WM_MBUTTONUP:
+		Handler.OnMouseUp(Window, EMouseButton::Middle, Pos);
+		break;
+	case WM_XBUTTONUP:
+		Handler.OnMouseUp(
+		    Window, GET_XBUTTON_WPARAM(Message.WParam) == XBUTTON1 ? EMouseButton::Thumb1 : EMouseButton::Thumb2, Pos);
+		break;
+	case WM_LBUTTONDBLCLK:
+		Handler.OnMouseDoubleClick(Window, EMouseButton::Left, Pos);
+		break;
+	case WM_RBUTTONDBLCLK:
+		Handler.OnMouseDoubleClick(Window, EMouseButton::Right, Pos);
+		break;
+	case WM_MBUTTONDBLCLK:
+		Handler.OnMouseDoubleClick(Window, EMouseButton::Middle, Pos);
+		break;
+	case WM_XBUTTONDBLCLK:
+		Handler.OnMouseDoubleClick(
+		    Window, GET_XBUTTON_WPARAM(Message.WParam) == XBUTTON1 ? EMouseButton::Thumb1 : EMouseButton::Thumb2, Pos);
+		break;
+	case WM_MOUSEMOVE:
+		Handler.OnMouseMove(Window, Pos);
+		break;
+	case WM_MOUSELEAVE:
+		Handler.OnMouseLeave(Window);
+		break;
 	case WM_MOUSEWHEEL:
 	case WM_MOUSEHWHEEL:
 	{
@@ -533,10 +598,20 @@ void FWindowsApplication::PollGameDeviceState(float DeltaTime)
 	IPlatformMessageHandler& Handler = *MessageHandler;
 
 	static constexpr WORD ButtonMasks[] = {
-		XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y,
-		XINPUT_GAMEPAD_LEFT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER, XINPUT_GAMEPAD_BACK, XINPUT_GAMEPAD_START,
-		XINPUT_GAMEPAD_LEFT_THUMB, XINPUT_GAMEPAD_RIGHT_THUMB,
-		XINPUT_GAMEPAD_DPAD_UP, XINPUT_GAMEPAD_DPAD_DOWN, XINPUT_GAMEPAD_DPAD_LEFT, XINPUT_GAMEPAD_DPAD_RIGHT,
+	    XINPUT_GAMEPAD_A,
+	    XINPUT_GAMEPAD_B,
+	    XINPUT_GAMEPAD_X,
+	    XINPUT_GAMEPAD_Y,
+	    XINPUT_GAMEPAD_LEFT_SHOULDER,
+	    XINPUT_GAMEPAD_RIGHT_SHOULDER,
+	    XINPUT_GAMEPAD_BACK,
+	    XINPUT_GAMEPAD_START,
+	    XINPUT_GAMEPAD_LEFT_THUMB,
+	    XINPUT_GAMEPAD_RIGHT_THUMB,
+	    XINPUT_GAMEPAD_DPAD_UP,
+	    XINPUT_GAMEPAD_DPAD_DOWN,
+	    XINPUT_GAMEPAD_DPAD_LEFT,
+	    XINPUT_GAMEPAD_DPAD_RIGHT,
 	};
 
 	for (int32 User = 0; User < static_cast<int32>(XUSER_MAX_COUNT); ++User)
@@ -569,8 +644,10 @@ void FWindowsApplication::PollGameDeviceState(float DeltaTime)
 		{
 			Pressed[I] = (G.wButtons & ButtonMasks[I]) != 0;
 		}
-		Pressed[static_cast<int32>(EGamepadButton::LeftTriggerThreshold)] = G.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
-		Pressed[static_cast<int32>(EGamepadButton::RightTriggerThreshold)] = G.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+		Pressed[static_cast<int32>(EGamepadButton::LeftTriggerThreshold)] =
+		    G.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+		Pressed[static_cast<int32>(EGamepadButton::RightTriggerThreshold)] =
+		    G.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
 
 		for (int32 I = 0; I < static_cast<int32>(EGamepadButton::Count); ++I)
 		{
@@ -593,12 +670,12 @@ void FWindowsApplication::PollGameDeviceState(float DeltaTime)
 		}
 
 		const float Axes[] = {
-			ApplyStickDeadZone(G.sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE),
-			ApplyStickDeadZone(G.sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE),
-			ApplyStickDeadZone(G.sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE),
-			ApplyStickDeadZone(G.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE),
-			ApplyTriggerThreshold(G.bLeftTrigger),
-			ApplyTriggerThreshold(G.bRightTrigger),
+		    ApplyStickDeadZone(G.sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE),
+		    ApplyStickDeadZone(G.sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE),
+		    ApplyStickDeadZone(G.sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE),
+		    ApplyStickDeadZone(G.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE),
+		    ApplyTriggerThreshold(G.bLeftTrigger),
+		    ApplyTriggerThreshold(G.bRightTrigger),
 		};
 		for (int32 I = 0; I < static_cast<int32>(EGamepadAxis::Count); ++I)
 		{
@@ -647,13 +724,13 @@ void FWindowsApplication::SetRawMouseInputEnabled(bool bEnable)
 	}
 	else
 	{
-		UE_LOG(LogApplicationCore, Warning, "RegisterRawInputDevices failed ({})", GetLastError());
+		GENESIS_LOG(LogApplicationCore, Warning, "RegisterRawInputDevices failed ({})", GetLastError());
 	}
 }
 
 FModifierKeysState FWindowsApplication::GetModifierKeys() const
 {
-	const auto Down = [](int Key) { return (GetKeyState(Key) & 0x8000) != 0; };
+	const TFunction<bool(int)> Down = [](int Key) { return (GetKeyState(Key) & 0x8000) != 0; };
 	FModifierKeysState State;
 	State.bLeftShift = Down(VK_LSHIFT);
 	State.bRightShift = Down(VK_RSHIFT);
@@ -672,7 +749,7 @@ void FWindowsApplication::GetDisplayMetrics(FDisplayMetrics& OutMetrics) const
 	OutMetrics.Monitors.clear();
 	EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR Monitor, HDC, LPRECT, LPARAM Param) -> BOOL
 	{
-		auto& Metrics = *reinterpret_cast<FDisplayMetrics*>(Param);
+		FDisplayMetrics& Metrics = *reinterpret_cast<FDisplayMetrics*>(Param);
 		MONITORINFOEXW Info{};
 		Info.cbSize = sizeof(Info);
 		if (GetMonitorInfoW(Monitor, &Info))
@@ -680,7 +757,8 @@ void FWindowsApplication::GetDisplayMetrics(FDisplayMetrics& OutMetrics) const
 			FMonitorInfo M;
 			M.Name = FString::FromWide(Info.szDevice);
 			M.bIsPrimary = (Info.dwFlags & MONITORINFOF_PRIMARY) != 0;
-			M.DisplayRect = FIntRect(Info.rcMonitor.left, Info.rcMonitor.top, Info.rcMonitor.right, Info.rcMonitor.bottom);
+			M.DisplayRect =
+			    FIntRect(Info.rcMonitor.left, Info.rcMonitor.top, Info.rcMonitor.right, Info.rcMonitor.bottom);
 			M.WorkArea = FIntRect(Info.rcWork.left, Info.rcWork.top, Info.rcWork.right, Info.rcWork.bottom);
 			UINT DpiX = 96, DpiY = 96;
 			GetDpiForMonitor(Monitor, MDT_EFFECTIVE_DPI, &DpiX, &DpiY);
@@ -692,7 +770,8 @@ void FWindowsApplication::GetDisplayMetrics(FDisplayMetrics& OutMetrics) const
 
 	const int32 X = GetSystemMetrics(SM_XVIRTUALSCREEN);
 	const int32 Y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-	OutMetrics.VirtualDesktopRect = FIntRect(X, Y, X + GetSystemMetrics(SM_CXVIRTUALSCREEN), Y + GetSystemMetrics(SM_CYVIRTUALSCREEN));
+	OutMetrics.VirtualDesktopRect =
+	    FIntRect(X, Y, X + GetSystemMetrics(SM_CXVIRTUALSCREEN), Y + GetSystemMetrics(SM_CYVIRTUALSCREEN));
 }
 
 void FWindowsApplication::ClipboardCopy(const FString& Text)
@@ -749,7 +828,7 @@ LRESULT CALLBACK FWindowsApplication::WndProc(HWND Hwnd, UINT Msg, WPARAM WParam
 {
 	if (Msg == WM_NCCREATE)
 	{
-		const auto* Create = reinterpret_cast<const CREATESTRUCTW*>(LParam);
+		const CREATESTRUCTW* Create = reinterpret_cast<const CREATESTRUCTW*>(LParam);
 		SetWindowLongPtrW(Hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(Create->lpCreateParams));
 		static_cast<FWindowsWindow*>(Create->lpCreateParams)->AttachHwnd(Hwnd);
 	}
@@ -771,7 +850,7 @@ LRESULT CALLBACK FWindowsApplication::WndProc(HWND Hwnd, UINT Msg, WPARAM WParam
 
 LRESULT FWindowsApplication::HitTest(FWindowsWindow& Window, LPARAM LParam)
 {
-	POINT P{ GET_X_LPARAM(LParam), GET_Y_LPARAM(LParam) };
+	POINT P{GET_X_LPARAM(LParam), GET_Y_LPARAM(LParam)};
 	ScreenToClient(Window.GetHwnd(), &P);
 	const FVector2 Pos(static_cast<float>(P.x), static_cast<float>(P.y));
 	const FIntPoint Size = Window.GetClientSize();
@@ -794,9 +873,11 @@ LRESULT FWindowsApplication::HitTest(FWindowsWindow& Window, LPARAM LParam)
 LRESULT FWindowsApplication::ProcessMessage(FWindowsWindow& Window, HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 {
 	IPlatformMessageHandler& Handler = *MessageHandler;
-	const auto Ref = [&Window]() { return TSharedRef<IPlatformWindow>(StaticCastSharedPtr<IPlatformWindow>(Window.shared_from_this())); };
+	const TFunction<TSharedRef<IPlatformWindow>()> Ref = [&Window]()
+	{ return TSharedRef<IPlatformWindow>(StaticCastSharedPtr<IPlatformWindow>(Window.shared_from_this())); };
 
-	if (Msg >= WM_IME_SETCONTEXT && Msg <= WM_IME_KEYUP || Msg == WM_IME_STARTCOMPOSITION || Msg == WM_IME_COMPOSITION || Msg == WM_IME_ENDCOMPOSITION)
+	if (Msg >= WM_IME_SETCONTEXT && Msg <= WM_IME_KEYUP || Msg == WM_IME_STARTCOMPOSITION ||
+	    Msg == WM_IME_COMPOSITION || Msg == WM_IME_ENDCOMPOSITION)
 	{
 		if (ProcessImeMessage(Window, Hwnd, Msg, WParam, LParam))
 		{
@@ -849,14 +930,23 @@ LRESULT FWindowsApplication::ProcessMessage(FWindowsWindow& Window, HWND Hwnd, U
 		Defer(Window, Msg, static_cast<WPARAM>(CodePoint), LParam);
 		return 0;
 	}
-	case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN: case WM_XBUTTONDOWN:
-	case WM_LBUTTONUP: case WM_RBUTTONUP: case WM_MBUTTONUP: case WM_XBUTTONUP:
-	case WM_LBUTTONDBLCLK: case WM_RBUTTONDBLCLK: case WM_MBUTTONDBLCLK: case WM_XBUTTONDBLCLK:
+	case WM_LBUTTONDOWN:
+	case WM_RBUTTONDOWN:
+	case WM_MBUTTONDOWN:
+	case WM_XBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_RBUTTONUP:
+	case WM_MBUTTONUP:
+	case WM_XBUTTONUP:
+	case WM_LBUTTONDBLCLK:
+	case WM_RBUTTONDBLCLK:
+	case WM_MBUTTONDBLCLK:
+	case WM_XBUTTONDBLCLK:
 	case WM_MOUSEMOVE:
 	{
 		if (Msg == WM_MOUSEMOVE && !Window.bTrackingMouse)
 		{
-			TRACKMOUSEEVENT Track{ sizeof(TRACKMOUSEEVENT), TME_LEAVE, Hwnd, 0 };
+			TRACKMOUSEEVENT Track{sizeof(TRACKMOUSEEVENT), TME_LEAVE, Hwnd, 0};
 			Window.bTrackingMouse = TrackMouseEvent(&Track) != FALSE;
 		}
 		Defer(Window, Msg, WParam, LParam, GET_X_LPARAM(LParam), GET_Y_LPARAM(LParam));
@@ -869,7 +959,7 @@ LRESULT FWindowsApplication::ProcessMessage(FWindowsWindow& Window, HWND Hwnd, U
 	case WM_MOUSEWHEEL:
 	case WM_MOUSEHWHEEL:
 	{
-		POINT P{ GET_X_LPARAM(LParam), GET_Y_LPARAM(LParam) }; // screen coordinates
+		POINT P{GET_X_LPARAM(LParam), GET_Y_LPARAM(LParam)}; // screen coordinates
 		ScreenToClient(Hwnd, &P);
 		Defer(Window, Msg, WParam, LParam, P.x, P.y);
 		return 0;
@@ -878,9 +968,10 @@ LRESULT FWindowsApplication::ProcessMessage(FWindowsWindow& Window, HWND Hwnd, U
 	{
 		RAWINPUT Raw{};
 		UINT Size = sizeof(Raw);
-		if (GetRawInputData(reinterpret_cast<HRAWINPUT>(LParam), RID_INPUT, &Raw, &Size, sizeof(RAWINPUTHEADER)) != static_cast<UINT>(-1)
-			&& Raw.header.dwType == RIM_TYPEMOUSE && !(Raw.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)
-			&& (Raw.data.mouse.lLastX != 0 || Raw.data.mouse.lLastY != 0))
+		if (GetRawInputData(reinterpret_cast<HRAWINPUT>(LParam), RID_INPUT, &Raw, &Size, sizeof(RAWINPUTHEADER)) !=
+		        static_cast<UINT>(-1) &&
+		    Raw.header.dwType == RIM_TYPEMOUSE && !(Raw.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) &&
+		    (Raw.data.mouse.lLastX != 0 || Raw.data.mouse.lLastY != 0))
 		{
 			Defer(Window, Msg, 0, 0, Raw.data.mouse.lLastX, Raw.data.mouse.lLastY);
 		}
@@ -937,14 +1028,15 @@ LRESULT FWindowsApplication::ProcessMessage(FWindowsWindow& Window, HWND Hwnd, U
 		// Windows suggests a rectangle that keeps the window's logical size.
 		const RECT* Suggested = reinterpret_cast<const RECT*>(LParam);
 		SetWindowPos(Hwnd, nullptr, Suggested->left, Suggested->top, Suggested->right - Suggested->left,
-			Suggested->bottom - Suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);
+		    Suggested->bottom - Suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);
 		return 0;
 	}
 	case WM_ACTIVATE:
 	{
 		const WORD State = LOWORD(WParam);
-		const EWindowActivation Activation = State == WA_INACTIVE ? EWindowActivation::Deactivate
-			: (State == WA_CLICKACTIVE ? EWindowActivation::ActivateByMouse : EWindowActivation::Activate);
+		const EWindowActivation Activation = State == WA_INACTIVE
+		    ? EWindowActivation::Deactivate
+		    : (State == WA_CLICKACTIVE ? EWindowActivation::ActivateByMouse : EWindowActivation::Activate);
 		Handler.OnWindowActivationChanged(Ref(), Activation);
 		break;
 	}
@@ -997,10 +1089,12 @@ LRESULT FWindowsApplication::ProcessMessage(FWindowsWindow& Window, HWND Hwnd, U
 			// monitor; inset by the frame so content stays on screen.
 			if (IsZoomed(Hwnd))
 			{
-				auto* Params = reinterpret_cast<NCCALCSIZE_PARAMS*>(LParam);
+				NCCALCSIZE_PARAMS* Params = reinterpret_cast<NCCALCSIZE_PARAMS*>(LParam);
 				const UINT Dpi = GetDpiForWindow(Hwnd);
-				const int32 FrameX = GetSystemMetricsForDpi(SM_CXFRAME, Dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, Dpi);
-				const int32 FrameY = GetSystemMetricsForDpi(SM_CYFRAME, Dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, Dpi);
+				const int32 FrameX =
+				    GetSystemMetricsForDpi(SM_CXFRAME, Dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, Dpi);
+				const int32 FrameY =
+				    GetSystemMetricsForDpi(SM_CYFRAME, Dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, Dpi);
 				Params->rgrc[0].left += FrameX;
 				Params->rgrc[0].right -= FrameX;
 				Params->rgrc[0].top += FrameY;

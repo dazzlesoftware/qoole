@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "Renderer/LandscapeRenderPlan.h"
+#include "Containers/ContainerAliases.h"
 #include <algorithm>
 #include <cmath>
 
@@ -47,7 +48,7 @@ static void LandscapeSamples(int first, int last, int step, std::vector<int>& ou
 
 // Zoom: what lines are scaled by after (FDraw::GetZoom); faces are not.
 void PlanLandscape(const Landscape& land, const Matrix44& trans, const FSceneViewVolume& clip, bool perspective,
-				   float winWidth, float zoom, float target, FLandscapeRenderPlan& plan)
+    float winWidth, float zoom, float target, FLandscapeRenderPlan& plan)
 {
 	plan.cxs = land.GetComponentsX();
 	plan.cys = land.GetComponentsY();
@@ -61,9 +62,10 @@ void PlanLandscape(const Landscape& land, const Matrix44& trans, const FSceneVie
 	trans.Transform(ay, Vector3d(0.0f, qs, 0.0f)).SubVector(o);
 	// Seen from the side (an orthographic view), only what crosses the
 	// screen counts: the depth axis is y.
-	const float quadView = zoom * (perspective ? std::max(ax.GetMag(), ay.GetMag())
-											   : std::max(sqrtf(ax.GetX() * ax.GetX() + ax.GetZ() * ax.GetZ()),
-														  sqrtf(ay.GetX() * ay.GetX() + ay.GetZ() * ay.GetZ())));
+	const float quadView = zoom *
+	    (perspective ? std::max(ax.GetMag(), ay.GetMag())
+	                 : std::max(sqrtf(ax.GetX() * ax.GetX() + ax.GetZ() * ax.GetZ()),
+	                       sqrtf(ay.GetX() * ay.GetX() + ay.GetZ() * ay.GetZ())));
 	const int orthoStep = LandscapeStep(quadView, target);
 	Vector3d corners[8];
 	for (int cy = 0; cy < plan.cys; cy++)
@@ -73,27 +75,25 @@ void PlanLandscape(const Landscape& land, const Matrix44& trans, const FSceneVie
 			float lo, hi;
 			land.GetComponentHeights(cx, cy, lo, hi);
 			const int x0 = cx * Landscape::ComponentQuads,
-					  x1 = std::min(x0 + Landscape::ComponentQuads, land.GetQuadsX());
+			          x1 = std::min(x0 + Landscape::ComponentQuads, land.GetQuadsX());
 			const int y0 = cy * Landscape::ComponentQuads,
-					  y1 = std::min(y0 + Landscape::ComponentQuads, land.GetQuadsY());
+			          y1 = std::min(y0 + Landscape::ComponentQuads, land.GetQuadsY());
 			const float lx0 = x0 * qs - land.GetSizeX() * 0.5f, lx1 = x1 * qs - land.GetSizeX() * 0.5f;
 			const float ly0 = y0 * qs - land.GetSizeY() * 0.5f, ly1 = y1 * qs - land.GetSizeY() * 0.5f;
 			Vector3d nearMin, nearMax;
 			for (int i = 0; i < 8; i++)
 			{
-				trans.Transform(corners[i],
-								Vector3d((i & 1) ? lx1 : lx0, (i & 2) ? ly1 : ly0, (i & 4) ? hi + 0.01f : lo - 0.01f));
+				trans.Transform(
+				    corners[i], Vector3d((i & 1) ? lx1 : lx0, (i & 2) ? ly1 : ly0, (i & 4) ? hi + 0.01f : lo - 0.01f));
 				if (i == 0)
 				{
 					nearMin = nearMax = corners[0];
 					continue;
 				}
 				nearMin.NewVector(std::min(nearMin.GetX(), corners[i].GetX()),
-								  std::min(nearMin.GetY(), corners[i].GetY()),
-								  std::min(nearMin.GetZ(), corners[i].GetZ()));
+				    std::min(nearMin.GetY(), corners[i].GetY()), std::min(nearMin.GetZ(), corners[i].GetZ()));
 				nearMax.NewVector(std::max(nearMax.GetX(), corners[i].GetX()),
-								  std::max(nearMax.GetY(), corners[i].GetY()),
-								  std::max(nearMax.GetZ(), corners[i].GetZ()));
+				    std::max(nearMax.GetY(), corners[i].GetY()), std::max(nearMax.GetZ(), corners[i].GetZ()));
 			}
 			const size_t c = (size_t)cy * plan.cxs + cx;
 			plan.bounds[c] = clip.BoundBox(corners);
@@ -117,9 +117,11 @@ void PlanLandscape(const Landscape& land, const Matrix44& trans, const FSceneVie
 // A grid point's height, or, on an edge it shares with a component drawn
 // coarser, where that component's edge passes (so no crack opens).
 static float LandscapeEdgeHeight(const Landscape& land, const FLandscapeRenderPlan& plan, int cx, int cy, int step,
-								 int x, int y, int x0, int x1, int y0, int y1)
+    int x, int y, int x0, int x1, int y0, int y1)
 {
-	const auto along = [&](int i, int first, int last, int coarse, bool horizontal, int fixed) {
+	const TFunction<float(int, int, int, int, bool, int)> along =
+	    [&](int i, int first, int last, int coarse, bool horizontal, int fixed)
+	{
 		const int a = std::min(first + ((i - first) / coarse) * coarse, last);
 		const int b = std::min(a + coarse, last);
 		if (b == a)
@@ -141,7 +143,7 @@ static float LandscapeEdgeHeight(const Landscape& land, const FLandscapeRenderPl
 	return land.GetHeight(x, y);
 }
 void BuildLandscapeComponent(const Landscape& land, const FLandscapeRenderPlan& plan, int cx, int cy,
-							 const Matrix44& transform, bool stitch, FLandscapeComponentMesh& out)
+    const Matrix44& transform, bool stitch, FLandscapeComponentMesh& out)
 {
 	out.X.clear();
 	out.Y.clear();
@@ -159,9 +161,9 @@ void BuildLandscapeComponent(const Landscape& land, const FLandscapeRenderPlan& 
 		{
 			const int x = out.X[i], y = out.Y[j];
 			const float h =
-				stitch ? LandscapeEdgeHeight(land, plan, cx, cy, step, x, y, x0, x1, y0, y1) : land.GetHeight(x, y);
+			    stitch ? LandscapeEdgeHeight(land, plan, cx, cy, step, x, y, x0, x1, y0, y1) : land.GetHeight(x, y);
 			transform.Transform(out.Points[j * out.X.size() + i],
-								Vector3d(x * land.GetQuadSize() - land.GetSizeX() * 0.5f,
-										 y * land.GetQuadSize() - land.GetSizeY() * 0.5f, h));
+			    Vector3d(x * land.GetQuadSize() - land.GetSizeX() * 0.5f,
+			        y * land.GetQuadSize() - land.GetSizeY() * 0.5f, h));
 		}
 }

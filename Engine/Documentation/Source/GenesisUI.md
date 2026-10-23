@@ -734,7 +734,7 @@ with C++20 at warning level 4):
 
 | Module | Contents |
 |---|---|
-| `Core` | `FString` (UTF-8, `std::u8string`), `FName`, container and smart-pointer aliases, `check`/`ensure`, `UE_LOG` logging, `TDelegate`/`TMulticastDelegate`, 2D math (`FVector2`, `FColor`/`FLinearColor`, `FMargin`, `FRect`, `FTransform2D`), time/file/path helpers. (Merged with milestone 1's `Core`, §14.4.) |
+| `Core` | `FString` (UTF-8, `std::u8string`), `FName`, container and smart-pointer aliases, `check`/`ensure`, `GENESIS_LOG` logging, `TDelegate`/`TMulticastDelegate`, 2D math (`FVector2`, `FColor`/`FLinearColor`, `FMargin`, `FRect`, `FTransform2D`), time/file/path helpers. (Merged with milestone 1's `Core`, §14.4.) |
 | `ApplicationCore` | `IPlatformApplication`, `IPlatformWindow` + `FWindowDesc`, `IPlatformMessageHandler`, `ICursor`, clipboard, display metrics. Win32: per-monitor DPI v2, `WM_DPICHANGED`, deferred input, raw mouse, XInput, OS-decorated and borderless windows (UI hit-testing for title bar and resize edges, DWM shadow kept). `FNullPlatformApplication` for headless tests. |
 | `RHI` | Device + queue, swapchain per window, upload/default buffers, 2D textures and render targets, pipelines from precompiled shaders, command list. D3D12 and Vulkan backends, chosen at startup. |
 | `SlateCore` | Draw elements (`FSlateWindowElementList`: Box with image/9-slice/tiling/tint, RoundedBox, Text, Lines, CustomVerts, Viewport), layers, scissor clip stack, `FSlateTextureAtlas`, and the font system (`FSlateFontCache`: FreeType + HarfBuzz, font fallback, shaping, measurement, glyph atlas). |
@@ -1128,7 +1128,7 @@ What became of each MFC surface of §14.1:
 | Texture browser | Not ported: the built-in game has no textures yet. Faces keep their texture names, which the properties panel edits as text. |
 | Compile dialog, colors page | Dropped with the old games' compile tools; colors come from the Genesis UI style. |
 
-`GenesisEditor -selftest=<dir>` now also builds a room by hollowing a cube,
+`GenesisEditorTest -selftest=<dir>` now also builds a room by hollowing a cube,
 cuts a doorway in it, sets a light's style and brightness and shows its
 properties, opens the Object menu, rotates the pyramid and clips the
 sphere with the mouse, shows the column's vertices, groups the column and
@@ -1182,7 +1182,7 @@ More screenshots: [the Object menu](Images/genesis-ui-m6/menu-object-d3d12-150.p
   with the mouse in a headless view; the properties of map objects and the
   property grid editing them; and brush editing, including a concave
   result being refused.
-- `GenesisEditor -selftest` ran in Debug (with the D3D12 debug layer) and
+- `GenesisEditorTest -selftest` ran in Debug (with the D3D12 debug layer) and
   Release on D3D12 and Vulkan and reported nothing; Vulkan ran without
   validation, which is not installed on this machine. The capture now waits
   for the desktop compositor: Release Vulkan was fast enough to be
@@ -1242,5 +1242,5 @@ scripts send no input to the rest of the desktop, but the windows are real
 and screenshots copy the screen, so the desktop has to be left alone while
 they run.
 
-`GenesisEditor -selftest=<dir>` stays the end-to-end check of the editor
+`GenesisEditorTest -selftest=<dir>` stays the end-to-end check of the editor
 itself; `EngineTests` stays the headless suite.

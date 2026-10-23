@@ -4,6 +4,8 @@
 // unless a transaction is open; they record FMapEdits (MapEdits.h).
 
 #include "MapDocument.h"
+#include "Containers/ContainerAliases.h"
+#include "Internationalization/TextLocalization.h"
 #include "MapPackage.h"
 #include "MapAssetLibrary.h"
 #include "AssetPackage.h"
@@ -44,7 +46,7 @@ namespace
 	{
 		return Obj.HasBrush() || Obj.CountBrushes() > 0;
 	}
-}
+} // namespace
 
 void FMapDocument::MoveObjects(const TArray<Object*>& Objects, const Vector3d& Delta)
 {
@@ -71,7 +73,7 @@ void FMapDocument::MoveObjects(const TArray<Object*>& Objects, const Vector3d& D
 		}
 		const FString& Id = Obj->GetIdentity().Actor;
 		if (std::none_of(NativeMoves.begin(), NativeMoves.end(),
-			[&](const auto& Move) { return Move.first == Id; }))
+		        [&](const TArray<std::pair<FString, FTransform3D>>::value_type& Move) { return Move.first == Id; }))
 		{
 			NativeMoves.emplace_back(Id, Transform);
 		}
@@ -79,7 +81,7 @@ void FMapDocument::MoveObjects(const TArray<Object*>& Objects, const Vector3d& D
 	if (bNativeOnly)
 	{
 		const bool bOwn = BeginOwnTransaction("Move");
-		for (const auto& Move : NativeMoves)
+		for (const std::pair<FString, FTransform3D>& Move : NativeMoves)
 		{
 			SetActorTransform(Move.first, Move.second, "Move");
 		}
@@ -99,7 +101,7 @@ void FMapDocument::MoveObjects(const TArray<Object*>& Objects, const Vector3d& D
 	}
 	else
 	{
-		auto Edit = std::make_unique<FMoveEdit>();
+		TUniquePtr<FMoveEdit> Edit = std::make_unique<FMoveEdit>();
 		Edit->Objects = Objects;
 		Edit->Delta = Delta;
 		Record(std::move(Edit), EMapChange::Geometry);
@@ -119,18 +121,29 @@ void FMapDocument::AddObjects(const TArray<Object*>& NewObjects)
 	// Copies used by undo preserve IDs. A caller inserting such a copy must
 	// not introduce aliases into the live world (including nested children).
 	TSet<std::string> Ids;
-	const auto Visit = [&](auto&& Self, Object& Obj, bool bIncoming) -> void
+	TFunction<void(Object&, bool)> Visit = [&](Object& Obj, bool bIncoming)
 	{
-		auto Id = Obj.GetIdentity();
-		const auto Conflicts = [&]() { return !Id.IsValid() || Ids.contains(Id.Actor.ToStdString()) || Ids.contains(Id.Transform.ToStdString()) || Ids.contains(Id.Payload.ToStdString()) || Ids.contains(Id.Entity.ToStdString()); };
-		if (bIncoming && Conflicts()) { Obj.RegenerateIdentity(false); Id = Obj.GetIdentity(); }
-		for (const auto* Value : { &Id.Actor, &Id.Transform, &Id.Payload, &Id.Entity }) Ids.insert(Value->ToStdString());
-		for (int I = 0; I < Obj.GetNumChildren(); ++I) Self(Self, Obj.GetChild(I), bIncoming);
+		FActorIdentity Id = Obj.GetIdentity();
+		const TFunction<bool()> Conflicts = [&]()
+		{
+			return !Id.IsValid() || Ids.contains(Id.Actor.ToStdString()) || Ids.contains(Id.Transform.ToStdString()) ||
+			    Ids.contains(Id.Payload.ToStdString()) || Ids.contains(Id.Entity.ToStdString());
+		};
+		if (bIncoming && Conflicts())
+		{
+			Obj.RegenerateIdentity(false);
+			Id = Obj.GetIdentity();
+		}
+		for (const FString* Value : {&Id.Actor, &Id.Transform, &Id.Payload, &Id.Entity})
+			Ids.insert(Value->ToStdString());
+		for (int I = 0; I < Obj.GetNumChildren(); ++I)
+			Visit(Obj.GetChild(I), bIncoming);
 	};
-	Visit(Visit, *Root, false);
-	for (Object* Obj : NewObjects) Visit(Visit, *Obj, true);
+	Visit(*Root, false);
+	for (Object* Obj : NewObjects)
+		Visit(*Obj, true);
 	const bool bOwn = BeginOwnTransaction(NewObjects.size() == 1 ? "Add Object" : "Add Objects");
-	auto Edit = std::make_unique<FAddEdit>();
+	TUniquePtr<FAddEdit> Edit = std::make_unique<FAddEdit>();
 	Edit->Objects = NewObjects;
 	Edit->Parent = Scope;
 	Edit->Redo(*this);
@@ -161,7 +174,7 @@ void FMapDocument::DeleteObjects(const TArray<Object*>& Objects)
 	TArray<Object*> Remaining = GetSelection();
 	std::erase_if(Remaining, [&](Object* Obj) { return std::find(Valid.begin(), Valid.end(), Obj) != Valid.end(); });
 	SetSelection(Remaining);
-	auto Edit = std::make_unique<FDeleteEdit>();
+	TUniquePtr<FDeleteEdit> Edit = std::make_unique<FDeleteEdit>();
 	Edit->Objects = Valid;
 	Edit->Redo(*this);
 	Record(std::move(Edit), EMapChange::Structure);
@@ -205,7 +218,8 @@ TArray<Object*> FMapDocument::DuplicateObjects(const TArray<Object*>& Objects, c
 	return Copies;
 }
 
-Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Position, FString* OutError, const FString& ExpectedId)
+Object* FMapDocument::AddPrefab(
+    const FString& PrefabPath, const Vector3d& Position, FString* OutError, const FString& ExpectedId)
 {
 	Object* Prefab = nullptr;
 	FString Error;
@@ -217,13 +231,17 @@ Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Posit
 	else
 	{
 		Prefab = new Object;
-		if (!Prefab->LoadObjFile(PrefabPath.ToAnsi().c_str())) { delete Prefab; Prefab = nullptr; }
+		if (!Prefab->LoadObjFile(PrefabPath.ToAnsi().c_str()))
+		{
+			delete Prefab;
+			Prefab = nullptr;
+		}
 	}
 	if (!Prefab)
 	{
 		if (OutError)
 		{
-			*OutError = Error.IsEmpty() ? FString::Format("{} could not be loaded.", PrefabPath) : Error;
+			*OutError = Error.IsEmpty() ? FTextLocalization::Format("{} could not be loaded.", PrefabPath) : Error;
 		}
 		return nullptr;
 	}
@@ -233,7 +251,7 @@ Object* FMapDocument::AddPrefab(const FString& PrefabPath, const Vector3d& Posit
 	Prefab->SetPosition(Offset);
 	const FString Name = FPaths::GetCleanFilename(PrefabPath);
 	const bool bOwn = BeginOwnTransaction(FString::Format("Add {}", Name.Left(Name.Len() - 4)));
-	AddObjects({ Prefab });
+	AddObjects({Prefab});
 	if (bOwn)
 	{
 		EndTransaction();
@@ -253,7 +271,7 @@ Object* FMapDocument::AddMesh(const FString& MeshName, const Vector3d& Position)
 	Obj->SetObjName(Mesh->GetName());
 	Obj->SetPosition(Position);
 	const bool bOwn = BeginOwnTransaction(FString::Format("Add {}", Mesh->GetName()));
-	AddObjects({ Obj });
+	AddObjects({Obj});
 	if (bOwn)
 	{
 		EndTransaction();
@@ -263,26 +281,32 @@ Object* FMapDocument::AddMesh(const FString& MeshName, const Vector3d& Position)
 
 Object* FMapDocument::AddMeshAsset(const FAssetReference& Ref, const Vector3d& Position, FString& Error)
 {
-	const auto Asset=FMapAssetLibrary::LoadMesh(Ref,{},Error); if(!Asset) return nullptr;
-	auto* Obj=new Object; Obj->SetMeshAsset(Asset); Obj->SetObjName(Asset->Data.Mesh->GetName()); Obj->SetPosition(Position);
-	AddObjects({Obj}); return Obj;
+	const std::shared_ptr<const FLoadedMeshAsset> Asset = FMapAssetLibrary::LoadMesh(Ref, {}, Error);
+	if (!Asset)
+		return nullptr;
+	Object* Obj = new Object;
+	Obj->SetMeshAsset(Asset);
+	Obj->SetObjName(Asset->Data.Mesh->GetName());
+	Obj->SetPosition(Position);
+	AddObjects({Obj});
+	return Obj;
 }
 
 bool FMapDocument::SetMeshMaterial(Object& Obj, const FAssetReference& Ref, FString& Error, int32 Slot)
 {
 	if (!Obj.GetMeshAsset())
 	{
-		Error = "Save this mesh as a native mesh asset and place it before assigning a material.";
+		Error = GENESIS_TEXT("Save this mesh as a native mesh asset and place it before assigning a material.");
 		return false;
 	}
-	const auto& Old = *Obj.GetMeshAsset();
+	const FLoadedMeshAsset& Old = *Obj.GetMeshAsset();
 	if (Slot < 0 || Slot >= Old.Data.GetNumMaterials())
 	{
-		Error = "Material slot outside mesh.";
+		Error = GENESIS_TEXT("Material slot outside mesh.");
 		return false;
 	}
-	auto Overrides = Old.AdditionalOverrides;
-	auto First = Old.MaterialOverride;
+	TArray<FAssetReference> Overrides = Old.AdditionalOverrides;
+	FAssetReference First = Old.MaterialOverride;
 	if (Slot == 0)
 		First = Ref;
 	else
@@ -290,7 +314,8 @@ bool FMapDocument::SetMeshMaterial(Object& Obj, const FAssetReference& Ref, FStr
 		Overrides.resize(Old.Data.AdditionalMaterials.size());
 		Overrides[Slot - 1] = Ref;
 	}
-	const auto Asset = FMapAssetLibrary::LoadMesh(Old.Source, First, Error, Overrides);
+	const std::shared_ptr<const FLoadedMeshAsset> Asset =
+	    FMapAssetLibrary::LoadMesh(Old.Source, First, Error, Overrides);
 	if (!Asset)
 		return false;
 	const bool Own = BeginOwnTransaction("Assign Material");
@@ -307,7 +332,8 @@ Object* FMapDocument::AddLandscape(int32 QuadsX, int32 QuadsY, float QuadSize, c
 	return AddLandscape(std::make_shared<Landscape>(QuadsX, QuadsY, QuadSize), Position);
 }
 
-Object* FMapDocument::AddLandscape(std::shared_ptr<const Landscape> Land, const Vector3d& Position, const FString& Description)
+Object* FMapDocument::AddLandscape(
+    std::shared_ptr<const Landscape> Land, const Vector3d& Position, const FString& Description)
 {
 	if (!Land)
 	{
@@ -318,7 +344,7 @@ Object* FMapDocument::AddLandscape(std::shared_ptr<const Landscape> Land, const 
 	Obj->SetObjName("Landscape");
 	Obj->SetPosition(Position);
 	const bool bOwn = BeginOwnTransaction(Description);
-	AddObjects({ Obj });
+	AddObjects({Obj});
 	if (bOwn)
 	{
 		EndTransaction();
@@ -338,7 +364,7 @@ Object* FMapDocument::AddFoliage(std::shared_ptr<const Foliage> NewFoliage, cons
 	const bool bOwn = BeginOwnTransaction(Description);
 	// Made by painting: what was selected stays so.
 	const TArray<Object*> Selected = GetSelection();
-	AddObjects({ Obj });
+	AddObjects({Obj});
 	SetSelection(Selected);
 	if (bOwn)
 	{
@@ -354,7 +380,7 @@ void FMapDocument::SetFoliage(Object& Obj, std::shared_ptr<const Foliage> NewFol
 		return;
 	}
 	const bool bOwn = BeginOwnTransaction(Description);
-	CaptureObjects({ &Obj });
+	CaptureObjects({&Obj});
 	Obj.SetFoliage(std::move(NewFoliage));
 	if (Obj.GetParentPtr())
 	{
@@ -374,7 +400,7 @@ void FMapDocument::SetLandscape(Object& Obj, std::shared_ptr<const Landscape> Ne
 		return;
 	}
 	const bool bOwn = BeginOwnTransaction(Description);
-	CaptureObjects({ &Obj });
+	CaptureObjects({&Obj});
 	Obj.SetLandscape(std::move(NewLandscape));
 	if (Obj.GetParentPtr())
 	{
@@ -393,7 +419,7 @@ Object* FMapDocument::AddEntity(const FString& ClassName, const Vector3d& Positi
 	Obj->SetEntity(new Entity(ClassName.ToAnsi().c_str()));
 	Obj->SetPosition(Position);
 	const bool bOwn = BeginOwnTransaction(FString::Format("Add {}", ClassName));
-	AddObjects({ Obj });
+	AddObjects({Obj});
 	if (bOwn)
 	{
 		EndTransaction();
@@ -422,8 +448,10 @@ bool FMapDocument::SavePrefab(const TArray<Object*>& Objects, const FString& Pre
 			bFirst = false;
 			continue;
 		}
-		Min.NewVector(FMath::Min(Min.GetX(), ObjMin.GetX()), FMath::Min(Min.GetY(), ObjMin.GetY()), FMath::Min(Min.GetZ(), ObjMin.GetZ()));
-		Max.NewVector(FMath::Max(Max.GetX(), ObjMax.GetX()), FMath::Max(Max.GetY(), ObjMax.GetY()), FMath::Max(Max.GetZ(), ObjMax.GetZ()));
+		Min.NewVector(FMath::Min(Min.GetX(), ObjMin.GetX()), FMath::Min(Min.GetY(), ObjMin.GetY()),
+		    FMath::Min(Min.GetZ(), ObjMin.GetZ()));
+		Max.NewVector(FMath::Max(Max.GetX(), ObjMax.GetX()), FMath::Max(Max.GetY(), ObjMax.GetY()),
+		    FMath::Max(Max.GetZ(), ObjMax.GetZ()));
 	}
 	Vector3d Center(Min);
 	Center.AddVector(Max).MultVector(-0.5f);
@@ -446,17 +474,26 @@ bool FMapDocument::SavePrefab(const TArray<Object*>& Objects, const FString& Pre
 		if (FFileHelper::FileExists(PrefabPath))
 		{
 			FAssetPackageMetadata Existing;
-			if (!FAssetPackageStore::ReadMetadata(PrefabPath, Existing, OutError)) return false;
-			if (Existing.Kind != EAssetPackageKind::Asset || Existing.Schema != "Genesis.Prefab" || (Existing.SchemaVersion < 1 || Existing.SchemaVersion > 3))
-			{ OutError = "Choose a different filename: the existing package is not a supported prefab asset."; return false; }
+			if (!FAssetPackageStore::ReadMetadata(PrefabPath, Existing, OutError))
+				return false;
+			if (Existing.Kind != EAssetPackageKind::Asset || Existing.Schema != "Genesis.Prefab" ||
+			    (Existing.SchemaVersion < 1 || Existing.SchemaVersion > 3))
+			{
+				OutError = "Choose a different filename: the existing package is not a supported prefab asset.";
+				return false;
+			}
 			Id = Existing.Id;
 		}
 		return FMapPackage::Save(PrefabPath, Prefab, Id, OutError, true);
 	}
-	if(FMapAssetLibrary::HasNativeAssets(Prefab)) { OutError="Save as .asset to preserve native asset references."; return false; }
+	if (FMapAssetLibrary::HasNativeAssets(Prefab))
+	{
+		OutError = "Save as .asset to preserve native asset references.";
+		return false;
+	}
 	if (!Prefab.SaveObjFile(PrefabPath.ToAnsi().c_str()))
 	{
-		OutError = FString::Format("{} could not be written.", PrefabPath);
+		OutError = FTextLocalization::Format("{} could not be written.", PrefabPath);
 		return false;
 	}
 	return true;
@@ -479,7 +516,8 @@ void FMapDocument::CaptureObjects(const TArray<Object*>& Objects)
 	}
 }
 
-void FMapDocument::TransformObjects(const TArray<Object*>& Objects, const Matrix44& Transform, bool bMirror, const FString& Description)
+void FMapDocument::TransformObjects(
+    const TArray<Object*>& Objects, const Matrix44& Transform, bool bMirror, const FString& Description)
 {
 	const TArray<Object*> Targets = InScope(Objects, *Scope);
 	if (Targets.empty())
@@ -504,9 +542,12 @@ void FMapDocument::RotateObjects(const TArray<Object*>& Objects, int32 Axis, flo
 {
 	Matrix44 Rotation;
 	const float Radians = DEG2RAD(Degrees);
-	if (Axis == 0) Rotation.SetRotateX(Radians);
-	else if (Axis == 1) Rotation.SetRotateY(Radians);
-	else Rotation.SetRotateZ(Radians);
+	if (Axis == 0)
+		Rotation.SetRotateX(Radians);
+	else if (Axis == 1)
+		Rotation.SetRotateY(Radians);
+	else
+		Rotation.SetRotateZ(Radians);
 	TransformObjects(Objects, AboutPivot(Rotation, Pivot), false, "Rotate");
 }
 
@@ -521,7 +562,7 @@ void FMapDocument::FlipObjects(const TArray<Object*>& Objects, int32 Axis, const
 {
 	Matrix44 Flip;
 	Flip.SetScale(Vector3d(Axis == 0 ? -1.0f : 1.0f, Axis == 1 ? -1.0f : 1.0f, Axis == 2 ? -1.0f : 1.0f));
-	static const char* const Names[3] = { "Flip X", "Flip Y", "Flip Z" };
+	static const char* const Names[3] = {"Flip X", "Flip Y", "Flip Z"};
 	TransformObjects(Objects, AboutPivot(Flip, Pivot), true, Names[FMath::Clamp(Axis, 0, 2)]);
 }
 
@@ -599,7 +640,7 @@ bool FMapDocument::SubtractSelection()
 		{
 			continue;
 		}
-		CaptureObjects({ Obj });
+		CaptureObjects({Obj});
 		if (Obj->CSGSubtract(CutterList))
 		{
 			Modified.push_back(Obj);
@@ -620,7 +661,7 @@ bool FMapDocument::SubtractSelection()
 	}
 	if (!Pieces.empty())
 	{
-		auto Added = std::make_unique<FAddEdit>(); // already in the scope
+		TUniquePtr<FAddEdit> Added = std::make_unique<FAddEdit>(); // already in the scope
 		Added->Objects = Pieces;
 		Added->Parent = Scope;
 		Record(std::move(Added), EMapChange::Structure);
@@ -648,7 +689,7 @@ bool FMapDocument::IntersectSelection()
 	}
 	BeginTransaction("Intersect");
 	DeleteObjects(Selection);
-	AddObjects({ Common });
+	AddObjects({Common});
 	EndTransaction();
 	return true;
 }
@@ -680,8 +721,9 @@ bool FMapDocument::ClipObjects(const TArray<Object*>& Objects, const Plane& Clip
 	for (Object* Obj : Targets)
 	{
 		Object* Other = Mode == EMapClip::Split ? new Object(*Obj) : nullptr;
-		if (Other) Other->RegenerateIdentity();
-		CaptureObjects({ Obj });
+		if (Other)
+			Other->RegenerateIdentity();
+		CaptureObjects({Obj});
 		const bool bClipped = Obj->PlaneClip(Keep);
 		if (!bClipped)
 		{
@@ -747,8 +789,8 @@ Object* FMapDocument::GroupObjects(const TArray<Object*>& Objects)
 	Object* Group = new Object;
 	Group->TransSpace::SetPosition(Center);
 	{
-		auto Edit = std::make_unique<FAddEdit>();
-		Edit->Objects = { Group };
+		TUniquePtr<FAddEdit> Edit = std::make_unique<FAddEdit>();
+		Edit->Objects = {Group};
 		Edit->Parent = Scope;
 		Edit->Redo(*this);
 		Record(std::move(Edit), EMapChange::Structure);
@@ -759,13 +801,13 @@ Object* FMapDocument::GroupObjects(const TArray<Object*>& Objects)
 	Vector3d Back(Center);
 	Back.MultVector(-1.0f);
 	MoveBy(Members, Back);
-	auto Reparent = std::make_unique<FReparentEdit>();
+	TUniquePtr<FReparentEdit> Reparent = std::make_unique<FReparentEdit>();
 	Reparent->Objects = Members;
 	Reparent->NewParent = Group;
 	Reparent->Redo(*this);
 	Record(std::move(Reparent), EMapChange::Structure);
 	Group->SetBoundRadius();
-	SetSelection({ Group });
+	SetSelection({Group});
 	EndTransaction();
 	return Group;
 }
@@ -802,7 +844,7 @@ bool FMapDocument::UngroupObjects(const TArray<Object*>& Groups)
 		{
 			Member->Transform(GroupTransform, true);
 		}
-		auto Reparent = std::make_unique<FReparentEdit>();
+		TUniquePtr<FReparentEdit> Reparent = std::make_unique<FReparentEdit>();
 		Reparent->Objects = Members;
 		Reparent->NewParent = Scope;
 		Reparent->Redo(*this);
@@ -824,7 +866,7 @@ void FMapDocument::SetObjectName(Object& Obj, const FString& Name)
 		return;
 	}
 	const bool bOwn = BeginOwnTransaction("Rename");
-	CaptureObjects({ &Obj });
+	CaptureObjects({&Obj});
 	Obj.SetObjName(Name.ToAnsi().c_str());
 	Changed(EMapChange::Geometry);
 	if (bOwn)
@@ -887,7 +929,7 @@ namespace
 			ApplyTexture(Obj.GetChild(Index), Name);
 		}
 	}
-}
+} // namespace
 
 void FMapDocument::SetTexture(const TArray<Object*>& Objects, const FString& TextureName)
 {
@@ -923,7 +965,7 @@ void FMapDocument::BeginBrushEdit(Object& Brush, const FString& Description)
 {
 	check(Brush.HasBrush() && !BrushEditTarget);
 	BeginTransaction(Description);
-	CaptureObjects({ &Brush });
+	CaptureObjects({&Brush});
 	BrushEditTarget = &Brush;
 	bBrushEditStarted = false;
 }
@@ -941,7 +983,7 @@ namespace
 		Inverse.Transform(Moved);
 		return Moved.SubVector(Origin);
 	}
-}
+} // namespace
 
 void FMapDocument::MoveBrushVertex(int32 VertexIndex, const Vector3d& Delta)
 {
@@ -1024,7 +1066,7 @@ namespace
 		OutFront.NewVector(cy * sp * sr - sy * cr, sy * sp * sr + cy * cr, cp * sr);
 		OutTop.NewVector(cy * sp * cr + sy * sr, sy * sp * cr - cy * sr, cp * cr);
 	}
-}
+} // namespace
 
 Vector3d FMapDocument::GetMeshRotation(const Object& Obj)
 {
@@ -1044,7 +1086,7 @@ Vector3d FMapDocument::GetMeshRotation(const Object& Obj)
 		YawRad = std::atan2(-Y.GetX(), Y.GetY());
 		RollRad = 0.0f;
 	}
-	const auto Clean = [](float Radians)
+	const TFunction<float(float)> Clean = [](float Radians)
 	{
 		const float Degrees = RAD2DEG(Radians);
 		return std::fabs(Degrees) < 0.0005f ? 0.0f : Degrees;
@@ -1082,8 +1124,7 @@ bool FMapDocument::ApplyActorTransform(const FString& ActorId, const FTransform3
 	return true;
 }
 
-bool FMapDocument::SetActorTransform(const FString& ActorId, const FTransform3D& Transform,
-	const FString& Description)
+bool FMapDocument::SetActorTransform(const FString& ActorId, const FTransform3D& Transform, const FString& Description)
 {
 	FTransform3D Before;
 	if (!Transform.IsValid() || !GetActorTransform(ActorId, Before))
@@ -1095,8 +1136,8 @@ bool FMapDocument::SetActorTransform(const FString& ActorId, const FTransform3D&
 		return true;
 	}
 	const bool bOwn = BeginOwnTransaction(Description);
-	FActorTransformEdit* Last = Pending->Edits.empty() ? nullptr :
-		dynamic_cast<FActorTransformEdit*>(Pending->Edits.back().get());
+	FActorTransformEdit* Last =
+	    Pending->Edits.empty() ? nullptr : dynamic_cast<FActorTransformEdit*>(Pending->Edits.back().get());
 	ApplyActorTransform(ActorId, Transform);
 	if (Last && Last->ActorId == ActorId)
 	{
@@ -1105,7 +1146,7 @@ bool FMapDocument::SetActorTransform(const FString& ActorId, const FTransform3D&
 	}
 	else
 	{
-		auto Edit = std::make_unique<FActorTransformEdit>();
+		TUniquePtr<FActorTransformEdit> Edit = std::make_unique<FActorTransformEdit>();
 		Edit->ActorId = ActorId;
 		Edit->Before = Before;
 		Edit->After = Transform;
@@ -1140,7 +1181,7 @@ void FMapDocument::SetMeshScale(Object& Obj, const Vector3d& Scale)
 	{
 		return;
 	}
-	const auto Safe = [](float V) { return std::fabs(V) < 1e-3f ? (V < 0.0f ? -1e-3f : 1e-3f) : V; };
+	const TFunction<float(float)> Safe = [](float V) { return std::fabs(V) < 1e-3f ? (V < 0.0f ? -1e-3f : 1e-3f) : V; };
 	Transform.Scale = Vector3d(Safe(Scale.GetX()), Safe(Scale.GetY()), Safe(Scale.GetZ()));
 	SetActorTransform(Obj.GetIdentity().Actor, Transform, "Scale");
 }
@@ -1153,7 +1194,7 @@ void FMapDocument::SetMesh(Object& Obj, const FString& MeshName)
 		return;
 	}
 	const bool bOwn = BeginOwnTransaction("Change Static Mesh");
-	CaptureObjects({ &Obj });
+	CaptureObjects({&Obj});
 	Obj.SetMesh(Mesh);
 	if (Obj.GetParentPtr())
 	{
@@ -1169,21 +1210,23 @@ void FMapDocument::SetMesh(Object& Obj, const FString& MeshName)
 bool FMapDocument::ReloadMeshAssets(const FAssetReference* Filter, FString& Error)
 {
 	TArray<std::pair<Object*, std::shared_ptr<const FLoadedMeshAsset>>> Updates;
-	const auto Visit = [&](auto&& Self, Object& Obj) -> bool {
-		if (const auto Old = Obj.GetMeshAsset(); Old && (!Filter || Old->Source.Id == Filter->Id))
+	TFunction<bool(Object&)> Visit = [&](Object& Obj)
+	{
+		if (const std::shared_ptr<const FLoadedMeshAsset> Old = Obj.GetMeshAsset();
+		    Old && (!Filter || Old->Source.Id == Filter->Id))
 		{
-			const auto Loaded =
-				FMapAssetLibrary::LoadMesh(Old->Source, Old->MaterialOverride, Error, Old->AdditionalOverrides);
+			const std::shared_ptr<const FLoadedMeshAsset> Loaded =
+			    FMapAssetLibrary::LoadMesh(Old->Source, Old->MaterialOverride, Error, Old->AdditionalOverrides);
 			if (!Loaded)
 				return false;
 			Updates.push_back({&Obj, Loaded});
 		}
 		for (int I = 0; I < Obj.GetNumChildren(); ++I)
-			if (!Self(Self, Obj.GetChild(I)))
+			if (!Visit(Obj.GetChild(I)))
 				return false;
 		return true;
 	};
-	if (!Visit(Visit, GetRoot()))
+	if (!Visit(GetRoot()))
 		return false;
 	if (Updates.empty())
 	{
@@ -1192,10 +1235,10 @@ bool FMapDocument::ReloadMeshAssets(const FAssetReference* Filter, FString& Erro
 	}
 	const bool Own = BeginOwnTransaction(Filter ? "Refresh Mesh Asset" : "Refresh Render Assets");
 	TArray<Object*> Objects;
-	for (const auto& Update : Updates)
+	for (const std::pair<Object*, std::shared_ptr<const FLoadedMeshAsset>>& Update : Updates)
 		Objects.push_back(Update.first);
 	CaptureObjects(Objects);
-	for (const auto& Update : Updates)
+	for (const std::pair<Object*, std::shared_ptr<const FLoadedMeshAsset>>& Update : Updates)
 		Update.first->SetMeshAsset(Update.second);
 	Changed(EMapChange::Geometry);
 	if (Own)
@@ -1204,8 +1247,16 @@ bool FMapDocument::ReloadMeshAssets(const FAssetReference* Filter, FString& Erro
 	return true;
 }
 
-bool FMapDocument::ReloadMeshAsset(const FAssetReference& Ref,FString& Error) {
- if(Ref.Id.IsEmpty()) { Error="A mesh identity is required to refresh instances."; return false; }
- return ReloadMeshAssets(&Ref,Error);
+bool FMapDocument::ReloadMeshAsset(const FAssetReference& Ref, FString& Error)
+{
+	if (Ref.Id.IsEmpty())
+	{
+		Error = GENESIS_TEXT("A mesh identity is required to refresh instances.");
+		return false;
+	}
+	return ReloadMeshAssets(&Ref, Error);
 }
-bool FMapDocument::ReloadRenderAssets(FString& Error) { return ReloadMeshAssets(nullptr,Error); }
+bool FMapDocument::ReloadRenderAssets(FString& Error)
+{
+	return ReloadMeshAssets(nullptr, Error);
+}

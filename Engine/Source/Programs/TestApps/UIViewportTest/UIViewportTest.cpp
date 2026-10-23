@@ -11,6 +11,8 @@
 // step), undoes it, zooms with the wheel, pans, and toggles the grid.
 
 #include "DemoScene.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 #include "TestApp.h"
 #include "TestWidgets.h"
 #include "Widgets/Input/SButton.h"
@@ -22,7 +24,7 @@
 class FViewportTestApp final : public FTestApp
 {
 public:
-	FViewportTestApp() : FTestApp({ "UIViewportTest", "Genesis UI - RHI viewport", FVector2(1000.0f, 700.0f) }) {}
+	FViewportTestApp() : FTestApp({"UIViewportTest", "Genesis UI - RHI viewport", FVector2(1000.0f, 700.0f)}) {}
 
 protected:
 	TSharedRef<SWidget> MakeContent() override
@@ -33,31 +35,79 @@ protected:
 		Scene.OnSelectionChanged.AddLambda([this] { Client->RequestRedraw(); });
 		Scene.OnLog.AddLambda([this](const FString& Line) { SetLastEvent(Line); });
 
-		const auto Toggle = [](const char* Label, TFunction<bool()> Get, TFunction<void()> Flip) -> TSharedRef<SWidget>
+		const TFunction<TSharedRef<SWidget>(const char*, TFunction<bool()>, TFunction<void()>)> Toggle =
+		    [](const char* Label, TFunction<bool()> Get, TFunction<void()> Flip) -> TSharedRef<SWidget>
 		{
-			return SNew(SCheckBox).Text(Label).IsChecked([Get] { return Get() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; }).OnCheckStateChanged([Flip](ECheckBoxState) { Flip(); });
+			return SNew(SCheckBox)
+			    .Text(Label)
+			    .IsChecked([Get] {
+				return Get() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+			}).OnCheckStateChanged([Flip](ECheckBoxState) { Flip(); });
 		};
-		return TestFrame(*this, "RHI viewport",
-			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(12.0f, 8.0f))
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 16.0f, 0.0f))
-					[Toggle("Grid", [this] { return Client->bShowGrid; }, [this] { Client->bShowGrid = !Client->bShowGrid; Client->RequestRedraw(); })]
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 16.0f, 0.0f))
-					[Toggle("Snap", [this] { return Client->bSnap; }, [this] { Client->bSnap = !Client->bSnap; })]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))[SNew(SButton).Text("Undo").IsEnabled([this] { return Scene.CanUndo(); }).OnClicked([this] { Scene.Undo(); return FReply::Handled(); })]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))[SNew(SButton).Text("Redo").IsEnabled([this] { return Scene.CanRedo(); }).OnClicked([this] { Scene.Redo(); return FReply::Handled(); })]
-				+ SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Frame selection").OnClicked([this] { Client->FrameSelection(); return FReply::Handled(); })]
-				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right).VAlign(VAlign_Center)[SNew(STextBlock).TextStyle(&TestTextStyle("SmallText")).Text([this]
-				{
-					return FString::Format("{} selected · zoom {:.0f}% · {} draws", Scene.Selection.size(), Client->GetZoom() * 100.0f, Client->GetDrawCount());
-				})]
-			]
-			+ SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(12.0f, 0.0f, 12.0f, 12.0f))
-			[
-				SAssignNew(Viewport, SViewport).ViewportClient(StaticCastSharedPtr<IViewportClient>(Client))
-			]);
+		return TestFrame(
+		    *this, "RHI viewport",
+		    SNew(SVerticalBox) +
+		        SVerticalBox::Slot().AutoHeight().Padding(FMargin(12.0f, 8.0f))
+		            [SNew(SHorizontalBox) +
+		             SHorizontalBox::Slot()
+		                 .AutoWidth()
+		                 .VAlign(VAlign_Center)
+		                 .Padding(FMargin(0.0f, 0.0f, 16.0f, 0.0f))[Toggle(
+		                     "Grid", [this] { return Client->bShowGrid; },
+		                     [this]
+		                     {
+			                     Client->bShowGrid = !Client->bShowGrid;
+			                     Client->RequestRedraw();
+		                     })] +
+		             SHorizontalBox::Slot()
+		                 .AutoWidth()
+		                 .VAlign(VAlign_Center)
+		                 .Padding(FMargin(0.0f, 0.0f, 16.0f, 0.0f))[Toggle(
+		                     "Snap", [this] { return Client->bSnap; }, [this] { Client->bSnap = !Client->bSnap; })] +
+		             SHorizontalBox::Slot().AutoWidth().Padding(FMargin(
+		                 0.0f, 0.0f, 8.0f, 0.0f))[SNew(SButton)
+		                                              .Text("Undo")
+		                                              .IsEnabled([this] { return Scene.CanUndo(); })
+		                                              .OnClicked(
+		                                                  [this]
+		                                                  {
+			                                                  Scene.Undo();
+			                                                  return FReply::Handled();
+		                                                  })] +
+		             SHorizontalBox::Slot().AutoWidth().Padding(
+		                 FMargin(0.0f, 0.0f, 8.0f, 0.0f))[SNew(SButton)
+		                                                      .Text("Redo")
+		                                                      .IsEnabled([this] { return Scene.CanRedo(); })
+		                                                      .OnClicked(
+		                                                          [this]
+		                                                          {
+			                                                          Scene.Redo();
+			                                                          return FReply::Handled();
+		                                                          })] +
+		             SHorizontalBox::Slot().AutoWidth()[SNew(SButton)
+		                                                    .Text("Frame selection")
+		                                                    .OnClicked(
+		                                                        [this]
+		                                                        {
+			                                                        Client->FrameSelection();
+			                                                        return FReply::Handled();
+		                                                        })] +
+		             SHorizontalBox::Slot()
+		                 .FillWidth(1.0f)
+		                 .HAlign(HAlign_Right)
+		                 .VAlign(VAlign_Center)[SNew(STextBlock)
+		                                            .TextStyle(&TestTextStyle("SmallText"))
+		                                            .Text(
+		                                                [this]
+		                                                {
+			                                                return FString::Format(
+			                                                    "{} selected · zoom {:.0f}% · {} draws",
+			                                                    Scene.Selection.size(), Client->GetZoom() * 100.0f,
+			                                                    Client->GetDrawCount());
+		                                                })]] +
+		        SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(
+		            12.0f, 0.0f, 12.0f, 12.0f))[SAssignNew(Viewport, SViewport)
+		                                            .ViewportClient(StaticCastSharedPtr<IViewportClient>(Client))]);
 	}
 
 	void OnShutdown() override
@@ -69,55 +119,71 @@ protected:
 	void BuildSelfTest(FTestScript& Script) override
 	{
 		Script.Capture("start")
-			.Do([this] { Click(EntityCenter("pillar")); })
-			.Check("a click selects the pillar", [this] { return Scene.Selection == TArray<int32>{ Find("pillar")->Id }; })
-			.Do([this]
-			{
-				SetModifierKeys(true, false);
-				Click(EntityCenter("light_warm"));
-				SetModifierKeys(false, false);
-			})
-			.Check("Shift-click adds the light", [this] { return Scene.Selection.size() == 2; })
-			// Drag the pillar by 64 world units right: a drag that starts on the
-			// selection moves all of it, snapped, as one undo step.
-			.Do([this]
-			{
-				PillarStart = Find("pillar")->Position;
-				LightStart = Find("light_warm")->Position;
-				const float Pixels = 64.0f * Client->GetZoom() * Viewport->GetCachedGeometry().Scale;
-				Drag(EntityCenter("pillar"), EntityCenter("pillar") + FVector2(Pixels + 3.0f, 0.0f));
-			})
-			.Check("the drag moves the selection 64 units, snapped", [this]
-			{
-				return Find("pillar")->Position == PillarStart + FVector2(64.0f, 0.0f) && Find("light_warm")->Position == LightStart + FVector2(64.0f, 0.0f);
-			})
-			.Check("the move is one undo step", [this] { return Scene.CanUndo() && Scene.GetUndoDescription() == "Move 2 object(s)"; })
-			.Capture("moved")
-			.Do([this] { PointAtText("Undo", true); })
-			.Check("Undo puts it back", [this] { return Find("pillar")->Position == PillarStart && Scene.CanRedo(); })
-			// Zoom at the cursor, then pan with the middle button.
-			.Do([this]
-			{
-				ZoomBefore = Client->GetZoom();
-				Wheel(GetCenter(*Viewport), 3.0f);
-			})
-			.Check("the wheel zooms in", [this] { return Client->GetZoom() > ZoomBefore * 1.3f; })
-			.Do([this]
-			{
-				PanBefore = Client->WorldToLocal(FVector2::Zero());
-				Drag(GetCenter(*Viewport), GetCenter(*Viewport) + FVector2(-120.0f, -80.0f), EMouseButton::Middle);
-			})
-			.Check("a middle drag pans", [this] { return Client->WorldToLocal(FVector2::Zero()).X < PanBefore.X - 10.0f; })
-			.Capture("zoomed")
-			.Do([this]
-			{
-				DrawsBefore = Client->GetDrawCount();
-				PointAtText("Grid", true);
-			})
-			.Check("toggling the grid redraws the viewport", [this] { return !Client->bShowGrid && Client->GetDrawCount() > DrawsBefore; }, 5)
-			.Do([this] { MoveMouse(FVector2(2.0f, 2.0f)); DrawsBefore = Client->GetDrawCount(); }, 10)
-			.Check("an idle viewport does not redraw", [this] { return Client->GetDrawCount() == DrawsBefore; }, 30)
-			.Capture("no_grid");
+		    .Do([this] { Click(EntityCenter("pillar")); })
+		    .Check(
+		        "a click selects the pillar", [this] { return Scene.Selection == TArray<int32>{Find("pillar")->Id}; })
+		    .Do(
+		        [this]
+		{
+			SetModifierKeys(true, false);
+			Click(EntityCenter("light_warm"));
+			SetModifierKeys(false, false);
+		})
+		    .Check("Shift-click adds the light", [this] { return Scene.Selection.size() == 2; })
+		    // Drag the pillar by 64 world units right: a drag that starts on the
+		    // selection moves all of it, snapped, as one undo step.
+		    .Do(
+		        [this]
+		{
+			PillarStart = Find("pillar")->Position;
+			LightStart = Find("light_warm")->Position;
+			const float Pixels = 64.0f * Client->GetZoom() * Viewport->GetCachedGeometry().Scale;
+			Drag(EntityCenter("pillar"), EntityCenter("pillar") + FVector2(Pixels + 3.0f, 0.0f));
+		})
+		    .Check("the drag moves the selection 64 units, snapped",
+		        [this]
+		{
+			return Find("pillar")->Position == PillarStart + FVector2(64.0f, 0.0f) &&
+			    Find("light_warm")->Position == LightStart + FVector2(64.0f, 0.0f);
+		})
+		    .Check("the move is one undo step",
+		        [this] { return Scene.CanUndo() && Scene.GetUndoDescription() == "Move 2 object(s)"; })
+		    .Capture("moved")
+		    .Do([this] { PointAtText("Undo", true); })
+		    .Check("Undo puts it back", [this] { return Find("pillar")->Position == PillarStart && Scene.CanRedo(); })
+		    // Zoom at the cursor, then pan with the middle button.
+		    .Do(
+		        [this]
+		{
+			ZoomBefore = Client->GetZoom();
+			Wheel(GetCenter(*Viewport), 3.0f);
+		})
+		    .Check("the wheel zooms in", [this] { return Client->GetZoom() > ZoomBefore * 1.3f; })
+		    .Do(
+		        [this]
+		{
+			PanBefore = Client->WorldToLocal(FVector2::Zero());
+			Drag(GetCenter(*Viewport), GetCenter(*Viewport) + FVector2(-120.0f, -80.0f), EMouseButton::Middle);
+		})
+		    .Check(
+		        "a middle drag pans", [this] { return Client->WorldToLocal(FVector2::Zero()).X < PanBefore.X - 10.0f; })
+		    .Capture("zoomed")
+		    .Do(
+		        [this]
+		{
+			DrawsBefore = Client->GetDrawCount();
+			PointAtText("Grid", true);
+		})
+		    .Check("toggling the grid redraws the viewport",
+		        [this] { return !Client->bShowGrid && Client->GetDrawCount() > DrawsBefore; }, 5)
+		    .Do(
+		        [this]
+		{
+			MoveMouse(FVector2(2.0f, 2.0f));
+			DrawsBefore = Client->GetDrawCount();
+		}, 10)
+		    .Check("an idle viewport does not redraw", [this] { return Client->GetDrawCount() == DrawsBefore; }, 30)
+		    .Capture("no_grid");
 	}
 
 private:

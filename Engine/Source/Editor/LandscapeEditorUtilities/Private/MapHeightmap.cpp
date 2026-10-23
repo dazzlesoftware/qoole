@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapHeightmap.h"
+#include "Internationalization/TextLocalization.h"
 
 #include "HAL/File.h"
 #include "Landscape/Landscape.h"
@@ -22,8 +23,8 @@ namespace
 {
 	bool IsRaw(const FString& Path)
 	{
-		return Path.EndsWith(".r16", ESearchCase::IgnoreCase) || Path.EndsWith(".r8", ESearchCase::IgnoreCase)
-			|| Path.EndsWith(".raw", ESearchCase::IgnoreCase);
+		return Path.EndsWith(".r16", ESearchCase::IgnoreCase) || Path.EndsWith(".r8", ESearchCase::IgnoreCase) ||
+		    Path.EndsWith(".raw", ESearchCase::IgnoreCase);
 	}
 
 	// The side of a square of Count samples, or 0.
@@ -49,13 +50,15 @@ namespace
 		// No header: the size is the square the samples make. 8 bits (as
 		// Unreal's weightmaps) when the bytes make a square, 16 when their
 		// pairs do (never both, as 2 n^2 is no square).
-		const bool b16 = Path.EndsWith(".r16", ESearchCase::IgnoreCase)
-			|| (!Path.EndsWith(".r8", ESearchCase::IgnoreCase) && Bytes.size() % 2 == 0 && SquareSide(Bytes.size() / 2) != 0);
+		const bool b16 = Path.EndsWith(".r16", ESearchCase::IgnoreCase) ||
+		    (!Path.EndsWith(".r8", ESearchCase::IgnoreCase) && Bytes.size() % 2 == 0 &&
+		        SquareSide(Bytes.size() / 2) != 0);
 		const SIZE_T Count = b16 ? Bytes.size() / 2 : Bytes.size();
 		const int32 Side = (b16 && Bytes.size() % 2 != 0) ? 0 : SquareSide(Count);
 		if (Side == 0)
 		{
-			Error = FString::Format("A RAW file must be a square of {} samples ({})", b16 ? "16-bit" : "8- or 16-bit", Path);
+			Error = FTextLocalization::Format(
+			    "A RAW file must be a square of {} samples ({})", b16 ? "16-bit" : "8- or 16-bit", Path);
 			return false;
 		}
 		Out.Width = Side;
@@ -63,7 +66,8 @@ namespace
 		Out.Samples.resize(Count);
 		for (SIZE_T Index = 0; Index < Count; ++Index)
 		{
-			Out.Samples[Index] = b16 ? static_cast<uint16>(Bytes[Index * 2] | (Bytes[Index * 2 + 1] << 8)) : static_cast<uint16>(Bytes[Index] * 257);
+			Out.Samples[Index] = b16 ? static_cast<uint16>(Bytes[Index * 2] | (Bytes[Index * 2 + 1] << 8))
+			                         : static_cast<uint16>(Bytes[Index] * 257);
 		}
 		return true;
 	}
@@ -83,7 +87,8 @@ namespace
 			Bytes[Index * 2 + 1] = static_cast<uint8>(Map.Samples[Index] >> 8);
 		}
 		FFile File;
-		if (!File.Open(Path, EFileOpenMode::Write) || File.Write(Bytes.data(), static_cast<int64>(Bytes.size())) != static_cast<int64>(Bytes.size()))
+		if (!File.Open(Path, EFileOpenMode::Write) ||
+		    File.Write(Bytes.data(), static_cast<int64>(Bytes.size())) != static_cast<int64>(Bytes.size()))
 		{
 			Error = FString::Format("Can't write {}", Path);
 			return false;
@@ -98,8 +103,15 @@ namespace
 	struct FComScope
 	{
 		bool bOwned = false;
-		FComScope() { bOwned = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)); }
-		~FComScope() { if (bOwned) CoUninitialize(); }
+		FComScope()
+		{
+			bOwned = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
+		}
+		~FComScope()
+		{
+			if (bOwned)
+				CoUninitialize();
+		}
 	};
 
 	bool DecodeImage(const FString& Path, FHeightmap& Out, FString& Error)
@@ -111,22 +123,24 @@ namespace
 		ComPtr<IWICFormatConverter> Converter;
 		UINT Width = 0;
 		UINT Height = 0;
-		if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&Factory)))
-			|| FAILED(Factory->CreateDecoderFromFilename(Path.ToWide().c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &Decoder))
-			|| FAILED(Decoder->GetFrame(0, &Frame))
-			|| FAILED(Frame->GetSize(&Width, &Height)))
+		if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&Factory))) ||
+		    FAILED(Factory->CreateDecoderFromFilename(
+		        Path.ToWide().c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &Decoder)) ||
+		    FAILED(Decoder->GetFrame(0, &Frame)) || FAILED(Frame->GetSize(&Width, &Height)))
 		{
 			Error = FString::Format("Can't read {} as an image", Path);
 			return false;
 		}
 		if (Width < 2 || Height < 2 || Width > 16384 || Height > 16384)
 		{
-			Error = FString::Format("A heightmap or weightmap must be 2 to 16384 pixels each way ({} is {} x {})", Path, Width, Height);
+			Error = FTextLocalization::Format(
+			    "A heightmap or weightmap must be 2 to 16384 pixels each way ({} is {} x {})", Path, Width, Height);
 			return false;
 		}
 		// Whatever the file holds, as 16-bit gray (8 bits scale up evenly).
-		if (FAILED(Factory->CreateFormatConverter(&Converter))
-			|| FAILED(Converter->Initialize(Frame.Get(), GUID_WICPixelFormat16bppGray, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom)))
+		if (FAILED(Factory->CreateFormatConverter(&Converter)) ||
+		    FAILED(Converter->Initialize(Frame.Get(), GUID_WICPixelFormat16bppGray, WICBitmapDitherTypeNone, nullptr,
+		        0.0, WICBitmapPaletteTypeCustom)))
 		{
 			Error = FString::Format("Can't read {} as grayscale", Path);
 			return false;
@@ -134,9 +148,10 @@ namespace
 		Out.Width = static_cast<int32>(Width);
 		Out.Height = static_cast<int32>(Height);
 		Out.Samples.resize(static_cast<SIZE_T>(Width) * Height);
-		if (FAILED(Converter->CopyPixels(nullptr, Width * 2, static_cast<UINT>(Out.Samples.size() * 2), reinterpret_cast<BYTE*>(Out.Samples.data()))))
+		if (FAILED(Converter->CopyPixels(nullptr, Width * 2, static_cast<UINT>(Out.Samples.size() * 2),
+		        reinterpret_cast<BYTE*>(Out.Samples.data()))))
 		{
-			Error = FString::Format("Can't read the pixels of {}", Path);
+			Error = FTextLocalization::Format("Can't read the pixels of {}", Path);
 			return false;
 		}
 		return true;
@@ -168,17 +183,17 @@ namespace
 				Row[X] = To8(Map.At(X, Y));
 			}
 		}
-		if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&Factory)))
-			|| FAILED(Factory->CreateStream(&Stream))
-			|| FAILED(Stream->InitializeFromFilename(Path.ToWide().c_str(), GENERIC_WRITE))
-			|| FAILED(Factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &Encoder))
-			|| FAILED(Encoder->Initialize(Stream.Get(), WICBitmapEncoderNoCache))
-			|| FAILED(Encoder->CreateNewFrame(&Frame, nullptr))
-			|| FAILED(Frame->Initialize(nullptr))
-			|| FAILED(Frame->SetSize(static_cast<UINT>(Map.Width), static_cast<UINT>(Map.Height)))
-			|| FAILED(Frame->SetPixelFormat(&Format)) || Format != Wanted
-			|| FAILED(Frame->WritePixels(static_cast<UINT>(Map.Height), Stride, static_cast<UINT>(Pixels.size()), Pixels.data()))
-			|| FAILED(Frame->Commit()) || FAILED(Encoder->Commit()))
+		if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&Factory))) ||
+		    FAILED(Factory->CreateStream(&Stream)) ||
+		    FAILED(Stream->InitializeFromFilename(Path.ToWide().c_str(), GENERIC_WRITE)) ||
+		    FAILED(Factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &Encoder)) ||
+		    FAILED(Encoder->Initialize(Stream.Get(), WICBitmapEncoderNoCache)) ||
+		    FAILED(Encoder->CreateNewFrame(&Frame, nullptr)) || FAILED(Frame->Initialize(nullptr)) ||
+		    FAILED(Frame->SetSize(static_cast<UINT>(Map.Width), static_cast<UINT>(Map.Height))) ||
+		    FAILED(Frame->SetPixelFormat(&Format)) || Format != Wanted ||
+		    FAILED(Frame->WritePixels(
+		        static_cast<UINT>(Map.Height), Stride, static_cast<UINT>(Pixels.size()), Pixels.data())) ||
+		    FAILED(Frame->Commit()) || FAILED(Encoder->Commit()))
 		{
 			Error = FString::Format("Can't write {}", Path);
 			return false;
@@ -188,17 +203,17 @@ namespace
 #else
 	bool DecodeImage(const FString& Path, FHeightmap&, FString& Error)
 	{
-		Error = FString::Format("Only RAW (.r16, .r8) files can be read here ({})", Path);
+		Error = FTextLocalization::Format("Only RAW (.r16, .r8) files can be read here ({})", Path);
 		return false;
 	}
 
 	bool EncodePng(const FString& Path, const FHeightmap&, int32, FString& Error)
 	{
-		Error = FString::Format("Only RAW (.r16, .r8) files can be written here ({})", Path);
+		Error = FTextLocalization::Format("Only RAW (.r16, .r8) files can be written here ({})", Path);
 		return false;
 	}
 #endif
-}
+} // namespace
 
 float FHeightmap::Sample(float U, float V) const
 {
@@ -233,18 +248,20 @@ bool FHeightmap::Save(const FString& Path, FString& Error, int32 Bits) const
 {
 	if (!IsValid())
 	{
-		Error = "Nothing to save";
+		Error = GENESIS_TEXT("Nothing to save");
 		return false;
 	}
 	// The extension can say: .r16 is 16 bits, .r8 8.
-	Bits = Path.EndsWith(".r16", ESearchCase::IgnoreCase) ? 16 : Path.EndsWith(".r8", ESearchCase::IgnoreCase) ? 8 : (Bits == 8 ? 8 : 16);
+	Bits = Path.EndsWith(".r16", ESearchCase::IgnoreCase) ? 16
+	    : Path.EndsWith(".r8", ESearchCase::IgnoreCase)   ? 8
+	                                                      : (Bits == 8 ? 8 : 16);
 	if (IsRaw(Path))
 	{
 		return SaveRaw(Path, *this, Bits, Error);
 	}
 	if (!Path.EndsWith(".png", ESearchCase::IgnoreCase))
 	{
-		Error = "Heightmaps and weightmaps are saved as .png, .raw, .r16 or .r8";
+		Error = GENESIS_TEXT("Heightmaps and weightmaps are saved as .png, .raw, .r16 or .r8");
 		return false;
 	}
 	return EncodePng(Path, *this, Bits, Error);
@@ -252,8 +269,8 @@ bool FHeightmap::Save(const FString& Path, FString& Error, int32 Bits) const
 
 TArray<FFileTypeFilter> FHeightmap::FileFilters()
 {
-	return { { "Grayscale maps (*.png, *.raw, *.r16, *.r8)", "*.png;*.raw;*.r16;*.r8" },
-		{ "Images (*.png, *.bmp, *.jpg, *.tif)", "*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff" } };
+	return {{"Grayscale maps (*.png, *.raw, *.r16, *.r8)", "*.png;*.raw;*.r16;*.r8"},
+	    {"Images (*.png, *.bmp, *.jpg, *.tif)", "*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff"}};
 }
 
 std::vector<float> FHeightmap::ToHeights(int32 PointsX, int32 PointsY, float ZRange) const
@@ -290,7 +307,8 @@ FHeightmap FHeightmap::FromLandscape(const Landscape& Land, float ZRange)
 		for (int32 X = 0; X < Map.Width; ++X)
 		{
 			const float Value = std::round(Land.GetHeight(X, Y) * Scale + 32768.0f);
-			Map.Samples[static_cast<SIZE_T>(Row) * Map.Width + X] = static_cast<uint16>(FMath::Clamp(Value, 0.0f, 65535.0f));
+			Map.Samples[static_cast<SIZE_T>(Row) * Map.Width + X] =
+			    static_cast<uint16>(FMath::Clamp(Value, 0.0f, 65535.0f));
 		}
 	}
 	return Map;
@@ -321,7 +339,8 @@ FHeightmap FHeightmap::FromWeights(const Landscape& Land, int32 Layer)
 	{
 		for (int32 X = 0; X < Map.Width; ++X)
 		{
-			const float Value = std::round(FMath::Clamp(Land.GetWeight(Layer, X, Map.Height - 1 - Row), 0.0f, 1.0f) * 65535.0f);
+			const float Value =
+			    std::round(FMath::Clamp(Land.GetWeight(Layer, X, Map.Height - 1 - Row), 0.0f, 1.0f) * 65535.0f);
 			Map.Samples[static_cast<SIZE_T>(Row) * Map.Width + X] = static_cast<uint16>(Value);
 		}
 	}

@@ -1,28 +1,31 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapFoliageMode.h"
+#include "Containers/ContainerAliases.h"
 
 #include "MapCoreHeaders.h"
 
 #include <algorithm>
 #include <cmath>
 
-
 const char* ToString(EFoliageTool Tool)
 {
 	switch (Tool)
 	{
-	case EFoliageTool::Paint: return "Paint";
-	case EFoliageTool::Erase: return "Erase";
-	case EFoliageTool::Single: return "Single";
+	case EFoliageTool::Paint:
+		return "Paint";
+	case EFoliageTool::Erase:
+		return "Erase";
+	case EFoliageTool::Single:
+		return "Single";
 	}
 	return "?";
 }
 
 namespace
 {
-	constexpr float PaintRate = 6.0f;    // of the missing instances a second
-	constexpr float EraseRate = 8.0f;    // chance a second at full strength
+	constexpr float PaintRate = 6.0f;     // of the missing instances a second
+	constexpr float EraseRate = 8.0f;     // chance a second at full strength
 	constexpr float TraceTop = 100000.0f; // rays down to the ground start this high
 	constexpr float Degrees = 57.29578f;
 
@@ -63,7 +66,7 @@ namespace
 		Inverse.Transform(Out, Scope);
 		return Out;
 	}
-}
+} // namespace
 
 void FMapFoliageMode::SetDocument(FMapDocument* InDocument)
 {
@@ -75,7 +78,7 @@ void FMapFoliageMode::SetDocument(FMapDocument* InDocument)
 
 const TArray<FString>& FMapFoliageMode::GetPresetNames()
 {
-	static const TArray<FString> Names = { "Grass", "Bush", "Tree", "Pine", "Rock" };
+	static const TArray<FString> Names = {"Grass", "Bush", "Tree", "Pine", "Rock"};
 	return Names;
 }
 
@@ -170,7 +173,7 @@ bool FMapFoliageMode::AddType(const FString& Preset)
 		for (const FString& Candidate : GetPresetNames())
 		{
 			const bool bThere = std::any_of(Current.GetTypes().begin(), Current.GetTypes().end(),
-				[&Candidate](const FoliageType& Type) { return Type.mesh == Candidate.ToAnsi(); });
+			    [&Candidate](const FoliageType& Type) { return Type.mesh == Candidate.ToAnsi(); });
 			if (!bThere)
 			{
 				Name = Candidate;
@@ -224,7 +227,8 @@ bool FMapFoliageMode::RemoveType(int32 Type)
 bool FMapFoliageMode::SetType(int32 Type, const FoliageType& NewType, const FString& Description)
 {
 	Object* Obj = GetFoliageObject();
-	if (!Obj || Type < 0 || Type >= Obj->GetFoliage().GetNumTypes() || Obj->GetFoliage().GetTypes()[static_cast<SIZE_T>(Type)] == NewType)
+	if (!Obj || Type < 0 || Type >= Obj->GetFoliage().GetNumTypes() ||
+	    Obj->GetFoliage().GetTypes()[static_cast<SIZE_T>(Type)] == NewType)
 	{
 		return false;
 	}
@@ -317,7 +321,8 @@ bool FMapFoliageMode::GroundAt(float X, float Y, Vector3d& OutPoint, Vector3d& O
 	// The normal from the ground a little to either side.
 	constexpr float Step = 4.0f;
 	Vector3d Right, Ahead;
-	if (!TraceSurface(Vector3d(X + Step, Y, TraceTop), Down, Right) || !TraceSurface(Vector3d(X, Y + Step, TraceTop), Down, Ahead))
+	if (!TraceSurface(Vector3d(X + Step, Y, TraceTop), Down, Right) ||
+	    !TraceSurface(Vector3d(X, Y + Step, TraceTop), Down, Ahead))
 	{
 		OutNormal.NewVector(0.0f, 0.0f, 1.0f);
 		return true;
@@ -336,11 +341,12 @@ bool FMapFoliageMode::GroundAt(float X, float Y, Vector3d& OutPoint, Vector3d& O
 }
 
 bool FMapFoliageMode::MakeInstance(const Foliage& Current, int32 Type, const Vector3d& Ground, const Vector3d& Normal,
-	const TArray<FoliageInstance>& Existing, FoliageInstance& Out)
+    const TArray<FoliageInstance>& Existing, FoliageInstance& Out)
 {
 	const FoliageType& Kind = Current.GetTypes()[static_cast<SIZE_T>(Type)];
 	const float Slope = std::acos(FMath::Clamp(Normal.GetZ(), -1.0f, 1.0f)) * Degrees;
-	if (Slope < Kind.slopeMin || Slope > Kind.slopeMax || Ground.GetZ() < Kind.heightMin || Ground.GetZ() > Kind.heightMax)
+	if (Slope < Kind.slopeMin || Slope > Kind.slopeMax || Ground.GetZ() < Kind.heightMin ||
+	    Ground.GetZ() > Kind.heightMax)
 	{
 		return false;
 	}
@@ -412,7 +418,7 @@ bool FMapFoliageMode::ApplyAt(const Vector3d& ScopePoint, float DeltaSeconds, bo
 	const Matrix44 Forward = ToScope(*Obj);
 	const float Radius = FMath::Max(Brush.Radius, 1.0f);
 	const float Strength = FMath::Clamp(Brush.Strength, 0.0f, 1.0f);
-	const auto Distance = [&](const FoliageInstance& Instance)
+	const TFunction<float(const FoliageInstance&)> Distance = [&](const FoliageInstance& Instance)
 	{
 		Vector3d At;
 		Forward.Transform(At, Instance.position);
@@ -464,7 +470,8 @@ bool FMapFoliageMode::ApplyAt(const Vector3d& ScopePoint, float DeltaSeconds, bo
 		{
 			continue;
 		}
-		const int32 Tries = FMath::Min(static_cast<int32>(Missing * FMath::Min(1.0f, PaintRate * DeltaSeconds) + Random()), 400);
+		const int32 Tries =
+		    FMath::Min(static_cast<int32>(Missing * FMath::Min(1.0f, PaintRate * DeltaSeconds) + Random()), 400);
 		for (int32 Try = 0; Try < Tries; ++Try)
 		{
 			// Anywhere in the brush, thinning out over its falloff.
@@ -476,8 +483,9 @@ bool FMapFoliageMode::ApplyAt(const Vector3d& ScopePoint, float DeltaSeconds, bo
 			}
 			Vector3d Ground, Normal;
 			FoliageInstance Made;
-			if (GroundAt(ScopePoint.GetX() + Rho * std::cos(Theta), ScopePoint.GetY() + Rho * std::sin(Theta), Ground, Normal)
-				&& MakeInstance(Current, Type, Ground, Normal, Instances, Made))
+			if (GroundAt(ScopePoint.GetX() + Rho * std::cos(Theta), ScopePoint.GetY() + Rho * std::sin(Theta), Ground,
+			        Normal) &&
+			    MakeInstance(Current, Type, Ground, Normal, Instances, Made))
 			{
 				Instances.push_back(Made);
 				bChanged = true;
@@ -488,7 +496,8 @@ bool FMapFoliageMode::ApplyAt(const Vector3d& ScopePoint, float DeltaSeconds, bo
 	{
 		return false;
 	}
-	Document->SetFoliage(*Obj, Current.WithInstances(std::vector<FoliageInstance>(Instances.begin(), Instances.end())), "Paint Foliage");
+	Document->SetFoliage(
+	    *Obj, Current.WithInstances(std::vector<FoliageInstance>(Instances.begin(), Instances.end())), "Paint Foliage");
 	return true;
 }
 
@@ -512,7 +521,8 @@ bool FMapFoliageMode::PlaceAt(int32 Type, const Vector3d& ScopePoint)
 		return false;
 	}
 	Instances.push_back(Made);
-	Document->SetFoliage(*Obj, Current.WithInstances(std::vector<FoliageInstance>(Instances.begin(), Instances.end())), "Place Foliage");
+	Document->SetFoliage(
+	    *Obj, Current.WithInstances(std::vector<FoliageInstance>(Instances.begin(), Instances.end())), "Place Foliage");
 	return true;
 }
 
@@ -524,7 +534,8 @@ bool FMapFoliageMode::BeginStroke(const Vector3d& ScopePoint, bool bEraseTool)
 	}
 	EndStroke();
 	const bool bRemoving = bEraseTool || Tool == EFoliageTool::Erase;
-	Document->BeginTransaction(Tool == EFoliageTool::Single && !bRemoving ? "Place Foliage" : (bRemoving ? "Erase Foliage" : "Paint Foliage"));
+	Document->BeginTransaction(
+	    Tool == EFoliageTool::Single && !bRemoving ? "Place Foliage" : (bRemoving ? "Erase Foliage" : "Paint Foliage"));
 	bStroking = true;
 	bErase = bEraseTool;
 	StrokePoint = ScopePoint;
@@ -633,7 +644,7 @@ void FMapFoliageMode::DrawOverlay(const FMapViewportClient& View, FSlateWindowEl
 	const FColor Color = bRemoving ? FColor(255, 150, 90) : FColor(120, 220, 120);
 	// The brush on the ground under it.
 	TArray<FVector2> Run;
-	const auto Flush = [&]
+	const TFunction<void()> Flush = [&]
 	{
 		if (Run.size() > 1)
 		{
@@ -648,8 +659,9 @@ void FMapFoliageMode::DrawOverlay(const FMapViewportClient& View, FSlateWindowEl
 		const float Angle = static_cast<float>(Step) / Steps * 6.2831853f;
 		Vector3d Ground, Normal;
 		FVector2 Screen;
-		if (GroundAt(HoverPoint.GetX() + std::cos(Angle) * Radius, HoverPoint.GetY() + std::sin(Angle) * Radius, Ground, Normal)
-			&& View.MapToScreen(Ground, Screen))
+		if (GroundAt(HoverPoint.GetX() + std::cos(Angle) * Radius, HoverPoint.GetY() + std::sin(Angle) * Radius, Ground,
+		        Normal) &&
+		    View.MapToScreen(Ground, Screen))
 		{
 			Run.push_back(Screen);
 		}
@@ -662,7 +674,8 @@ void FMapFoliageMode::DrawOverlay(const FMapViewportClient& View, FSlateWindowEl
 	FVector2 Dot;
 	if (View.MapToScreen(HoverPoint, Dot))
 	{
-		Out.AddRoundedBox(8, FPaintGeometry::Make(Dot - FVector2(2.5f, 2.5f), FVector2(5.0f, 5.0f), DpiScale), Color, 2.5f);
+		Out.AddRoundedBox(
+		    8, FPaintGeometry::Make(Dot - FVector2(2.5f, 2.5f), FVector2(5.0f, 5.0f), DpiScale), Color, 2.5f);
 	}
 }
 
@@ -670,10 +683,12 @@ FString FMapFoliageMode::GetHint() const
 {
 	switch (Tool)
 	{
-	case EFoliageTool::Paint: return "Foliage: Paint (Shift erases)";
-	case EFoliageTool::Erase: return "Foliage: Erase";
-	case EFoliageTool::Single: return "Foliage: Single (click to place one)";
+	case EFoliageTool::Paint:
+		return "Foliage: Paint (Shift erases)";
+	case EFoliageTool::Erase:
+		return "Foliage: Erase";
+	case EFoliageTool::Single:
+		return "Foliage: Single (click to place one)";
 	}
 	return "Foliage";
 }
-

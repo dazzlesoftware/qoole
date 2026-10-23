@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "SlateRHIRenderingPolicy.h"
+#include "Templates/SharedPointer.h"
 
 // DXIL: compiled from Shaders/SlateShaders.hlsl by the project's build step.
 #include "SlateShaders_VSMain_DXIL.h"
@@ -19,31 +20,33 @@ DEFINE_LOG_CATEGORY(LogSlateRHIRenderer, Log);
 
 namespace
 {
-	template <SIZE_T N>
-	FRHIShaderBytecode Bytecode(const unsigned char (&Data)[N])
+	template <SIZE_T N> FRHIShaderBytecode Bytecode(const unsigned char (&Data)[N])
 	{
-		return FRHIShaderBytecode{ Data, N };
+		return FRHIShaderBytecode{Data, N};
 	}
 
 	EBlendMode ToBlendMode(ESlateBlendMode Blend)
 	{
 		switch (Blend)
 		{
-		case ESlateBlendMode::Alpha: return EBlendMode::AlphaBlend;
-		case ESlateBlendMode::Premultiplied: return EBlendMode::PremultipliedAlpha;
-		case ESlateBlendMode::Opaque: return EBlendMode::Opaque;
-		case ESlateBlendMode::Count: break;
+		case ESlateBlendMode::Alpha:
+			return EBlendMode::AlphaBlend;
+		case ESlateBlendMode::Premultiplied:
+			return EBlendMode::PremultipliedAlpha;
+		case ESlateBlendMode::Opaque:
+			return EBlendMode::Opaque;
+		case ESlateBlendMode::Count:
+			break;
 		}
 		return EBlendMode::AlphaBlend;
 	}
 
 	constexpr uint64 InitialVertexBufferSize = 1024 * 1024;
 	constexpr uint64 InitialIndexBufferSize = 256 * 1024;
-}
+} // namespace
 
 FSlateRHIRenderingPolicy::FSlateRHIRenderingPolicy(FRHIDevice& InDevice, FSlateFontCache& InFontCache)
-	: Device(InDevice)
-	, FontCache(InFontCache)
+    : Device(InDevice), FontCache(InFontCache)
 {
 }
 
@@ -54,7 +57,7 @@ FSlateRHIRenderingPolicy::~FSlateRHIRenderingPolicy()
 
 bool FSlateRHIRenderingPolicy::Initialize()
 {
-	const uint8 White[4] = { 255, 255, 255, 255 };
+	const uint8 White[4] = {255, 255, 255, 255};
 	FRHITextureDesc Desc;
 	Desc.Width = 1;
 	Desc.Height = 1;
@@ -70,8 +73,8 @@ bool FSlateRHIRenderingPolicy::Initialize()
 
 	for (FFrameBuffers& Frame : Frames)
 	{
-		if (!EnsureCapacity(Frame.Vertices, InitialVertexBufferSize, EBufferUsage::Vertex, "UI vertices")
-			|| !EnsureCapacity(Frame.Indices, InitialIndexBufferSize, EBufferUsage::Index, "UI indices"))
+		if (!EnsureCapacity(Frame.Vertices, InitialVertexBufferSize, EBufferUsage::Vertex, "UI vertices") ||
+		    !EnsureCapacity(Frame.Indices, InitialIndexBufferSize, EBufferUsage::Index, "UI indices"))
 		{
 			return false;
 		}
@@ -86,7 +89,8 @@ FSlateTextureId FSlateRHIRenderingPolicy::RegisterTexture(TSharedPtr<FRHITexture
 	return Id;
 }
 
-bool FSlateRHIRenderingPolicy::EnsureCapacity(TSharedPtr<FRHIBuffer>& Buffer, uint64 Required, EBufferUsage Usage, const char* Name)
+bool FSlateRHIRenderingPolicy::EnsureCapacity(
+    TSharedPtr<FRHIBuffer>& Buffer, uint64 Required, EBufferUsage Usage, const char* Name)
 {
 	if (Buffer && Buffer->GetSize() >= Required)
 	{
@@ -118,9 +122,11 @@ void FSlateRHIRenderingPolicy::BeginFrame()
 	Frame.IndexCursor = 0;
 
 	// Render targets are registered per frame; their ids may be reused.
-	for (const auto& [Target, Id] : RenderTargetIds)
+	for (const std::pair<const ISlateRenderTarget* const, unsigned long long>& TargetBinding : RenderTargetIds)
 	{
-		if (auto It = Textures.find(Id); It != Textures.end())
+		const unsigned long long& Id = TargetBinding.second;
+
+		if (TMap<FSlateTextureId, TSharedPtr<FRHITexture>>::iterator It = Textures.find(Id); It != Textures.end())
 		{
 			Device.DeferRelease(It->second);
 			Textures.erase(It);
@@ -129,7 +135,8 @@ void FSlateRHIRenderingPolicy::BeginFrame()
 	RenderTargetIds.clear();
 }
 
-TSharedRef<FSlateRenderTargetRHI> FSlateRHIRenderingPolicy::CreateRenderTarget(int32 Width, int32 Height, const char* DebugName)
+TSharedRef<FSlateRenderTargetRHI> FSlateRHIRenderingPolicy::CreateRenderTarget(
+    int32 Width, int32 Height, const char* DebugName)
 {
 	FRHITextureDesc Desc;
 	Desc.Width = static_cast<uint32>(Width);
@@ -145,13 +152,14 @@ TSharedRef<FSlateRenderTargetRHI> FSlateRHIRenderingPolicy::CreateRenderTarget(i
 FSlateResolvedTexture FSlateRHIRenderingPolicy::ResolveRenderTarget(ISlateRenderTarget& Target)
 {
 	FSlateResolvedTexture Result;
-	auto* RHITarget = dynamic_cast<FSlateRenderTargetRHI*>(&Target);
+	FSlateRenderTargetRHI* RHITarget = dynamic_cast<FSlateRenderTargetRHI*>(&Target);
 	if (!ensuref(RHITarget, "Viewport elements need an FSlateRenderTargetRHI"))
 	{
 		Result.Id = WhiteTextureId;
 		return Result;
 	}
-	if (auto It = RenderTargetIds.find(&Target); It != RenderTargetIds.end())
+	if (TMap<const ISlateRenderTarget*, FSlateTextureId>::iterator It = RenderTargetIds.find(&Target);
+	    It != RenderTargetIds.end())
 	{
 		Result.Id = It->second;
 		return Result;
@@ -192,10 +200,10 @@ void FSlateRHIRenderingPolicy::SyncGlyphPages()
 		}
 		// The first upload covers the whole page so untouched texels are 0.
 		const FIntRect Region = GlyphPageRevisions[I] == 0 || !Page.DirtyRect
-			? FIntRect(0, 0, FFontAtlasPage::Size, FFontAtlasPage::Size)
-			: *Page.DirtyRect;
+		    ? FIntRect(0, 0, FFontAtlasPage::Size, FFontAtlasPage::Size)
+		    : *Page.DirtyRect;
 		Device.UpdateTexture(*Textures.at(Id), Region,
-			&Page.Pixels[SIZE_T(Region.Top) * FFontAtlasPage::Size + Region.Left], FFontAtlasPage::Size);
+		    &Page.Pixels[SIZE_T(Region.Top) * FFontAtlasPage::Size + Region.Left], FFontAtlasPage::Size);
 		Page.DirtyRect.reset();
 		GlyphPageRevisions[I] = Page.Revision;
 	}
@@ -247,7 +255,7 @@ void FSlateRHIRenderingPolicy::UploadImage(const FSlateTextureData& Image, FImag
 			Page.Id = RegisterTexture(Page.Texture);
 			Entry.AtlasPage = static_cast<int32>(ImagePages.size()) - 1;
 			Slot = Page.Packer.Allocate(W, H);
-			UE_LOG(LogSlateRHIRenderer, Log, "Image atlas page {} created", Entry.AtlasPage);
+			GENESIS_LOG(LogSlateRHIRenderer, Log, "Image atlas page {} created", Entry.AtlasPage);
 		}
 		check(Slot);
 		Entry.AtlasSlot = *Slot;
@@ -272,24 +280,30 @@ void FSlateRHIRenderingPolicy::UploadImage(const FSlateTextureData& Image, FImag
 		}
 	}
 	const FIntRect& Slot = Entry.AtlasSlot;
-	Device.UpdateTexture(*ImagePages[Entry.AtlasPage].Texture, FIntRect(Slot.Left - 1, Slot.Top - 1, Slot.Right + 1, Slot.Bottom + 1), Padded.data());
+	Device.UpdateTexture(*ImagePages[Entry.AtlasPage].Texture,
+	    FIntRect(Slot.Left - 1, Slot.Top - 1, Slot.Right + 1, Slot.Bottom + 1), Padded.data());
 }
 
 FSlateResolvedTexture FSlateRHIRenderingPolicy::ResolveImage(const FSlateTextureData& Image)
 {
-	auto [It, bInserted] = Images.try_emplace(Image.GetId());
+	std::pair<TMap<uint64, FImageEntry>::iterator, bool> ItBinding = Images.try_emplace(Image.GetId());
+	TMap<uint64, FImageEntry>::iterator& It = ItBinding.first;
+	bool& bInserted = ItBinding.second;
+
 	FImageEntry& Entry = It->second;
 	if (bInserted || Entry.Revision != Image.GetRevision())
 	{
 		UploadImage(Image, Entry);
 	}
-	return FSlateResolvedTexture{ Entry.Texture, Entry.UVRect };
+	return FSlateResolvedTexture{Entry.Texture, Entry.UVRect};
 }
 
-FRHIGraphicsPipeline* FSlateRHIRenderingPolicy::GetPipeline(ESlateShader Shader, ESlateBlendMode Blend, EPixelFormat Format)
+FRHIGraphicsPipeline* FSlateRHIRenderingPolicy::GetPipeline(
+    ESlateShader Shader, ESlateBlendMode Blend, EPixelFormat Format)
 {
-	const uint32 Key = static_cast<uint32>(Shader) | (static_cast<uint32>(Blend) << 4) | (static_cast<uint32>(Format) << 8);
-	if (auto It = Pipelines.find(Key); It != Pipelines.end())
+	const uint32 Key =
+	    static_cast<uint32>(Shader) | (static_cast<uint32>(Blend) << 4) | (static_cast<uint32>(Format) << 8);
+	if (TMap<uint32, TSharedPtr<FRHIGraphicsPipeline>>::iterator It = Pipelines.find(Key); It != Pipelines.end())
 	{
 		return It->second.get();
 	}
@@ -304,7 +318,8 @@ FRHIGraphicsPipeline* FSlateRHIRenderingPolicy::GetPipeline(ESlateShader Shader,
 		Desc.DebugName = "UI default";
 		break;
 	case ESlateShader::RoundedBox:
-		Desc.PixelShader = bVulkan ? Bytecode(g_SlateShaders_PSRoundedBox_SPIRV) : Bytecode(g_SlateShaders_PSRoundedBox_DXIL);
+		Desc.PixelShader =
+		    bVulkan ? Bytecode(g_SlateShaders_PSRoundedBox_SPIRV) : Bytecode(g_SlateShaders_PSRoundedBox_DXIL);
 		Desc.DebugName = "UI rounded box";
 		break;
 	case ESlateShader::Line:
@@ -316,12 +331,12 @@ FRHIGraphicsPipeline* FSlateRHIRenderingPolicy::GetPipeline(ESlateShader Shader,
 		return nullptr;
 	}
 	Desc.VertexAttributes = {
-		{ "POSITION", 0, EVertexFormat::Float2, offsetof(FSlateVertex, Position) },
-		{ "TEXCOORD", 0, EVertexFormat::Float2, offsetof(FSlateVertex, UV) },
-		{ "COLOR", 0, EVertexFormat::UByte4N, offsetof(FSlateVertex, Color) },
-		{ "COLOR", 1, EVertexFormat::UByte4N, offsetof(FSlateVertex, SecondaryColor) },
-		{ "TEXCOORD", 1, EVertexFormat::Float4, offsetof(FSlateVertex, Params0) },
-		{ "TEXCOORD", 2, EVertexFormat::Float4, offsetof(FSlateVertex, Params1) },
+	    {"POSITION", 0, EVertexFormat::Float2, offsetof(FSlateVertex, Position)},
+	    {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FSlateVertex, UV)},
+	    {"COLOR", 0, EVertexFormat::UByte4N, offsetof(FSlateVertex, Color)},
+	    {"COLOR", 1, EVertexFormat::UByte4N, offsetof(FSlateVertex, SecondaryColor)},
+	    {"TEXCOORD", 1, EVertexFormat::Float4, offsetof(FSlateVertex, Params0)},
+	    {"TEXCOORD", 2, EVertexFormat::Float4, offsetof(FSlateVertex, Params1)},
 	};
 	Desc.VertexStride = sizeof(FSlateVertex);
 	Desc.BlendMode = ToBlendMode(Blend);
@@ -332,14 +347,15 @@ FRHIGraphicsPipeline* FSlateRHIRenderingPolicy::GetPipeline(ESlateShader Shader,
 	TSharedPtr<FRHIGraphicsPipeline> Pipeline = Device.CreateGraphicsPipeline(Desc);
 	if (!Pipeline)
 	{
-		UE_LOG(LogSlateRHIRenderer, Error, "Failed to create the {} pipeline", ToString(Shader));
+		GENESIS_LOG(LogSlateRHIRenderer, Error, "Failed to create the {} pipeline", ToString(Shader));
 		return nullptr;
 	}
 	Pipelines.emplace(Key, Pipeline);
 	return Pipeline.get();
 }
 
-void FSlateRHIRenderingPolicy::Render(FRHICommandList& CommandList, FRHISwapChain& Target, const FSlateWindowElementList& Elements, const TOptional<FLinearColor>& ClearColor)
+void FSlateRHIRenderingPolicy::Render(FRHICommandList& CommandList, FRHISwapChain& Target,
+    const FSlateWindowElementList& Elements, const TOptional<FLinearColor>& ClearColor)
 {
 	if (!Target.IsDrawable())
 	{
@@ -353,12 +369,14 @@ void FSlateRHIRenderingPolicy::Render(FRHICommandList& CommandList, FRHISwapChai
 	LastStats.Elements = static_cast<int32>(Elements.GetElements().size());
 }
 
-void FSlateRHIRenderingPolicy::Render(FRHICommandList& CommandList, FRHITexture& Target, const FSlateWindowElementList& Elements, const TOptional<FLinearColor>& ClearColor)
+void FSlateRHIRenderingPolicy::Render(FRHICommandList& CommandList, FRHITexture& Target,
+    const FSlateWindowElementList& Elements, const TOptional<FLinearColor>& ClearColor)
 {
 	Batcher.Batch(Elements, &FontCache, *this, Batched);
 	SyncGlyphPages();
 	CommandList.BeginRenderPass(Target, ClearColor);
-	RenderBatches(CommandList, Target.GetFormat(), FIntPoint(static_cast<int32>(Target.GetWidth()), static_cast<int32>(Target.GetHeight())));
+	RenderBatches(CommandList, Target.GetFormat(),
+	    FIntPoint(static_cast<int32>(Target.GetWidth()), static_cast<int32>(Target.GetHeight())));
 	CommandList.EndRenderPass();
 	LastStats.Elements = static_cast<int32>(Elements.GetElements().size());
 }
@@ -395,12 +413,15 @@ void FSlateRHIRenderingPolicy::RenderBatches(FRHICommandList& CommandList, EPixe
 	}
 	const uint64 VertexOffset = Frame.VertexCursor;
 	const uint64 IndexOffset = Frame.IndexCursor;
-	memcpy(static_cast<uint8*>(Frame.Vertices->GetMappedData()) + VertexOffset, Batched.Vertices.data(), static_cast<SIZE_T>(VertexBytes));
-	memcpy(static_cast<uint8*>(Frame.Indices->GetMappedData()) + IndexOffset, Batched.Indices.data(), static_cast<SIZE_T>(IndexBytes));
+	memcpy(static_cast<uint8*>(Frame.Vertices->GetMappedData()) + VertexOffset, Batched.Vertices.data(),
+	    static_cast<SIZE_T>(VertexBytes));
+	memcpy(static_cast<uint8*>(Frame.Indices->GetMappedData()) + IndexOffset, Batched.Indices.data(),
+	    static_cast<SIZE_T>(IndexBytes));
 	Frame.VertexCursor = FMath::AlignUp<uint64>(VertexOffset + VertexBytes, 256);
 	Frame.IndexCursor = FMath::AlignUp<uint64>(IndexOffset + IndexBytes, 256);
 
-	const float Transform[4] = { 2.0f / static_cast<float>(TargetSize.X), -2.0f / static_cast<float>(TargetSize.Y), -1.0f, 1.0f };
+	const float Transform[4] = {
+	    2.0f / static_cast<float>(TargetSize.X), -2.0f / static_cast<float>(TargetSize.Y), -1.0f, 1.0f};
 	const FIntRect FullScissor(0, 0, TargetSize.X, TargetSize.Y);
 
 	CommandList.SetVertexBuffer(*Frame.Vertices, VertexOffset, sizeof(FSlateVertex));
@@ -425,15 +446,16 @@ void FSlateRHIRenderingPolicy::RenderBatches(FRHICommandList& CommandList, EPixe
 		}
 		if (Batch.Texture != CurrentTexture)
 		{
-			auto It = Textures.find(Batch.Texture);
+			TMap<FSlateTextureId, TSharedPtr<FRHITexture>>::iterator It = Textures.find(Batch.Texture);
 			CommandList.SetTexture(It != Textures.end() && It->second ? *It->second : *Textures.at(WhiteTextureId));
 			CurrentTexture = Batch.Texture;
 		}
 		if (Batch.ClipIndex != CurrentClip)
 		{
 			const FIntRect Scissor = Batch.ClipIndex == INDEX_NONE ? FullScissor : Batched.ClipRects[Batch.ClipIndex];
-			CommandList.SetScissor(FIntRect(FMath::Clamp(Scissor.Left, 0, TargetSize.X), FMath::Clamp(Scissor.Top, 0, TargetSize.Y),
-				FMath::Clamp(Scissor.Right, 0, TargetSize.X), FMath::Clamp(Scissor.Bottom, 0, TargetSize.Y)));
+			CommandList.SetScissor(
+			    FIntRect(FMath::Clamp(Scissor.Left, 0, TargetSize.X), FMath::Clamp(Scissor.Top, 0, TargetSize.Y),
+			        FMath::Clamp(Scissor.Right, 0, TargetSize.X), FMath::Clamp(Scissor.Bottom, 0, TargetSize.Y)));
 			CurrentClip = Batch.ClipIndex;
 		}
 		CommandList.DrawIndexed(Batch.NumIndices, Batch.FirstIndex, 0);

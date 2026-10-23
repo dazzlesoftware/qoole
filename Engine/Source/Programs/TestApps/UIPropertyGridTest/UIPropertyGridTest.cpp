@@ -11,6 +11,7 @@
 // picker from a swatch.
 
 #include "DemoScene.h"
+#include "Templates/SharedPointer.h"
 #include "Framework/PropertyGrid/SPropertyGrid.h"
 #include "TestApp.h"
 #include "TestWidgets.h"
@@ -24,13 +25,19 @@
 class FPropertyGridTestApp final : public FTestApp
 {
 public:
-	FPropertyGridTestApp() : FTestApp({ "UIPropertyGridTest", "Genesis UI - Property grid", FVector2(1000.0f, 700.0f) }) {}
+	FPropertyGridTestApp() : FTestApp({"UIPropertyGridTest", "Genesis UI - Property grid", FVector2(1000.0f, 700.0f)})
+	{
+	}
 
 protected:
 	TSharedRef<SWidget> MakeContent() override
 	{
 		Scene.OnLog.AddLambda([this](const FString& Line) { SetLastEvent(Line); });
-		Scene.OnSelectionChanged.AddLambda([this] { SyncList(); UpdateGrid(); });
+		Scene.OnSelectionChanged.AddLambda([this]
+		{
+			SyncList();
+			UpdateGrid();
+		});
 		Scene.OnChanged.AddLambda([this]
 		{
 			SyncList();
@@ -108,56 +115,61 @@ protected:
 	void BuildSelfTest(FTestScript& Script) override
 	{
 		Script.Capture("empty")
-			.Do([this] { PointAtText("pillar", true); })
-			.Check("selecting an object shows its properties", [this] { return Grid->GetObjects().size() == 1 && HasProperty("Name") && !HasProperty("Brightness"); })
-			.Capture("pillar")
-			.Do([this] { Grid->SetPropertyValue("Name", FString("pillar_big")); })
-			.Check("editing a property changes the object", [this] { return Scene.Find(PillarId())->Name == "pillar_big"; })
-			.Check("an edit is one undo step", [this] { return Scene.CanUndo(); })
-			.Do([this] { PointAtText("Undo", true); })
-			.Check("Undo reverts the edit", [this] { return Scene.Find(PillarId())->Name == "pillar"; })
-			.Do([this] { PointAtText("Redo", true); })
-			.Check("Redo applies it again", [this] { return Scene.Find(PillarId())->Name == "pillar_big"; })
-			// Both lights: brightness is shared, and their values differ.
-			.Do([this] { Scene.SetSelection(IdsOfKind(1)); })
-			.Check("two lights selected, the grid shows their shared properties", [this] { return Grid->GetObjects().size() == 2 && HasProperty("Brightness"); }, 5)
-			.Capture("mixed")
-			.Do([this] { Grid->SetPropertyValue("Brightness", 4.0f); })
-			.Check("one edit changes both lights", [this]
+		    .Do([this] { PointAtText("pillar", true); })
+		    .Check("selecting an object shows its properties",
+		        [this] { return Grid->GetObjects().size() == 1 && HasProperty("Name") && !HasProperty("Brightness"); })
+		    .Capture("pillar")
+		    .Do([this] { Grid->SetPropertyValue("Name", FString("pillar_big")); })
+		    .Check("editing a property changes the object",
+		        [this] { return Scene.Find(PillarId())->Name == "pillar_big"; })
+		    .Check("an edit is one undo step", [this] { return Scene.CanUndo(); })
+		    .Do([this] { PointAtText("Undo", true); })
+		    .Check("Undo reverts the edit", [this] { return Scene.Find(PillarId())->Name == "pillar"; })
+		    .Do([this] { PointAtText("Redo", true); })
+		    .Check("Redo applies it again", [this] { return Scene.Find(PillarId())->Name == "pillar_big"; })
+		    // Both lights: brightness is shared, and their values differ.
+		    .Do([this] { Scene.SetSelection(IdsOfKind(1)); })
+		    .Check("two lights selected, the grid shows their shared properties",
+		        [this] { return Grid->GetObjects().size() == 2 && HasProperty("Brightness"); }, 5)
+		    .Capture("mixed")
+		    .Do([this] { Grid->SetPropertyValue("Brightness", 4.0f); })
+		    .Check("one edit changes both lights",
+		        [this]
+		{
+			for (const int32 Id : IdsOfKind(1))
 			{
-				for (const int32 Id : IdsOfKind(1))
+				if (Scene.Find(Id)->Brightness != 4.0f)
 				{
-					if (Scene.Find(Id)->Brightness != 4.0f)
-					{
-						return false;
-					}
+					return false;
 				}
-				return true;
-			})
-			.Do([this] { Scene.Undo(); })
-			.Check("one undo reverts both", [this] { return Scene.Find(IdsOfKind(1)[0])->Brightness == 1.0f && Scene.Find(IdsOfKind(1)[1])->Brightness == 2.5f; })
-			// A brush and a light: no brightness.
-			.Do([this] { Scene.SetSelection({ PillarId(), IdsOfKind(1)[0] }); })
-			.Check("a brush and a light share no brightness", [this] { return !HasProperty("Brightness") && HasProperty("Color"); }, 5)
-			// The search box.
-			.Do([this] { Grid->SetFilterText("pos"); })
-			.Capture("filtered", 5)
-			.Do([this] { Grid->SetFilterText(""); })
-			// The color picker from a swatch.
-			.Do([this]
+			}
+			return true;
+		})
+		    .Do([this] { Scene.Undo(); })
+		    .Check("one undo reverts both", [this]
+		{ return Scene.Find(IdsOfKind(1)[0])->Brightness == 1.0f && Scene.Find(IdsOfKind(1)[1])->Brightness == 2.5f; })
+		    // A brush and a light: no brightness.
+		    .Do([this] { Scene.SetSelection({PillarId(), IdsOfKind(1)[0]}); })
+		    .Check("a brush and a light share no brightness",
+		        [this] { return !HasProperty("Brightness") && HasProperty("Color"); }, 5)
+		    // The search box.
+		    .Do([this] { Grid->SetFilterText("pos"); })
+		    .Capture("filtered", 5)
+		    .Do([this] { Grid->SetFilterText(""); })
+		    // The color picker from a swatch.
+		    .Do([this] { Scene.SetSelection({PillarId()}); })
+		    .Do(
+		        [this]
+		{
+			if (const SColorBlock* Swatch = FindWidget<SColorBlock>(*Grid);
+			    Expect(Swatch != nullptr, "the grid shows a color swatch"))
 			{
-				Scene.SetSelection({ PillarId() });
-			})
-			.Do([this]
-			{
-				if (const SColorBlock* Swatch = FindWidget<SColorBlock>(*Grid); Expect(Swatch != nullptr, "the grid shows a color swatch"))
-				{
-					Click(GetCenter(*Swatch));
-				}
-			}, 5)
-			.Check("a click on the swatch opens the color picker", [this] { return GetApp().GetMenuCount() == 1; }, 5)
-			.Capture("color_picker")
-			.Do([this] { PressKey(EKey::Escape); });
+				Click(GetCenter(*Swatch));
+			}
+		}, 5)
+		    .Check("a click on the swatch opens the color picker", [this] { return GetApp().GetMenuCount() == 1; }, 5)
+		    .Capture("color_picker")
+		    .Do([this] { PressKey(EKey::Escape); });
 	}
 
 private:
@@ -185,7 +197,10 @@ private:
 		return Ids;
 	}
 
-	int32 PillarId() const { return 5; }
+	int32 PillarId() const
+	{
+		return 5;
+	}
 
 	bool HasProperty(const char* Name) const
 	{

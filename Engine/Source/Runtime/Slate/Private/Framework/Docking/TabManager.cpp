@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Framework/Docking/TabManager.h"
+#include "Templates/SharedPointer.h"
+#include "Internationalization/TextLocalization.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/SDockingArea.h"
@@ -10,7 +12,7 @@
 
 TSharedRef<FDockStackLayout> FDockStackLayout::AddTab(FName TabId, ETabState State)
 {
-	Tabs.push_back({ TabId, State });
+	Tabs.push_back({TabId, State});
 	if (State == ETabState::Opened && ForegroundTab.IsNone())
 	{
 		ForegroundTab = TabId;
@@ -69,7 +71,7 @@ TSharedRef<FDockAreaLayout> FDockAreaLayout::SetWindow(TOptional<FIntPoint> Posi
 
 TSharedRef<FDockLayout> FDockLayout::New(FName Name, int32 Version)
 {
-	auto Layout = MakeShared<FDockLayout>();
+	TSharedRef<FDockLayout> Layout = MakeShared<FDockLayout>();
 	Layout->Name = Name;
 	Layout->Version = Version;
 	return Layout;
@@ -77,7 +79,7 @@ TSharedRef<FDockLayout> FDockLayout::New(FName Name, int32 Version)
 
 TSharedRef<FDockAreaLayout> FDockLayout::NewPrimaryArea()
 {
-	auto Area = MakeShared<FDockAreaLayout>();
+	TSharedRef<FDockAreaLayout> Area = MakeShared<FDockAreaLayout>();
 	Area->bPrimary = true;
 	return Area;
 }
@@ -159,14 +161,15 @@ namespace
 		TSharedPtr<FDockLayoutNode> Node;
 		if (Type == "Stack")
 		{
-			auto Stack = std::make_shared<FDockStackLayout>();
+			TSharedPtr<FDockStackLayout> Stack = std::make_shared<FDockStackLayout>();
 			const FJsonValue& Tabs = Json.Get("Tabs");
 			for (int32 I = 0; I < Tabs.Num() && Tabs.IsArray(); ++I)
 			{
 				const FString Id = Tabs[I].Get("Id").AsString();
 				if (!Id.IsEmpty())
 				{
-					Stack->Tabs.push_back({ FName(Id), Tabs[I].Get("Open").AsBool(true) ? ETabState::Opened : ETabState::Closed });
+					Stack->Tabs.push_back(
+					    {FName(Id), Tabs[I].Get("Open").AsBool(true) ? ETabState::Opened : ETabState::Closed});
 				}
 			}
 			Stack->ForegroundTab = FName(Json.Get("Foreground").AsString());
@@ -174,7 +177,7 @@ namespace
 		}
 		else if (Type == "Splitter")
 		{
-			auto Splitter = std::make_shared<FDockSplitterLayout>();
+			TSharedPtr<FDockSplitterLayout> Splitter = std::make_shared<FDockSplitterLayout>();
 			SplitterFromJson(*Splitter, Json);
 			Node = Splitter;
 		}
@@ -188,7 +191,8 @@ namespace
 
 	void SplitterFromJson(FDockSplitterLayout& Out, const FJsonValue& Json)
 	{
-		Out.Orientation = Json.Get("Orientation").AsString() == "Vertical" ? EOrientation::Vertical : EOrientation::Horizontal;
+		Out.Orientation =
+		    Json.Get("Orientation").AsString() == "Vertical" ? EOrientation::Vertical : EOrientation::Horizontal;
 		const FJsonValue& Children = Json.Get("Children");
 		for (int32 I = 0; I < Children.Num() && Children.IsArray(); ++I)
 		{
@@ -198,7 +202,7 @@ namespace
 			}
 		}
 	}
-}
+} // namespace
 
 FJsonValue FDockLayout::ToJson() const
 {
@@ -229,14 +233,14 @@ TSharedPtr<FDockLayout> FDockLayout::FromJson(const FJsonValue& Json)
 	{
 		return nullptr;
 	}
-	auto Layout = std::make_shared<FDockLayout>();
+	TSharedPtr<FDockLayout> Layout = std::make_shared<FDockLayout>();
 	Layout->Name = FName(Json.Get("Name").AsString());
 	Layout->Version = Json.Get("Version").AsInt(-1);
 	const FJsonValue& AreaArray = Json.Get("Areas");
 	for (int32 I = 0; I < AreaArray.Num(); ++I)
 	{
 		const FJsonValue& AreaJson = AreaArray[I];
-		auto Area = std::make_shared<FDockAreaLayout>();
+		TSharedPtr<FDockAreaLayout> Area = std::make_shared<FDockAreaLayout>();
 		SplitterFromJson(*Area, AreaJson);
 		Area->bPrimary = AreaJson.Get("Primary").AsBool();
 		if (AreaJson.Contains("X") && AreaJson.Contains("Y"))
@@ -404,13 +408,17 @@ TSharedRef<SWidget> FTabManager::RestoreNode(const TSharedRef<FDockLayoutNode>& 
 	return Splitter;
 }
 
-TSharedRef<SDockingArea> FTabManager::RestoreArea(const TSharedRef<FDockAreaLayout>& Layout, const TSharedPtr<SWindow>& Window)
+TSharedRef<SDockingArea> FTabManager::RestoreArea(
+    const TSharedRef<FDockAreaLayout>& Layout, const TSharedPtr<SWindow>& Window)
 {
-	const TSharedRef<SDockingArea> Area = SNew(SDockingArea, TSharedRef<FTabManager>(shared_from_this()), Layout->bPrimary, Window).Orientation(Layout->Orientation);
+	const TSharedRef<SDockingArea> Area =
+	    SNew(SDockingArea, TSharedRef<FTabManager>(shared_from_this()), Layout->bPrimary, Window)
+	        .Orientation(Layout->Orientation);
 	for (const TSharedRef<FDockLayoutNode>& Child : Layout->Children)
 	{
 		const TSharedRef<SWidget> Widget = RestoreNode(Child, Window);
-		Area->AddChildNode(TSharedRef<SDockingNode>(std::static_pointer_cast<SDockingNode>(Widget.ToSharedPtr())), Child->SizeCoefficient);
+		Area->AddChildNode(TSharedRef<SDockingNode>(std::static_pointer_cast<SDockingNode>(Widget.ToSharedPtr())),
+		    Child->SizeCoefficient);
 	}
 	// Stacks whose tabs were all closed are left out (their tabs reopen elsewhere).
 	TArray<TSharedRef<SDockTabStack>> Stacks;
@@ -434,10 +442,10 @@ TSharedRef<SDockingArea> FTabManager::RestoreArea(const TSharedRef<FDockAreaLayo
 TSharedRef<SDockingArea> FTabManager::OpenFloatingWindow(const TSharedRef<FDockAreaLayout>& Layout)
 {
 	const TSharedRef<SWindow> Window = SNew(SWindow)
-		.Title("Genesis")
-		.ClientSize(Layout->WindowSize)
-		.ScreenPosition(Layout->WindowPosition)
-		.AppearsInTaskbar(false);
+	                                       .Title(GENESIS_TEXT("Genesis"))
+	                                       .ClientSize(Layout->WindowSize)
+	                                       .ScreenPosition(Layout->WindowPosition)
+	                                       .AppearsInTaskbar(false);
 	const TSharedRef<SDockingArea> Area = RestoreArea(Layout, Window.ToSharedPtr());
 	Window->SetContent(Area);
 	const TWeakPtr<SDockingArea> WeakArea = Area.ToSharedPtr();
@@ -462,7 +470,8 @@ TSharedRef<SDockingArea> FTabManager::OpenFloatingWindow(const TSharedRef<FDockA
 		}
 		if (const TSharedPtr<FTabManager> Manager = WeakManager.lock())
 		{
-			std::erase_if(Manager->Areas, [&Pinned](const TWeakPtr<SDockingArea>& A) { return A.lock() == Pinned || A.expired(); });
+			std::erase_if(Manager->Areas,
+			    [&Pinned](const TWeakPtr<SDockingArea>& A) { return A.lock() == Pinned || A.expired(); });
 		}
 		return bAllClosed;
 	}));
@@ -479,7 +488,8 @@ TSharedRef<SDockingArea> FTabManager::OpenFloatingWindow(const TSharedRef<FDockA
 	return Area;
 }
 
-TSharedRef<SWidget> FTabManager::RestoreFrom(const TSharedRef<FDockLayout>& Layout, const TSharedPtr<SWindow>& PrimaryWindow)
+TSharedRef<SWidget> FTabManager::RestoreFrom(
+    const TSharedRef<FDockLayout>& Layout, const TSharedPtr<SWindow>& PrimaryWindow)
 {
 	LayoutName = Layout->Name;
 	LayoutVersion = Layout->Version;
@@ -500,7 +510,7 @@ TSharedRef<SWidget> FTabManager::RestoreFrom(const TSharedRef<FDockLayout>& Layo
 	{
 		if (!Area->bPrimary)
 		{
-			auto Floating = std::make_shared<FDockAreaLayout>(*Area);
+			TSharedPtr<FDockAreaLayout> Floating = std::make_shared<FDockAreaLayout>(*Area);
 			OpenFloatingWindow(TSharedRef<FDockAreaLayout>(Floating));
 		}
 	}
@@ -516,7 +526,7 @@ namespace
 		if (Node.IsStack())
 		{
 			const SDockTabStack& Stack = static_cast<const SDockTabStack&>(Node);
-			auto Layout = FDockLayout::NewStack();
+			TSharedRef<FDockStackLayout> Layout = FDockLayout::NewStack();
 			for (const TSharedRef<SDockTab>& Tab : Stack.GetTabs())
 			{
 				Layout->AddTab(Tab->GetTabId());
@@ -533,7 +543,7 @@ namespace
 			return Layout;
 		}
 		const SDockingSplitter& Splitter = static_cast<const SDockingSplitter&>(Node);
-		auto Layout = FDockLayout::NewSplitter()->SetOrientation(Splitter.GetOrientation());
+		TSharedRef<FDockSplitterLayout> Layout = FDockLayout::NewSplitter()->SetOrientation(Splitter.GetOrientation());
 		for (const TSharedRef<SDockingNode>& Child : Splitter.GetChildNodes())
 		{
 			Layout->Split(PersistNode(Child.Get()));
@@ -541,7 +551,7 @@ namespace
 		Layout->SizeCoefficient = Node.GetSizeCoefficient();
 		return Layout;
 	}
-}
+} // namespace
 
 TSharedRef<FDockLayout> FTabManager::PersistLayout() const
 {
@@ -553,13 +563,15 @@ TSharedRef<FDockLayout> FTabManager::PersistLayout() const
 		{
 			continue;
 		}
-		auto AreaLayout = Area->IsPrimary() ? FDockLayout::NewPrimaryArea() : FDockLayout::NewFloatingArea();
+		TSharedRef<FDockAreaLayout> AreaLayout =
+		    Area->IsPrimary() ? FDockLayout::NewPrimaryArea() : FDockLayout::NewFloatingArea();
 		AreaLayout->SetOrientation(Area->GetOrientation());
 		for (const TSharedRef<SDockingNode>& Child : Area->GetChildNodes())
 		{
 			AreaLayout->Split(PersistNode(Child.Get()));
 		}
-		if (const TSharedPtr<SWindow> Window = Area->GetWindow(); Window && !Area->IsPrimary() && Window->GetNativeWindow())
+		if (const TSharedPtr<SWindow> Window = Area->GetWindow();
+		    Window && !Area->IsPrimary() && Window->GetNativeWindow())
 		{
 			AreaLayout->SetWindow(Window->GetNativeWindow()->GetClientPosition(), Window->GetLogicalSize());
 		}
@@ -582,13 +594,14 @@ TSharedRef<FDockLayout> FTabManager::LoadLayout(const FString& SavedJson, const 
 	const TOptional<FJsonValue> Json = FJsonValue::Parse(SavedJson.View(), &Error);
 	if (!Json)
 	{
-		UE_LOG(LogSlate, Warning, "Saved layout ignored: {}", Error);
+		GENESIS_LOG(LogSlate, Warning, "Saved layout ignored: {}", Error);
 		return Default;
 	}
 	const TSharedPtr<FDockLayout> Saved = FDockLayout::FromJson(*Json);
 	if (!Saved || Saved->Name != Default->Name || Saved->Version != Default->Version || !Saved->GetPrimaryArea())
 	{
-		UE_LOG(LogSlate, Log, "Saved layout ignored (another name or version); using the default \"{}\" v{}", Default->Name, Default->Version);
+		GENESIS_LOG(LogSlate, Log, "Saved layout ignored (another name or version); using the default \"{}\" v{}",
+		    Default->Name, Default->Version);
 		return Default;
 	}
 	return ToSharedRef(Saved);
@@ -708,7 +721,8 @@ TSharedPtr<SDockTab> FTabManager::TryInvokeTab(FName TabId)
 		Existing->ActivateInParent();
 		if (const TSharedPtr<SDockTabStack> Stack = Existing->GetParentStack())
 		{
-			if (SDockingArea* Area = Stack->GetDockArea(); Area && Area->GetWindow() && Area->GetWindow()->GetNativeWindow())
+			if (SDockingArea* Area = Stack->GetDockArea();
+			    Area && Area->GetWindow() && Area->GetWindow()->GetNativeWindow())
 			{
 				Area->GetWindow()->GetNativeWindow()->BringToFront();
 			}
@@ -751,7 +765,7 @@ void FTabManager::SetActiveTab(const TSharedPtr<SDockTab>& Tab)
 		return;
 	}
 	ActiveTab = Tab;
-	for (const TSharedPtr<SDockTab>& Changed : { Old, Tab })
+	for (const TSharedPtr<SDockTab>& Changed : {Old, Tab})
 	{
 		if (Changed)
 		{
@@ -809,7 +823,8 @@ void FTabManager::OnStackEmptied(const TSharedRef<SDockTabStack>& Stack)
 	if (!Area->IsPrimary() && Area->GetChildNodes().empty())
 	{
 		const TSharedPtr<SDockingArea> AreaPtr = StaticCastSharedPtr<SDockingArea>(Area->shared_from_this());
-		std::erase_if(Areas, [&AreaPtr](const TWeakPtr<SDockingArea>& A) { return A.lock() == AreaPtr || A.expired(); });
+		std::erase_if(
+		    Areas, [&AreaPtr](const TWeakPtr<SDockingArea>& A) { return A.lock() == AreaPtr || A.expired(); });
 		if (const TSharedPtr<SWindow> Window = Area->GetWindow(); Window && FSlateApplication::IsInitialized())
 		{
 			Window->SetOnRequestClose(FRequestWindowClose());
@@ -850,7 +865,8 @@ void FTabManager::MoveTabToStack(const TSharedRef<SDockTab>& Tab, const TSharedR
 	OnLayoutChanged.Broadcast();
 }
 
-void FTabManager::MoveTabToNewStack(const TSharedRef<SDockTab>& Tab, const TSharedRef<SDockTabStack>& Beside, EUINavigation Side)
+void FTabManager::MoveTabToNewStack(
+    const TSharedRef<SDockTab>& Tab, const TSharedRef<SDockTabStack>& Beside, EUINavigation Side)
 {
 	if (Tab->GetParentStack() == Beside.ToSharedPtr() && Beside->NumTabs() == 1)
 	{
@@ -863,7 +879,8 @@ void FTabManager::MoveTabToNewStack(const TSharedRef<SDockTab>& Tab, const TShar
 		return;
 	}
 	const TSharedRef<SDockTabStack> NewStack = SNew(SDockTabStack, TSharedRef<FTabManager>(shared_from_this()));
-	const EOrientation Orientation = Side == EUINavigation::Left || Side == EUINavigation::Right ? EOrientation::Horizontal : EOrientation::Vertical;
+	const EOrientation Orientation =
+	    Side == EUINavigation::Left || Side == EUINavigation::Right ? EOrientation::Horizontal : EOrientation::Vertical;
 	const bool bAfter = Side == EUINavigation::Right || Side == EUINavigation::Down;
 	if (Parent->GetOrientation() == Orientation)
 	{
@@ -891,14 +908,16 @@ void FTabManager::MoveTabToNewWindow(const TSharedRef<SDockTab>& Tab, FIntPoint 
 	if (const TSharedPtr<SDockTabStack> Stack = Tab->GetParentStack())
 	{
 		SDockingArea* Area = Stack->GetDockArea();
-		if (Area && !Area->IsPrimary() && Stack->NumTabs() == 1 && Area->GetChildNodes().size() == 1 && Area->GetWindow())
+		if (Area && !Area->IsPrimary() && Stack->NumTabs() == 1 && Area->GetChildNodes().size() == 1 &&
+		    Area->GetWindow())
 		{
 			Area->GetWindow()->GetNativeWindow()->MoveWindowTo(ScreenPosition.X, ScreenPosition.Y);
 			return;
 		}
 	}
 	RemoveTabFromStack(Tab);
-	const TSharedRef<SDockingArea> Area = OpenFloatingWindow(FDockLayout::NewFloatingArea()->SetWindow(ScreenPosition, LogicalSize));
+	const TSharedRef<SDockingArea> Area =
+	    OpenFloatingWindow(FDockLayout::NewFloatingArea()->SetWindow(ScreenPosition, LogicalSize));
 	const TSharedRef<SDockTabStack> Stack = SNew(SDockTabStack, TSharedRef<FTabManager>(shared_from_this()));
 	Area->AddChildNode(Stack, 1.0f);
 	Stack->AddTab(Tab);

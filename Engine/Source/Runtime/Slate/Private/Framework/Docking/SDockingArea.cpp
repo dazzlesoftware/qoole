@@ -1,6 +1,9 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Framework/Docking/SDockingArea.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
+#include "Internationalization/TextLocalization.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/Layout/SBox.h"
@@ -9,8 +12,11 @@
 
 namespace
 {
-	const FDockTabStyle& DockStyle() { return FAppStyle::Get().GetWidgetStyle<FDockTabStyle>("DockTab"); }
-}
+	const FDockTabStyle& DockStyle()
+	{
+		return FAppStyle::Get().GetWidgetStyle<FDockTabStyle>("DockTab");
+	}
+} // namespace
 
 // ---------------------------------------------------------------------------
 // SDockingNode, SDockingSplitter
@@ -176,10 +182,15 @@ void SDockingSplitter::Simplify()
 
 void SDockingSplitter::Rebuild()
 {
-	SAssignNew(Splitter, SSplitter).Orientation(Orientation).Style(&FAppStyle::Get().GetWidgetStyle<FSplitterStyle>("Splitter"));
+	SAssignNew(Splitter, SSplitter)
+	    .Orientation(Orientation)
+	    .Style(&FAppStyle::Get().GetWidgetStyle<FSplitterStyle>("Splitter"));
 	for (SIZE_T I = 0; I < ChildNodes.size(); ++I)
 	{
-		Splitter->AddSlot().Value(Coefficients[I]).MinSize(60.0f).OnSlotResized(FOnFloatValueChanged::CreateLambda([this](float)
+		Splitter->AddSlot()
+		    .Value(Coefficients[I])
+		    .MinSize(60.0f)
+		    .OnSlotResized(FOnFloatValueChanged::CreateLambda([this](float)
 		{
 			if (SDockingArea* Area = GetDockArea())
 			{
@@ -196,7 +207,8 @@ void SDockingSplitter::Rebuild()
 // ---------------------------------------------------------------------------
 // SDockingArea
 
-void SDockingArea::Construct(const FArguments& Args, const TSharedRef<FTabManager>& InTabManager, bool bInPrimary, const TSharedPtr<SWindow>& InWindow)
+void SDockingArea::Construct(const FArguments& Args, const TSharedRef<FTabManager>& InTabManager, bool bInPrimary,
+    const TSharedPtr<SWindow>& InWindow)
 {
 	TabManager = InTabManager.ToSharedPtr();
 	bPrimary = bInPrimary;
@@ -224,8 +236,8 @@ void SDockingArea::GatherStacks(TArray<TSharedRef<SDockTabStack>>& Out) const
 	Walk(*this);
 }
 
-int32 SDockingArea::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SDockingArea::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	if (ChildNodes.empty())
 	{
@@ -233,10 +245,11 @@ int32 SDockingArea::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, c
 		const FSlateFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
 		if (Font.Font && FSlateApplication::IsInitialized())
 		{
-			const TSharedRef<const FShapedGlyphSequence> Text = FSlateApplication::Get().GetFontCache().ShapeText("Open a panel from the Window menu", Font, Geometry.Scale);
+			const TSharedRef<const FShapedGlyphSequence> Text = FSlateApplication::Get().GetFontCache().ShapeText(
+			    "Open a panel from the Window menu", Font, Geometry.Scale);
 			const FVector2 Size = Text->GetLogicalSize();
 			OutDrawElements.AddText(LayerId, Geometry.ToPaintGeometry((Geometry.Size - Size) * 0.5f, Size), Text,
-				InWidgetStyle.Tinted(FSlateColor(EStyleColor::ForegroundSecondary).Resolve()));
+			    InWidgetStyle.Tinted(FSlateColor(EStyleColor::ForegroundSecondary).Resolve()));
 		}
 		return LayerId;
 	}
@@ -249,8 +262,9 @@ int32 SDockingArea::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, c
 TSharedPtr<SWidget> FDockTabDragDrop::GetDefaultDecorator() const
 {
 	const FDockTabStyle& Style = DockStyle();
-	return SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("DragDecorator")).Padding(Style.TabPadding)
-		[SNew(STextBlock).Text(Tab ? Tab->GetLabel() : FString()).TextStyle(&Style.Text)];
+	return SNew(SBorder)
+	    .BorderImage(&FAppStyle::Get().GetBrush("DragDecorator"))
+	    .Padding(Style.TabPadding)[SNew(STextBlock).Text(Tab ? Tab->GetLabel() : FString()).TextStyle(&Style.Text)];
 }
 
 void FDockTabDragDrop::OnDrop(bool bDropWasHandled, const FPointerEvent&)
@@ -262,7 +276,8 @@ void FDockTabDragDrop::OnDrop(bool bDropWasHandled, const FPointerEvent&)
 	// Dropped outside every dock target: a new floating window there.
 	if (const TSharedPtr<FTabManager> Manager = Tab->GetTabManager())
 	{
-		Manager->MoveTabToNewWindow(ToSharedRef(Tab), FIntPoint(FMath::RoundToInt(ScreenPosition.X) - 20, FMath::RoundToInt(ScreenPosition.Y) - 12), SourceSize);
+		Manager->MoveTabToNewWindow(ToSharedRef(Tab),
+		    FIntPoint(FMath::RoundToInt(ScreenPosition.X) - 20, FMath::RoundToInt(ScreenPosition.Y) - 12), SourceSize);
 	}
 }
 
@@ -282,23 +297,33 @@ namespace
 			Tab = InTab.ToSharedPtr();
 			Stack = InStack;
 			const FDockTabStyle& Style = DockStyle();
-			const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text([this] { const TSharedPtr<SDockTab> T = Tab.lock(); return T ? T->GetLabel() : FString(); }).TextStyle(&Style.Text)];
+			const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox) +
+			    SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock)
+			            .Text([this]
+			{
+				const TSharedPtr<SDockTab> T = Tab.lock();
+				return T ? T->GetLabel() : FString();
+			}).TextStyle(&Style.Text)];
 			if (InTab->IsClosable())
 			{
-				Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(6.0f, 0.0f, -4.0f, 0.0f))
-				[
-					SNew(SButton).Text("×").ButtonStyle(&Style.CloseButton).IsFocusable(false).ToolTipText("Close")
-					.Visibility([this] { return IsHovered() || IsForeground() ? EVisibility::Visible : EVisibility::Hidden; })
-					.OnClicked([this]
+				Row->AddSlot()
+				    .AutoWidth()
+				    .VAlign(VAlign_Center)
+				    .Padding(FMargin(6.0f, 0.0f, -4.0f, 0.0f))[SNew(SButton)
+				            .Text(GENESIS_TEXT("×"))
+				            .ButtonStyle(&Style.CloseButton)
+				            .IsFocusable(false)
+				            .ToolTipText(GENESIS_TEXT("Close"))
+				            .Visibility([this]
+				{ return IsHovered() || IsForeground() ? EVisibility::Visible : EVisibility::Hidden; })
+				            .OnClicked([this]
+				{
+					if (const TSharedPtr<SDockTab> T = Tab.lock())
 					{
-						if (const TSharedPtr<SDockTab> T = Tab.lock())
-						{
-							T->RequestCloseTab();
-						}
-						return FReply::Handled();
-					})
-				];
+						T->RequestCloseTab();
+					}
+					return FReply::Handled();
+				})];
 			}
 			ChildSlot.Padding(Style.TabPadding)[Row];
 		}
@@ -330,32 +355,41 @@ namespace
 			{
 				return FReply::Unhandled();
 			}
-			auto Operation = std::make_shared<FDockTabDragDrop>();
+			TSharedPtr<FDockTabDragDrop> Operation = std::make_shared<FDockTabDragDrop>();
 			Operation->Tab = T;
 			if (const TSharedPtr<SWindow> Window = FSlateApplication::Get().FindWindowForWidget(*Stack))
 			{
-				Operation->SourceSize = Stack->GetCachedGeometry().GetLayoutBoundingRect().GetSize() / Window->GetScale();
+				Operation->SourceSize =
+				    Stack->GetCachedGeometry().GetLayoutBoundingRect().GetSize() / Window->GetScale();
 			}
-			return FReply::Handled().BeginDragDrop(TSharedRef<FDragDropOperation>(StaticCastSharedPtr<FDragDropOperation>(Operation)));
+			return FReply::Handled().BeginDragDrop(
+			    TSharedRef<FDragDropOperation>(StaticCastSharedPtr<FDragDropOperation>(Operation)));
 		}
 
-		EWindowZone GetWindowZoneOverride() const override { return EWindowZone::ClientArea; }
+		EWindowZone GetWindowZoneOverride() const override
+		{
+			return EWindowZone::ClientArea;
+		}
 
 	protected:
-		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-			int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
+		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+		    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 		{
 			const FDockTabStyle& Style = DockStyle();
 			const bool bForeground = IsForeground();
 			const bool bActiveStack = Stack->IsActiveStack();
-			const FSlateBrush& Brush = bForeground ? (bActiveStack ? Style.Active : Style.Foreground) : (IsHovered() ? Style.Hovered : Style.Normal);
+			const FSlateBrush& Brush = bForeground ? (bActiveStack ? Style.Active : Style.Foreground)
+			                                       : (IsHovered() ? Style.Hovered : Style.Normal);
 			Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 			if (bForeground && bActiveStack)
 			{
-				Style.ActiveIndicator.Paint(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FRect(0.0f, 0.0f, Geometry.Size.X, 2.0f)), InWidgetStyle.ColorAndOpacityTint);
+				Style.ActiveIndicator.Paint(OutDrawElements, LayerId + 1,
+				    Geometry.ToPaintGeometry(FRect(0.0f, 0.0f, Geometry.Size.X, 2.0f)),
+				    InWidgetStyle.ColorAndOpacityTint);
 			}
 			FWidgetStyle ChildStyle = MakeChildStyle(InWidgetStyle);
-			ChildStyle.SetForegroundColor(FSlateColor(bForeground ? EStyleColor::ForegroundHover : EStyleColor::ForegroundSecondary).Resolve());
+			ChildStyle.SetForegroundColor(
+			    FSlateColor(bForeground ? EStyleColor::ForegroundHover : EStyleColor::ForegroundSecondary).Resolve());
 			return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, ChildStyle);
 		}
 
@@ -369,7 +403,7 @@ namespace
 		TWeakPtr<SDockTab> Tab;
 		SDockTabStack* Stack = nullptr;
 	};
-}
+} // namespace
 
 // ---------------------------------------------------------------------------
 // SDockTabStack
@@ -379,24 +413,18 @@ void SDockTabStack::Construct(const FArguments&, const TSharedRef<FTabManager>& 
 	TabManager = InTabManager.ToSharedPtr();
 	Style = &DockStyle();
 	SAssignNew(Well, SHorizontalBox);
-	const TSharedRef<SWidget> WellWidget = SNew(SBorder).BorderImage(&Style->WellBackground).Padding(0.0f)
-		[
-			// Clipped: tabs that do not fit must not draw over the next stack.
-			SNew(SBox).HeightOverride(TOptional<float>(Style->WellHeight)).HAlign(HAlign_Left).Clipping(EWidgetClipping::ClipToBounds)[ToSharedRef(Well)]
-		];
+	const TSharedRef<SWidget> WellWidget = SNew(SBorder)
+	                                           .BorderImage(&Style->WellBackground)
+	                                           .Padding(0.0f)[
+	                                               // Clipped: tabs that do not fit must not draw over the next stack.
+	                                               SNew(SBox)
+	                                                   .HeightOverride(TOptional<float>(Style->WellHeight))
+	                                                   .HAlign(HAlign_Left)
+	                                                   .Clipping(EWidgetClipping::ClipToBounds)[ToSharedRef(Well)]];
 	WellArea = WellWidget.ToSharedPtr();
-	ChildSlot
-	[
-		SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight()[WellWidget]
-		+ SVerticalBox::Slot().FillHeight(1.0f)
-		[
-			SNew(SBorder).BorderImage(&Style->ContentBackground).Padding(0.0f)
-			[
-				SAssignNew(ContentBox, SBox)
-			]
-		]
-	];
+	ChildSlot[SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[WellWidget] +
+	    SVerticalBox::Slot().FillHeight(
+	        1.0f)[SNew(SBorder).BorderImage(&Style->ContentBackground).Padding(0.0f)[SAssignNew(ContentBox, SBox)]]];
 }
 
 TSharedPtr<SDockTab> SDockTabStack::GetForegroundTab() const
@@ -507,7 +535,8 @@ FReply SDockTabStack::OnPreviewMouseButtonDown(const FGeometry&, const FPointerE
 	return FReply::Unhandled();
 }
 
-SDockTabStack::FDropTarget SDockTabStack::ComputeDropTarget(const FGeometry& Geometry, FVector2 AbsolutePosition, const SDockTab& Dragged) const
+SDockTabStack::FDropTarget SDockTabStack::ComputeDropTarget(
+    const FGeometry& Geometry, FVector2 AbsolutePosition, const SDockTab& Dragged) const
 {
 	FDropTarget Target;
 	const FVector2 Local = Geometry.AbsoluteToLocal(AbsolutePosition);
@@ -534,7 +563,9 @@ SDockTabStack::FDropTarget SDockTabStack::ComputeDropTarget(const FGeometry& Geo
 				Target.WellIndex = static_cast<int32>(I) + 1;
 			}
 		}
-		const float InsertX = Target.WellIndex < static_cast<int32>(Lefts.size()) ? Lefts[Target.WellIndex] : (Rights.empty() ? 0.0f : Rights.back());
+		const float InsertX = Target.WellIndex < static_cast<int32>(Lefts.size())
+		    ? Lefts[Target.WellIndex]
+		    : (Rights.empty() ? 0.0f : Rights.back());
 		Target.bValid = !bOwnOnly;
 		Target.PreviewRect = FRect(InsertX - 1.5f, 2.0f, InsertX + 1.5f, WellHeight - 2.0f);
 		return Target;
@@ -545,27 +576,39 @@ SDockTabStack::FDropTarget SDockTabStack::ComputeDropTarget(const FGeometry& Geo
 	const float EdgeX = FMath::Min(Content.Width() * 0.25f, 120.0f);
 	const float EdgeY = FMath::Min(Content.Height() * 0.25f, 120.0f);
 	const FVector2 P = Local;
-	if (P.X < Content.Left + EdgeX) Target.Side = EUINavigation::Left;
-	else if (P.X > Content.Right - EdgeX) Target.Side = EUINavigation::Right;
-	else if (P.Y < Content.Top + EdgeY) Target.Side = EUINavigation::Up;
-	else if (P.Y > Content.Bottom - EdgeY) Target.Side = EUINavigation::Down;
+	if (P.X < Content.Left + EdgeX)
+		Target.Side = EUINavigation::Left;
+	else if (P.X > Content.Right - EdgeX)
+		Target.Side = EUINavigation::Right;
+	else if (P.Y < Content.Top + EdgeY)
+		Target.Side = EUINavigation::Up;
+	else if (P.Y > Content.Bottom - EdgeY)
+		Target.Side = EUINavigation::Down;
 	const FVector2 Mid = Content.GetCenter();
 	switch (Target.Side)
 	{
-	case EUINavigation::Left: Target.PreviewRect = FRect(Content.Left, Content.Top, Mid.X, Content.Bottom); break;
-	case EUINavigation::Right: Target.PreviewRect = FRect(Mid.X, Content.Top, Content.Right, Content.Bottom); break;
-	case EUINavigation::Up: Target.PreviewRect = FRect(Content.Left, Content.Top, Content.Right, Mid.Y); break;
-	case EUINavigation::Down: Target.PreviewRect = FRect(Content.Left, Mid.Y, Content.Right, Content.Bottom); break;
-	default: Target.PreviewRect = Content; break;
+	case EUINavigation::Left:
+		Target.PreviewRect = FRect(Content.Left, Content.Top, Mid.X, Content.Bottom);
+		break;
+	case EUINavigation::Right:
+		Target.PreviewRect = FRect(Mid.X, Content.Top, Content.Right, Content.Bottom);
+		break;
+	case EUINavigation::Up:
+		Target.PreviewRect = FRect(Content.Left, Content.Top, Content.Right, Mid.Y);
+		break;
+	case EUINavigation::Down:
+		Target.PreviewRect = FRect(Content.Left, Mid.Y, Content.Right, Content.Bottom);
+		break;
+	default:
+		Target.PreviewRect = Content;
+		break;
 	}
 	const bool bAlreadyHere = Dragged.GetParentStack().get() == this;
 	Target.bValid = Target.Side == EUINavigation::Invalid ? !bAlreadyHere : !bOwnOnly;
 	return Target;
 }
 
-void SDockTabStack::OnDragEnter(const FGeometry&, const FDragDropEvent&)
-{
-}
+void SDockTabStack::OnDragEnter(const FGeometry&, const FDragDropEvent&) {}
 
 void SDockTabStack::OnDragLeave(const FDragDropEvent&)
 {
@@ -584,7 +627,8 @@ FReply SDockTabStack::OnDragOver(const FGeometry& Geometry, const FDragDropEvent
 		return FReply::Unhandled();
 	}
 	const FDropTarget Target = ComputeDropTarget(Geometry, Event.GetAbsolutePosition(), *Op->Tab);
-	const bool bChanged = !DragTarget || DragTarget->bValid != Target.bValid || !(DragTarget->PreviewRect == Target.PreviewRect);
+	const bool bChanged =
+	    !DragTarget || DragTarget->bValid != Target.bValid || !(DragTarget->PreviewRect == Target.PreviewRect);
 	DragTarget = Target;
 	if (bChanged)
 	{
@@ -625,24 +669,28 @@ FReply SDockTabStack::OnDrop(const FGeometry& Geometry, const FDragDropEvent& Ev
 	return FReply::Handled();
 }
 
-int32 SDockTabStack::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SDockTabStack::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	int32 MaxLayer = SDockingNode::OnPaint(Args, Geometry, CullingRect, OutDrawElements, LayerId, InWidgetStyle);
 	if (DragTarget && DragTarget->bValid)
 	{
-		Style->DropTarget.Paint(OutDrawElements, ++MaxLayer, Geometry.ToPaintGeometry(DragTarget->PreviewRect), InWidgetStyle.ColorAndOpacityTint);
+		Style->DropTarget.Paint(OutDrawElements, ++MaxLayer, Geometry.ToPaintGeometry(DragTarget->PreviewRect),
+		    InWidgetStyle.ColorAndOpacityTint);
 		if (!DragTarget->bInWell)
 		{
 			// The five targets in the middle of the content.
 			const float WellHeight = WellArea ? WellArea->GetCachedGeometry().Size.Y : Style->WellHeight;
 			const FVector2 C(Geometry.Size.X * 0.5f, (Geometry.Size.Y + WellHeight) * 0.5f);
 			const float S = 22.0f, Gap = 26.0f;
-			const FVector2 Offsets[] = { FVector2(0.0f, 0.0f), FVector2(-Gap, 0.0f), FVector2(Gap, 0.0f), FVector2(0.0f, -Gap), FVector2(0.0f, Gap) };
+			const FVector2 Offsets[] = {FVector2(0.0f, 0.0f), FVector2(-Gap, 0.0f), FVector2(Gap, 0.0f),
+			    FVector2(0.0f, -Gap), FVector2(0.0f, Gap)};
 			++MaxLayer;
 			for (const FVector2& O : Offsets)
 			{
-				Style->DropZoneIcon.Paint(OutDrawElements, MaxLayer, Geometry.ToPaintGeometry(C + O - FVector2(S * 0.5f), FVector2(S)), InWidgetStyle.ColorAndOpacityTint);
+				Style->DropZoneIcon.Paint(OutDrawElements, MaxLayer,
+				    Geometry.ToPaintGeometry(C + O - FVector2(S * 0.5f), FVector2(S)),
+				    InWidgetStyle.ColorAndOpacityTint);
 			}
 		}
 	}

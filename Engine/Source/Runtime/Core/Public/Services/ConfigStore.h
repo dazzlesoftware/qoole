@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // are separate calls because a store may keep them differently (the MFC
 // profile writes integers to the registry as DWORDs and strings as REG_SZ).
 
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
 
 class IConfigStore
 {
@@ -41,7 +41,10 @@ public:
 	virtual void SetInt(const FString& Section, const FString& Key, int32 Value) = 0;
 
 	// Writes pending changes to permanent storage.
-	virtual bool Flush() { return true; }
+	virtual bool Flush()
+	{
+		return true;
+	}
 };
 
 // Settings kept in memory only. The default store when the application has
@@ -54,7 +57,10 @@ public:
 	void SetString(const FString& Section, const FString& Key, const FString& Value) override;
 	void SetInt(const FString& Section, const FString& Key, int32 Value) override;
 
-	void Clear() { Sections.clear(); }
+	void Clear()
+	{
+		Sections.clear();
+	}
 
 protected:
 	using FSection = TMap<FString, FString>;
@@ -73,7 +79,10 @@ class FIniConfigStore : public FMemoryConfigStore
 public:
 	explicit FIniConfigStore(FString InPath) : Path(std::move(InPath)) {}
 
-	const FString& GetPath() const { return Path; }
+	const FString& GetPath() const
+	{
+		return Path;
+	}
 
 	// Replaces the current contents with the file's. A missing file loads as
 	// empty and returns false.

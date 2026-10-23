@@ -12,9 +12,9 @@ namespace
 	FString Scratch(const char* Name)
 	{
 		static int Sequence = 0;
-		const auto Stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-		const auto Dir = std::filesystem::temp_directory_path() /
-			FString::Format("GenesisPackages-{}-{}", Stamp, ++Sequence).ToWide();
+		long long const Stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+		const std::filesystem::path Dir = std::filesystem::temp_directory_path() /
+		    FString::Format("GenesisPackages-{}-{}", Stamp, ++Sequence).ToWide();
 		std::filesystem::create_directories(Dir);
 		return FString::FromWide((Dir / Name).wstring());
 	}
@@ -25,11 +25,11 @@ namespace
 		Package.Schema = "Genesis.World";
 		Package.Exports["Actors"] = FJsonValue::MakeArray();
 		Package.Exports["Actors"].Push("Terrain α");
-		Package.Bulk = { 0, 1, 128, 255 };
-		Package.Dependencies = { "/Game/Materials/Grass" };
+		Package.Bulk = {0, 1, 128, 255};
+		Package.Dependencies = {"/Game/Materials/Grass"};
 		return Package;
 	}
-}
+} // namespace
 
 TEST_SUITE("ProjectsPackages")
 {
@@ -41,8 +41,8 @@ TEST_SUITE("ProjectsPackages")
 		Project.Extensions["Plugins"] = FJsonValue::MakeArray();
 		Project.Extensions["Plugins"].Push("FutureLandscapeTools");
 		FString Error;
-		auto Json = Project.ToJson();
-		const auto Back = FProjectDescriptor::FromJson(Json, Error);
+		FJsonValue Json = Project.ToJson();
+		const TOptional<FProjectDescriptor> Back = FProjectDescriptor::FromJson(Json, Error);
 		REQUIRE(Back);
 		CHECK(Back->ToJson() == Json);
 		Json["FileVersion"] = 99;
@@ -57,16 +57,17 @@ TEST_SUITE("ProjectsPackages")
 	{
 		const FString Path = Scratch("World.gproject");
 		FString Error, Resolved;
-		const auto Project = FProjectContext::Create(Path, "My World", Error);
+		const TOptional<FProjectContext> Project = FProjectContext::Create(Path, "My World", Error);
 		REQUIRE_MESSAGE(Project, *Error);
 		CHECK(FFile::DirectoryExists(Project->GetContentDir()));
 		CHECK(FFile::DirectoryExists(Project->GetSavedDir()));
 		CHECK(Project->ResolvePackage("/Game/Maps/Main", true, Resolved, Error));
 		CHECK(Resolved.EndsWith("Main.gmap"));
-		for (const char* Invalid : { "/Game/../Outside", "/Engine/Foo", "/Game/C:/Foo", "/Game/a\\b", "/Game//Foo", "/Game/Foo/" })
+		for (const char* Invalid :
+		    {"/Game/../Outside", "/Engine/Foo", "/Game/C:/Foo", "/Game/a\\b", "/Game//Foo", "/Game/Foo/"})
 			CHECK_FALSE(Project->ResolvePackage(Invalid, true, Resolved, Error));
 		CHECK_FALSE(FProjectContext::Create(Path, "Overwrite", Error));
-		const auto Back = FProjectContext::Open(Path, Error);
+		const TOptional<FProjectContext> Back = FProjectContext::Open(Path, Error);
 		REQUIRE(Back);
 		CHECK(Back->GetDescriptor().Name == "My World");
 		FProjectContext::SetActive(*Back);
@@ -79,7 +80,7 @@ TEST_SUITE("ProjectsPackages")
 	{
 		const FString Path = Scratch("Terrain.gmap");
 		FString Error;
-		auto Package = Example();
+		FAssetPackage Package = Example();
 		REQUIRE_MESSAGE(FAssetPackageStore::Save(Path, Package, Error), *Error);
 		CHECK_FALSE(Package.Id.IsEmpty());
 		const FString Id = Package.Id;
@@ -103,7 +104,7 @@ TEST_SUITE("ProjectsPackages")
 
 	TEST_CASE("Asset extension and empty bulk are supported")
 	{
-		auto Package = Example();
+		FAssetPackage Package = Example();
 		Package.Kind = EAssetPackageKind::Asset;
 		Package.Schema = "Genesis.Material";
 		Package.Bulk.clear();
@@ -121,12 +122,12 @@ TEST_SUITE("ProjectsPackages")
 	{
 		const FString Path = Scratch("Terrain.gmap");
 		FString Error, Text;
-		auto Package = Example();
+		FAssetPackage Package = Example();
 		REQUIRE(FAssetPackageStore::Save(Path, Package, Error));
 		REQUIRE(FFile::ReadAllText(Path, Text));
-		const auto Manifest = FJsonValue::Parse(Text.View());
+		const TOptional<FJsonValue> Manifest = FJsonValue::Parse(Text.View());
 		REQUIRE(Manifest);
-		auto Bad = *Manifest;
+		FJsonValue Bad = *Manifest;
 		Bad["Exports"]["File"] = "../outside.gexp";
 		REQUIRE(FFile::WriteAllText(Path, Bad.ToString()));
 		FAssetPackage Output;
@@ -138,8 +139,8 @@ TEST_SUITE("ProjectsPackages")
 		REQUIRE(FFile::WriteAllText(Path, Bad.ToString()));
 		CHECK_FALSE(FAssetPackageStore::Load(Path, Output, Error));
 		REQUIRE(FFile::WriteAllText(Path, Manifest->ToString()));
-		const auto Sidecar = std::filesystem::path(Path.ToWide()).parent_path() /
-			Manifest->Get("Bulk").Get("File").AsString().ToWide();
+		const std::filesystem::path Sidecar =
+		    std::filesystem::path(Path.ToWide()).parent_path() / Manifest->Get("Bulk").Get("File").AsString().ToWide();
 		REQUIRE(FFile::WriteAllText(FString::FromWide(Sidecar.wstring()), "xxxx"));
 		CHECK_FALSE(FAssetPackageStore::Load(Path, Output, Error));
 		CHECK(Output.Schema == "unchanged");

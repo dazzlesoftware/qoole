@@ -43,7 +43,7 @@ enum class EPixelFormat : uint8
 	R8_UNORM,
 	R8G8B8A8_UNORM,
 	B8G8R8A8_UNORM,
-	D32_FLOAT, // depth buffers only (see FRHITextureDesc)
+	D32_FLOAT,     // depth buffers only (see FRHITextureDesc)
 	R8G8B8A8_SRGB, // color texture sampling decodes to linear before filtering
 };
 
@@ -51,9 +51,15 @@ uint32 GetBytesPerPixel(EPixelFormat Format);
 // How many levels a full mip chain of this size has, and the byte size of
 // one level / of the first Levels levels (tightly packed).
 uint32 GetFullMipLevels(uint32 Width, uint32 Height);
-inline uint32 GetMipSize(uint32 Size, uint32 Level) { return (Size >> Level) > 0 ? (Size >> Level) : 1; }
+inline uint32 GetMipSize(uint32 Size, uint32 Level)
+{
+	return (Size >> Level) > 0 ? (Size >> Level) : 1;
+}
 SIZE_T GetMipChainBytes(EPixelFormat Format, uint32 Width, uint32 Height, uint32 Levels);
-inline bool IsDepthFormat(EPixelFormat Format) { return Format == EPixelFormat::D32_FLOAT; }
+inline bool IsDepthFormat(EPixelFormat Format)
+{
+	return Format == EPixelFormat::D32_FLOAT;
+}
 
 enum class EBufferUsage : uint8
 {
@@ -81,8 +87,14 @@ class FRHIBuffer
 {
 public:
 	virtual ~FRHIBuffer() = default;
-	const FRHIBufferDesc& GetDesc() const { return Desc; }
-	uint64 GetSize() const { return Desc.Size; }
+	const FRHIBufferDesc& GetDesc() const
+	{
+		return Desc;
+	}
+	uint64 GetSize() const
+	{
+		return Desc.Size;
+	}
 	// Persistent CPU pointer for Upload buffers; nullptr for Default ones.
 	virtual void* GetMappedData() = 0;
 
@@ -96,8 +108,8 @@ struct FRHITextureDesc
 	uint32 Width = 1;
 	uint32 Height = 1;
 	EPixelFormat Format = EPixelFormat::R8G8B8A8_UNORM;
-	bool bRenderTarget = false;          // can be drawn into with BeginRenderPass
-	const void* InitialData = nullptr;   // tightly packed rows unless InitialRowPitch is set
+	bool bRenderTarget = false;        // can be drawn into with BeginRenderPass
+	const void* InitialData = nullptr; // tightly packed rows unless InitialRowPitch is set
 	uint32 InitialRowPitch = 0;
 	// Mip levels, each half the one before (at least 1 x 1). With more than
 	// one, InitialData holds them all, largest first, each tightly packed
@@ -117,13 +129,28 @@ class FRHITexture
 {
 public:
 	virtual ~FRHITexture() = default;
-	const FRHITextureDesc& GetDesc() const { return Desc; }
-	uint32 GetWidth() const { return Desc.Width; }
-	uint32 GetHeight() const { return Desc.Height; }
-	EPixelFormat GetFormat() const { return Desc.Format; }
+	const FRHITextureDesc& GetDesc() const
+	{
+		return Desc;
+	}
+	uint32 GetWidth() const
+	{
+		return Desc.Width;
+	}
+	uint32 GetHeight() const
+	{
+		return Desc.Height;
+	}
+	EPixelFormat GetFormat() const
+	{
+		return Desc.Format;
+	}
 
 protected:
-	explicit FRHITexture(const FRHITextureDesc& InDesc) : Desc(InDesc) { Desc.InitialData = nullptr; }
+	explicit FRHITexture(const FRHITextureDesc& InDesc) : Desc(InDesc)
+	{
+		Desc.InitialData = nullptr;
+	}
 	FRHITextureDesc Desc;
 };
 
@@ -140,7 +167,10 @@ public:
 	virtual EPixelFormat GetFormat() const = 0;
 	// Whether the swapchain can be drawn into this frame (not minimized).
 	virtual bool IsDrawable() const = 0;
-	IPlatformWindow* GetWindow() const { return Window; }
+	IPlatformWindow* GetWindow() const
+	{
+		return Window;
+	}
 
 protected:
 	explicit FRHISwapChain(IPlatformWindow* InWindow) : Window(InWindow) {}
@@ -222,7 +252,7 @@ struct FRHIGraphicsPipelineDesc
 	ESamplerFilter SamplerFilter = ESamplerFilter::Linear;
 	ESamplerAddress SamplerAddress = ESamplerAddress::Clamp;
 	bool bUniformBuffer = false; // b1 / [[vk::binding(0, NumTextures)]]; vertex and pixel stages
-	uint32 NumTextures = 1; // texture slots, 1 to MaxTextures
+	uint32 NumTextures = 1;      // texture slots, 1 to MaxTextures
 	ECullMode CullMode = ECullMode::None;
 	EPixelFormat RenderTargetFormat = EPixelFormat::R8G8B8A8_UNORM;
 	uint32 PushConstantSize = 0; // bytes, multiple of 4, at most 64
@@ -237,7 +267,10 @@ class FRHIGraphicsPipeline
 {
 public:
 	virtual ~FRHIGraphicsPipeline() = default;
-	const FRHIGraphicsPipelineDesc& GetDesc() const { return Desc; }
+	const FRHIGraphicsPipelineDesc& GetDesc() const
+	{
+		return Desc;
+	}
 
 protected:
 	explicit FRHIGraphicsPipeline(const FRHIGraphicsPipelineDesc& InDesc) : Desc(InDesc) {}
@@ -262,7 +295,8 @@ public:
 	virtual void BeginRenderPass(FRHITexture& Target, const TOptional<FLinearColor>& ClearColor) = 0;
 	// Draw into a render target texture with a depth buffer of the same size
 	// (D32_FLOAT); ClearDepth unset keeps its contents.
-	virtual void BeginRenderPass(FRHITexture& Target, FRHITexture& DepthTarget, const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth) = 0;
+	virtual void BeginRenderPass(FRHITexture& Target, FRHITexture& DepthTarget,
+	    const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth) = 0;
 	virtual void EndRenderPass() = 0;
 
 	virtual void SetViewport(float X, float Y, float Width, float Height) = 0;
@@ -273,21 +307,28 @@ public:
 	virtual void SetUniformBuffer(FRHIBuffer& Buffer) = 0;
 	// Into a texture slot of the pipeline (0 to its NumTextures - 1).
 	virtual void SetTexture(FRHITexture& Texture, uint32 Slot) = 0;
-	void SetTexture(FRHITexture& Texture) { SetTexture(Texture, 0); }
+	void SetTexture(FRHITexture& Texture)
+	{
+		SetTexture(Texture, 0);
+	}
 	// Slot 0 holds the vertices, slot 1 the instances (per-instance data).
 	virtual void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride, uint32 Slot) = 0;
-	void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride) { SetVertexBuffer(Buffer, Offset, Stride, 0); }
+	void SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride)
+	{
+		SetVertexBuffer(Buffer, Offset, Stride, 0);
+	}
 	virtual void SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndexFormat Format) = 0;
 	virtual void DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex) = 0;
 	// InstanceCount copies, reading instances FirstInstance on from slot 1.
-	virtual void DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance) = 0;
+	virtual void DrawIndexedInstanced(
+	    uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance) = 0;
 };
 
 struct FRHIDeviceDesc
 {
 	ERHIBackend Backend = ERHIBackend::D3D12;
-	bool bDebugLayer = UE_BUILD_DEBUG != 0; // D3D12 debug layer / Vulkan validation, when installed
-	bool bSoftwareAdapter = false;         // D3D12 WARP (headless tests); ignored by Vulkan
+	bool bDebugLayer = GENESIS_BUILD_DEBUG != 0; // D3D12 debug layer / Vulkan validation, when installed
+	bool bSoftwareAdapter = false;               // D3D12 WARP (headless tests); ignored by Vulkan
 };
 
 class FRHIDevice
@@ -300,7 +341,10 @@ public:
 
 	virtual ~FRHIDevice() = default;
 
-	ERHIBackend GetBackend() const { return Backend; }
+	ERHIBackend GetBackend() const
+	{
+		return Backend;
+	}
 	virtual FString GetAdapterName() const = 0;
 
 	virtual TUniquePtr<FRHISwapChain> CreateSwapChain(IPlatformWindow& Window) = 0;
@@ -311,7 +355,8 @@ public:
 	// Copies pixels into a region of a texture (mip level 0 of a slice). The
 	// copy happens on the GPU timeline before the next submitted frame; Data
 	// may be freed on return. RowPitch 0 means tightly packed.
-	virtual void UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch = 0, uint32 Slice = 0) = 0;
+	virtual void UpdateTexture(
+	    FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch = 0, uint32 Slice = 0) = 0;
 
 	// Waits for the GPU and copies a texture's pixels back (tightly packed
 	// rows). Slow; meant for tests and screenshots.

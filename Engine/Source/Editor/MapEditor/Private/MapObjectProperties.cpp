@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapObjectProperties.h"
+#include "Internationalization/TextLocalization.h"
 
 #include "MapEditorPrivate.h"
 #include "MapAssetLibrary.h"
@@ -24,8 +25,8 @@ namespace
 	TArray<FString> MaterialOptions()
 	{
 		TArray<FString> Result{"Use Mesh Default"};
-		if (const auto Registry = FMapAssetLibrary::GetRegistry())
-			for (const auto& Asset : Registry->GetAssets())
+		if (const std::shared_ptr<FAssetRegistry> Registry = FMapAssetLibrary::GetRegistry())
+			for (const FAssetData& Asset : Registry->GetAssets())
 				if (IsMaterialAsset(Asset.Metadata))
 					Result.push_back(Asset.PackagePath);
 		return Result;
@@ -41,7 +42,10 @@ namespace
 		return Options;
 	}
 
-	FString KeyProperty(const char* Key) { return FString::Format("Key:{}", Key); }
+	FString KeyProperty(const char* Key)
+	{
+		return FString::Format("Key:{}", Key);
+	}
 
 	EntInfo* FindInfo(const Object& Obj)
 	{
@@ -70,19 +74,24 @@ namespace
 
 	FString ValueText(const FPropertyValue& Value)
 	{
-		if (const int32* Int = std::get_if<int32>(&Value)) return FString::Format("{}", *Int);
+		if (const int32* Int = std::get_if<int32>(&Value))
+			return FString::Format("{}", *Int);
 		if (const float* Float = std::get_if<float>(&Value))
 		{
 			std::string Text = std::format("{:.3f}", *Float);
-			while (!Text.empty() && Text.back() == '0') Text.pop_back();
-			if (!Text.empty() && Text.back() == '.') Text.pop_back();
+			while (!Text.empty() && Text.back() == '0')
+				Text.pop_back();
+			if (!Text.empty() && Text.back() == '.')
+				Text.pop_back();
 			return FString(Text);
 		}
-		if (const FString* String = std::get_if<FString>(&Value)) return *String;
-		if (const bool* Bool = std::get_if<bool>(&Value)) return *Bool ? FString("1") : FString("0");
+		if (const FString* String = std::get_if<FString>(&Value))
+			return *String;
+		if (const bool* Bool = std::get_if<bool>(&Value))
+			return *Bool ? FString("1") : FString("0");
 		return FString();
 	}
-}
+} // namespace
 
 FString FMapObjectProperties::GetDisplayName() const
 {
@@ -108,36 +117,42 @@ void FMapObjectProperties::GetProperties(TArray<FPropertyDesc>& Out) const
 	if (Obj.HasMesh())
 	{
 		// Unreal's Transform section, then the mesh.
-		Out.push_back(FPropertyDesc(PositionProperty, EPropertyType::Vector3, "Location", "Transform").SetToolTip("In the space of the group being edited"));
-		Out.push_back(FPropertyDesc(RotationProperty, EPropertyType::Vector3, "Rotation", "Transform").SetToolTip("Degrees: roll about X, pitch about Y, yaw about Z"));
+		Out.push_back(FPropertyDesc(PositionProperty, EPropertyType::Vector3, "Location", "Transform")
+		        .SetToolTip(GENESIS_TEXT("In the space of the group being edited")));
+		Out.push_back(FPropertyDesc(RotationProperty, EPropertyType::Vector3, "Rotation", "Transform")
+		        .SetToolTip(GENESIS_TEXT("Degrees: roll about X, pitch about Y, yaw about Z")));
 		Out.push_back(FPropertyDesc(ScaleProperty, EPropertyType::Vector3, "Scale", "Transform"));
 		if (Obj.HasLandscape())
 		{
 			// Sculpt it in the Landscape mode (Shift+2).
-			Out.push_back(FPropertyDesc(LandscapeQuadsProperty, EPropertyType::String, "Quads", "Landscape").SetReadOnly());
-			Out.push_back(FPropertyDesc(LandscapeSizeProperty, EPropertyType::String, "Size", "Landscape").SetReadOnly());
+			Out.push_back(
+			    FPropertyDesc(LandscapeQuadsProperty, EPropertyType::String, "Quads", "Landscape").SetReadOnly());
+			Out.push_back(
+			    FPropertyDesc(LandscapeSizeProperty, EPropertyType::String, "Size", "Landscape").SetReadOnly());
 			return;
 		}
-		if(const auto Asset=Obj.GetMeshAsset()) {
-			Out.push_back(FPropertyDesc(MeshProperty,EPropertyType::String,"Static Mesh","Static Mesh").SetReadOnly());
+		if (const std::shared_ptr<const FLoadedMeshAsset> Asset = Obj.GetMeshAsset())
+		{
+			Out.push_back(
+			    FPropertyDesc(MeshProperty, EPropertyType::String, "Static Mesh", "Static Mesh").SetReadOnly());
 			for (int I = 0; I < Asset->Data.GetNumMaterials(); ++I)
-				Out.push_back(
-					FPropertyDesc(FName(*FString::Format("MaterialSlot:{}", I)), EPropertyType::Enum,
-								  Asset->Data.GetMaterialName(I), "Materials")
-						.SetOptions(MaterialOptions())
-						.SetToolTip("Use Mesh Default clears this actor override; other slots remain unchanged."));
+				Out.push_back(FPropertyDesc(FName(*FString::Format("MaterialSlot:{}", I)), EPropertyType::Enum,
+				    Asset->Data.GetMaterialName(I), "Materials")
+				        .SetOptions(MaterialOptions())
+				        .SetToolTip(GENESIS_TEXT(
+				            "Use Mesh Default clears this actor override; other slots remain unchanged.")));
 		}
 		else
 			Out.push_back(FPropertyDesc(MeshProperty, EPropertyType::Enum, "Static Mesh", "Static Mesh")
-							  .SetOptions(MeshOptions()));
+			        .SetOptions(MeshOptions()));
 		return;
 	}
 	Out.push_back(FPropertyDesc(PositionProperty, EPropertyType::Vector3, "Position", "Object")
-					  .SetToolTip("In the space of the group being edited"));
+	        .SetToolTip(GENESIS_TEXT("In the space of the group being edited")));
 	if (Obj.HasBrush() || Obj.CountBrushes() > 0)
 	{
 		Out.push_back(FPropertyDesc(TextureProperty, EPropertyType::String, "Texture", "Surface")
-						  .SetToolTip("Applied to every face"));
+		        .SetToolTip(GENESIS_TEXT("Applied to every face")));
 	}
 	if (!Obj.HasEntity())
 	{
@@ -162,10 +177,12 @@ void FMapObjectProperties::GetProperties(TArray<FPropertyDesc>& Out) const
 			switch (Entry->vartype)
 			{
 			case VAR_INT:
-				Out.push_back(FPropertyDesc(FName(KeyProperty(Entry->name)), EPropertyType::Int, Name, "Entity").SetToolTip(Tip));
+				Out.push_back(
+				    FPropertyDesc(FName(KeyProperty(Entry->name)), EPropertyType::Int, Name, "Entity").SetToolTip(Tip));
 				break;
 			case VAR_FLOAT:
-				Out.push_back(FPropertyDesc(FName(KeyProperty(Entry->name)), EPropertyType::Float, Name, "Entity").SetToolTip(Tip));
+				Out.push_back(FPropertyDesc(FName(KeyProperty(Entry->name)), EPropertyType::Float, Name, "Entity")
+				        .SetToolTip(Tip));
 				break;
 			case VAR_TYPEDEF:
 			case VAR_STRDEF:
@@ -175,19 +192,23 @@ void FMapObjectProperties::GetProperties(TArray<FPropertyDesc>& Out) const
 				{
 					Options.push_back(FString::FromAnsi(Entry->entDef->GetEntryNum(Option)->name));
 				}
-				Out.push_back(FPropertyDesc(FName(KeyProperty(Entry->name)), EPropertyType::Enum, Name, "Entity").SetOptions(Options).SetToolTip(Tip));
+				Out.push_back(FPropertyDesc(FName(KeyProperty(Entry->name)), EPropertyType::Enum, Name, "Entity")
+				        .SetOptions(Options)
+				        .SetToolTip(Tip));
 				break;
 			}
 			case VAR_FLAGDEF:
 				for (int Flag = 0; Flag < Entry->entDef->GetNumEntries(); ++Flag)
 				{
 					const FDefEntry* Def = Entry->entDef->GetEntryNum(Flag);
-					Out.push_back(FPropertyDesc(FName(FString::Format("Flag:{}:{}", Entry->name, Def->val)), EPropertyType::Bool,
-						FString::FromAnsi(Def->name), FString::Format("Entity: {}", Name)).SetToolTip(Def->desc ? FString::FromAnsi(Def->desc) : FString()));
+					Out.push_back(FPropertyDesc(FName(FString::Format("Flag:{}:{}", Entry->name, Def->val)),
+					    EPropertyType::Bool, FString::FromAnsi(Def->name), FString::Format("Entity: {}", Name))
+					        .SetToolTip(Def->desc ? FString::FromAnsi(Def->desc) : FString()));
 				}
 				break;
 			default:
-				Out.push_back(FPropertyDesc(FName(KeyProperty(Entry->name)), EPropertyType::String, Name, "Entity").SetToolTip(Tip));
+				Out.push_back(FPropertyDesc(FName(KeyProperty(Entry->name)), EPropertyType::String, Name, "Entity")
+				        .SetToolTip(Tip));
 				break;
 			}
 		}
@@ -216,20 +237,22 @@ void FMapObjectProperties::GetProperties(TArray<FPropertyDesc>& Out) const
 FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 {
 	const FString Name = Property.ToString();
-	if(Name.StartsWith("MaterialSlot:") && Obj.GetMeshAsset()) {
-		const int I=std::atoi(Name.ToAnsi().c_str()+13); const auto& Asset=*Obj.GetMeshAsset();
+	if (Name.StartsWith("MaterialSlot:") && Obj.GetMeshAsset())
+	{
+		const int I = std::atoi(Name.ToAnsi().c_str() + 13);
+		const FLoadedMeshAsset& Asset = *Obj.GetMeshAsset();
 		if (I < 0 || I >= Asset.Data.GetNumMaterials())
 			return int32(0);
-		const auto Ref =
-			I == 0 ? Asset.MaterialOverride
-				   : (I <= static_cast<int>(Asset.AdditionalOverrides.size()) ? Asset.AdditionalOverrides[I - 1]
-																			  : FAssetReference{});
-		const auto Options = MaterialOptions();
+		const FAssetReference Ref = I == 0
+		    ? Asset.MaterialOverride
+		    : (I <= static_cast<int>(Asset.AdditionalOverrides.size()) ? Asset.AdditionalOverrides[I - 1]
+		                                                               : FAssetReference{});
+		const TArray<FString> Options = MaterialOptions();
 		if (Ref.IsNull())
 			return int32(0);
-		const auto Registry = FMapAssetLibrary::GetRegistry();
+		const std::shared_ptr<FAssetRegistry> Registry = FMapAssetLibrary::GetRegistry();
 		FString Error;
-		const auto* Data = Registry ? Registry->Resolve(Ref, Error) : nullptr;
+		const FAssetData* Data = Registry ? Registry->Resolve(Ref, Error) : nullptr;
 		for (size_t N = 1; N < Options.size(); ++N)
 			if (Data && Options[N] == Data->PackagePath)
 				return static_cast<int32>(N);
@@ -253,26 +276,29 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 		if (Property == RotationProperty)
 		{
 			const Vector3d R = FMapDocument::GetMeshRotation(Obj);
-			return FPropertyVector3{ R.GetX(), R.GetY(), R.GetZ() };
+			return FPropertyVector3{R.GetX(), R.GetY(), R.GetZ()};
 		}
 		if (Property == ScaleProperty)
 		{
 			const Vector3d& S = Obj.GetScale();
-			return FPropertyVector3{ S.GetX(), S.GetY(), S.GetZ() };
+			return FPropertyVector3{S.GetX(), S.GetY(), S.GetZ()};
 		}
 		if (Obj.HasLandscape() && Property == LandscapeQuadsProperty)
 		{
 			const Landscape& Land = Obj.GetLandscape();
-			return FString::Format("{} x {} ({} heights)", Land.GetQuadsX(), Land.GetQuadsY(), Land.GetHeights().size());
+			return FString::Format(
+			    "{} x {} ({} heights)", Land.GetQuadsX(), Land.GetQuadsY(), Land.GetHeights().size());
 		}
 		if (Obj.HasLandscape() && Property == LandscapeSizeProperty)
 		{
 			const Landscape& Land = Obj.GetLandscape();
-			return FString::Format("{:.0f} x {:.0f} units ({:.0f} a quad)", Land.GetSizeX(), Land.GetSizeY(), Land.GetQuadSize());
+			return FString::Format(
+			    "{:.0f} x {:.0f} units ({:.0f} a quad)", Land.GetSizeX(), Land.GetSizeY(), Land.GetQuadSize());
 		}
 		if (Property == MeshProperty)
 		{
-			if(const auto Asset=Obj.GetMeshAsset()) return Asset->Source.Path;
+			if (const std::shared_ptr<const FLoadedMeshAsset> Asset = Obj.GetMeshAsset())
+				return Asset->Source.Path;
 			const TArray<FString> Options = MeshOptions();
 			for (SIZE_T Index = 0; Index < Options.size(); ++Index)
 			{
@@ -321,14 +347,17 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 	const char* Text = Raw ? Raw : (Entry && Entry->def ? Entry->def : "");
 	switch (Entry ? Entry->vartype : VAR_STR)
 	{
-	case VAR_INT: return static_cast<int32>(std::atoi(Text));
-	case VAR_FLOAT: return static_cast<float>(std::atof(Text));
+	case VAR_INT:
+		return static_cast<int32>(std::atoi(Text));
+	case VAR_FLOAT:
+		return static_cast<float>(std::atof(Text));
 	case VAR_TYPEDEF:
 	case VAR_STRDEF:
 		for (int Option = 0; Option < Entry->entDef->GetNumEntries(); ++Option)
 		{
 			const FDefEntry* Def = Entry->entDef->GetEntryNum(Option);
-			const bool bMatch = Entry->vartype == VAR_STRDEF ? (Def->str && !stricmp(Def->str, Text)) : (Text[0] && Def->val == std::atoi(Text));
+			const bool bMatch = Entry->vartype == VAR_STRDEF ? (Def->str && !stricmp(Def->str, Text))
+			                                                 : (Text[0] && Def->val == std::atoi(Text));
 			if (bMatch)
 			{
 				return static_cast<int32>(Option);
@@ -343,12 +372,28 @@ FPropertyValue FMapObjectProperties::GetValue(FName Property) const
 void FMapObjectProperties::SetValue(FName Property, const FPropertyValue& Value)
 {
 	const FString Name = Property.ToString();
-	if(Name.StartsWith("MaterialSlot:") && Obj.GetMeshAsset()) {
-		const int Slot=std::atoi(Name.ToAnsi().c_str()+13); const auto Options=MaterialOptions();
-		if(const auto* Index=std::get_if<int32>(&Value);Index && *Index>=0 && *Index<static_cast<int32>(Options.size())) {
-			FAssetReference Ref; FString Error;
-			if(*Index>0) { const auto Registry=FMapAssetLibrary::GetRegistry(); const auto* Data=Registry?Registry->Resolve({{},Options[*Index]},Error):nullptr; if(!Data) { UE_LOG(LogMapEditor,Warning,"{}",Error); return; } Ref=Data->GetReference(); }
-			if(!Document.SetMeshMaterial(Obj,Ref,Error,Slot)) UE_LOG(LogMapEditor,Warning,"{}",Error);
+	if (Name.StartsWith("MaterialSlot:") && Obj.GetMeshAsset())
+	{
+		const int Slot = std::atoi(Name.ToAnsi().c_str() + 13);
+		const TArray<FString> Options = MaterialOptions();
+		if (const int* Index = std::get_if<int32>(&Value);
+		    Index && *Index >= 0 && *Index < static_cast<int32>(Options.size()))
+		{
+			FAssetReference Ref;
+			FString Error;
+			if (*Index > 0)
+			{
+				const std::shared_ptr<FAssetRegistry> Registry = FMapAssetLibrary::GetRegistry();
+				const FAssetData* Data = Registry ? Registry->Resolve({{}, Options[*Index]}, Error) : nullptr;
+				if (!Data)
+				{
+					GENESIS_LOG(LogMapEditor, Warning, "{}", Error);
+					return;
+				}
+				Ref = Data->GetReference();
+			}
+			if (!Document.SetMeshMaterial(Obj, Ref, Error, Slot))
+				GENESIS_LOG(LogMapEditor, Warning, "{}", Error);
 		}
 		return;
 	}
@@ -391,7 +436,8 @@ void FMapObjectProperties::SetValue(FName Property, const FPropertyValue& Value)
 	if (Property == MeshProperty)
 	{
 		const TArray<FString> Options = MeshOptions();
-		if (const int32* Index = std::get_if<int32>(&Value); Index && *Index >= 0 && *Index < static_cast<int32>(Options.size()))
+		if (const int32* Index = std::get_if<int32>(&Value);
+		    Index && *Index >= 0 && *Index < static_cast<int32>(Options.size()))
 		{
 			Document.SetMesh(Obj, Options[static_cast<SIZE_T>(*Index)]);
 		}
@@ -413,7 +459,7 @@ void FMapObjectProperties::SetValue(FName Property, const FPropertyValue& Value)
 		int Bits = Current ? std::atoi(Current) : 0;
 		const int Bit = std::atoi(Parts[2].ToAnsi().c_str());
 		Bits = std::get<bool>(Value) ? (Bits | Bit) : (Bits & ~Bit);
-		Document.SetEntityKey({ &Obj }, Parts[1], Bits ? FString::Format("{}", Bits) : FString());
+		Document.SetEntityKey({&Obj}, Parts[1], Bits ? FString::Format("{}", Bits) : FString());
 		return;
 	}
 	if (!Name.StartsWith("Key:"))
@@ -428,17 +474,19 @@ void FMapObjectProperties::SetValue(FName Property, const FPropertyValue& Value)
 		for (int Entry = 0; Entry < Info->GetNumEntries(); ++Entry)
 		{
 			const FEntEntry* E = Info->GetEntryNum(Entry);
-			if (E->name && Key.Equals(E->name, ESearchCase::IgnoreCase) && (E->vartype == VAR_TYPEDEF || E->vartype == VAR_STRDEF))
+			if (E->name && Key.Equals(E->name, ESearchCase::IgnoreCase) &&
+			    (E->vartype == VAR_TYPEDEF || E->vartype == VAR_STRDEF))
 			{
 				if (*Index < 0 || *Index >= E->entDef->GetNumEntries())
 				{
 					return;
 				}
 				const FDefEntry* Def = E->entDef->GetEntryNum(*Index);
-				Document.SetEntityKey({ &Obj }, Key, E->vartype == VAR_STRDEF ? FString::FromAnsi(Def->str) : FString::Format("{}", Def->val));
+				Document.SetEntityKey({&Obj}, Key,
+				    E->vartype == VAR_STRDEF ? FString::FromAnsi(Def->str) : FString::Format("{}", Def->val));
 				return;
 			}
 		}
 	}
-	Document.SetEntityKey({ &Obj }, Key, ValueText(Value));
+	Document.SetEntityKey({&Obj}, Key, ValueText(Value));
 }

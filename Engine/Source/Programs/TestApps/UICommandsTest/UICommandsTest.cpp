@@ -14,6 +14,8 @@
 // uses the new key, and resets the bindings.
 
 #include "Framework/MultiBox/MenuRegistry.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 #include "TestApp.h"
 #include "TestWidgets.h"
 #include "Widgets/Input/SButton.h"
@@ -32,24 +34,35 @@ namespace
 		SLATE_BEGIN_ARGS(SChordEditor)
 		SLATE_END_ARGS()
 
-		void Construct(const FArguments&, const TSharedRef<FUICommandInfo>& InCommand, TFunction<void(const FString&)> InLog)
+		void Construct(
+		    const FArguments&, const TSharedRef<FUICommandInfo>& InCommand, TFunction<void(const FString&)> InLog)
 		{
 			Command = InCommand.ToSharedPtr();
 			Log = std::move(InLog);
-			ChildSlot
-			[
-				SNew(SButton).HAlign(HAlign_Left).IsFocusable(false)
-				.Text([this] { return bCapturing ? FString("Press keys (Esc cancels, Backspace clears)") : (Command->GetInputText().IsEmpty() ? FString("(none)") : Command->GetInputText()); })
-				.OnClicked([this]
-				{
-					bCapturing = true;
-					return FReply::Handled().SetUserFocus(SharedThis(this), EFocusCause::Mouse);
-				})
-			];
+			ChildSlot[SNew(SButton)
+			        .HAlign(HAlign_Left)
+			        .IsFocusable(false)
+			        .Text(
+			            [this]
+			{
+				return bCapturing ? FString("Press keys (Esc cancels, Backspace clears)")
+				                  : (Command->GetInputText().IsEmpty() ? FString("(none)") : Command->GetInputText());
+			})
+			        .OnClicked([this]
+			{
+				bCapturing = true;
+				return FReply::Handled().SetUserFocus(SharedThis(this), EFocusCause::Mouse);
+			})];
 		}
 
-		const TSharedPtr<FUICommandInfo>& GetCommand() const { return Command; }
-		bool SupportsKeyboardFocus() const override { return true; }
+		const TSharedPtr<FUICommandInfo>& GetCommand() const
+		{
+			return Command;
+		}
+		bool SupportsKeyboardFocus() const override
+		{
+			return true;
+		}
 
 		FReply OnPreviewKeyDown(const FGeometry&, const FKeyEvent& Event) override
 		{
@@ -58,7 +71,8 @@ namespace
 				return FReply::Unhandled();
 			}
 			const EKey Key = Event.GetKey();
-			if (Key == EKey::LeftShift || Key == EKey::RightShift || Key == EKey::LeftControl || Key == EKey::RightControl || Key == EKey::LeftAlt || Key == EKey::RightAlt)
+			if (Key == EKey::LeftShift || Key == EKey::RightShift || Key == EKey::LeftControl ||
+			    Key == EKey::RightControl || Key == EKey::LeftAlt || Key == EKey::RightAlt)
 			{
 				return FReply::Handled(); // wait for the real key
 			}
@@ -71,28 +85,37 @@ namespace
 			if (Key != EKey::BackSpace)
 			{
 				Chord.Key = Key;
-				Chord.Modifiers = (Event.IsControlDown() ? EModifierKey::Control : EModifierKey::None) | (Event.IsShiftDown() ? EModifierKey::Shift : EModifierKey::None)
-					| (Event.IsAltDown() ? EModifierKey::Alt : EModifierKey::None);
+				Chord.Modifiers = (Event.IsControlDown() ? EModifierKey::Control : EModifierKey::None) |
+				    (Event.IsShiftDown() ? EModifierKey::Shift : EModifierKey::None) |
+				    (Event.IsAltDown() ? EModifierKey::Alt : EModifierKey::None);
 			}
-			const TSharedPtr<FUICommandInfo> Displaced = FInputBindingManager::Get().SetUserChord(ToSharedRef(Command), Chord);
-			Log(FString::Format("Bound \"{}\" to {}{}", Command->GetLabel(), Chord.IsValid() ? Chord.ToString() : FString("nothing"),
-				Displaced ? FString::Format(" (taken from \"{}\")", Displaced->GetLabel()) : FString()));
+			const TSharedPtr<FUICommandInfo> Displaced =
+			    FInputBindingManager::Get().SetUserChord(ToSharedRef(Command), Chord);
+			Log(FString::Format("Bound \"{}\" to {}{}", Command->GetLabel(),
+			    Chord.IsValid() ? Chord.ToString() : FString("nothing"),
+			    Displaced ? FString::Format(" (taken from \"{}\")", Displaced->GetLabel()) : FString()));
 			return FReply::Handled().ClearUserFocus();
 		}
 
-		void OnFocusLost(const FFocusEvent&) override { bCapturing = false; }
+		void OnFocusLost(const FFocusEvent&) override
+		{
+			bCapturing = false;
+		}
 
 	private:
 		TSharedPtr<FUICommandInfo> Command;
 		TFunction<void(const FString&)> Log;
 		bool bCapturing = false;
 	};
-}
+} // namespace
 
 class FCommandsTestApp final : public FTestApp
 {
 public:
-	FCommandsTestApp() : FTestApp({ "UICommandsTest", "Genesis UI - Commands, menus and shortcuts", FVector2(1000.0f, 700.0f), true }) {}
+	FCommandsTestApp()
+	    : FTestApp({"UICommandsTest", "Genesis UI - Commands, menus and shortcuts", FVector2(1000.0f, 700.0f), true})
+	{
+	}
 
 protected:
 	bool StartServices() override
@@ -106,52 +129,68 @@ protected:
 	{
 		const FMenuContext Context(ToSharedRef(Commands));
 		FMenuRegistry& Registry = FMenuRegistry::Get();
-		for (const TSharedRef<FUICommandInfo>& Command : FInputBindingManager::Get().FindContext("CommandsTest")->GetCommands())
+		for (const TSharedRef<FUICommandInfo>& Command :
+		    FInputBindingManager::Get().FindContext("CommandsTest")->GetCommands())
 		{
 			CommandItems.push_back(Command.ToSharedPtr());
 		}
 
-		const TSharedRef<SWidget> Bindings = SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[SNew(STextBlock).TextStyle(&TestTextStyle("SmallText")).Text("Click a shortcut, then press the new keys. Saved on exit.")]
-				+ SHorizontalBox::Slot().AutoWidth()[SNew(SButton).Text("Reset all").OnClicked([this] { FInputBindingManager::Get().ResetToDefaults(); SetLastEvent("Key bindings reset"); return FReply::Handled(); })]
-			]
-			+ SVerticalBox::Slot().FillHeight(1.0f)
-			[
-				SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Recessed")).Padding(1.0f)
-				[
-					SAssignNew(BindingsList, SListView<TSharedPtr<FUICommandInfo>>)
-					.ListItemsSource(&CommandItems)
-					.OnGenerateRow([this](TSharedPtr<FUICommandInfo> Command, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
-					{
-						return SNew(STableRow<TSharedPtr<FUICommandInfo>>, Owner).Padding(FMargin(8.0f, 2.0f))
-						[
-							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().FillWidth(0.3f).VAlign(VAlign_Center)[SNew(STextBlock).Text(Command->GetLabel())]
-							+ SHorizontalBox::Slot().FillWidth(0.45f).VAlign(VAlign_Center)[SNew(STextBlock).Text(Command->GetDescription()).TextStyle(&TestTextStyle("SmallText"))]
-							+ SHorizontalBox::Slot().FillWidth(0.25f)[SNew(SChordEditor, ToSharedRef(Command), [this](const FString& Line) { SetLastEvent(Line); })]
-						];
-					})
-				]
-			];
+		const TSharedRef<SWidget> Bindings =
+		    SNew(SVerticalBox) +
+		    SVerticalBox::Slot().AutoHeight().Padding(FMargin(
+		        0.0f, 0.0f, 0.0f,
+		        6.0f))[SNew(SHorizontalBox) +
+		               SHorizontalBox::Slot().FillWidth(1.0f).VAlign(
+		                   VAlign_Center)[SNew(STextBlock)
+		                                      .TextStyle(&TestTextStyle("SmallText"))
+		                                      .Text("Click a shortcut, then press the new keys. Saved on exit.")] +
+		               SHorizontalBox::Slot().AutoWidth()[SNew(SButton)
+		                                                      .Text("Reset all")
+		                                                      .OnClicked(
+		                                                          [this]
+		                                                          {
+			                                                          FInputBindingManager::Get().ResetToDefaults();
+			                                                          SetLastEvent("Key bindings reset");
+			                                                          return FReply::Handled();
+		                                                          })]] +
+		    SVerticalBox::Slot().FillHeight(
+		        1.0f)[SNew(SBorder)
+		                  .BorderImage(&FAppStyle::Get().GetBrush("Recessed"))
+		                  .Padding(1.0f)
+		                      [SAssignNew(BindingsList, SListView<TSharedPtr<FUICommandInfo>>)
+		                           .ListItemsSource(&CommandItems)
+		                           .OnGenerateRow(
+		                               [this](TSharedPtr<FUICommandInfo> Command,
+		                                      const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
+		                               {
+			                               return SNew(STableRow<TSharedPtr<FUICommandInfo>>, Owner)
+			                                   .Padding(FMargin(8.0f, 2.0f))
+			                                       [SNew(SHorizontalBox) +
+			                                        SHorizontalBox::Slot().FillWidth(0.3f).VAlign(
+			                                            VAlign_Center)[SNew(STextBlock).Text(Command->GetLabel())] +
+			                                        SHorizontalBox::Slot().FillWidth(0.45f).VAlign(
+			                                            VAlign_Center)[SNew(STextBlock)
+			                                                               .Text(Command->GetDescription())
+			                                                               .TextStyle(&TestTextStyle("SmallText"))] +
+			                                        SHorizontalBox::Slot().FillWidth(0.25f)[SNew(
+			                                            SChordEditor, ToSharedRef(Command),
+			                                            [this](const FString& Line) { SetLastEvent(Line); })]];
+		                               })]];
 
-		return SNew(SCommandBindingScope).CommandList(Commands)
-		[
-			TestFrame(*this, "Commands, menus and shortcuts",
-				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[SNew(SBorder).BorderImage(&FAppStyle::Get().GetBrush("Header")).Padding(FMargin(6.0f, 0.0f))[Registry.GenerateMenuBar("CommandsTest.MainMenu", Context)]]
-				+ SVerticalBox::Slot().AutoHeight()[Registry.GenerateToolBar("CommandsTest.ToolBar", Context)]
-				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(16.0f, 12.0f))
-				[
-					SNew(STextBlock).TextStyle(&TestTextStyle("HeadingText")).Text([this]
-					{
-						return FString::Format("Value {}   ·   grid {}   ·   snap {}   ·   step {}", Value, bGrid ? "on" : "off", bSnap ? "on" : "off", Step);
-					})
-				]
-				+ SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(16.0f, 0.0f, 16.0f, 16.0f))[Bindings])
-		];
+		return SNew(SCommandBindingScope)
+		    .CommandList(Commands)[TestFrame(*this, "Commands, menus and shortcuts",
+		        SNew(SVerticalBox) +
+		            SVerticalBox::Slot().AutoHeight()[SNew(SBorder)
+		                    .BorderImage(&FAppStyle::Get().GetBrush("Header"))
+		                    .Padding(FMargin(6.0f, 0.0f))[Registry.GenerateMenuBar("CommandsTest.MainMenu", Context)]] +
+		            SVerticalBox::Slot().AutoHeight()[Registry.GenerateToolBar("CommandsTest.ToolBar", Context)] +
+		            SVerticalBox::Slot().AutoHeight().Padding(FMargin(16.0f, 12.0f))[SNew(STextBlock)
+		                    .TextStyle(&TestTextStyle("HeadingText"))
+		                    .Text([this]
+		{
+			return FString::Format("Value {}   ·   grid {}   ·   snap {}   ·   step {}", Value, bGrid ? "on" : "off",
+			    bSnap ? "on" : "off", Step);
+		})] + SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(16.0f, 0.0f, 16.0f, 16.0f))[Bindings])];
 	}
 
 	void OnShutdown() override
@@ -159,58 +198,82 @@ protected:
 		if (!GetSettingsDir().IsEmpty())
 		{
 			const FString Text = FInputBindingManager::Get().SaveUserBindings().ToString();
-			FFileHelper::SaveArrayToFile(TArrayView<const uint8>(reinterpret_cast<const uint8*>(*Text), static_cast<SIZE_T>(Text.Len())), GetSettingsDir() + "Bindings.json");
+			FFileHelper::SaveArrayToFile(
+			    TArrayView<const uint8>(reinterpret_cast<const uint8*>(*Text), static_cast<SIZE_T>(Text.Len())),
+			    GetSettingsDir() + "Bindings.json");
 		}
 		BindingsList.reset();
 	}
 
 	void BuildSelfTest(FTestScript& Script) override
 	{
-		Script.Capture("start")
-			// Shortcuts reach the scope through the focused widget.
-			.Do([this] { Click(GetCenter(*BindingsList)); })
-			.Do([this] { Press(EKey::A); Press(EKey::A); Press(EKey::A); })
-			.Check("A adds one, three times", [this] { return Value == 3; })
-			.Do([this] { Press(EKey::Z, true); })
-			.Check("Ctrl+Z undoes", [this] { return Value == 2 && Redo.size() == 1; })
-			.Do([this] { PointAtText("Edit", true); })
-			.Check("the Edit menu names what Undo undoes", [this] { return IsTextShown("Undo Add 1"); }, 5)
-			.Capture("menu_edit")
-			.Do([this] { PressKey(EKey::Escape); })
-			// A toggle from the toolbar.
-			.Do([this] { PointAtText("Grid", true); })
-			.Check("the toolbar toggles the grid", [this] { return !bGrid; })
-			// Radio entries in a submenu: View > Step > 10.
-			.Do([this] { PointAtText("View", true); })
-			.Do([this] { PointAtText("Step", false); }, 5)
-			.Capture("menu_view", 30)
-			.Do([this] { PointAtText("10", true); })
-			.Check("a radio entry sets the step", [this] { return Step == 10 && GetApp().GetMenuCount() == 0; }, 5)
-			.Do([this] { Click(GetCenter(*BindingsList)); Press(EKey::A); })
-			.Check("adding uses the step", [this] { return Value == 12; })
-			// Rebind Add to K.
-			.Do([this]
+		Script
+		    .Capture("start")
+		    // Shortcuts reach the scope through the focused widget.
+		    .Do([this] { Click(GetCenter(*BindingsList)); })
+		    .Do(
+		        [this]
+		{
+			Press(EKey::A);
+			Press(EKey::A);
+			Press(EKey::A);
+		})
+		    .Check("A adds one, three times", [this] { return Value == 3; })
+		    .Do([this] { Press(EKey::Z, true); })
+		    .Check("Ctrl+Z undoes", [this] { return Value == 2 && Redo.size() == 1; })
+		    .Do([this] { PointAtText("Edit", true); })
+		    .Check("the Edit menu names what Undo undoes", [this] { return IsTextShown("Undo Add 1"); }, 5)
+		    .Capture("menu_edit")
+		    .Do([this] { PressKey(EKey::Escape); })
+		    // A toggle from the toolbar.
+		    .Do([this] { PointAtText("Grid", true); })
+		    .Check("the toolbar toggles the grid", [this] { return !bGrid; })
+		    // Radio entries in a submenu: View > Step > 10.
+		    .Do([this] { PointAtText("View", true); })
+		    .Do([this] { PointAtText("Step", false); }, 5)
+		    .Capture("menu_view", 30)
+		    .Do([this] { PointAtText("10", true); })
+		    .Check("a radio entry sets the step", [this] { return Step == 10 && GetApp().GetMenuCount() == 0; }, 5)
+		    .Do(
+		        [this]
+		{
+			Click(GetCenter(*BindingsList));
+			Press(EKey::A);
+		})
+		    .Check("adding uses the step", [this] { return Value == 12; })
+		    // Rebind Add to K.
+		    .Do(
+		        [this]
+		{
+			const SChordEditor* Editor =
+			    FindWidget<SChordEditor>(*BindingsList, [this](SChordEditor& E) { return E.GetCommand() == Cmd.Add; });
+			if (Expect(Editor != nullptr, "the bindings list shows Add"))
 			{
-				const SChordEditor* Editor = FindWidget<SChordEditor>(*BindingsList, [this](SChordEditor& E) { return E.GetCommand() == Cmd.Add; });
-				if (Expect(Editor != nullptr, "the bindings list shows Add"))
-				{
-					Click(GetCenter(*Editor));
-				}
-			})
-			.Do([this] { Press(EKey::K); })
-			.Check("Add is bound to K", [this] { return Cmd.Add->GetInputText() == "K"; })
-			.Capture("rebound")
-			.Do([this] { Click(GetCenter(*BindingsList)); Press(EKey::A); Press(EKey::K); })
-			.Check("K adds and A no longer does", [this] { return Value == 22; })
-			.Do([this] { PointAtText("Reset all", true); })
-			.Check("Reset all restores A", [this] { return Cmd.Add->GetInputText() == "A"; });
+				Click(GetCenter(*Editor));
+			}
+		})
+		    .Do([this] { Press(EKey::K); })
+		    .Check("Add is bound to K", [this] { return Cmd.Add->GetInputText() == "K"; })
+		    .Capture("rebound")
+		    .Do([this]
+		{
+			Click(GetCenter(*BindingsList));
+			Press(EKey::A);
+			Press(EKey::K);
+		}).Check("K adds and A no longer does", [this] {
+			return Value == 22;
+		}).Do([this] {
+			PointAtText("Reset all", true);
+		}).Check("Reset all restores A", [this] { return Cmd.Add->GetInputText() == "A"; });
 	}
 
 private:
 	void Press(EKey Key, bool bControl = false)
 	{
 		SetModifierKeys(false, bControl);
-		const uint32 Character = Key >= EKey::A && Key <= EKey::Z ? static_cast<uint32>('a' + (static_cast<int32>(Key) - static_cast<int32>(EKey::A))) : 0;
+		const uint32 Character = Key >= EKey::A && Key <= EKey::Z
+		    ? static_cast<uint32>('a' + (static_cast<int32>(Key) - static_cast<int32>(EKey::A)))
+		    : 0;
 		PressKey(Key, bControl ? 0 : Character);
 		SetModifierKeys(false, false);
 	}
@@ -229,7 +292,7 @@ private:
 
 	void Apply(int32 NewValue, const FString& Description)
 	{
-		Undo.push_back({ Description, Value });
+		Undo.push_back({Description, Value});
 		Redo.clear();
 		Value = NewValue;
 		SetLastEvent(Description);
@@ -237,31 +300,46 @@ private:
 
 	void RegisterCommands()
 	{
-		auto Context = MakeShared<FBindingContext>(FName("CommandsTest"), "UI commands test");
+		TSharedRef<FBindingContext> Context = MakeShared<FBindingContext>(FName("CommandsTest"), "UI commands test");
 		using T = EUserInterfaceActionType;
-		Cmd.Add = Context->AddCommand("Add", "Add", "Add the step to the value", T::Button, FInputChord(EKey::A)).ToSharedPtr();
-		Cmd.Subtract = Context->AddCommand("Subtract", "Subtract", "Subtract the step from the value", T::Button, FInputChord(EKey::S)).ToSharedPtr();
-		Cmd.Undo = Context->AddCommand("Undo", "Undo", "Undo the last change", T::Button, FInputChord(EKey::Z, EModifierKey::Control)).ToSharedPtr();
-		Cmd.Redo = Context->AddCommand("Redo", "Redo", "Redo the change undone last", T::Button, FInputChord(EKey::Y, EModifierKey::Control)).ToSharedPtr();
-		Cmd.Reset = Context->AddCommand("Reset", "Reset", "Set the value to zero (disabled at zero)", T::Button, FInputChord(EKey::R, EModifierKey::Control)).ToSharedPtr();
+		Cmd.Add = Context->AddCommand("Add", "Add", "Add the step to the value", T::Button, FInputChord(EKey::A))
+		              .ToSharedPtr();
+		Cmd.Subtract = Context
+		                   ->AddCommand("Subtract", "Subtract", "Subtract the step from the value", T::Button,
+		                       FInputChord(EKey::S))
+		                   .ToSharedPtr();
+		Cmd.Undo = Context
+		               ->AddCommand("Undo", "Undo", "Undo the last change", T::Button,
+		                   FInputChord(EKey::Z, EModifierKey::Control))
+		               .ToSharedPtr();
+		Cmd.Redo = Context
+		               ->AddCommand("Redo", "Redo", "Redo the change undone last", T::Button,
+		                   FInputChord(EKey::Y, EModifierKey::Control))
+		               .ToSharedPtr();
+		Cmd.Reset = Context
+		                ->AddCommand("Reset", "Reset", "Set the value to zero (disabled at zero)", T::Button,
+		                    FInputChord(EKey::R, EModifierKey::Control))
+		                .ToSharedPtr();
 		Cmd.Grid = Context->AddCommand("Grid", "Grid", "A toggle", T::ToggleButton, FInputChord(EKey::G)).ToSharedPtr();
-		Cmd.Snap = Context->AddCommand("Snap", "Snap", "Another toggle", T::ToggleButton, FInputChord(EKey::N)).ToSharedPtr();
+		Cmd.Snap =
+		    Context->AddCommand("Snap", "Snap", "Another toggle", T::ToggleButton, FInputChord(EKey::N)).ToSharedPtr();
 		Cmd.Quit = Context->AddCommand("Quit", "Exit", "Close the test").ToSharedPtr();
 		FInputBindingManager::Get().RegisterContext(Context);
 
 		FUICommandList& List = *Commands;
 		List.MapAction(ToSharedRef(Cmd.Add), [this] { Apply(Value + Step, FString::Format("Add {}", Step)); });
-		List.MapAction(ToSharedRef(Cmd.Subtract), [this] { Apply(Value - Step, FString::Format("Subtract {}", Step)); });
+		List.MapAction(
+		    ToSharedRef(Cmd.Subtract), [this] { Apply(Value - Step, FString::Format("Subtract {}", Step)); });
 		List.MapAction(ToSharedRef(Cmd.Undo), [this]
 		{
-			Redo.push_back({ Undo.back().Description, Value });
+			Redo.push_back({Undo.back().Description, Value});
 			Value = Undo.back().Value;
 			Undo.pop_back();
 			SetLastEvent("Undo");
 		}, [this] { return !Undo.empty(); });
 		List.MapAction(ToSharedRef(Cmd.Redo), [this]
 		{
-			Undo.push_back({ Redo.back().Description, Value });
+			Undo.push_back({Redo.back().Description, Value});
 			Value = Redo.back().Value;
 			Redo.pop_back();
 			SetLastEvent("Redo");
@@ -298,8 +376,10 @@ private:
 		FMenuDefinition& Edit = Registry.RegisterMenu("CommandsTest.MainMenu.Edit");
 		Edit.AddDynamicSection("History", [this](FMenuSection& Section, const FMenuContext&)
 		{
-			Section.AddCommand(Cmd.Undo, Undo.empty() ? FString("Undo") : FString::Format("Undo {}", Undo.back().Description));
-			Section.AddCommand(Cmd.Redo, Redo.empty() ? FString("Redo") : FString::Format("Redo {}", Redo.back().Description));
+			Section.AddCommand(
+			    Cmd.Undo, Undo.empty() ? FString("Undo") : FString::Format("Undo {}", Undo.back().Description));
+			Section.AddCommand(
+			    Cmd.Redo, Redo.empty() ? FString("Redo") : FString::Format("Redo {}", Redo.back().Description));
 		});
 		FMenuSection& ValueSection = Edit.AddSection("Value", "Value");
 		ValueSection.AddCommand(Cmd.Add);
@@ -310,14 +390,21 @@ private:
 		FMenuSection& Toggles = View.AddSection("Toggles", "Toggles");
 		Toggles.AddCommand(Cmd.Grid);
 		Toggles.AddCommand(Cmd.Snap);
-		Toggles.AddSubMenu("Step", "Step", "How much Add and Subtract change the value", [this](FMenuSection& Section, const FMenuContext&)
+		Toggles.AddSubMenu("Step", "Step", "How much Add and Subtract change the value",
+		    [this](FMenuSection& Section, const FMenuContext&)
 		{
-			for (const int32 Size : { 1, 5, 10, 100 })
+			for (const int32 Size : {1, 5, 10, 100})
 			{
 				FUIAction Action;
-				Action.Execute = FSimpleDelegate::CreateLambda([this, Size] { Step = Size; SetLastEvent(FString::Format("Step {}", Size)); });
-				Action.GetCheckState = TDelegate<ECheckBoxState()>::CreateLambda([this, Size] { return Step == Size ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
-				Section.AddEntry(FName(FString::Format("Step{}", Size)), FString::Format("{}", Size), "", Action, EUserInterfaceActionType::RadioButton);
+				Action.Execute = FSimpleDelegate::CreateLambda([this, Size]
+				{
+					Step = Size;
+					SetLastEvent(FString::Format("Step {}", Size));
+				});
+				Action.GetCheckState = TDelegate<ECheckBoxState()>::CreateLambda(
+				    [this, Size] { return Step == Size ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
+				Section.AddEntry(FName(FString::Format("Step{}", Size)), FString::Format("{}", Size), "", Action,
+				    EUserInterfaceActionType::RadioButton);
 			}
 		});
 

@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Framework/Commands/UICommands.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include "Framework/Application/SlateApplication.h"
 
@@ -16,13 +18,36 @@ namespace
 		const char* Name;
 	};
 	constexpr FKeyName KeyNames[] = {
-		{ EKey::BackSpace, "Backspace" }, { EKey::Tab, "Tab" }, { EKey::Enter, "Enter" }, { EKey::Escape, "Esc" }, { EKey::SpaceBar, "Space" },
-		{ EKey::PageUp, "PageUp" }, { EKey::PageDown, "PageDown" }, { EKey::End, "End" }, { EKey::Home, "Home" },
-		{ EKey::Left, "Left" }, { EKey::Up, "Up" }, { EKey::Right, "Right" }, { EKey::Down, "Down" },
-		{ EKey::Insert, "Insert" }, { EKey::Delete, "Delete" },
-		{ EKey::Semicolon, ";" }, { EKey::Equals, "=" }, { EKey::Comma, "," }, { EKey::Hyphen, "-" }, { EKey::Period, "." },
-		{ EKey::Slash, "/" }, { EKey::Tilde, "`" }, { EKey::LeftBracket, "[" }, { EKey::Backslash, "\\" }, { EKey::RightBracket, "]" },
-		{ EKey::Apostrophe, "'" }, { EKey::Add, "Num+" }, { EKey::Subtract, "Num-" }, { EKey::Multiply, "Num*" }, { EKey::Divide, "Num/" },
+	    {EKey::BackSpace, "Backspace"},
+	    {EKey::Tab, "Tab"},
+	    {EKey::Enter, "Enter"},
+	    {EKey::Escape, "Esc"},
+	    {EKey::SpaceBar, "Space"},
+	    {EKey::PageUp, "PageUp"},
+	    {EKey::PageDown, "PageDown"},
+	    {EKey::End, "End"},
+	    {EKey::Home, "Home"},
+	    {EKey::Left, "Left"},
+	    {EKey::Up, "Up"},
+	    {EKey::Right, "Right"},
+	    {EKey::Down, "Down"},
+	    {EKey::Insert, "Insert"},
+	    {EKey::Delete, "Delete"},
+	    {EKey::Semicolon, ";"},
+	    {EKey::Equals, "="},
+	    {EKey::Comma, ","},
+	    {EKey::Hyphen, "-"},
+	    {EKey::Period, "."},
+	    {EKey::Slash, "/"},
+	    {EKey::Tilde, "`"},
+	    {EKey::LeftBracket, "["},
+	    {EKey::Backslash, "\\"},
+	    {EKey::RightBracket, "]"},
+	    {EKey::Apostrophe, "'"},
+	    {EKey::Add, "Num+"},
+	    {EKey::Subtract, "Num-"},
+	    {EKey::Multiply, "Num*"},
+	    {EKey::Divide, "Num/"},
 	};
 
 	FString KeyToText(EKey Key)
@@ -55,8 +80,10 @@ namespace
 		if (Text.Len() == 1)
 		{
 			const char C = Text[0];
-			if (C >= 'a' && C <= 'z') return static_cast<EKey>(C - 'a' + 'A');
-			if ((C >= 'A' && C <= 'Z') || (C >= '0' && C <= '9')) return static_cast<EKey>(C);
+			if (C >= 'a' && C <= 'z')
+				return static_cast<EKey>(C - 'a' + 'A');
+			if ((C >= 'A' && C <= 'Z') || (C >= '0' && C <= '9'))
+				return static_cast<EKey>(C);
 		}
 		if (Text.Len() >= 2 && (Text[0] == 'F' || Text[0] == 'f'))
 		{
@@ -79,7 +106,7 @@ namespace
 		}
 		return {};
 	}
-}
+} // namespace
 
 bool FInputChord::Matches(const FKeyEvent& Event) const
 {
@@ -87,9 +114,9 @@ bool FInputChord::Matches(const FKeyEvent& Event) const
 	{
 		return false;
 	}
-	return Event.IsShiftDown() == HasModifier(Modifiers, EModifierKey::Shift)
-		&& Event.IsControlDown() == HasModifier(Modifiers, EModifierKey::Control)
-		&& Event.IsAltDown() == HasModifier(Modifiers, EModifierKey::Alt);
+	return Event.IsShiftDown() == HasModifier(Modifiers, EModifierKey::Shift) &&
+	    Event.IsControlDown() == HasModifier(Modifiers, EModifierKey::Control) &&
+	    Event.IsAltDown() == HasModifier(Modifiers, EModifierKey::Alt);
 }
 
 FString FInputChord::ToString() const
@@ -99,9 +126,12 @@ FString FInputChord::ToString() const
 		return FString();
 	}
 	FString Text;
-	if (HasModifier(Modifiers, EModifierKey::Control)) Text += "Ctrl+";
-	if (HasModifier(Modifiers, EModifierKey::Shift)) Text += "Shift+";
-	if (HasModifier(Modifiers, EModifierKey::Alt)) Text += "Alt+";
+	if (HasModifier(Modifiers, EModifierKey::Control))
+		Text += "Ctrl+";
+	if (HasModifier(Modifiers, EModifierKey::Shift))
+		Text += "Shift+";
+	if (HasModifier(Modifiers, EModifierKey::Alt))
+		Text += "Alt+";
 	return Text + KeyToText(Key);
 }
 
@@ -117,10 +147,14 @@ TOptional<FInputChord> FInputChord::Parse(const FString& Text)
 	for (SIZE_T I = 0; I + 1 < Parts.size(); ++I)
 	{
 		const FString Part = Parts[I].TrimStartAndEnd();
-		if (Part.Equals("Ctrl", ESearchCase::IgnoreCase) || Part.Equals("Control", ESearchCase::IgnoreCase)) Chord.Modifiers = Chord.Modifiers | EModifierKey::Control;
-		else if (Part.Equals("Shift", ESearchCase::IgnoreCase)) Chord.Modifiers = Chord.Modifiers | EModifierKey::Shift;
-		else if (Part.Equals("Alt", ESearchCase::IgnoreCase)) Chord.Modifiers = Chord.Modifiers | EModifierKey::Alt;
-		else return {};
+		if (Part.Equals("Ctrl", ESearchCase::IgnoreCase) || Part.Equals("Control", ESearchCase::IgnoreCase))
+			Chord.Modifiers = Chord.Modifiers | EModifierKey::Control;
+		else if (Part.Equals("Shift", ESearchCase::IgnoreCase))
+			Chord.Modifiers = Chord.Modifiers | EModifierKey::Shift;
+		else if (Part.Equals("Alt", ESearchCase::IgnoreCase))
+			Chord.Modifiers = Chord.Modifiers | EModifierKey::Alt;
+		else
+			return {};
 	}
 	const TOptional<EKey> Key = TextToKey(Parts.back().TrimStartAndEnd());
 	if (!Key)
@@ -134,10 +168,12 @@ TOptional<FInputChord> FInputChord::Parse(const FString& Text)
 // ---------------------------------------------------------------------------
 // FBindingContext, FInputBindingManager
 
-TSharedRef<FUICommandInfo> FBindingContext::AddCommand(FName CommandName, FString Label, FString CommandDescription, EUserInterfaceActionType Type, FInputChord DefaultChord, FName Icon)
+TSharedRef<FUICommandInfo> FBindingContext::AddCommand(FName CommandName, FString Label, FString CommandDescription,
+    EUserInterfaceActionType Type, FInputChord DefaultChord, FName Icon)
 {
 	checkf(!FindCommand(CommandName), "Command {} added twice to {}", CommandName, Name);
-	auto Command = MakeShared<FUICommandInfo>(Name, CommandName, std::move(Label), std::move(CommandDescription), Type, DefaultChord, Icon);
+	TSharedRef<FUICommandInfo> Command = MakeShared<FUICommandInfo>(
+	    Name, CommandName, GENESIS_TEXT(Label), GENESIS_TEXT(CommandDescription), Type, DefaultChord, Icon);
 	Commands.push_back(Command);
 	return Command;
 }
@@ -169,7 +205,8 @@ void FInputBindingManager::RegisterContext(const TSharedRef<FBindingContext>& Co
 
 void FInputBindingManager::UnregisterContext(FName ContextName)
 {
-	std::erase_if(Contexts, [ContextName](const TSharedRef<FBindingContext>& C) { return C->GetName() == ContextName; });
+	std::erase_if(
+	    Contexts, [ContextName](const TSharedRef<FBindingContext>& C) { return C->GetName() == ContextName; });
 }
 
 TSharedPtr<FBindingContext> FInputBindingManager::FindContext(FName ContextName) const
@@ -187,7 +224,7 @@ TSharedPtr<FBindingContext> FInputBindingManager::FindContext(FName ContextName)
 bool FInputBindingManager::IsInFamily(FName Context, FName Other) const
 {
 	// Other is Context or one of its parents, or the other way around.
-	const auto IsAncestor = [this](FName Child, FName Ancestor)
+	const TFunction<bool(FName, FName)> IsAncestor = [this](FName Child, FName Ancestor)
 	{
 		for (FName C = Child; !C.IsNone();)
 		{
@@ -224,7 +261,8 @@ TSharedPtr<FUICommandInfo> FInputBindingManager::FindCommandForChord(FName Conte
 	return nullptr;
 }
 
-TSharedPtr<FUICommandInfo> FInputBindingManager::SetUserChord(const TSharedRef<FUICommandInfo>& Command, const FInputChord& Chord)
+TSharedPtr<FUICommandInfo> FInputBindingManager::SetUserChord(
+    const TSharedRef<FUICommandInfo>& Command, const FInputChord& Chord)
 {
 	TSharedPtr<FUICommandInfo> Displaced;
 	if (Chord.IsValid())
@@ -305,10 +343,11 @@ void FInputBindingManager::LoadUserBindings(const FJsonValue& Bindings)
 void FUICommandList::MapAction(const TSharedRef<FUICommandInfo>& Command, FUIAction Action)
 {
 	UnmapAction(Command);
-	Mappings.push_back({ Command, std::move(Action) });
+	Mappings.push_back({Command, std::move(Action)});
 }
 
-void FUICommandList::MapAction(const TSharedRef<FUICommandInfo>& Command, TFunction<void()> Execute, TFunction<bool()> CanExecute, TFunction<bool()> IsChecked)
+void FUICommandList::MapAction(const TSharedRef<FUICommandInfo>& Command, TFunction<void()> Execute,
+    TFunction<bool()> CanExecute, TFunction<bool()> IsChecked)
 {
 	FUIAction Action;
 	Action.Execute = FSimpleDelegate::CreateLambda(std::move(Execute));
@@ -318,7 +357,8 @@ void FUICommandList::MapAction(const TSharedRef<FUICommandInfo>& Command, TFunct
 	}
 	if (IsChecked)
 	{
-		Action.GetCheckState = TDelegate<ECheckBoxState()>::CreateLambda([IsChecked]() { return IsChecked() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
+		Action.GetCheckState = TDelegate<ECheckBoxState()>::CreateLambda(
+		    [IsChecked]() { return IsChecked() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
 	}
 	MapAction(Command, std::move(Action));
 }

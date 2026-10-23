@@ -13,7 +13,7 @@ struct FMaterialParameterCollection
 };
 class FMaterialParameterCollectionCodec
 {
-  public:
+public:
 	static bool Encode(const FMaterialParameterCollection&, FAssetPackage&, FString&);
 	static bool Decode(const FAssetPackage&, FMaterialParameterCollection&, FString&);
 	static bool Refresh(FMaterialGraph&, const FAssetRegistry&, bool& bChanged, FString&);
@@ -22,8 +22,9 @@ class FMaterialParameterCollectionCodec
 // become immutable per-frame uniform snapshots; shader binaries remain unchanged.
 class FMaterialParameterCollectionInstance
 {
-  public:
-	FMaterialParameterCollectionInstance(FAssetReference, FMaterialParameterCollection);
+public:
+	static std::shared_ptr<FMaterialParameterCollectionInstance> Create(
+	    FAssetReference, FMaterialParameterCollection, FString& Error);
 	const FAssetReference& GetReference() const
 	{
 		return Reference;
@@ -32,7 +33,8 @@ class FMaterialParameterCollectionInstance
 	bool SetVector(const FString&, const float (&)[4], FString&);
 	bool GetValue(const FString&, uint8 Width, float (&)[4], FString&) const;
 
-  private:
+private:
+	FMaterialParameterCollectionInstance(FAssetReference, FMaterialParameterCollection);
 	FAssetReference Reference;
 	FMaterialParameterCollection Values;
 };

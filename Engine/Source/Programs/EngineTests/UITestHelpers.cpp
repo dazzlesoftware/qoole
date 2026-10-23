@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "UITestHelpers.h"
+#include "Templates/SharedPointer.h"
 
 namespace
 {
@@ -9,7 +10,7 @@ namespace
 		static TSharedPtr<FSlateFontCache> Cache;
 		return Cache;
 	}
-}
+} // namespace
 
 void FUITestStyle::EnsureInitialized()
 {
@@ -35,7 +36,10 @@ FUITestApp::FUITestApp(float DpiScale)
 {
 	FUITestStyle::EnsureInitialized();
 	Platform = std::make_shared<FNullPlatformApplication>(DpiScale);
-	App = FSlateApplication::Create(TSharedRef<IPlatformApplication>(StaticCastSharedPtr<IPlatformApplication>(Platform)), FUITestStyle::GetFontCache()).ToSharedPtr();
+	App =
+	    FSlateApplication::Create(TSharedRef<IPlatformApplication>(StaticCastSharedPtr<IPlatformApplication>(Platform)),
+	        FUITestStyle::GetFontCache())
+	        .ToSharedPtr();
 	App->SetTimeSource([this]() { return Time; });
 }
 

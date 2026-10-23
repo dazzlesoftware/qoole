@@ -1,11 +1,11 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Null/NullPlatformApplication.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 FNullPlatformWindow::FNullPlatformWindow(FNullPlatformApplication& InOwner, const FWindowDesc& InDesc)
-	: Owner(InOwner)
-	, Desc(InDesc)
-	, DpiScale(InOwner.GetDefaultDpiScale())
+    : Owner(InOwner), Desc(InDesc), DpiScale(InOwner.GetDefaultDpiScale())
 {
 	ClientSize = FIntPoint(FMath::RoundToInt(Desc.Size.X * DpiScale), FMath::RoundToInt(Desc.Size.Y * DpiScale));
 	if (Desc.Position)
@@ -31,7 +31,8 @@ void FNullPlatformWindow::Restore()
 	bMaximized = false;
 	if (bWasMinimized)
 	{
-		Owner.GetMessageHandler()->OnSizeChanged(TSharedRef<IPlatformWindow>(shared_from_this()), ClientSize.X, ClientSize.Y, false);
+		Owner.GetMessageHandler()->OnSizeChanged(
+		    TSharedRef<IPlatformWindow>(shared_from_this()), ClientSize.X, ClientSize.Y, false);
 	}
 }
 
@@ -59,14 +60,11 @@ void FNullPlatformWindow::SimulateDpiChange(float NewScale)
 	Owner.GetMessageHandler()->OnSizeChanged(Self, ClientSize.X, ClientSize.Y, false);
 }
 
-FNullPlatformApplication::FNullPlatformApplication(float InDefaultDpiScale)
-	: DefaultDpiScale(InDefaultDpiScale)
-{
-}
+FNullPlatformApplication::FNullPlatformApplication(float InDefaultDpiScale) : DefaultDpiScale(InDefaultDpiScale) {}
 
 TSharedRef<IPlatformWindow> FNullPlatformApplication::MakeWindow(const FWindowDesc& Desc)
 {
-	auto Window = std::make_shared<FNullPlatformWindow>(*this, Desc);
+	TSharedPtr<FNullPlatformWindow> Window = std::make_shared<FNullPlatformWindow>(*this, Desc);
 	Windows.push_back(Window);
 	return TSharedRef<IPlatformWindow>(Window);
 }
@@ -78,7 +76,7 @@ void FNullPlatformApplication::ProcessDeferredEvents(float DeltaTime)
 	std::deque<TFunction<void(IPlatformMessageHandler&)>> Pending;
 	Pending.swap(Events);
 	const TSharedPtr<IPlatformMessageHandler> Handler = GetMessageHandler();
-	for (auto& Event : Pending)
+	for (std::function<void(IPlatformMessageHandler&)>& Event : Pending)
 	{
 		Event(*Handler);
 	}
@@ -92,7 +90,7 @@ void FNullPlatformApplication::GetDisplayMetrics(FDisplayMetrics& OutMetrics) co
 	Monitor.DisplayRect = FIntRect(0, 0, 1920, 1080);
 	Monitor.WorkArea = FIntRect(0, 0, 1920, 1040);
 	Monitor.DpiScale = DefaultDpiScale;
-	OutMetrics.Monitors = { Monitor };
+	OutMetrics.Monitors = {Monitor};
 	OutMetrics.VirtualDesktopRect = Monitor.DisplayRect;
 }
 
@@ -116,19 +114,24 @@ void FNullPlatformApplication::QueueMouseMove(const TSharedRef<IPlatformWindow>&
 	Events.push_back([Window, Position](IPlatformMessageHandler& H) { H.OnMouseMove(Window, Position); });
 }
 
-void FNullPlatformApplication::QueueMouseDown(const TSharedRef<IPlatformWindow>& Window, EMouseButton Button, FVector2 Position)
+void FNullPlatformApplication::QueueMouseDown(
+    const TSharedRef<IPlatformWindow>& Window, EMouseButton Button, FVector2 Position)
 {
-	Events.push_back([Window, Button, Position](IPlatformMessageHandler& H) { H.OnMouseDown(Window, Button, Position); });
+	Events.push_back(
+	    [Window, Button, Position](IPlatformMessageHandler& H) { H.OnMouseDown(Window, Button, Position); });
 }
 
-void FNullPlatformApplication::QueueMouseUp(const TSharedRef<IPlatformWindow>& Window, EMouseButton Button, FVector2 Position)
+void FNullPlatformApplication::QueueMouseUp(
+    const TSharedRef<IPlatformWindow>& Window, EMouseButton Button, FVector2 Position)
 {
 	Events.push_back([Window, Button, Position](IPlatformMessageHandler& H) { H.OnMouseUp(Window, Button, Position); });
 }
 
-void FNullPlatformApplication::QueueMouseWheel(const TSharedRef<IPlatformWindow>& Window, float Delta, FVector2 Position)
+void FNullPlatformApplication::QueueMouseWheel(
+    const TSharedRef<IPlatformWindow>& Window, float Delta, FVector2 Position)
 {
-	Events.push_back([Window, Delta, Position](IPlatformMessageHandler& H) { H.OnMouseWheel(Window, Delta, false, Position); });
+	Events.push_back(
+	    [Window, Delta, Position](IPlatformMessageHandler& H) { H.OnMouseWheel(Window, Delta, false, Position); });
 }
 
 void FNullPlatformApplication::QueueCompositionBegin()

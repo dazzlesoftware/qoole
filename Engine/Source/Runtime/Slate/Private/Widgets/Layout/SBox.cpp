@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Widgets/Layout/SBox.h"
+#include "Containers/ContainerAliases.h"
 
 #include "Layout/LayoutUtils.h"
 
@@ -24,7 +25,8 @@ FVector2 SBox::ComputeDesiredSize(float) const
 {
 	const FSimpleSlot& Slot = ChildSlotStorage.Slot;
 	FVector2 Size = Slot.GetWidget()->GetDesiredSize() + Slot.GetPadding().GetDesiredSize();
-	const auto Limit = [](float Value, const TOptional<float>& Override, const TOptional<float>& Min, const TOptional<float>& Max)
+	const TFunction<float(float, const TOptional<float>&, const TOptional<float>&, const TOptional<float>&)> Limit =
+	    [](float Value, const TOptional<float>& Override, const TOptional<float>& Min, const TOptional<float>& Max)
 	{
 		if (Override)
 		{
@@ -47,10 +49,12 @@ FVector2 SBox::ComputeDesiredSize(float) const
 
 void SBox::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const
 {
-	ArrangeSlotChild(AllottedGeometry, ArrangedChildren, ChildSlotStorage.Slot, FVector2::Zero(), AllottedGeometry.Size);
+	ArrangeSlotChild(
+	    AllottedGeometry, ArrangedChildren, ChildSlotStorage.Slot, FVector2::Zero(), AllottedGeometry.Size);
 }
 
-int32 SBox::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SBox::OnPaint(const FPaintArgs& Args, const FGeometry&, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId, InWidgetStyle);
 }
@@ -89,8 +93,8 @@ FReply SBorder::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPoint
 	return MouseDoubleClickHandler.IsBound() ? MouseDoubleClickHandler.Execute(Geometry, Event) : FReply::Unhandled();
 }
 
-int32 SBorder::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SBorder::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	if (BorderImage && BorderImage->IsVisible())
 	{

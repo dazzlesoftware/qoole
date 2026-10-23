@@ -19,7 +19,7 @@ namespace VulkanDynamicAPI
 	{
 		HMODULE VulkanModule = nullptr;
 		int32 VulkanModuleRefCount = 0;
-	}
+	} // namespace
 
 	bool LoadVulkanLibrary()
 	{
@@ -32,25 +32,30 @@ namespace VulkanDynamicAPI
 		VulkanModule = LoadLibraryW(L"vulkan-1.dll");
 		if (!VulkanModule)
 		{
-			UE_LOG(LogRHI, Warning, "Vulkan: vulkan-1.dll not found (no Vulkan driver installed)");
+			GENESIS_LOG(LogRHI, Warning, "Vulkan: vulkan-1.dll not found (no Vulkan driver installed)");
 			return false;
 		}
 
-		vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(reinterpret_cast<void*>(GetProcAddress(VulkanModule, "vkGetInstanceProcAddr")));
+		vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
+		    reinterpret_cast<void*>(GetProcAddress(VulkanModule, "vkGetInstanceProcAddr")));
 		if (!vkGetInstanceProcAddr)
 		{
-			UE_LOG(LogRHI, Warning, "Vulkan: vulkan-1.dll has no vkGetInstanceProcAddr");
+			GENESIS_LOG(LogRHI, Warning, "Vulkan: vulkan-1.dll has no vkGetInstanceProcAddr");
 			FreeLibrary(VulkanModule);
 			VulkanModule = nullptr;
 			return false;
 		}
 
 		bool bOk = true;
-#define GET_VK_ENTRYPOINTS(Name) \
-		Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(VK_NULL_HANDLE, #Name)); \
-		if (!Name) { UE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
-#define GET_VK_ENTRYPOINTS_OPTIONAL(Name) \
-		Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(VK_NULL_HANDLE, #Name));
+#define GET_VK_ENTRYPOINTS(Name)                                                                                       \
+	Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(VK_NULL_HANDLE, #Name));                                 \
+	if (!Name)                                                                                                         \
+	{                                                                                                                  \
+		GENESIS_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name);                                         \
+		bOk = false;                                                                                                   \
+	}
+#define GET_VK_ENTRYPOINTS_OPTIONAL(Name)                                                                              \
+	Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(VK_NULL_HANDLE, #Name));
 		ENUM_VK_ENTRYPOINTS_BASE(GET_VK_ENTRYPOINTS)
 		ENUM_VK_ENTRYPOINTS_OPTIONAL_BASE(GET_VK_ENTRYPOINTS_OPTIONAL)
 #undef GET_VK_ENTRYPOINTS
@@ -87,11 +92,15 @@ namespace VulkanDynamicAPI
 	bool LoadInstanceFunctions(VkInstance Instance)
 	{
 		bool bOk = true;
-#define GET_INSTANCE_VK_ENTRYPOINTS(Name) \
-		Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(Instance, #Name)); \
-		if (!Name) { UE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
-#define GET_INSTANCE_VK_ENTRYPOINTS_OPTIONAL(Name) \
-		Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(Instance, #Name));
+#define GET_INSTANCE_VK_ENTRYPOINTS(Name)                                                                              \
+	Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(Instance, #Name));                                       \
+	if (!Name)                                                                                                         \
+	{                                                                                                                  \
+		GENESIS_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name);                                         \
+		bOk = false;                                                                                                   \
+	}
+#define GET_INSTANCE_VK_ENTRYPOINTS_OPTIONAL(Name)                                                                     \
+	Name = reinterpret_cast<PFN_##Name>(vkGetInstanceProcAddr(Instance, #Name));
 		ENUM_VK_ENTRYPOINTS_INSTANCE(GET_INSTANCE_VK_ENTRYPOINTS)
 		ENUM_VK_ENTRYPOINTS_OPTIONAL_INSTANCE(GET_INSTANCE_VK_ENTRYPOINTS_OPTIONAL)
 #undef GET_INSTANCE_VK_ENTRYPOINTS
@@ -102,9 +111,13 @@ namespace VulkanDynamicAPI
 	bool LoadDeviceFunctions(VkDevice Device)
 	{
 		bool bOk = true;
-#define GET_DEVICE_VK_ENTRYPOINTS(Name) \
-		Name = reinterpret_cast<PFN_##Name>(vkGetDeviceProcAddr(Device, #Name)); \
-		if (!Name) { UE_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name); bOk = false; }
+#define GET_DEVICE_VK_ENTRYPOINTS(Name)                                                                                \
+	Name = reinterpret_cast<PFN_##Name>(vkGetDeviceProcAddr(Device, #Name));                                           \
+	if (!Name)                                                                                                         \
+	{                                                                                                                  \
+		GENESIS_LOG(LogRHI, Warning, "Vulkan: missing entry point {}", #Name);                                         \
+		bOk = false;                                                                                                   \
+	}
 		ENUM_VK_ENTRYPOINTS_DEVICE(GET_DEVICE_VK_ENTRYPOINTS)
 #undef GET_DEVICE_VK_ENTRYPOINTS
 		return bOk;
@@ -114,29 +127,51 @@ namespace VulkanDynamicAPI
 	{
 		switch (Result)
 		{
-		case VK_SUCCESS: return "VK_SUCCESS";
-		case VK_NOT_READY: return "VK_NOT_READY";
-		case VK_TIMEOUT: return "VK_TIMEOUT";
-		case VK_INCOMPLETE: return "VK_INCOMPLETE";
-		case VK_SUBOPTIMAL_KHR: return "VK_SUBOPTIMAL_KHR";
-		case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
-		case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-		case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
-		case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
-		case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
-		case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
-		case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
-		case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
-		case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
-		case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
-		case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
-		case VK_ERROR_FRAGMENTED_POOL: return "VK_ERROR_FRAGMENTED_POOL";
-		case VK_ERROR_OUT_OF_POOL_MEMORY: return "VK_ERROR_OUT_OF_POOL_MEMORY";
-		case VK_ERROR_SURFACE_LOST_KHR: return "VK_ERROR_SURFACE_LOST_KHR";
-		case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
-		case VK_ERROR_OUT_OF_DATE_KHR: return "VK_ERROR_OUT_OF_DATE_KHR";
-		default: break;
+		case VK_SUCCESS:
+			return "VK_SUCCESS";
+		case VK_NOT_READY:
+			return "VK_NOT_READY";
+		case VK_TIMEOUT:
+			return "VK_TIMEOUT";
+		case VK_INCOMPLETE:
+			return "VK_INCOMPLETE";
+		case VK_SUBOPTIMAL_KHR:
+			return "VK_SUBOPTIMAL_KHR";
+		case VK_ERROR_OUT_OF_HOST_MEMORY:
+			return "VK_ERROR_OUT_OF_HOST_MEMORY";
+		case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+			return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+		case VK_ERROR_INITIALIZATION_FAILED:
+			return "VK_ERROR_INITIALIZATION_FAILED";
+		case VK_ERROR_DEVICE_LOST:
+			return "VK_ERROR_DEVICE_LOST";
+		case VK_ERROR_MEMORY_MAP_FAILED:
+			return "VK_ERROR_MEMORY_MAP_FAILED";
+		case VK_ERROR_LAYER_NOT_PRESENT:
+			return "VK_ERROR_LAYER_NOT_PRESENT";
+		case VK_ERROR_EXTENSION_NOT_PRESENT:
+			return "VK_ERROR_EXTENSION_NOT_PRESENT";
+		case VK_ERROR_FEATURE_NOT_PRESENT:
+			return "VK_ERROR_FEATURE_NOT_PRESENT";
+		case VK_ERROR_INCOMPATIBLE_DRIVER:
+			return "VK_ERROR_INCOMPATIBLE_DRIVER";
+		case VK_ERROR_TOO_MANY_OBJECTS:
+			return "VK_ERROR_TOO_MANY_OBJECTS";
+		case VK_ERROR_FORMAT_NOT_SUPPORTED:
+			return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+		case VK_ERROR_FRAGMENTED_POOL:
+			return "VK_ERROR_FRAGMENTED_POOL";
+		case VK_ERROR_OUT_OF_POOL_MEMORY:
+			return "VK_ERROR_OUT_OF_POOL_MEMORY";
+		case VK_ERROR_SURFACE_LOST_KHR:
+			return "VK_ERROR_SURFACE_LOST_KHR";
+		case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+			return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+		case VK_ERROR_OUT_OF_DATE_KHR:
+			return "VK_ERROR_OUT_OF_DATE_KHR";
+		default:
+			break;
 		}
 		return "VK_ERROR_(other)";
 	}
-}
+} // namespace VulkanDynamicAPI

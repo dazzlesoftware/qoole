@@ -7,8 +7,7 @@
 using namespace VulkanDynamicAPI;
 
 FVulkanSwapChain::FVulkanSwapChain(FVulkanDevice& InDevice, IPlatformWindow& InWindow)
-	: FRHISwapChain(&InWindow)
-	, Device(InDevice)
+    : FRHISwapChain(&InWindow), Device(InDevice)
 {
 }
 
@@ -40,15 +39,16 @@ FVulkanSwapChain::~FVulkanSwapChain()
 
 bool FVulkanSwapChain::Initialize()
 {
-	VkWin32SurfaceCreateInfoKHR SurfaceInfo{ VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
+	VkWin32SurfaceCreateInfoKHR SurfaceInfo{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
 	SurfaceInfo.hinstance = GetModuleHandleW(nullptr);
 	SurfaceInfo.hwnd = static_cast<HWND>(Window->GetNativeHandle());
 	if (!SurfaceInfo.hwnd)
 	{
-		UE_LOG(LogRHI, Error, "Vulkan: cannot create a swapchain for a window without a native handle");
+		GENESIS_LOG(LogRHI, Error, "Vulkan: cannot create a swapchain for a window without a native handle");
 		return false;
 	}
-	if (!VulkanUtil::Check(vkCreateWin32SurfaceKHR(Device.GetInstance(), &SurfaceInfo, nullptr, &Surface), "vkCreateWin32SurfaceKHR"))
+	if (!VulkanUtil::Check(
+	        vkCreateWin32SurfaceKHR(Device.GetInstance(), &SurfaceInfo, nullptr, &Surface), "vkCreateWin32SurfaceKHR"))
 	{
 		Surface = VK_NULL_HANDLE;
 		return false;
@@ -58,7 +58,7 @@ bool FVulkanSwapChain::Initialize()
 	vkGetPhysicalDeviceSurfaceSupportKHR(Device.GetPhysicalDevice(), Device.GetQueueFamily(), Surface, &bSupported);
 	if (!bSupported)
 	{
-		UE_LOG(LogRHI, Error, "Vulkan: the graphics queue cannot present to this window");
+		GENESIS_LOG(LogRHI, Error, "Vulkan: the graphics queue cannot present to this window");
 		return false;
 	}
 
@@ -70,34 +70,35 @@ bool FVulkanSwapChain::Initialize()
 	Formats.resize(Count);
 	if (Formats.empty())
 	{
-		UE_LOG(LogRHI, Error, "Vulkan: the surface reports no formats");
+		GENESIS_LOG(LogRHI, Error, "Vulkan: the surface reports no formats");
 		return false;
 	}
 	SurfaceFormat = Formats[0];
 	PixelFormat = EPixelFormat::Unknown;
-	for (VkFormat Wanted : { VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM })
+	for (VkFormat Wanted : {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM})
 	{
-		auto It = std::find_if(Formats.begin(), Formats.end(), [Wanted](const VkSurfaceFormatKHR& F)
-		{
-			return F.format == Wanted && F.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-		});
+		TArray<VkSurfaceFormatKHR>::iterator It =
+		    std::find_if(Formats.begin(), Formats.end(), [Wanted](const VkSurfaceFormatKHR& F)
+		{ return F.format == Wanted && F.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR; });
 		if (It != Formats.end())
 		{
 			SurfaceFormat = *It;
-			PixelFormat = Wanted == VK_FORMAT_B8G8R8A8_UNORM ? EPixelFormat::B8G8R8A8_UNORM : EPixelFormat::R8G8B8A8_UNORM;
+			PixelFormat =
+			    Wanted == VK_FORMAT_B8G8R8A8_UNORM ? EPixelFormat::B8G8R8A8_UNORM : EPixelFormat::R8G8B8A8_UNORM;
 			break;
 		}
 	}
 	if (PixelFormat == EPixelFormat::Unknown)
 	{
-		UE_LOG(LogRHI, Error, "Vulkan: the surface supports neither B8G8R8A8_UNORM nor R8G8B8A8_UNORM");
+		GENESIS_LOG(LogRHI, Error, "Vulkan: the surface supports neither B8G8R8A8_UNORM nor R8G8B8A8_UNORM");
 		return false;
 	}
 
 	for (VkSemaphore& Semaphore : AcquireSemaphores)
 	{
-		VkSemaphoreCreateInfo SemaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-		if (!VulkanUtil::Check(vkCreateSemaphore(Device.GetHandle(), &SemaphoreInfo, nullptr, &Semaphore), "vkCreateSemaphore"))
+		VkSemaphoreCreateInfo SemaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+		if (!VulkanUtil::Check(
+		        vkCreateSemaphore(Device.GetHandle(), &SemaphoreInfo, nullptr, &Semaphore), "vkCreateSemaphore"))
 		{
 			Semaphore = VK_NULL_HANDLE;
 			return false;
@@ -132,9 +133,12 @@ void FVulkanSwapChain::DestroyImages()
 	const VkDevice DeviceHandle = Device.GetHandle();
 	for (FImage& Image : Images)
 	{
-		if (Image.Framebuffer) vkDestroyFramebuffer(DeviceHandle, Image.Framebuffer, nullptr);
-		if (Image.View) vkDestroyImageView(DeviceHandle, Image.View, nullptr);
-		if (Image.RenderFinished) vkDestroySemaphore(DeviceHandle, Image.RenderFinished, nullptr);
+		if (Image.Framebuffer)
+			vkDestroyFramebuffer(DeviceHandle, Image.Framebuffer, nullptr);
+		if (Image.View)
+			vkDestroyImageView(DeviceHandle, Image.View, nullptr);
+		if (Image.RenderFinished)
+			vkDestroySemaphore(DeviceHandle, Image.RenderFinished, nullptr);
 	}
 	Images.clear();
 }
@@ -146,7 +150,8 @@ bool FVulkanSwapChain::Recreate()
 	const VkPhysicalDevice PhysicalDevice = Device.GetPhysicalDevice();
 
 	VkSurfaceCapabilitiesKHR Capabilities;
-	if (!VulkanUtil::Check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(PhysicalDevice, Surface, &Capabilities), "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
+	if (!VulkanUtil::Check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(PhysicalDevice, Surface, &Capabilities),
+	        "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
 	{
 		return false;
 	}
@@ -174,7 +179,8 @@ bool FVulkanSwapChain::Recreate()
 	VkCompositeAlphaFlagBitsKHR CompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	if (!(Capabilities.supportedCompositeAlpha & CompositeAlpha))
 	{
-		for (VkCompositeAlphaFlagBitsKHR Candidate : { VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR })
+		for (VkCompositeAlphaFlagBitsKHR Candidate : {VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+		         VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR})
 		{
 			if (Capabilities.supportedCompositeAlpha & Candidate)
 			{
@@ -189,7 +195,7 @@ bool FVulkanSwapChain::Recreate()
 		Usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	}
 
-	VkSwapchainCreateInfoKHR CreateInfo{ VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
+	VkSwapchainCreateInfoKHR CreateInfo{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
 	CreateInfo.surface = Surface;
 	CreateInfo.minImageCount = ImageCount;
 	CreateInfo.imageFormat = SurfaceFormat.format;
@@ -198,7 +204,9 @@ bool FVulkanSwapChain::Recreate()
 	CreateInfo.imageArrayLayers = 1;
 	CreateInfo.imageUsage = Usage;
 	CreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	CreateInfo.preTransform = (Capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : Capabilities.currentTransform;
+	CreateInfo.preTransform = (Capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+	    ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+	    : Capabilities.currentTransform;
 	CreateInfo.compositeAlpha = CompositeAlpha;
 	CreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // always supported
 	CreateInfo.clipped = VK_TRUE;
@@ -225,28 +233,32 @@ bool FVulkanSwapChain::Recreate()
 	TArray<VkImage> SwapchainImages(Count);
 	vkGetSwapchainImagesKHR(DeviceHandle, Swapchain, &Count, SwapchainImages.data());
 
-	const VkRenderPass RenderPass = Device.GetRenderPass(SurfaceFormat.format, true, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	const VkRenderPass RenderPass =
+	    Device.GetRenderPass(SurfaceFormat.format, true, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	Images.resize(Count);
 	for (uint32 Index = 0; Index < Count; ++Index)
 	{
 		FImage& Image = Images[Index];
 		Image.Image = SwapchainImages[Index];
 
-		VkImageViewCreateInfo ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+		VkImageViewCreateInfo ViewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
 		ViewInfo.image = Image.Image;
 		ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		ViewInfo.format = SurfaceFormat.format;
-		ViewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		VkFramebufferCreateInfo FramebufferInfo{ VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
+		ViewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+		VkFramebufferCreateInfo FramebufferInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
 		FramebufferInfo.renderPass = RenderPass;
 		FramebufferInfo.attachmentCount = 1;
 		FramebufferInfo.width = Extent.width;
 		FramebufferInfo.height = Extent.height;
 		FramebufferInfo.layers = 1;
-		VkSemaphoreCreateInfo SemaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-		if (!VulkanUtil::Check(vkCreateImageView(DeviceHandle, &ViewInfo, nullptr, &Image.View), "vkCreateImageView")
-			|| (FramebufferInfo.pAttachments = &Image.View, !VulkanUtil::Check(vkCreateFramebuffer(DeviceHandle, &FramebufferInfo, nullptr, &Image.Framebuffer), "vkCreateFramebuffer"))
-			|| !VulkanUtil::Check(vkCreateSemaphore(DeviceHandle, &SemaphoreInfo, nullptr, &Image.RenderFinished), "vkCreateSemaphore"))
+		VkSemaphoreCreateInfo SemaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+		if (!VulkanUtil::Check(vkCreateImageView(DeviceHandle, &ViewInfo, nullptr, &Image.View), "vkCreateImageView") ||
+		    (FramebufferInfo.pAttachments = &Image.View,
+		        !VulkanUtil::Check(vkCreateFramebuffer(DeviceHandle, &FramebufferInfo, nullptr, &Image.Framebuffer),
+		            "vkCreateFramebuffer")) ||
+		    !VulkanUtil::Check(
+		        vkCreateSemaphore(DeviceHandle, &SemaphoreInfo, nullptr, &Image.RenderFinished), "vkCreateSemaphore"))
 		{
 			DestroyImages();
 			vkDestroySwapchainKHR(DeviceHandle, Swapchain, nullptr);
@@ -276,7 +288,8 @@ bool FVulkanSwapChain::AcquireNextImage(uint32 FrameIndex)
 
 	for (int32 Attempt = 0; Attempt < 2; ++Attempt)
 	{
-		const VkResult Result = vkAcquireNextImageKHR(Device.GetHandle(), Swapchain, UINT64_MAX, AcquireSemaphores[FrameIndex], VK_NULL_HANDLE, &ImageIndex);
+		const VkResult Result = vkAcquireNextImageKHR(
+		    Device.GetHandle(), Swapchain, UINT64_MAX, AcquireSemaphores[FrameIndex], VK_NULL_HANDLE, &ImageIndex);
 		if (Result == VK_SUCCESS || Result == VK_SUBOPTIMAL_KHR)
 		{
 			if (Result == VK_SUBOPTIMAL_KHR)
@@ -305,7 +318,7 @@ bool FVulkanSwapChain::AcquireNextImage(uint32 FrameIndex)
 void FVulkanSwapChain::Present(VkQueue Queue)
 {
 	check(bAcquired);
-	VkPresentInfoKHR PresentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+	VkPresentInfoKHR PresentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
 	PresentInfo.waitSemaphoreCount = 1;
 	PresentInfo.pWaitSemaphores = &Images[ImageIndex].RenderFinished;
 	PresentInfo.swapchainCount = 1;

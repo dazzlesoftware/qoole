@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "TestHelpers.h"
+#include "Templates/SharedPointer.h"
 
 FTestFonts& FTestFonts::Get()
 {
@@ -10,8 +11,9 @@ FTestFonts& FTestFonts::Get()
 		const FString Dir = FPaths::FindContentDir();
 		Fonts.Regular = Fonts.Cache.LoadFace(Dir + "Slate/Fonts/NotoSans-Regular.ttf");
 		Fonts.Devanagari = Fonts.Cache.LoadFace(Dir + "Slate/Fonts/NotoSansDevanagari-Regular.ttf");
-		Fonts.Latin = std::make_shared<FCompositeFont>(FName("Latin"), TArray<TSharedPtr<FFontFace>>{ Fonts.Regular });
-		Fonts.Composite = std::make_shared<FCompositeFont>(FName("Composite"), TArray<TSharedPtr<FFontFace>>{ Fonts.Regular, Fonts.Devanagari });
+		Fonts.Latin = std::make_shared<FCompositeFont>(FName("Latin"), TArray<TSharedPtr<FFontFace>>{Fonts.Regular});
+		Fonts.Composite = std::make_shared<FCompositeFont>(
+		    FName("Composite"), TArray<TSharedPtr<FFontFace>>{Fonts.Regular, Fonts.Devanagari});
 		return true;
 	}();
 	(void)bLoaded;
@@ -38,7 +40,7 @@ TEST_SUITE("Text")
 
 		// Shaped at 2x the pixel size, the logical size stays about the same
 		// (hinting may move it by a fraction of a pixel per glyph).
-		for (const float Scale : { 1.25f, 1.5f, 2.0f })
+		for (const float Scale : {1.25f, 1.5f, 2.0f})
 		{
 			const FVector2 Scaled = Fonts.Cache.MeasureText("Hello, world", Font, Scale);
 			CHECK(Scaled.X == doctest::Approx(Long.X).epsilon(0.05));
@@ -50,7 +52,8 @@ TEST_SUITE("Text")
 	{
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const auto Shaped = Fonts.Cache.ShapeText("Typography", FSlateFontInfo(Fonts.Latin, 20.0f), 1.0f);
+		const TSharedRef<const FShapedGlyphSequence> Shaped =
+		    Fonts.Cache.ShapeText("Typography", FSlateFontInfo(Fonts.Latin, 20.0f), 1.0f);
 		float Sum = 0.0f;
 		for (const FShapedGlyphEntry& Glyph : Shaped->Glyphs)
 		{
@@ -67,7 +70,7 @@ TEST_SUITE("Text")
 		REQUIRE(Fonts.IsValid());
 		const FSlateFontInfo Font(Fonts.Composite, 18.0f);
 		const std::string_view Namaste = "नमस्ते"; // 6 code points
-		const auto Shaped = Fonts.Cache.ShapeText(Namaste, Font, 1.0f);
+		const TSharedRef<const FShapedGlyphSequence> Shaped = Fonts.Cache.ShapeText(Namaste, Font, 1.0f);
 		CHECK(FUtf8::CountCodePoints(Namaste) == 6);
 		// स + ् + त form a conjunct and े is a mark: fewer glyphs than code points.
 		CHECK(Shaped->Glyphs.size() < 6);
@@ -77,7 +80,7 @@ TEST_SUITE("Text")
 			CHECK(Glyph.GlyphIndex != 0); // no .notdef boxes
 		}
 
-		const auto Mixed = Fonts.Cache.ShapeText("Hello नमस्ते!", Font, 1.0f);
+		const TSharedRef<const FShapedGlyphSequence> Mixed = Fonts.Cache.ShapeText("Hello नमस्ते!", Font, 1.0f);
 		bool bUsedLatin = false;
 		bool bUsedDevanagari = false;
 		for (const FShapedGlyphEntry& Glyph : Mixed->Glyphs)
@@ -90,7 +93,8 @@ TEST_SUITE("Text")
 		CHECK(bUsedDevanagari);
 		CHECK(Mixed->Width > Shaped->Width);
 		// The line is tall enough for Devanagari's head line and marks.
-		CHECK(Mixed->LineHeight >= Fonts.Cache.ShapeText("Hello", FSlateFontInfo(Fonts.Latin, 18.0f), 1.0f)->LineHeight);
+		CHECK(
+		    Mixed->LineHeight >= Fonts.Cache.ShapeText("Hello", FSlateFontInfo(Fonts.Latin, 18.0f), 1.0f)->LineHeight);
 	}
 
 	TEST_CASE("Shaping results are cached per pixel size")
@@ -98,9 +102,9 @@ TEST_SUITE("Text")
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
 		const FSlateFontInfo Font(Fonts.Latin, 12.0f);
-		const auto A = Fonts.Cache.ShapeText("cache me", Font, 1.0f);
-		const auto B = Fonts.Cache.ShapeText("cache me", Font, 1.0f);
-		const auto C = Fonts.Cache.ShapeText("cache me", Font, 2.0f);
+		const TSharedRef<const FShapedGlyphSequence> A = Fonts.Cache.ShapeText("cache me", Font, 1.0f);
+		const TSharedRef<const FShapedGlyphSequence> B = Fonts.Cache.ShapeText("cache me", Font, 1.0f);
+		const TSharedRef<const FShapedGlyphSequence> C = Fonts.Cache.ShapeText("cache me", Font, 2.0f);
 		CHECK(A.ToSharedPtr() == B.ToSharedPtr());
 		CHECK(A.ToSharedPtr() != C.ToSharedPtr());
 		CHECK(C->PixelSize == 24.0f);
@@ -110,7 +114,8 @@ TEST_SUITE("Text")
 	{
 		FTestFonts& Fonts = FTestFonts::Get();
 		REQUIRE(Fonts.IsValid());
-		const auto Shaped = Fonts.Cache.ShapeText("A", FSlateFontInfo(Fonts.Latin, 40.0f), 1.0f);
+		const TSharedRef<const FShapedGlyphSequence> Shaped =
+		    Fonts.Cache.ShapeText("A", FSlateFontInfo(Fonts.Latin, 40.0f), 1.0f);
 		REQUIRE(Shaped->Glyphs.size() == 1);
 		const FShapedGlyphEntry& Glyph = Shaped->Glyphs[0];
 		const FCachedGlyph& First = Fonts.Cache.GetGlyph(*Glyph.Face, Shaped->PixelSize, Glyph.GlyphIndex);

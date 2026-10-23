@@ -1,29 +1,31 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "Scripting/ScriptWorldSubsystem.h"
+#include "Templates/SharedPointer.h"
+#include "Internationalization/TextLocalization.h"
 #include <algorithm>
 #include <cmath>
 #include <exception>
 namespace
 {
-using J = FJsonValue;
-struct FBusy
-{
-	bool& Value;
-	explicit FBusy(bool& B) : Value(B)
+	using J = FJsonValue;
+	struct FBusy
 	{
-		Value = true;
-	}
-	~FBusy()
+		bool& Value;
+		explicit FBusy(bool& B) : Value(B)
+		{
+			Value = true;
+		}
+		~FBusy()
+		{
+			Value = false;
+		}
+	};
+	void Append(FString& Out, const FString& E)
 	{
-		Value = false;
+		if (!Out.IsEmpty())
+			Out += "\n";
+		Out += E;
 	}
-};
-void Append(FString& Out, const FString& E)
-{
-	if (!Out.IsEmpty())
-		Out += "\n";
-	Out += E;
-}
 } // namespace
 struct FScriptWorldSubsystem::FInstance
 {
@@ -32,11 +34,10 @@ struct FScriptWorldSubsystem::FInstance
 	std::unique_ptr<IScriptRuntime> Runtime;
 	bool bFaulted = false;
 };
-FScriptWorldSubsystem::FScriptWorldSubsystem(FScriptRuntimeRequest R, std::weak_ptr<FWorld> W,
-											 FScriptRuntimeRegistry P, std::shared_ptr<IScriptHost> H,
-											 FModuleLoader L)
-	: Request(std::move(R)), World(std::move(W)), Providers(std::move(P)), Host(std::move(H)),
-	  Load(std::move(L)), Owner(std::this_thread::get_id())
+FScriptWorldSubsystem::FScriptWorldSubsystem(FScriptRuntimeRequest R, std::weak_ptr<FWorld> W, FScriptRuntimeRegistry P,
+    std::shared_ptr<IScriptHost> H, FModuleLoader L)
+    : Request(std::move(R)), World(std::move(W)), Providers(std::move(P)), Host(std::move(H)), Load(std::move(L)),
+      Owner(std::this_thread::get_id())
 {
 }
 FScriptWorldSubsystem::~FScriptWorldSubsystem()
@@ -48,12 +49,12 @@ bool FScriptWorldSubsystem::Check(FString& E) const
 {
 	if (std::this_thread::get_id() != Owner)
 	{
-		E = "Script world lifecycle must run on its owning thread.";
+		E = GENESIS_TEXT("Script world lifecycle must run on its owning thread.");
 		return false;
 	}
 	if (bBusy)
 	{
-		E = "Script world lifecycle cannot reenter itself.";
+		E = GENESIS_TEXT("Script world lifecycle cannot reenter itself.");
 		return false;
 	}
 	return true;
@@ -79,18 +80,18 @@ bool FScriptWorldSubsystem::Call(FInstance& I, const char* Function, J A, FStrin
 	}
 	catch (...)
 	{
-		E = "Unknown script lifecycle exception.";
+		E = GENESIS_TEXT("Unknown script lifecycle exception.");
 	}
 	I.bFaulted = true;
-	E = FString::Format("Script component {} / {}: {}", I.Actor, I.Component, E);
+	E = FTextLocalization::Format("Script component {} / {}: {}", I.Actor, I.Component, E);
 	return false;
 }
 bool FScriptWorldSubsystem::Synchronize(FString& E)
 {
-	auto W = World.lock();
+	TSharedPtr<FWorld> W = World.lock();
 	if (!W)
 	{
-		E = "Script world has expired.";
+		E = GENESIS_TEXT("Script world has expired.");
 		return false;
 	}
 	struct FDescriptor
@@ -99,34 +100,34 @@ bool FScriptWorldSubsystem::Synchronize(FString& E)
 		J Properties;
 	};
 	TArray<FDescriptor> Desired;
-	for (const auto& A : W->GetActors())
-		for (const auto& C : A.Components)
+	for (const FActor& A : W->GetActors())
+		for (const FActorComponent& C : A.Components)
 			if (C.Type == "Genesis.Script")
 			{
-				const auto& M = C.Properties.Get("Module");
+				const FJsonValue& M = C.Properties.Get("Module");
 				if (M.GetType() != EJsonType::String || M.AsString().IsEmpty() || M.AsString().Len() > 128)
 				{
-					E = "Script component requires a valid Module name.";
+					E = GENESIS_TEXT("Script component requires a valid Module name.");
 					return false;
 				}
 				Desired.push_back({A.Id, C.Id, M.AsString(), C.Properties});
 				if (Desired.size() > 256)
 				{
-					E = "A script world supports at most 256 live script components.";
+					E = GENESIS_TEXT("A script world supports at most 256 live script components.");
 					return false;
 				}
 			}
 	FString Failures;
 	// Snapshot descriptors and resolve identities again after every callback.
-	for (auto It = Instances.begin(); It != Instances.end();)
+	for (TArray<std::unique_ptr<FInstance>>::iterator It = Instances.begin(); It != Instances.end();)
 	{
-		auto& I = **It;
-		const auto Found = std::find_if(Desired.begin(), Desired.end(), [&](const auto& D) {
-			return D.Actor == I.Actor && D.Component == I.Component && D.Module == I.Module;
-		});
+		FScriptWorldSubsystem::FInstance& I = **It;
+		const TArray<FDescriptor>::const_iterator Found =
+		    std::find_if(Desired.begin(), Desired.end(), [&](const TArray<FDescriptor>::value_type& D)
+		{ return D.Actor == I.Actor && D.Component == I.Component && D.Module == I.Module; });
 		if (Found == Desired.end())
 		{
-			auto A = J::MakeObject();
+			FJsonValue A = J::MakeObject();
 			A["Reason"] = "Removed";
 			FString Failure;
 			if (I.Runtime && !Call(I, "OnEndPlay", A, Failure))
@@ -139,15 +140,15 @@ bool FScriptWorldSubsystem::Synchronize(FString& E)
 			++It;
 		}
 	}
-	for (const auto& D : Desired)
+	for (const FDescriptor& D : Desired)
 	{
-		if (std::any_of(Instances.begin(), Instances.end(),
-						[&](const auto& I) { return I->Actor == D.Actor && I->Component == D.Component; }))
+		if (std::any_of(Instances.begin(), Instances.end(), [&](const TArray<std::unique_ptr<FInstance>>::value_type& I)
+		{ return I->Actor == D.Actor && I->Component == D.Component; }))
 			continue;
-		const auto* C = W->FindComponent(D.Actor, D.Component);
+		const FActorComponent* C = W->FindComponent(D.Actor, D.Component);
 		if (!C || C->Type != "Genesis.Script" || C->Properties.Get("Module").AsString() != D.Module)
 			continue;
-		auto I = std::make_unique<FInstance>();
+		TUniquePtr<FScriptWorldSubsystem::FInstance> I = std::make_unique<FInstance>();
 		I->Actor = D.Actor;
 		I->Component = D.Component;
 		I->Module = D.Module;
@@ -158,8 +159,7 @@ bool FScriptWorldSubsystem::Synchronize(FString& E)
 		bool Loaded = false;
 		try
 		{
-			Loaded = I->Runtime && Load(D.Module, Payload, Failure) &&
-					 I->Runtime->LoadModule("main", Payload, Failure);
+			Loaded = I->Runtime && Load(D.Module, Payload, Failure) && I->Runtime->LoadModule("main", Payload, Failure);
 		}
 		catch (const std::exception& Exception)
 		{
@@ -167,14 +167,14 @@ bool FScriptWorldSubsystem::Synchronize(FString& E)
 		}
 		catch (...)
 		{
-			Failure = "Unknown script module loader exception.";
+			Failure = GENESIS_TEXT("Unknown script module loader exception.");
 		}
 		if (!Loaded)
 		{
 			// Keep a fault marker so a broken module is not loaded every frame.
 			I->bFaulted = true;
 			I->Runtime.reset();
-			Append(Failures, FString::Format("Cannot start script component {}: {}", D.Component, Failure));
+			Append(Failures, FTextLocalization::Format("Cannot start script component {}: {}", D.Component, Failure));
 		}
 		else if (!Call(*I, "OnBeginPlay", J::MakeObject(), Failure))
 			Append(Failures, Failure);
@@ -190,12 +190,12 @@ bool FScriptWorldSubsystem::BeginPlay(FString& E)
 		return false;
 	if (bRunning)
 	{
-		E = "Script world has already begun play.";
+		E = GENESIS_TEXT("Script world has already begun play.");
 		return false;
 	}
 	if (Request.Purpose != EScriptPurpose::Gameplay || !Host || !Load || !Providers.IsAvailable(Request))
 	{
-		E = "Script world needs a gameplay provider, module loader and host.";
+		E = GENESIS_TEXT("Script world needs a gameplay provider, module loader and host.");
 		return false;
 	}
 	FBusy Busy(bBusy);
@@ -209,29 +209,29 @@ bool FScriptWorldSubsystem::Tick(float DeltaSeconds, FString& E)
 		return false;
 	if (!bRunning)
 	{
-		E = "Script world has not begun play.";
+		E = GENESIS_TEXT("Script world has not begun play.");
 		return false;
 	}
 	if (!std::isfinite(DeltaSeconds) || DeltaSeconds < 0 || DeltaSeconds > 10)
 	{
-		E = "Script tick delta must be finite and between zero and ten seconds.";
+		E = GENESIS_TEXT("Script tick delta must be finite and between zero and ten seconds.");
 		return false;
 	}
 	FBusy Busy(bBusy);
 	FString Failures, Failure;
 	if (!Synchronize(Failure))
 		Append(Failures, Failure);
-	auto W = World.lock();
+	TSharedPtr<FWorld> W = World.lock();
 	if (!W)
 	{
 		E = std::move(Failures);
 		return false;
 	}
-	for (auto& I : Instances)
+	for (std::unique_ptr<FScriptWorldSubsystem::FInstance>& I : Instances)
 	{
 		if (I->bFaulted || !W->FindComponent(I->Actor, I->Component))
 			continue;
-		auto A = J::MakeObject();
+		FJsonValue A = J::MakeObject();
 		A["DeltaSeconds"] = DeltaSeconds;
 		if (!Call(*I, "OnTick", A, Failure))
 			Append(Failures, Failure);
@@ -248,28 +248,28 @@ bool FScriptWorldSubsystem::SendEvent(const FString& Name, const J& Payload, FSt
 		return false;
 	if (!bRunning)
 	{
-		E = "Script world has not begun play.";
+		E = GENESIS_TEXT("Script world has not begun play.");
 		return false;
 	}
 	if (Name.IsEmpty() || Name.Len() > 128 || !ValidateScriptValue(Payload, E))
 	{
 		if (E.IsEmpty())
-			E = "Script event needs a bounded name and payload.";
+			E = GENESIS_TEXT("Script event needs a bounded name and payload.");
 		return false;
 	}
 	FBusy Busy(bBusy);
-	auto W = World.lock();
+	TSharedPtr<FWorld> W = World.lock();
 	if (!W)
 	{
-		E = "Script world has expired.";
+		E = GENESIS_TEXT("Script world has expired.");
 		return false;
 	}
 	FString Failures, Failure;
-	for (auto& I : Instances)
+	for (std::unique_ptr<FScriptWorldSubsystem::FInstance>& I : Instances)
 	{
 		if (I->bFaulted || !W->FindComponent(I->Actor, I->Component))
 			continue;
-		auto A = J::MakeObject();
+		FJsonValue A = J::MakeObject();
 		A["Name"] = Name;
 		A["Payload"] = Payload;
 		if (!Call(*I, "OnEvent", A, Failure))
@@ -289,10 +289,10 @@ bool FScriptWorldSubsystem::EndPlay(FString& E)
 		return true;
 	FBusy Busy(bBusy);
 	FString Failures, Failure;
-	for (auto& I : Instances)
+	for (std::unique_ptr<FScriptWorldSubsystem::FInstance>& I : Instances)
 		if (I->Runtime)
 		{
-			auto A = J::MakeObject();
+			FJsonValue A = J::MakeObject();
 			A["Reason"] = "Stopped";
 			if (!Call(*I, "OnEndPlay", A, Failure))
 				Append(Failures, Failure);

@@ -6,18 +6,18 @@
 
 namespace
 {
-Matrix44 ToScope(const Object& Obj)
-{
-	Matrix44 M;
-	Obj.CalTransSpaceMatrix(M.SetIdentity());
-	return M;
-}
-Matrix44 ToLocal(const Object& Obj)
-{
-	Matrix44 M;
-	Obj.CalInvTransSpaceMatrix(M.SetIdentity());
-	return M;
-}
+	Matrix44 ToScope(const Object& Obj)
+	{
+		Matrix44 M;
+		Obj.CalTransSpaceMatrix(M.SetIdentity());
+		return M;
+	}
+	Matrix44 ToLocal(const Object& Obj)
+	{
+		Matrix44 M;
+		Obj.CalInvTransSpaceMatrix(M.SetIdentity());
+		return M;
+	}
 } // namespace
 void SnapFoliageToLandscape(FMapDocument& Document, const Object& Land, const Landscape& Before)
 {
@@ -39,7 +39,8 @@ void SnapFoliageToLandscape(FMapDocument& Document, const Object& Land, const La
 		Matrix44 FoliageToLand, LandToFoliage;
 		FoliageToLand.Multiply(ScopeToLand, FoliageToScope);
 		LandToFoliage.Multiply(ScopeToFoliage, LandToScope);
-		if (auto Updated = SnapFoliageToHeightfield(Obj->GetFoliage(), Before, After, FoliageToLand, LandToFoliage))
+		if (std::shared_ptr<const Foliage> Updated =
+		        SnapFoliageToHeightfield(Obj->GetFoliage(), Before, After, FoliageToLand, LandToFoliage))
 		{
 			Document.SetFoliage(*Obj, std::move(Updated), "Sculpt Landscape");
 		}

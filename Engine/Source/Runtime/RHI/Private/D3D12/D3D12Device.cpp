@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "D3D12/D3D12RHI.h"
+#include "Templates/SharedPointer.h"
 
 #include "GenericPlatform/PlatformWindow.h"
 
@@ -17,12 +18,18 @@ namespace
 	{
 		switch (Format)
 		{
-		case EPixelFormat::R8_UNORM: return DXGI_FORMAT_R8_UNORM;
-		case EPixelFormat::R8G8B8A8_UNORM: return DXGI_FORMAT_R8G8B8A8_UNORM;
-		case EPixelFormat::R8G8B8A8_SRGB: return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-		case EPixelFormat::B8G8R8A8_UNORM: return DXGI_FORMAT_B8G8R8A8_UNORM;
-		case EPixelFormat::D32_FLOAT: return DXGI_FORMAT_D32_FLOAT;
-		case EPixelFormat::Unknown: break;
+		case EPixelFormat::R8_UNORM:
+			return DXGI_FORMAT_R8_UNORM;
+		case EPixelFormat::R8G8B8A8_UNORM:
+			return DXGI_FORMAT_R8G8B8A8_UNORM;
+		case EPixelFormat::R8G8B8A8_SRGB:
+			return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+		case EPixelFormat::B8G8R8A8_UNORM:
+			return DXGI_FORMAT_B8G8R8A8_UNORM;
+		case EPixelFormat::D32_FLOAT:
+			return DXGI_FORMAT_D32_FLOAT;
+		case EPixelFormat::Unknown:
+			break;
 		}
 		return DXGI_FORMAT_UNKNOWN;
 	}
@@ -31,15 +38,20 @@ namespace
 	{
 		switch (Format)
 		{
-		case EVertexFormat::Float2: return DXGI_FORMAT_R32G32_FLOAT;
-		case EVertexFormat::Float3: return DXGI_FORMAT_R32G32B32_FLOAT;
-		case EVertexFormat::Float4: return DXGI_FORMAT_R32G32B32A32_FLOAT;
-		case EVertexFormat::UByte4N: return DXGI_FORMAT_R8G8B8A8_UNORM;
+		case EVertexFormat::Float2:
+			return DXGI_FORMAT_R32G32_FLOAT;
+		case EVertexFormat::Float3:
+			return DXGI_FORMAT_R32G32B32_FLOAT;
+		case EVertexFormat::Float4:
+			return DXGI_FORMAT_R32G32B32A32_FLOAT;
+		case EVertexFormat::UByte4N:
+			return DXGI_FORMAT_R8G8B8A8_UNORM;
 		}
 		return DXGI_FORMAT_UNKNOWN;
 	}
 
-	D3D12_RESOURCE_BARRIER Transition(ID3D12Resource* Resource, D3D12_RESOURCE_STATES Before, D3D12_RESOURCE_STATES After)
+	D3D12_RESOURCE_BARRIER Transition(
+	    ID3D12Resource* Resource, D3D12_RESOURCE_STATES Before, D3D12_RESOURCE_STATES After)
 	{
 		D3D12_RESOURCE_BARRIER Barrier{};
 		Barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -63,11 +75,11 @@ namespace
 	constexpr uint32 RtvHeapCapacity = 256;
 	constexpr uint32 DsvHeapCapacity = 64;
 	constexpr uint64 UploadChunkSize = 4 * 1024 * 1024;
-}
+} // namespace
 
 TUniquePtr<FRHIDevice> CreateD3D12Device(const FRHIDeviceDesc& Desc)
 {
-	auto Device = MakeUnique<FD3D12Device>(Desc);
+	TUniquePtr<FD3D12Device> Device = MakeUnique<FD3D12Device>(Desc);
 	if (!Device->Initialize())
 	{
 		return nullptr;
@@ -78,7 +90,8 @@ TUniquePtr<FRHIDevice> CreateD3D12Device(const FRHIDeviceDesc& Desc)
 // ---------------------------------------------------------------------------
 // Descriptor heap
 
-bool FD3D12DescriptorHeap::Initialize(ID3D12Device* Device, D3D12_DESCRIPTOR_HEAP_TYPE Type, uint32 InCapacity, bool bShaderVisible)
+bool FD3D12DescriptorHeap::Initialize(
+    ID3D12Device* Device, D3D12_DESCRIPTOR_HEAP_TYPE Type, uint32 InCapacity, bool bShaderVisible)
 {
 	D3D12_DESCRIPTOR_HEAP_DESC HeapDesc{};
 	HeapDesc.Type = Type;
@@ -107,7 +120,7 @@ uint32 FD3D12DescriptorHeap::Allocate()
 {
 	if (FreeList.empty())
 	{
-		UE_LOG(LogRHI, Error, "D3D12 descriptor heap exhausted ({} descriptors)", Capacity);
+		GENESIS_LOG(LogRHI, Error, "D3D12 descriptor heap exhausted ({} descriptors)", Capacity);
 		return Invalid;
 	}
 	const uint32 Index = FreeList.back();
@@ -125,22 +138,20 @@ void FD3D12DescriptorHeap::Free(uint32 Index)
 
 D3D12_CPU_DESCRIPTOR_HANDLE FD3D12DescriptorHeap::GetCpuHandle(uint32 Index) const
 {
-	return D3D12_CPU_DESCRIPTOR_HANDLE{ CpuStart.ptr + SIZE_T(Index) * Increment };
+	return D3D12_CPU_DESCRIPTOR_HANDLE{CpuStart.ptr + SIZE_T(Index) * Increment};
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE FD3D12DescriptorHeap::GetGpuHandle(uint32 Index) const
 {
-	return D3D12_GPU_DESCRIPTOR_HANDLE{ GpuStart.ptr + uint64(Index) * Increment };
+	return D3D12_GPU_DESCRIPTOR_HANDLE{GpuStart.ptr + uint64(Index) * Increment};
 }
 
 // ---------------------------------------------------------------------------
 // Resources
 
-FD3D12Buffer::FD3D12Buffer(FD3D12Device& InDevice, const FRHIBufferDesc& InDesc, ComPtr<ID3D12Resource> InResource, void* InMapped)
-	: FRHIBuffer(InDesc)
-	, Device(InDevice)
-	, Resource(std::move(InResource))
-	, Mapped(InMapped)
+FD3D12Buffer::FD3D12Buffer(
+    FD3D12Device& InDevice, const FRHIBufferDesc& InDesc, ComPtr<ID3D12Resource> InResource, void* InMapped)
+    : FRHIBuffer(InDesc), Device(InDevice), Resource(std::move(InResource)), Mapped(InMapped)
 {
 	Desc.InitialData = nullptr;
 }
@@ -150,12 +161,9 @@ FD3D12Buffer::~FD3D12Buffer()
 	Device.DeferDelete(std::move(Resource));
 }
 
-FD3D12Texture::FD3D12Texture(FD3D12Device& InDevice, const FRHITextureDesc& InDesc, ComPtr<ID3D12Resource> InResource, uint32 InSrv, uint32 InRtv)
-	: FRHITexture(InDesc)
-	, Device(InDevice)
-	, Resource(std::move(InResource))
-	, Srv(InSrv)
-	, Rtv(InRtv)
+FD3D12Texture::FD3D12Texture(FD3D12Device& InDevice, const FRHITextureDesc& InDesc, ComPtr<ID3D12Resource> InResource,
+    uint32 InSrv, uint32 InRtv)
+    : FRHITexture(InDesc), Device(InDevice), Resource(std::move(InResource)), Srv(InSrv), Rtv(InRtv)
 {
 }
 
@@ -175,8 +183,7 @@ FD3D12Texture::~FD3D12Texture()
 // Swapchain
 
 FD3D12SwapChain::FD3D12SwapChain(FD3D12Device& InDevice, IPlatformWindow& InWindow)
-	: FRHISwapChain(&InWindow)
-	, Device(InDevice)
+    : FRHISwapChain(&InWindow), Device(InDevice)
 {
 	for (uint32& Rtv : Rtvs)
 	{
@@ -208,10 +215,11 @@ bool FD3D12SwapChain::Initialize()
 	SwapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 
 	ComPtr<IDXGISwapChain1> SwapChain1;
-	HRESULT Hr = Device.GetFactory()->CreateSwapChainForHwnd(Device.GetQueue(), Hwnd, &SwapDesc, nullptr, nullptr, &SwapChain1);
+	HRESULT Hr =
+	    Device.GetFactory()->CreateSwapChainForHwnd(Device.GetQueue(), Hwnd, &SwapDesc, nullptr, nullptr, &SwapChain1);
 	if (FAILED(Hr) || FAILED(SwapChain1.As(&SwapChain)))
 	{
-		UE_LOG(LogRHI, Error, "CreateSwapChainForHwnd failed (0x{:08X})", static_cast<uint32>(Hr));
+		GENESIS_LOG(LogRHI, Error, "CreateSwapChainForHwnd failed (0x{:08X})", static_cast<uint32>(Hr));
 		return false;
 	}
 	Device.GetFactory()->MakeWindowAssociation(Hwnd, DXGI_MWA_NO_ALT_ENTER);
@@ -230,7 +238,8 @@ void FD3D12SwapChain::AcquireBuffers()
 		{
 			Rtvs[I] = Device.GetRtvHeap().Allocate();
 		}
-		Device.GetDevice()->CreateRenderTargetView(BackBuffers[I].Get(), nullptr, Device.GetRtvHeap().GetCpuHandle(Rtvs[I]));
+		Device.GetDevice()->CreateRenderTargetView(
+		    BackBuffers[I].Get(), nullptr, Device.GetRtvHeap().GetCpuHandle(Rtvs[I]));
 	}
 }
 
@@ -268,7 +277,7 @@ void FD3D12SwapChain::Resize(uint32 Width, uint32 Height)
 	const HRESULT Hr = SwapChain->ResizeBuffers(BufferCount, Width, Height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
 	if (FAILED(Hr))
 	{
-		UE_LOG(LogRHI, Error, "ResizeBuffers({}x{}) failed (0x{:08X})", Width, Height, static_cast<uint32>(Hr));
+		GENESIS_LOG(LogRHI, Error, "ResizeBuffers({}x{}) failed (0x{:08X})", Width, Height, static_cast<uint32>(Hr));
 	}
 	AcquireBuffers();
 }
@@ -288,7 +297,7 @@ void FD3D12SwapChain::Present()
 	const HRESULT Hr = SwapChain->Present(1, 0);
 	if (FAILED(Hr))
 	{
-		UE_LOG(LogRHI, Error, "Present failed (0x{:08X})", static_cast<uint32>(Hr));
+		GENESIS_LOG(LogRHI, Error, "Present failed (0x{:08X})", static_cast<uint32>(Hr));
 	}
 }
 
@@ -301,13 +310,13 @@ void FD3D12CommandList::Begin(ID3D12GraphicsCommandList* InList)
 	PassResource = nullptr;
 	CurrentRootSignature = nullptr;
 	CurrentPipeline = nullptr;
-	ID3D12DescriptorHeap* Heaps[] = { Device.GetSrvHeap().GetHeap() };
+	ID3D12DescriptorHeap* Heaps[] = {Device.GetSrvHeap().GetHeap()};
 	List->SetDescriptorHeaps(1, Heaps);
 	List->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
-void FD3D12CommandList::BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOptional<FLinearColor>& ClearColor, FIntPoint Size,
-	const D3D12_CPU_DESCRIPTOR_HANDLE* Dsv, const TOptional<float>& ClearDepth)
+void FD3D12CommandList::BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOptional<FLinearColor>& ClearColor,
+    FIntPoint Size, const D3D12_CPU_DESCRIPTOR_HANDLE* Dsv, const TOptional<float>& ClearDepth)
 {
 	List->OMSetRenderTargets(1, &Rtv, FALSE, Dsv);
 	if (Dsv && ClearDepth)
@@ -316,7 +325,7 @@ void FD3D12CommandList::BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOption
 	}
 	if (ClearColor)
 	{
-		const float Color[4] = { ClearColor->R, ClearColor->G, ClearColor->B, ClearColor->A };
+		const float Color[4] = {ClearColor->R, ClearColor->G, ClearColor->B, ClearColor->A};
 		List->ClearRenderTargetView(Rtv, Color, 0, nullptr);
 	}
 	SetViewport(0.0f, 0.0f, static_cast<float>(Size.X), static_cast<float>(Size.Y));
@@ -326,11 +335,12 @@ void FD3D12CommandList::BeginPass(D3D12_CPU_DESCRIPTOR_HANDLE Rtv, const TOption
 void FD3D12CommandList::BeginRenderPass(FRHISwapChain& Target, const TOptional<FLinearColor>& ClearColor)
 {
 	check(!PassResource);
-	auto& SwapChain = static_cast<FD3D12SwapChain&>(Target);
+	FD3D12SwapChain& SwapChain = static_cast<FD3D12SwapChain&>(Target);
 	check(SwapChain.IsDrawable());
 	PassResource = SwapChain.GetCurrentBackBuffer();
 	PassRestoreState = D3D12_RESOURCE_STATE_PRESENT;
-	const D3D12_RESOURCE_BARRIER Barrier = Transition(PassResource, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	const D3D12_RESOURCE_BARRIER Barrier =
+	    Transition(PassResource, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	List->ResourceBarrier(1, &Barrier);
 	BeginPass(SwapChain.GetCurrentRtv(), ClearColor, SwapChain.GetSize());
 	Device.MarkPresent(&SwapChain);
@@ -339,56 +349,60 @@ void FD3D12CommandList::BeginRenderPass(FRHISwapChain& Target, const TOptional<F
 void FD3D12CommandList::BeginRenderPass(FRHITexture& Target, const TOptional<FLinearColor>& ClearColor)
 {
 	check(!PassResource);
-	auto& Texture = static_cast<FD3D12Texture&>(Target);
+	FD3D12Texture& Texture = static_cast<FD3D12Texture&>(Target);
 	check(Texture.GetDesc().bRenderTarget);
 	PassResource = Texture.GetResource();
 	PassRestoreState = TextureIdleState;
-	const D3D12_RESOURCE_BARRIER Barrier = Transition(PassResource, TextureIdleState, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	const D3D12_RESOURCE_BARRIER Barrier =
+	    Transition(PassResource, TextureIdleState, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	List->ResourceBarrier(1, &Barrier);
 	BeginPass(Device.GetRtvHeap().GetCpuHandle(Texture.GetRtvIndex()), ClearColor,
-		FIntPoint(static_cast<int32>(Texture.GetWidth()), static_cast<int32>(Texture.GetHeight())));
+	    FIntPoint(static_cast<int32>(Texture.GetWidth()), static_cast<int32>(Texture.GetHeight())));
 }
 
-void FD3D12CommandList::BeginRenderPass(FRHITexture& Target, FRHITexture& DepthTarget, const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth)
+void FD3D12CommandList::BeginRenderPass(FRHITexture& Target, FRHITexture& DepthTarget,
+    const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth)
 {
 	check(!PassResource);
-	auto& Texture = static_cast<FD3D12Texture&>(Target);
-	auto& Depth = static_cast<FD3D12Texture&>(DepthTarget);
+	FD3D12Texture& Texture = static_cast<FD3D12Texture&>(Target);
+	FD3D12Texture& Depth = static_cast<FD3D12Texture&>(DepthTarget);
 	check(Texture.GetDesc().bRenderTarget && IsDepthFormat(Depth.GetFormat()));
 	check(Depth.GetWidth() == Texture.GetWidth() && Depth.GetHeight() == Texture.GetHeight());
 	PassResource = Texture.GetResource();
 	PassRestoreState = TextureIdleState;
-	const D3D12_RESOURCE_BARRIER Barrier = Transition(PassResource, TextureIdleState, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	const D3D12_RESOURCE_BARRIER Barrier =
+	    Transition(PassResource, TextureIdleState, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	List->ResourceBarrier(1, &Barrier);
 	// Depth buffers stay in DEPTH_WRITE for their whole life.
 	const D3D12_CPU_DESCRIPTOR_HANDLE Dsv = Device.GetDsvHeap().GetCpuHandle(Depth.GetDsvIndex());
 	BeginPass(Device.GetRtvHeap().GetCpuHandle(Texture.GetRtvIndex()), ClearColor,
-		FIntPoint(static_cast<int32>(Texture.GetWidth()), static_cast<int32>(Texture.GetHeight())), &Dsv, ClearDepth);
+	    FIntPoint(static_cast<int32>(Texture.GetWidth()), static_cast<int32>(Texture.GetHeight())), &Dsv, ClearDepth);
 }
 
 void FD3D12CommandList::EndRenderPass()
 {
 	check(PassResource);
-	const D3D12_RESOURCE_BARRIER Barrier = Transition(PassResource, D3D12_RESOURCE_STATE_RENDER_TARGET, PassRestoreState);
+	const D3D12_RESOURCE_BARRIER Barrier =
+	    Transition(PassResource, D3D12_RESOURCE_STATE_RENDER_TARGET, PassRestoreState);
 	List->ResourceBarrier(1, &Barrier);
 	PassResource = nullptr;
 }
 
 void FD3D12CommandList::SetViewport(float X, float Y, float Width, float Height)
 {
-	const D3D12_VIEWPORT Viewport{ X, Y, Width, Height, 0.0f, 1.0f };
+	const D3D12_VIEWPORT Viewport{X, Y, Width, Height, 0.0f, 1.0f};
 	List->RSSetViewports(1, &Viewport);
 }
 
 void FD3D12CommandList::SetScissor(const FIntRect& Rect)
 {
-	const D3D12_RECT Scissor{ Rect.Left, Rect.Top, FMath::Max(Rect.Left, Rect.Right), FMath::Max(Rect.Top, Rect.Bottom) };
+	const D3D12_RECT Scissor{Rect.Left, Rect.Top, FMath::Max(Rect.Left, Rect.Right), FMath::Max(Rect.Top, Rect.Bottom)};
 	List->RSSetScissorRects(1, &Scissor);
 }
 
 void FD3D12CommandList::SetPipeline(FRHIGraphicsPipeline& Pipeline)
 {
-	auto& D3DPipeline = static_cast<FD3D12Pipeline&>(Pipeline);
+	FD3D12Pipeline& D3DPipeline = static_cast<FD3D12Pipeline&>(Pipeline);
 	if (&D3DPipeline == CurrentPipeline)
 	{
 		return;
@@ -410,10 +424,11 @@ void FD3D12CommandList::SetPushConstants(const void* Data, uint32 Size)
 
 void FD3D12CommandList::SetUniformBuffer(FRHIBuffer& Buffer)
 {
-    check(CurrentPipeline && CurrentPipeline->GetDesc().bUniformBuffer && Buffer.GetDesc().Usage==EBufferUsage::Uniform);
-    const auto& Desc=CurrentPipeline->GetDesc();
-    List->SetGraphicsRootConstantBufferView((Desc.PushConstantSize>0?1:0)+Desc.NumTextures,
-        static_cast<FD3D12Buffer&>(Buffer).GetResource()->GetGPUVirtualAddress());
+	check(CurrentPipeline && CurrentPipeline->GetDesc().bUniformBuffer &&
+	    Buffer.GetDesc().Usage == EBufferUsage::Uniform);
+	const FRHIGraphicsPipelineDesc& Desc = CurrentPipeline->GetDesc();
+	List->SetGraphicsRootConstantBufferView((Desc.PushConstantSize > 0 ? 1 : 0) + Desc.NumTextures,
+	    static_cast<FD3D12Buffer&>(Buffer).GetResource()->GetGPUVirtualAddress());
 }
 
 void FD3D12CommandList::SetTexture(FRHITexture& Texture, uint32 Slot)
@@ -421,21 +436,24 @@ void FD3D12CommandList::SetTexture(FRHITexture& Texture, uint32 Slot)
 	check(CurrentPipeline && Slot < CurrentPipeline->GetDesc().NumTextures);
 	// A table per slot, after the constants.
 	const uint32 TableIndex = (CurrentPipeline->GetDesc().PushConstantSize > 0 ? 1 : 0) + Slot;
-	List->SetGraphicsRootDescriptorTable(TableIndex, Device.GetSrvHeap().GetGpuHandle(static_cast<FD3D12Texture&>(Texture).GetSrvIndex()));
+	List->SetGraphicsRootDescriptorTable(
+	    TableIndex, Device.GetSrvHeap().GetGpuHandle(static_cast<FD3D12Texture&>(Texture).GetSrvIndex()));
 }
 
 void FD3D12CommandList::SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint32 Stride, uint32 Slot)
 {
 	ID3D12Resource* Resource = static_cast<FD3D12Buffer&>(Buffer).GetResource();
-	const D3D12_VERTEX_BUFFER_VIEW View{ Resource->GetGPUVirtualAddress() + Offset, static_cast<UINT>(Buffer.GetSize() - Offset), Stride };
+	const D3D12_VERTEX_BUFFER_VIEW View{
+	    Resource->GetGPUVirtualAddress() + Offset, static_cast<UINT>(Buffer.GetSize() - Offset), Stride};
 	List->IASetVertexBuffers(Slot, 1, &View);
 }
 
 void FD3D12CommandList::SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndexFormat Format)
 {
 	ID3D12Resource* Resource = static_cast<FD3D12Buffer&>(Buffer).GetResource();
-	const D3D12_INDEX_BUFFER_VIEW View{ Resource->GetGPUVirtualAddress() + Offset, static_cast<UINT>(Buffer.GetSize() - Offset),
-		Format == EIndexFormat::UInt16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT };
+	const D3D12_INDEX_BUFFER_VIEW View{Resource->GetGPUVirtualAddress() + Offset,
+	    static_cast<UINT>(Buffer.GetSize() - Offset),
+	    Format == EIndexFormat::UInt16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT};
 	List->IASetIndexBuffer(&View);
 }
 
@@ -444,7 +462,8 @@ void FD3D12CommandList::DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 
 	List->DrawIndexedInstanced(IndexCount, 1, FirstIndex, BaseVertex, 0);
 }
 
-void FD3D12CommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance)
+void FD3D12CommandList::DrawIndexedInstanced(
+    uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance)
 {
 	List->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, BaseVertex, FirstInstance);
 }
@@ -453,9 +472,7 @@ void FD3D12CommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceC
 // Device
 
 FD3D12Device::FD3D12Device(const FRHIDeviceDesc& InDesc)
-	: FRHIDevice(ERHIBackend::D3D12)
-	, Desc(InDesc)
-	, CommandList(*this)
+    : FRHIDevice(ERHIBackend::D3D12), Desc(InDesc), CommandList(*this)
 {
 }
 
@@ -484,29 +501,32 @@ bool FD3D12Device::Initialize()
 		{
 			Debug->EnableDebugLayer();
 			FactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-			UE_LOG(LogRHI, Display, "D3D12 debug layer enabled");
+			GENESIS_LOG(LogRHI, Display, "D3D12 debug layer enabled");
 		}
 		else
 		{
-			UE_LOG(LogRHI, Display, "D3D12 debug layer requested but not installed (Graphics Tools optional feature)");
+			GENESIS_LOG(
+			    LogRHI, Display, "D3D12 debug layer requested but not installed (Graphics Tools optional feature)");
 		}
 	}
 
 	if (FAILED(CreateDXGIFactory2(FactoryFlags, IID_PPV_ARGS(&Factory))))
 	{
-		UE_LOG(LogRHI, Error, "CreateDXGIFactory2 failed");
+		GENESIS_LOG(LogRHI, Error, "CreateDXGIFactory2 failed");
 		return false;
 	}
 
 	ComPtr<IDXGIAdapter1> Adapter;
 	if (!Desc.bSoftwareAdapter)
 	{
-		for (UINT I = 0; Factory->EnumAdapterByGpuPreference(I, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&Adapter)) != DXGI_ERROR_NOT_FOUND; ++I)
+		for (UINT I = 0; Factory->EnumAdapterByGpuPreference(
+		                     I, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&Adapter)) != DXGI_ERROR_NOT_FOUND;
+		    ++I)
 		{
 			DXGI_ADAPTER_DESC1 AdapterDesc;
 			Adapter->GetDesc1(&AdapterDesc);
-			if (!(AdapterDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-				&& SUCCEEDED(D3D12CreateDevice(Adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device))))
+			if (!(AdapterDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) &&
+			    SUCCEEDED(D3D12CreateDevice(Adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device))))
 			{
 				break;
 			}
@@ -517,12 +537,12 @@ bool FD3D12Device::Initialize()
 	{
 		if (!Desc.bSoftwareAdapter)
 		{
-			UE_LOG(LogRHI, Warning, "No hardware D3D12 adapter; using WARP");
+			GENESIS_LOG(LogRHI, Warning, "No hardware D3D12 adapter; using WARP");
 		}
-		if (FAILED(Factory->EnumWarpAdapter(IID_PPV_ARGS(&Adapter)))
-			|| FAILED(D3D12CreateDevice(Adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device))))
+		if (FAILED(Factory->EnumWarpAdapter(IID_PPV_ARGS(&Adapter))) ||
+		    FAILED(D3D12CreateDevice(Adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device))))
 		{
-			UE_LOG(LogRHI, Error, "D3D12CreateDevice failed");
+			GENESIS_LOG(LogRHI, Error, "D3D12CreateDevice failed");
 			return false;
 		}
 	}
@@ -534,7 +554,7 @@ bool FD3D12Device::Initialize()
 	{
 		InfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
 		// Not interesting for a UI renderer that clears with arbitrary colors.
-		D3D12_MESSAGE_ID Deny[] = { D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE };
+		D3D12_MESSAGE_ID Deny[] = {D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE};
 		D3D12_INFO_QUEUE_FILTER Filter{};
 		Filter.DenyList.NumIDs = static_cast<UINT>(std::size(Deny));
 		Filter.DenyList.pIDList = Deny;
@@ -543,20 +563,20 @@ bool FD3D12Device::Initialize()
 
 	D3D12_COMMAND_QUEUE_DESC QueueDesc{};
 	QueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-	if (FAILED(Device->CreateCommandQueue(&QueueDesc, IID_PPV_ARGS(&Queue)))
-		|| FAILED(Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence))))
+	if (FAILED(Device->CreateCommandQueue(&QueueDesc, IID_PPV_ARGS(&Queue))) ||
+	    FAILED(Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence))))
 	{
-		UE_LOG(LogRHI, Error, "Failed to create the D3D12 queue");
+		GENESIS_LOG(LogRHI, Error, "Failed to create the D3D12 queue");
 		return false;
 	}
 	SetName(Queue.Get(), "RHI direct queue");
 	FenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
-	if (!SrvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, SrvHeapCapacity, true)
-		|| !RtvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, RtvHeapCapacity, false)
-		|| !DsvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV, DsvHeapCapacity, false))
+	if (!SrvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, SrvHeapCapacity, true) ||
+	    !RtvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, RtvHeapCapacity, false) ||
+	    !DsvHeap.Initialize(Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV, DsvHeapCapacity, false))
 	{
-		UE_LOG(LogRHI, Error, "Failed to create D3D12 descriptor heaps");
+		GENESIS_LOG(LogRHI, Error, "Failed to create D3D12 descriptor heaps");
 		return false;
 	}
 
@@ -566,11 +586,14 @@ bool FD3D12Device::Initialize()
 		Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&Frame.UploadAllocator));
 	}
 	Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&ImmediateAllocator));
-	if (FAILED(Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Frames[0].Allocator.Get(), nullptr, IID_PPV_ARGS(&MainList)))
-		|| FAILED(Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Frames[0].UploadAllocator.Get(), nullptr, IID_PPV_ARGS(&UploadList)))
-		|| FAILED(Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, ImmediateAllocator.Get(), nullptr, IID_PPV_ARGS(&ImmediateList))))
+	if (FAILED(Device->CreateCommandList(
+	        0, D3D12_COMMAND_LIST_TYPE_DIRECT, Frames[0].Allocator.Get(), nullptr, IID_PPV_ARGS(&MainList))) ||
+	    FAILED(Device->CreateCommandList(
+	        0, D3D12_COMMAND_LIST_TYPE_DIRECT, Frames[0].UploadAllocator.Get(), nullptr, IID_PPV_ARGS(&UploadList))) ||
+	    FAILED(Device->CreateCommandList(
+	        0, D3D12_COMMAND_LIST_TYPE_DIRECT, ImmediateAllocator.Get(), nullptr, IID_PPV_ARGS(&ImmediateList))))
 	{
-		UE_LOG(LogRHI, Error, "Failed to create D3D12 command lists");
+		GENESIS_LOG(LogRHI, Error, "Failed to create D3D12 command lists");
 		return false;
 	}
 	MainList->Close();
@@ -593,16 +616,23 @@ void FD3D12Device::FlushDebugMessages()
 		SIZE_T Length = 0;
 		InfoQueue->GetMessage(I, nullptr, &Length);
 		TArray<uint8> Storage(Length);
-		auto* Message = reinterpret_cast<D3D12_MESSAGE*>(Storage.data());
+		D3D12_MESSAGE* Message = reinterpret_cast<D3D12_MESSAGE*>(Storage.data());
 		if (SUCCEEDED(InfoQueue->GetMessage(I, Message, &Length)))
 		{
-			const std::string_view Text(Message->pDescription, Message->DescriptionByteLength > 0 ? Message->DescriptionByteLength - 1 : 0);
+			const std::string_view Text(
+			    Message->pDescription, Message->DescriptionByteLength > 0 ? Message->DescriptionByteLength - 1 : 0);
 			switch (Message->Severity)
 			{
 			case D3D12_MESSAGE_SEVERITY_CORRUPTION:
-			case D3D12_MESSAGE_SEVERITY_ERROR: UE_LOG(LogRHI, Error, "D3D12: {}", Text); break;
-			case D3D12_MESSAGE_SEVERITY_WARNING: UE_LOG(LogRHI, Warning, "D3D12: {}", Text); break;
-			default: UE_LOG(LogRHI, Verbose, "D3D12: {}", Text); break;
+			case D3D12_MESSAGE_SEVERITY_ERROR:
+				GENESIS_LOG(LogRHI, Error, "D3D12: {}", Text);
+				break;
+			case D3D12_MESSAGE_SEVERITY_WARNING:
+				GENESIS_LOG(LogRHI, Warning, "D3D12: {}", Text);
+				break;
+			default:
+				GENESIS_LOG(LogRHI, Verbose, "D3D12: {}", Text);
+				break;
 			}
 		}
 	}
@@ -665,7 +695,7 @@ void FD3D12Device::CollectGarbage()
 
 TUniquePtr<FRHISwapChain> FD3D12Device::CreateSwapChain(IPlatformWindow& Window)
 {
-	auto SwapChain = MakeUnique<FD3D12SwapChain>(*this, Window);
+	TUniquePtr<FD3D12SwapChain> SwapChain = MakeUnique<FD3D12SwapChain>(*this, Window);
 	if (!SwapChain->Initialize())
 	{
 		return nullptr;
@@ -676,14 +706,17 @@ TUniquePtr<FRHISwapChain> FD3D12Device::CreateSwapChain(IPlatformWindow& Window)
 TSharedPtr<FRHIBuffer> FD3D12Device::CreateBuffer(const FRHIBufferDesc& BufferDesc)
 {
 	check(BufferDesc.Size > 0);
-	if (!ensuref(BufferDesc.Usage != EBufferUsage::Uniform || BufferDesc.Size <= 65536, "Uniform buffer exceeds 64 KiB")) return nullptr;
+	if (!ensuref(
+	        BufferDesc.Usage != EBufferUsage::Uniform || BufferDesc.Size <= 65536, "Uniform buffer exceeds 64 KiB"))
+		return nullptr;
 	const bool bUpload = BufferDesc.Memory == EBufferMemory::Upload;
 
 	D3D12_HEAP_PROPERTIES Heap{};
 	Heap.Type = bUpload ? D3D12_HEAP_TYPE_UPLOAD : D3D12_HEAP_TYPE_DEFAULT;
 	D3D12_RESOURCE_DESC ResourceDesc{};
 	ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	ResourceDesc.Width = BufferDesc.Usage == EBufferUsage::Uniform ? (BufferDesc.Size + 255) & ~255ull : BufferDesc.Size;
+	ResourceDesc.Width =
+	    BufferDesc.Usage == EBufferUsage::Uniform ? (BufferDesc.Size + 255) & ~255ull : BufferDesc.Size;
 	ResourceDesc.Height = 1;
 	ResourceDesc.DepthOrArraySize = 1;
 	ResourceDesc.MipLevels = 1;
@@ -691,10 +724,12 @@ TSharedPtr<FRHIBuffer> FD3D12Device::CreateBuffer(const FRHIBufferDesc& BufferDe
 	ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
 	ComPtr<ID3D12Resource> Resource;
-	const D3D12_RESOURCE_STATES InitialState = bUpload ? D3D12_RESOURCE_STATE_GENERIC_READ : D3D12_RESOURCE_STATE_COMMON;
-	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, InitialState, nullptr, IID_PPV_ARGS(&Resource))))
+	const D3D12_RESOURCE_STATES InitialState =
+	    bUpload ? D3D12_RESOURCE_STATE_GENERIC_READ : D3D12_RESOURCE_STATE_COMMON;
+	if (FAILED(Device->CreateCommittedResource(
+	        &Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, InitialState, nullptr, IID_PPV_ARGS(&Resource))))
 	{
-		UE_LOG(LogRHI, Error, "Failed to create a {}-byte buffer", BufferDesc.Size);
+		GENESIS_LOG(LogRHI, Error, "Failed to create a {}-byte buffer", BufferDesc.Size);
 		return nullptr;
 	}
 	SetName(Resource.Get(), BufferDesc.DebugName);
@@ -702,7 +737,7 @@ TSharedPtr<FRHIBuffer> FD3D12Device::CreateBuffer(const FRHIBufferDesc& BufferDe
 	void* Mapped = nullptr;
 	if (bUpload)
 	{
-		const D3D12_RANGE NoRead{ 0, 0 };
+		const D3D12_RANGE NoRead{0, 0};
 		Resource->Map(0, &NoRead, &Mapped);
 		if (BufferDesc.InitialData)
 		{
@@ -717,10 +752,13 @@ TSharedPtr<FRHIBuffer> FD3D12Device::CreateBuffer(const FRHIBufferDesc& BufferDe
 		{
 			const FUploadAllocation Upload = AllocateUpload(ImmediateUpload, BufferDesc.Size, 16);
 			memcpy(Upload.Cpu, BufferDesc.InitialData, static_cast<SIZE_T>(BufferDesc.Size));
-			D3D12_RESOURCE_BARRIER Barrier = Transition(Target, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+			D3D12_RESOURCE_BARRIER Barrier =
+			    Transition(Target, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
 			List->ResourceBarrier(1, &Barrier);
 			List->CopyBufferRegion(Target, 0, Upload.Resource, Upload.Offset, BufferDesc.Size);
-			const D3D12_RESOURCE_STATES Final = BufferDesc.Usage == EBufferUsage::Index ? D3D12_RESOURCE_STATE_INDEX_BUFFER : D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+			const D3D12_RESOURCE_STATES Final = BufferDesc.Usage == EBufferUsage::Index
+			    ? D3D12_RESOURCE_STATE_INDEX_BUFFER
+			    : D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
 			Barrier = Transition(Target, D3D12_RESOURCE_STATE_COPY_DEST, Final);
 			List->ResourceBarrier(1, &Barrier);
 		});
@@ -745,7 +783,8 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 	ResourceDesc.Height = TextureDesc.Height;
 	const uint32 ArraySize = FMath::Max(TextureDesc.ArraySize, 1u);
 	ResourceDesc.DepthOrArraySize = static_cast<UINT16>(ArraySize);
-	const uint32 MipLevels = FMath::Clamp(TextureDesc.MipLevels, 1u, GetFullMipLevels(TextureDesc.Width, TextureDesc.Height));
+	const uint32 MipLevels =
+	    FMath::Clamp(TextureDesc.MipLevels, 1u, GetFullMipLevels(TextureDesc.Width, TextureDesc.Height));
 	ResourceDesc.MipLevels = static_cast<UINT16>(MipLevels);
 	ResourceDesc.Format = Format;
 	ResourceDesc.SampleDesc.Count = 1;
@@ -759,12 +798,13 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 	Clear.Color[3] = TextureDesc.ClearColor.A;
 
 	// Start in the copy state when there is data to upload.
-	const D3D12_RESOURCE_STATES InitialState = TextureDesc.InitialData ? D3D12_RESOURCE_STATE_COPY_DEST : TextureIdleState;
+	const D3D12_RESOURCE_STATES InitialState =
+	    TextureDesc.InitialData ? D3D12_RESOURCE_STATE_COPY_DEST : TextureIdleState;
 	ComPtr<ID3D12Resource> Resource;
 	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, InitialState,
-		TextureDesc.bRenderTarget ? &Clear : nullptr, IID_PPV_ARGS(&Resource))))
+	        TextureDesc.bRenderTarget ? &Clear : nullptr, IID_PPV_ARGS(&Resource))))
 	{
-		UE_LOG(LogRHI, Error, "Failed to create a {}x{} texture", TextureDesc.Width, TextureDesc.Height);
+		GENESIS_LOG(LogRHI, Error, "Failed to create a {}x{} texture", TextureDesc.Width, TextureDesc.Height);
 		return nullptr;
 	}
 	SetName(Resource.Get(), TextureDesc.DebugName);
@@ -790,10 +830,10 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 	// Single-channel textures read as (1, 1, 1, R): alpha masks (glyphs)
 	// then work with the same shader path as RGBA images.
 	SrvDesc.Shader4ComponentMapping = TextureDesc.Format == EPixelFormat::R8_UNORM
-		? D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
-			D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1, D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1,
-			D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1, D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_0)
-		: D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	    ? D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1,
+	          D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1, D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1,
+	          D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_0)
+	    : D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	Device->CreateShaderResourceView(Resource.Get(), &SrvDesc, SrvHeap.GetCpuHandle(Srv));
 
 	uint32 Rtv = FD3D12DescriptorHeap::Invalid;
@@ -803,14 +843,16 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 		Device->CreateRenderTargetView(Resource.Get(), nullptr, RtvHeap.GetCpuHandle(Rtv));
 	}
 
-	auto Texture = std::make_shared<FD3D12Texture>(*this, TextureDesc, std::move(Resource), Srv, Rtv);
+	TSharedPtr<FD3D12Texture> Texture =
+	    std::make_shared<FD3D12Texture>(*this, TextureDesc, std::move(Resource), Srv, Rtv);
 	if (TextureDesc.InitialData)
 	{
 		ExecuteImmediate([&](ID3D12GraphicsCommandList* List)
 		{
 			// RecordTextureCopy transitions from the idle state; the texture
 			// was created in COPY_DEST, so move it there first.
-			const D3D12_RESOURCE_BARRIER Barrier = Transition(Texture->GetResource(), D3D12_RESOURCE_STATE_COPY_DEST, TextureIdleState);
+			const D3D12_RESOURCE_BARRIER Barrier =
+			    Transition(Texture->GetResource(), D3D12_RESOURCE_STATE_COPY_DEST, TextureIdleState);
 			List->ResourceBarrier(1, &Barrier);
 			// Each slice's levels after the one before, tightly packed.
 			const uint8* Level = static_cast<const uint8*>(TextureDesc.InitialData);
@@ -819,8 +861,9 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateTexture(const FRHITextureDesc& Textu
 				for (uint32 Mip = 0; Mip < MipLevels; ++Mip)
 				{
 					const uint32 W = GetMipSize(TextureDesc.Width, Mip), H = GetMipSize(TextureDesc.Height, Mip);
-					RecordTextureCopy(List, *Texture, FIntRect(0, 0, static_cast<int32>(W), static_cast<int32>(H)), Level,
-						MipLevels > 1 || ArraySize > 1 ? 0 : TextureDesc.InitialRowPitch, ImmediateUpload, Mip + Slice * MipLevels);
+					RecordTextureCopy(List, *Texture, FIntRect(0, 0, static_cast<int32>(W), static_cast<int32>(H)),
+					    Level, MipLevels > 1 || ArraySize > 1 ? 0 : TextureDesc.InitialRowPitch, ImmediateUpload,
+					    Mip + Slice * MipLevels);
 					Level += SIZE_T(W) * H * GetBytesPerPixel(TextureDesc.Format);
 				}
 			}
@@ -848,9 +891,10 @@ TSharedPtr<FRHITexture> FD3D12Device::CreateDepthTexture(const FRHITextureDesc& 
 	Clear.DepthStencil.Depth = 1.0f;
 
 	ComPtr<ID3D12Resource> Resource;
-	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &Clear, IID_PPV_ARGS(&Resource))))
+	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc,
+	        D3D12_RESOURCE_STATE_DEPTH_WRITE, &Clear, IID_PPV_ARGS(&Resource))))
 	{
-		UE_LOG(LogRHI, Error, "Failed to create a {}x{} depth buffer", TextureDesc.Width, TextureDesc.Height);
+		GENESIS_LOG(LogRHI, Error, "Failed to create a {}x{} depth buffer", TextureDesc.Width, TextureDesc.Height);
 		return nullptr;
 	}
 	SetName(Resource.Get(), TextureDesc.DebugName);
@@ -869,8 +913,9 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(const FRHIGraphicsPip
 	const uint32 PushConstantSize = PipelineDesc.PushConstantSize;
 	const ESamplerFilter Filter = PipelineDesc.SamplerFilter;
 	const uint32 NumTextures = FMath::Clamp(PipelineDesc.NumTextures, 1u, MaxTextures);
-	const uint32 Key = (PipelineDesc.bUniformBuffer ? 1u << 31 : 0) | (PushConstantSize << 16) | (NumTextures << 8) | GetSamplerIndex(Filter, PipelineDesc.SamplerAddress);
-	if (auto It = RootSignatures.find(Key); It != RootSignatures.end())
+	const uint32 Key = (PipelineDesc.bUniformBuffer ? 1u << 31 : 0) | (PushConstantSize << 16) | (NumTextures << 8) |
+	    GetSamplerIndex(Filter, PipelineDesc.SamplerAddress);
+	if (TMap<uint32, ComPtr<ID3D12RootSignature>>::iterator It = RootSignatures.find(Key); It != RootSignatures.end())
 	{
 		return It->second;
 	}
@@ -900,17 +945,18 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(const FRHIGraphicsPip
 		Table.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	}
 
-
-    if (PipelineDesc.bUniformBuffer) {
-        auto& Uniform=Params[NumParams++];
-        Uniform.ParameterType=D3D12_ROOT_PARAMETER_TYPE_CBV;
-        Uniform.Descriptor.ShaderRegister=1;
-        Uniform.ShaderVisibility=D3D12_SHADER_VISIBILITY_ALL;
-    }
+	if (PipelineDesc.bUniformBuffer)
+	{
+		D3D12_ROOT_PARAMETER& Uniform = Params[NumParams++];
+		Uniform.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		Uniform.Descriptor.ShaderRegister = 1;
+		Uniform.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	}
 	D3D12_STATIC_SAMPLER_DESC Sampler{};
 	Sampler.Filter = Filter == ESamplerFilter::Point ? D3D12_FILTER_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-	Sampler.AddressU = Sampler.AddressV = Sampler.AddressW =
-		PipelineDesc.SamplerAddress == ESamplerAddress::Wrap ? D3D12_TEXTURE_ADDRESS_MODE_WRAP : D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	Sampler.AddressU = Sampler.AddressV = Sampler.AddressW = PipelineDesc.SamplerAddress == ESamplerAddress::Wrap
+	    ? D3D12_TEXTURE_ADDRESS_MODE_WRAP
+	    : D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	Sampler.MaxLOD = D3D12_FLOAT32_MAX;
 	Sampler.ShaderRegister = 0;
 	Sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
@@ -925,11 +971,13 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(const FRHIGraphicsPip
 	ComPtr<ID3DBlob> Blob, Error;
 	if (FAILED(D3D12SerializeRootSignature(&RootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &Blob, &Error)))
 	{
-		UE_LOG(LogRHI, Error, "Root signature: {}", Error ? static_cast<const char*>(Error->GetBufferPointer()) : "?");
+		GENESIS_LOG(
+		    LogRHI, Error, "Root signature: {}", Error ? static_cast<const char*>(Error->GetBufferPointer()) : "?");
 		return nullptr;
 	}
 	ComPtr<ID3D12RootSignature> RootSignature;
-	if (FAILED(Device->CreateRootSignature(0, Blob->GetBufferPointer(), Blob->GetBufferSize(), IID_PPV_ARGS(&RootSignature))))
+	if (FAILED(Device->CreateRootSignature(
+	        0, Blob->GetBufferPointer(), Blob->GetBufferSize(), IID_PPV_ARGS(&RootSignature))))
 	{
 		return nullptr;
 	}
@@ -940,7 +988,8 @@ ComPtr<ID3D12RootSignature> FD3D12Device::GetRootSignature(const FRHIGraphicsPip
 TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& PipelineDesc)
 {
 	check(PipelineDesc.PushConstantSize % 4 == 0 && PipelineDesc.PushConstantSize <= 64);
-	if (!ensuref(PipelineDesc.NumTextures >= 1 && PipelineDesc.NumTextures <= MaxTextures, "D3D12: a pipeline has 1 to {} textures", MaxTextures))
+	if (!ensuref(PipelineDesc.NumTextures >= 1 && PipelineDesc.NumTextures <= MaxTextures,
+	        "D3D12: a pipeline has 1 to {} textures", MaxTextures))
 	{
 		return nullptr;
 	}
@@ -954,15 +1003,17 @@ TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHI
 	for (const FVertexAttribute& Attribute : PipelineDesc.VertexAttributes)
 	{
 		const bool bInstance = Attribute.BufferSlot == 1;
-		Elements.push_back({ Attribute.SemanticName, Attribute.SemanticIndex, ToDxgi(Attribute.Format), Attribute.BufferSlot, Attribute.Offset,
-			bInstance ? D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA : D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, bInstance ? 1u : 0u });
+		Elements.push_back({Attribute.SemanticName, Attribute.SemanticIndex, ToDxgi(Attribute.Format),
+		    Attribute.BufferSlot, Attribute.Offset,
+		    bInstance ? D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA : D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+		    bInstance ? 1u : 0u});
 	}
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC PsoDesc{};
 	PsoDesc.pRootSignature = RootSignature.Get();
-	PsoDesc.VS = { PipelineDesc.VertexShader.Data, PipelineDesc.VertexShader.Size };
-	PsoDesc.PS = { PipelineDesc.PixelShader.Data, PipelineDesc.PixelShader.Size };
-	PsoDesc.InputLayout = { Elements.data(), static_cast<UINT>(Elements.size()) };
+	PsoDesc.VS = {PipelineDesc.VertexShader.Data, PipelineDesc.VertexShader.Size};
+	PsoDesc.PS = {PipelineDesc.PixelShader.Data, PipelineDesc.PixelShader.Size};
+	PsoDesc.InputLayout = {Elements.data(), static_cast<UINT>(Elements.size())};
 	PsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	PsoDesc.NumRenderTargets = 1;
 	PsoDesc.RTVFormats[0] = ToDxgi(PipelineDesc.RenderTargetFormat);
@@ -970,14 +1021,16 @@ TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHI
 	PsoDesc.SampleMask = UINT_MAX;
 	PsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 	PsoDesc.RasterizerState.CullMode = PipelineDesc.CullMode == ECullMode::Back ? D3D12_CULL_MODE_BACK
-		: PipelineDesc.CullMode == ECullMode::Front ? D3D12_CULL_MODE_FRONT : D3D12_CULL_MODE_NONE;
+	    : PipelineDesc.CullMode == ECullMode::Front                             ? D3D12_CULL_MODE_FRONT
+	                                                                            : D3D12_CULL_MODE_NONE;
 	PsoDesc.RasterizerState.DepthClipEnable = TRUE;
 	PsoDesc.DepthStencilState.DepthEnable = FALSE;
 	if (PipelineDesc.DepthFormat != EPixelFormat::Unknown)
 	{
 		PsoDesc.DSVFormat = ToDxgi(PipelineDesc.DepthFormat);
 		PsoDesc.DepthStencilState.DepthEnable = TRUE;
-		PsoDesc.DepthStencilState.DepthWriteMask = PipelineDesc.bDepthWrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+		PsoDesc.DepthStencilState.DepthWriteMask =
+		    PipelineDesc.bDepthWrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
 		PsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 	}
 
@@ -987,7 +1040,8 @@ TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHI
 	if (PipelineDesc.BlendMode != EBlendMode::Opaque)
 	{
 		Blend.BlendEnable = TRUE;
-		Blend.SrcBlend = PipelineDesc.BlendMode == EBlendMode::PremultipliedAlpha ? D3D12_BLEND_ONE : D3D12_BLEND_SRC_ALPHA;
+		Blend.SrcBlend =
+		    PipelineDesc.BlendMode == EBlendMode::PremultipliedAlpha ? D3D12_BLEND_ONE : D3D12_BLEND_SRC_ALPHA;
 		Blend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
 		Blend.BlendOp = D3D12_BLEND_OP_ADD;
 		Blend.SrcBlendAlpha = D3D12_BLEND_ONE;
@@ -999,7 +1053,7 @@ TSharedPtr<FRHIGraphicsPipeline> FD3D12Device::CreateGraphicsPipeline(const FRHI
 	const HRESULT Hr = Device->CreateGraphicsPipelineState(&PsoDesc, IID_PPV_ARGS(&Pso));
 	if (FAILED(Hr))
 	{
-		UE_LOG(LogRHI, Error, "CreateGraphicsPipelineState failed (0x{:08X})", static_cast<uint32>(Hr));
+		GENESIS_LOG(LogRHI, Error, "CreateGraphicsPipelineState failed (0x{:08X})", static_cast<uint32>(Hr));
 		FlushDebugMessages();
 		return nullptr;
 	}
@@ -1022,15 +1076,16 @@ namespace
 		ResourceDesc.SampleDesc.Count = 1;
 		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 		ComPtr<ID3D12Resource> Buffer;
-		verify(SUCCEEDED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&Buffer))));
+		verify(SUCCEEDED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc,
+		    D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&Buffer))));
 		SetName(Buffer.Get(), "RHI upload memory");
 		void* Cpu = nullptr;
-		const D3D12_RANGE NoRead{ 0, 0 };
+		const D3D12_RANGE NoRead{0, 0};
 		Buffer->Map(0, &NoRead, &Cpu);
 		OutCpu = static_cast<uint8*>(Cpu);
 		return Buffer;
 	}
-}
+} // namespace
 
 FD3D12Device::FUploadAllocation FD3D12Device::AllocateUpload(FUploadRing& Ring, uint64 Size, uint64 Alignment)
 {
@@ -1045,7 +1100,7 @@ FD3D12Device::FUploadAllocation FD3D12Device::AllocateUpload(FUploadRing& Ring, 
 		ComPtr<ID3D12Resource> Buffer = CreateUploadBuffer(Device.Get(), Size, Cpu);
 		ID3D12Resource* Raw = Buffer.Get();
 		DeferDelete(std::move(Buffer));
-		return { Raw, 0, Cpu };
+		return {Raw, 0, Cpu};
 	}
 
 	uint64 Offset = FMath::AlignUp(Ring.CurrentOffset, Alignment);
@@ -1064,11 +1119,11 @@ FD3D12Device::FUploadAllocation FD3D12Device::AllocateUpload(FUploadRing& Ring, 
 		Offset = 0;
 	}
 	Ring.CurrentOffset = Offset + Size;
-	return { Ring.Chunks[Ring.CurrentChunk].Get(), Offset, Ring.ChunkCpu[Ring.CurrentChunk] + Offset };
+	return {Ring.Chunks[Ring.CurrentChunk].Get(), Offset, Ring.ChunkCpu[Ring.CurrentChunk] + Offset};
 }
 
-void FD3D12Device::RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Texture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, FUploadRing& Ring,
-	uint32 Subresource)
+void FD3D12Device::RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Texture& Texture, const FIntRect& Region,
+    const void* Data, uint32 RowPitch, FUploadRing& Ring, uint32 Subresource)
 {
 	const uint32 Width = static_cast<uint32>(Region.Width());
 	const uint32 Height = static_cast<uint32>(Region.Height());
@@ -1076,10 +1131,12 @@ void FD3D12Device::RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Text
 	const uint32 SourcePitch = RowPitch ? RowPitch : Width * Bpp;
 	const uint32 AlignedPitch = FMath::AlignUp(Width * Bpp, uint32(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT));
 
-	const FUploadAllocation Upload = AllocateUpload(Ring, uint64(AlignedPitch) * Height, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+	const FUploadAllocation Upload =
+	    AllocateUpload(Ring, uint64(AlignedPitch) * Height, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
 	for (uint32 Row = 0; Row < Height; ++Row)
 	{
-		memcpy(Upload.Cpu + SIZE_T(Row) * AlignedPitch, static_cast<const uint8*>(Data) + SIZE_T(Row) * SourcePitch, SIZE_T(Width) * Bpp);
+		memcpy(Upload.Cpu + SIZE_T(Row) * AlignedPitch, static_cast<const uint8*>(Data) + SIZE_T(Row) * SourcePitch,
+		    SIZE_T(Width) * Bpp);
 	}
 
 	D3D12_TEXTURE_COPY_LOCATION Dest{};
@@ -1090,17 +1147,17 @@ void FD3D12Device::RecordTextureCopy(ID3D12GraphicsCommandList* List, FD3D12Text
 	Source.pResource = Upload.Resource;
 	Source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 	Source.PlacedFootprint.Offset = Upload.Offset;
-	Source.PlacedFootprint.Footprint = { ToDxgi(Texture.GetFormat()), Width, Height, 1, AlignedPitch };
+	Source.PlacedFootprint.Footprint = {ToDxgi(Texture.GetFormat()), Width, Height, 1, AlignedPitch};
 
-	D3D12_RESOURCE_BARRIER Barrier = Transition(Texture.GetResource(), TextureIdleState, D3D12_RESOURCE_STATE_COPY_DEST);
+	D3D12_RESOURCE_BARRIER Barrier =
+	    Transition(Texture.GetResource(), TextureIdleState, D3D12_RESOURCE_STATE_COPY_DEST);
 	List->ResourceBarrier(1, &Barrier);
 	List->CopyTextureRegion(&Dest, static_cast<UINT>(Region.Left), static_cast<UINT>(Region.Top), 0, &Source, nullptr);
 	Barrier = Transition(Texture.GetResource(), D3D12_RESOURCE_STATE_COPY_DEST, TextureIdleState);
 	List->ResourceBarrier(1, &Barrier);
 }
 
-template <typename F>
-void FD3D12Device::ExecuteImmediate(F&& Record)
+template <typename F> void FD3D12Device::ExecuteImmediate(F&& Record)
 {
 	// Rare (resource creation, readback): simple and synchronous.
 	WaitIdle();
@@ -1110,22 +1167,26 @@ void FD3D12Device::ExecuteImmediate(F&& Record)
 	ImmediateUpload.CurrentOffset = 0;
 	Record(ImmediateList.Get());
 	ImmediateList->Close();
-	ID3D12CommandList* Lists[] = { ImmediateList.Get() };
+	ID3D12CommandList* Lists[] = {ImmediateList.Get()};
 	Queue->ExecuteCommandLists(1, Lists);
 	WaitIdle();
 	FlushDebugMessages();
 }
 
-void FD3D12Device::UpdateTexture(FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, uint32 Slice)
+void FD3D12Device::UpdateTexture(
+    FRHITexture& Texture, const FIntRect& Region, const void* Data, uint32 RowPitch, uint32 Slice)
 {
-	check(!Region.IsEmpty() && Region.Right <= static_cast<int32>(Texture.GetWidth()) && Region.Bottom <= static_cast<int32>(Texture.GetHeight()));
+	check(!Region.IsEmpty() && Region.Right <= static_cast<int32>(Texture.GetWidth()) &&
+	    Region.Bottom <= static_cast<int32>(Texture.GetHeight()));
 	check(Slice < FMath::Max(Texture.GetDesc().ArraySize, 1u));
-	auto& D3DTexture = static_cast<FD3D12Texture&>(Texture);
+	FD3D12Texture& D3DTexture = static_cast<FD3D12Texture&>(Texture);
 	// Level 0 of the slice.
-	const uint32 Subresource = Slice * FMath::Clamp(Texture.GetDesc().MipLevels, 1u, GetFullMipLevels(Texture.GetWidth(), Texture.GetHeight()));
+	const uint32 Subresource = Slice *
+	    FMath::Clamp(Texture.GetDesc().MipLevels, 1u, GetFullMipLevels(Texture.GetWidth(), Texture.GetHeight()));
 	if (!bInFrame)
 	{
-		ExecuteImmediate([&](ID3D12GraphicsCommandList* List) { RecordTextureCopy(List, D3DTexture, Region, Data, RowPitch, ImmediateUpload, Subresource); });
+		ExecuteImmediate([&](ID3D12GraphicsCommandList* List)
+		{ RecordTextureCopy(List, D3DTexture, Region, Data, RowPitch, ImmediateUpload, Subresource); });
 		return;
 	}
 	FFrame& Frame = Frames[FrameIndex];
@@ -1140,7 +1201,7 @@ void FD3D12Device::UpdateTexture(FRHITexture& Texture, const FIntRect& Region, c
 bool FD3D12Device::ReadbackTexture(FRHITexture& Texture, TArray<uint8>& OutPixels)
 {
 	check(!bInFrame);
-	auto& D3DTexture = static_cast<FD3D12Texture&>(Texture);
+	FD3D12Texture& D3DTexture = static_cast<FD3D12Texture&>(Texture);
 	const uint32 Width = Texture.GetWidth();
 	const uint32 Height = Texture.GetHeight();
 	const uint32 Bpp = GetBytesPerPixel(Texture.GetFormat());
@@ -1157,19 +1218,21 @@ bool FD3D12Device::ReadbackTexture(FRHITexture& Texture, TArray<uint8>& OutPixel
 	ResourceDesc.SampleDesc.Count = 1;
 	ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	ComPtr<ID3D12Resource> Readback;
-	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&Readback))))
+	if (FAILED(Device->CreateCommittedResource(&Heap, D3D12_HEAP_FLAG_NONE, &ResourceDesc,
+	        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&Readback))))
 	{
 		return false;
 	}
 
 	ExecuteImmediate([&](ID3D12GraphicsCommandList* List)
 	{
-		D3D12_RESOURCE_BARRIER Barrier = Transition(D3DTexture.GetResource(), TextureIdleState, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		D3D12_RESOURCE_BARRIER Barrier =
+		    Transition(D3DTexture.GetResource(), TextureIdleState, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		List->ResourceBarrier(1, &Barrier);
 		D3D12_TEXTURE_COPY_LOCATION Dest{};
 		Dest.pResource = Readback.Get();
 		Dest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-		Dest.PlacedFootprint.Footprint = { ToDxgi(Texture.GetFormat()), Width, Height, 1, AlignedPitch };
+		Dest.PlacedFootprint.Footprint = {ToDxgi(Texture.GetFormat()), Width, Height, 1, AlignedPitch};
 		D3D12_TEXTURE_COPY_LOCATION Source{};
 		Source.pResource = D3DTexture.GetResource();
 		Source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
@@ -1179,7 +1242,7 @@ bool FD3D12Device::ReadbackTexture(FRHITexture& Texture, TArray<uint8>& OutPixel
 	});
 
 	void* Mapped = nullptr;
-	const D3D12_RANGE ReadRange{ 0, static_cast<SIZE_T>(ResourceDesc.Width) };
+	const D3D12_RANGE ReadRange{0, static_cast<SIZE_T>(ResourceDesc.Width)};
 	if (FAILED(Readback->Map(0, &ReadRange, &Mapped)))
 	{
 		return false;
@@ -1187,9 +1250,10 @@ bool FD3D12Device::ReadbackTexture(FRHITexture& Texture, TArray<uint8>& OutPixel
 	OutPixels.resize(SIZE_T(Width) * Height * Bpp);
 	for (uint32 Row = 0; Row < Height; ++Row)
 	{
-		memcpy(OutPixels.data() + SIZE_T(Row) * Width * Bpp, static_cast<const uint8*>(Mapped) + SIZE_T(Row) * AlignedPitch, SIZE_T(Width) * Bpp);
+		memcpy(OutPixels.data() + SIZE_T(Row) * Width * Bpp,
+		    static_cast<const uint8*>(Mapped) + SIZE_T(Row) * AlignedPitch, SIZE_T(Width) * Bpp);
 	}
-	const D3D12_RANGE NoWrite{ 0, 0 };
+	const D3D12_RANGE NoWrite{0, 0};
 	Readback->Unmap(0, &NoWrite);
 	return true;
 }
@@ -1245,7 +1309,7 @@ void FD3D12Device::EndFrame()
 
 	Queue->Signal(Fence.Get(), ++LastSignaledValue);
 	Frame.FenceValue = LastSignaledValue;
-	for (auto& Entry : Garbage)
+	for (FD3D12Device::FDeferredDelete& Entry : Garbage)
 	{
 		if (Entry.FenceValue == ~0ull)
 			Entry.FenceValue = Frame.FenceValue;

@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 // No Editor, MapCore, Slate or window/application modules.
 #include "Renderer/NativeMeshRenderer.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 #include "Renderer/ProjectedSceneRenderer.h"
 #include "Renderer/LandscapeProjection.h"
 #include "Renderer/WorldSceneDrawList.h"
@@ -17,9 +19,8 @@
 #include <algorithm>
 int wmain(int Argc, wchar_t** Argv)
 {
-	const auto Usage = [] {
-		std::printf("Usage: RuntimeRenderCheck.exe [-d3d12|-vulkan] [World.gmap ContentDirectory [Capture.bmp]]\n");
-	};
+	const TFunction<void()> Usage = []
+	{ std::printf("Usage: RuntimeRenderCheck.exe [-d3d12|-vulkan] [World.gmap ContentDirectory [Capture.bmp]]\n"); };
 	if (Argc > 1)
 	{
 		const std::wstring_view Option(Argv[1]);
@@ -56,12 +57,12 @@ int wmain(int Argc, wchar_t** Argv)
 	}
 	std::printf("Runtime landscape visibility, LOD and component preparation passed.\n");
 
-	const auto Backend =
-		Argc > 1 && std::wstring_view(Argv[1]) == L"-vulkan" ? ERHIBackend::Vulkan : ERHIBackend::D3D12;
+	const ERHIBackend Backend =
+	    Argc > 1 && std::wstring_view(Argv[1]) == L"-vulkan" ? ERHIBackend::Vulkan : ERHIBackend::D3D12;
 	FRHIDeviceDesc DeviceDesc;
 	DeviceDesc.Backend = Backend;
 	DeviceDesc.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-	auto Device = FRHIDevice::Create(DeviceDesc);
+	TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(DeviceDesc);
 	if (!Device)
 	{
 		std::fprintf(stderr, "Runtime renderer backend unavailable.\n");
@@ -72,14 +73,15 @@ int wmain(int Argc, wchar_t** Argv)
 	FRHITextureDesc Desc;
 	Desc.Width = Desc.Height = 256;
 	Desc.bRenderTarget = true;
-	auto Target = Device->CreateTexture(Desc);
+	TSharedPtr<FRHITexture> Target = Device->CreateTexture(Desc);
 	Desc.Format = EPixelFormat::D32_FLOAT;
-	auto Depth = Device->CreateTexture(Desc);
+	TSharedPtr<FRHITexture> Depth = Device->CreateTexture(Desc);
 	if (!Target || !Depth)
 		return 2;
-	for (auto Mode : {EMaterialBlendMode::Opaque, EMaterialBlendMode::Masked, EMaterialBlendMode::Translucent})
+	for (EMaterialBlendMode Mode :
+	    {EMaterialBlendMode::Opaque, EMaterialBlendMode::Masked, EMaterialBlendMode::Translucent})
 	{
-		auto Asset = std::make_shared<FLoadedMeshAsset>();
+		TSharedPtr<FLoadedMeshAsset> Asset = std::make_shared<FLoadedMeshAsset>();
 		Asset->Data.Mesh = StaticMesh::Find("Cube");
 		Asset->DisplayMesh = Asset->Data.Mesh;
 		Asset->Material = FMaterialAsset{};
@@ -95,8 +97,8 @@ int wmain(int Argc, wchar_t** Argv)
 			std::fprintf(stderr, "%s\n", *Error);
 			return 3;
 		}
-		auto& Cmd = Device->BeginFrame();
-		auto Prepared = Renderer.Prepare(List, Target->GetFormat(), Error);
+		FRHICommandList& Cmd = Device->BeginFrame();
+		TUniquePtr<FNativeMeshFrame> Prepared = Renderer.Prepare(List, Target->GetFormat(), Error);
 		if (!Prepared)
 		{
 			std::fprintf(stderr, "%s\n", *Error);
@@ -119,9 +121,9 @@ int wmain(int Argc, wchar_t** Argv)
 			return 5;
 		const size_t I = (128 * 256 + 128) * 4;
 		const int Red = Pixels[I], Blue = Pixels[I + 2];
-		const bool Good = Mode == EMaterialBlendMode::Opaque   ? (Red > 250 && Blue < 4)
-						  : Mode == EMaterialBlendMode::Masked ? (Red < 4 && Blue > 250)
-															   : (std::abs(Red - 128) < 4 && std::abs(Blue - 128) < 4);
+		const bool Good = Mode == EMaterialBlendMode::Opaque ? (Red > 250 && Blue < 4)
+		    : Mode == EMaterialBlendMode::Masked             ? (Red < 4 && Blue > 250)
+		                                                     : (std::abs(Red - 128) < 4 && std::abs(Blue - 128) < 4);
 		if (!Good)
 		{
 			std::fprintf(stderr, "Bad runtime pixel for mode %d: %d %d\n", static_cast<int>(Mode), Red, Blue);
@@ -131,14 +133,14 @@ int wmain(int Argc, wchar_t** Argv)
 	}
 	FProjectedSceneRenderer Scene(*Device);
 	Landscape Ground(4, 4, 32);
-	auto Layer = Ground.MakeLayer("Test", 240, 30, 20);
+	LandscapeLayer Layer = Ground.MakeLayer("Test", 240, 30, 20);
 	Layer.texture = "builtin:Snow";
 	for (float& W : Layer.weights)
 		W = 1;
-	auto Painted = Ground.WithLayers({Layer});
-	const TArray<FProjectedVertex> Quad = {{64, 64, .01f, 0, 0, 0xFFFFFFFF},   {192, 64, .01f, 1, 0, 0xFFFFFFFF},
-										   {192, 192, .01f, 1, 1, 0xFFFFFFFF}, {64, 64, .01f, 0, 0, 0xFFFFFFFF},
-										   {192, 192, .01f, 1, 1, 0xFFFFFFFF}, {64, 192, .01f, 0, 1, 0xFFFFFFFF}};
+	std::shared_ptr<const Landscape> Painted = Ground.WithLayers({Layer});
+	const TArray<FProjectedVertex> Quad = {{64, 64, .01f, 0, 0, 0xFFFFFFFF}, {192, 64, .01f, 1, 0, 0xFFFFFFFF},
+	    {192, 192, .01f, 1, 1, 0xFFFFFFFF}, {64, 64, .01f, 0, 0, 0xFFFFFFFF}, {192, 192, .01f, 1, 1, 0xFFFFFFFF},
+	    {64, 192, .01f, 0, 1, 0xFFFFFFFF}};
 	FProjectedSceneView SceneView;
 	SceneView.Width = SceneView.Height = 256;
 	SceneView.CenterX = SceneView.CenterY = 128;
@@ -160,7 +162,7 @@ int wmain(int Argc, wchar_t** Argv)
 			T.SetTranslation(Vector3d(0, 400, 0));
 			if (Fixture >= 5)
 			{
-				auto Triangle = std::make_shared<StaticMesh>("Scaled normal test");
+				TSharedPtr<StaticMesh> Triangle = std::make_shared<StaticMesh>("Scaled normal test");
 				Triangle->AddVertex(Vector3d(-64, 0, -64));
 				Triangle->AddVertex(Vector3d(64, 0, -64));
 				Triangle->AddVertex(Vector3d(0, 0, 64));
@@ -205,15 +207,16 @@ int wmain(int Argc, wchar_t** Argv)
 				FSceneViewVolume Volume{Vector3d(-1, 1, -1), Vector3d(1, 65536, 1), true};
 				FLandscapeDrawStats Stats;
 				AppendProjectedLandscape(Painted, 1, ToView, ToWorld, Vector3d(1, 1, 1), Volume, SceneView, 8,
-										 FixtureVertices, Batches, Stats);
+				    FixtureVertices, Batches, Stats);
 				if (Stats.Triangles == 0)
 					return 11;
 			}
 			else
 				Batches.push_back({1, Painted, 0, 6});
 		}
-		auto& Cmd = Device->BeginFrame();
-		auto Prepared = Scene.Prepare(FixtureVertices, Batches, Instances, Target->GetFormat(), Error);
+		FRHICommandList& Cmd = Device->BeginFrame();
+		TUniquePtr<FProjectedSceneFrame> Prepared =
+		    Scene.Prepare(FixtureVertices, Batches, Instances, Target->GetFormat(), Error);
 		if (!Prepared)
 		{
 			std::fprintf(stderr, "%s\n", *Error);
@@ -236,10 +239,10 @@ int wmain(int Argc, wchar_t** Argv)
 			return 9;
 		const size_t I = (128 * 256 + 128) * 4;
 		const int R = Pixels[I], G = Pixels[I + 1], B = Pixels[I + 2];
-		const bool Good = Fixture >= 5	 ? (std::abs(R - 179) < 4 && std::abs(G - 179) < 4 && std::abs(B - 179) < 4)
-						  : Fixture == 2 ? (std::abs(R - 219) < 4 && std::abs(G - 219) < 4 && std::abs(B - 219) < 4)
-						  : Fixture == 3 ? (G > 180 && R < 40 && B < 40)
-										 : (R > 180 && G < 40 && B < 40);
+		const bool Good = Fixture >= 5 ? (std::abs(R - 179) < 4 && std::abs(G - 179) < 4 && std::abs(B - 179) < 4)
+		    : Fixture == 2             ? (std::abs(R - 219) < 4 && std::abs(G - 219) < 4 && std::abs(B - 219) < 4)
+		    : Fixture == 3             ? (G > 180 && R < 40 && B < 40)
+		                               : (R > 180 && G < 40 && B < 40);
 		if (!Good)
 		{
 			std::fprintf(stderr, "Bad scene fixture %d pixel: %d %d %d\n", Fixture, R, G, B);
@@ -247,12 +250,12 @@ int wmain(int Argc, wchar_t** Argv)
 		}
 	}
 	std::printf("%s: GPU landscape layers, baked fallback, layer refresh, instanced meshes and mirrored/nonuniform "
-				"normals passed runtime-only readback.\n",
-				ToString(Backend));
+	            "normals passed runtime-only readback.\n",
+	    ToString(Backend));
 
 	if (Argc > 2)
 	{
-		auto Registry = std::make_shared<FAssetRegistry>();
+		TSharedPtr<FAssetRegistry> Registry = std::make_shared<FAssetRegistry>();
 		if (Argc < 4 || !Registry->SetMounts({{"/Game", FString::FromWide(Argv[3])}}, Error) || !Registry->Scan())
 		{
 			std::fprintf(stderr, "Supply a map and Content directory. %s\n", *Error);
@@ -261,7 +264,7 @@ int wmain(int Argc, wchar_t** Argv)
 		FAssetPackage Package;
 		FWorldSceneSnapshot World;
 		if (!FAssetPackageStore::Load(FString::FromWide(Argv[2]), Package, Error) ||
-			!FWorldSceneSnapshot::Load(Package, Registry.get(), World, Error))
+		    !FWorldSceneSnapshot::Load(Package, Registry.get(), World, Error))
 		{
 			std::fprintf(stderr, "Cannot construct runtime scene: %s\n", *Error);
 			return 13;
@@ -269,7 +272,7 @@ int wmain(int Argc, wchar_t** Argv)
 		FLandscapeTextureLibrary::SetAssetRegistry(Registry);
 		Vector3d Low, High;
 		bool First = true;
-		for (const auto& Item : World.GetItems())
+		for (const FWorldSceneItem& Item : World.GetItems())
 		{
 			Vector3d A, B;
 			bool HasBounds = true;
@@ -286,8 +289,9 @@ int wmain(int Argc, wchar_t** Argv)
 			for (int I = 0; I < 8; I++)
 			{
 				Vector3d P;
-				Item.ToWorld.Transform(P, Vector3d((I & 1) ? B.GetX() : A.GetX(), (I & 2) ? B.GetY() : A.GetY(),
-												   (I & 4) ? B.GetZ() : A.GetZ()));
+				Item.ToWorld.Transform(P,
+				    Vector3d(
+				        (I & 1) ? B.GetX() : A.GetX(), (I & 2) ? B.GetY() : A.GetY(), (I & 4) ? B.GetZ() : A.GetZ()));
 				if (First)
 				{
 					Low = High = P;
@@ -295,10 +299,10 @@ int wmain(int Argc, wchar_t** Argv)
 				}
 				else
 				{
-					Low.NewVector(std::min(Low.GetX(), P.GetX()), std::min(Low.GetY(), P.GetY()),
-								  std::min(Low.GetZ(), P.GetZ()));
+					Low.NewVector(
+					    std::min(Low.GetX(), P.GetX()), std::min(Low.GetY(), P.GetY()), std::min(Low.GetZ(), P.GetZ()));
 					High.NewVector(std::max(High.GetX(), P.GetX()), std::max(High.GetY(), P.GetY()),
-								   std::max(High.GetZ(), P.GetZ()));
+					    std::max(High.GetZ(), P.GetZ()));
 				}
 			}
 		}
@@ -308,7 +312,7 @@ int wmain(int Argc, wchar_t** Argv)
 			return 14;
 		}
 		const float Span =
-			std::max({High.GetX() - Low.GetX(), High.GetY() - Low.GetY(), High.GetZ() - Low.GetZ(), 128.0f});
+		    std::max({High.GetX() - Low.GetX(), High.GetY() - Low.GetY(), High.GetZ() - Low.GetZ(), 128.0f});
 		Matrix44 WorldToView;
 		WorldToView.SetIdentity();
 		WorldToView.SetMatrix(1, 1, 0);
@@ -333,15 +337,16 @@ int wmain(int Argc, wchar_t** Argv)
 			std::fprintf(stderr, "%s\n", *Error);
 			return 15;
 		}
-		auto& Cmd = Device->BeginFrame();
-		auto Geometry = Scene.Prepare(List.Vertices, List.Batches, List.Instances, Target->GetFormat(), Error);
+		FRHICommandList& Cmd = Device->BeginFrame();
+		TUniquePtr<FProjectedSceneFrame> Geometry =
+		    Scene.Prepare(List.Vertices, List.Batches, List.Instances, Target->GetFormat(), Error);
 		if (!Geometry)
 		{
 			std::fprintf(stderr, "%s\n", *Error);
 			Device->EndFrame();
 			return 16;
 		}
-		auto Materials = Renderer.Prepare(List.Meshes, Target->GetFormat(), Error);
+		TUniquePtr<FNativeMeshFrame> Materials = Renderer.Prepare(List.Meshes, Target->GetFormat(), Error);
 		if (!Materials && !List.Meshes.Vertices.empty())
 		{
 			std::fprintf(stderr, "%s\n", *Error);
@@ -375,7 +380,8 @@ int wmain(int Argc, wchar_t** Argv)
 		{
 			// Top-down 32-bit BMP for a portable, dependency-free diagnostic artifact.
 			TArray<uint8> BMP(54 + Pixels.size(), 0);
-			const auto Put = [&](size_t At, uint32 Value, int Bytes) {
+			const TFunction<void(size_t, uint32, int)> Put = [&](size_t At, uint32 Value, int Bytes)
+			{
 				for (int I = 0; I < Bytes; I++)
 					BMP[At + I] = static_cast<uint8>(Value >> (8 * I));
 			};
@@ -397,18 +403,18 @@ int wmain(int Argc, wchar_t** Argv)
 			}
 			FFile File;
 			if (!File.Open(FString::FromWide(Argv[4]), EFileOpenMode::Write) ||
-				File.Write(BMP.data(), static_cast<int64>(BMP.size())) != static_cast<int64>(BMP.size()))
+			    File.Write(BMP.data(), static_cast<int64>(BMP.size())) != static_cast<int64>(BMP.size()))
 				return 19;
 		}
 		std::printf("%s: native .gmap rendered: %zu scene items, %d terrain triangles, %u foliage instances, %zu "
-					"visible pixels; %d worldspawn metadata components.\n",
-					ToString(Backend), World.GetItems().size(), List.TerrainTriangles, List.FoliageInstances, Visible,
-					World.GetMetadataComponents());
+		            "visible pixels; %d worldspawn metadata components.\n",
+		    ToString(Backend), World.GetItems().size(), List.TerrainTriangles, List.FoliageInstances, Visible,
+		    World.GetMetadataComponents());
 		FLandscapeTextureLibrary::SetAssetRegistry({});
 	}
 
 	Device->WaitIdle();
-	std::printf("%s: native opaque, masked and translucent meshes rendered without editor/UI modules.\n",
-				ToString(Backend));
+	std::printf(
+	    "%s: native opaque, masked and translucent meshes rendered without editor/UI modules.\n", ToString(Backend));
 	return 0;
 }

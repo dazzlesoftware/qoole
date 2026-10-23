@@ -22,24 +22,24 @@ class FSlateStyleSet
 public:
 	explicit FSlateStyleSet(FName InName) : Name(InName) {}
 
-	FName GetName() const { return Name; }
+	FName GetName() const
+	{
+		return Name;
+	}
 
-	template <typename T>
-	void Set(FName Key, T Value)
+	template <typename T> void Set(FName Key, T Value)
 	{
 		Values[Key] = std::make_shared<std::any>(std::move(Value));
 	}
 
-	template <typename T>
-	const T* Find(FName Key) const
+	template <typename T> const T* Find(FName Key) const
 	{
-		auto It = Values.find(Key);
+		TMap<FName, TSharedPtr<std::any>>::const_iterator It = Values.find(Key);
 		return It == Values.end() ? nullptr : std::any_cast<T>(It->second.get());
 	}
 
 	// The value, or a default-constructed one (with a warning) when missing.
-	template <typename T>
-	const T& Get(FName Key) const
+	template <typename T> const T& Get(FName Key) const
 	{
 		if (const T* Value = Find<T>(Key))
 		{
@@ -50,15 +50,35 @@ public:
 		return Default;
 	}
 
-	template <typename T>
-	const T& GetWidgetStyle(FName Key) const { return Get<T>(Key); }
-	const FSlateBrush& GetBrush(FName Key) const { return Get<FSlateBrush>(Key); }
-	const FSlateFontInfo& GetFont(FName Key) const { return Get<FSlateFontInfo>(Key); }
-	FSlateColor GetColor(FName Key) const { return Get<FSlateColor>(Key); }
-	FMargin GetMargin(FName Key) const { return Get<FMargin>(Key); }
-	float GetFloat(FName Key) const { return Get<float>(Key); }
+	template <typename T> const T& GetWidgetStyle(FName Key) const
+	{
+		return Get<T>(Key);
+	}
+	const FSlateBrush& GetBrush(FName Key) const
+	{
+		return Get<FSlateBrush>(Key);
+	}
+	const FSlateFontInfo& GetFont(FName Key) const
+	{
+		return Get<FSlateFontInfo>(Key);
+	}
+	FSlateColor GetColor(FName Key) const
+	{
+		return Get<FSlateColor>(Key);
+	}
+	FMargin GetMargin(FName Key) const
+	{
+		return Get<FMargin>(Key);
+	}
+	float GetFloat(FName Key) const
+	{
+		return Get<float>(Key);
+	}
 
-	bool Contains(FName Key) const { return Values.contains(Key); }
+	bool Contains(FName Key) const
+	{
+		return Values.contains(Key);
+	}
 
 	// Registry.
 	static void Register(const TSharedRef<FSlateStyleSet>& Set);

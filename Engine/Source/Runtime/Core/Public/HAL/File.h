@@ -24,42 +24,54 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // Paths are UTF-8. Failures are reported by return values, never exceptions.
 
 #include "CoreTypes.h"
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
 
 #include <cstdio>
 
 enum class EFileOpenMode : uint8
 {
-	Read,		// Existing file, read only.
-	Write,		// Created or truncated, write only.
-	Append,		// Created if missing, writes go to the end.
+	Read,   // Existing file, read only.
+	Write,  // Created or truncated, write only.
+	Append, // Created if missing, writes go to the end.
 };
 
 class FFile
 {
 public:
 	FFile() = default;
-	~FFile() { Close(); }
+	~FFile()
+	{
+		Close();
+	}
 	FFile(const FFile&) = delete;
 	FFile& operator=(const FFile&) = delete;
-	FFile(FFile&& Other) noexcept : Handle(Other.Handle) { Other.Handle = nullptr; }
+	FFile(FFile&& Other) noexcept : Handle(Other.Handle)
+	{
+		Other.Handle = nullptr;
+	}
 	FFile& operator=(FFile&& Other) noexcept;
 
 	bool Open(const FString& Path, EFileOpenMode Mode);
 	void Close();
-	bool IsOpen() const { return Handle != nullptr; }
+	bool IsOpen() const
+	{
+		return Handle != nullptr;
+	}
 
 	// Bytes actually read or written.
 	int64 Read(void* Buffer, int64 Size);
 	int64 Write(const void* Buffer, int64 Size);
-	bool Write(const FString& Text) { return Write(*Text, Text.Len()) == Text.Len(); }
+	bool Write(const FString& Text)
+	{
+		return Write(*Text, Text.Len()) == Text.Len();
+	}
 
 	bool Seek(int64 Offset);
 	int64 Tell() const;
 	int64 Size() const;
 	bool AtEnd() const;
 
-	static bool Exists(const FString& Path);			// a file, not a directory
+	static bool Exists(const FString& Path); // a file, not a directory
 	static bool DirectoryExists(const FString& Path);
 	static bool IsReadOnly(const FString& Path);
 	static bool SetReadOnly(const FString& Path, bool bReadOnly);

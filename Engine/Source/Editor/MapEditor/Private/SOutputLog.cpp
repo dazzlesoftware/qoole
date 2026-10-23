@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "SOutputLog.h"
+#include "Containers/ContainerAliases.h"
+#include "Internationalization/TextLocalization.h"
 
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBox.h"
@@ -98,10 +100,14 @@ namespace
 		switch (Verbosity)
 		{
 		case ELogVerbosity::Fatal:
-		case ELogVerbosity::Error: return FColor(255, 96, 88);
-		case ELogVerbosity::Warning: return FColor(240, 200, 80);
-		case ELogVerbosity::Display: return FColor(208, 214, 224);
-		default: return FColor(150, 158, 172);
+		case ELogVerbosity::Error:
+			return FColor(255, 96, 88);
+		case ELogVerbosity::Warning:
+			return FColor(240, 200, 80);
+		case ELogVerbosity::Display:
+			return FColor(208, 214, 224);
+		default:
+			return FColor(150, 158, 172);
 		}
 	}
 
@@ -110,64 +116,75 @@ namespace
 	{
 		return Text.StartsWith("Error", ESearchCase::IgnoreCase);
 	}
-}
+} // namespace
 
 void SOutputLog::Construct(const FArguments&)
 {
 	const FTextBlockStyle* Small = &FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText");
-	const auto Toggle = [this](const char* Label, bool FFilter::*Member) -> TSharedRef<SWidget>
+	const TFunction<TSharedRef<SWidget>(const char*, bool FFilter::*)> Toggle =
+	    [this](const char* Label, bool FFilter::* Member) -> TSharedRef<SWidget>
 	{
-		return SNew(SCheckBox).Text(Label)
-			.IsChecked([this, Member] { return Filter.*Member ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-			.OnCheckStateChanged([this, Member](ECheckBoxState State)
-			{
-				Filter.*Member = State == ECheckBoxState::Checked;
-				Refilter();
-			});
+		return SNew(SCheckBox)
+		    .Text(Label)
+		    .IsChecked([this, Member] { return Filter.*Member ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+		    .OnCheckStateChanged([this, Member](ECheckBoxState State)
+		{
+			Filter.*Member = State == ECheckBoxState::Checked;
+			Refilter();
+		});
 	};
-	ChildSlot
-	[
-		SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 4.0f))
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))
-			[
-				SNew(SEditableTextBox).HintText("Search Log").OnTextChanged([this](const FString& Text) { SetFilterText(Text); })
-			]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))[Toggle("Errors", &FFilter::bErrors)]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))[Toggle("Warnings", &FFilter::bWarnings)]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))[Toggle("Messages", &FFilter::bMessages)]
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton).Text("Clear").ToolTipText("Clear the log").OnClicked([this]
-				{
-					FOutputLogHistory::Get().Clear();
-					All.clear();
-					NextSerial = FOutputLogHistory::Get().GetNextSerial();
-					Refilter();
-					return FReply::Handled();
-				})
-			]
-		]
-		+ SVerticalBox::Slot().FillHeight(1.0f)
-		[
-			SAssignNew(List, SListView<int32>)
-			.ListItemsSource(&Shown)
-			.SelectionMode(ESelectionMode::Multi)
-			.OnGenerateRow([this, Small](int32 Index, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
-			{
-				const bool bValid = Index >= 0 && Index < static_cast<int32>(All.size());
-				const FOutputLogMessage Message = bValid ? All[static_cast<SIZE_T>(Index)] : FOutputLogMessage();
-				const ELogVerbosity Shown = IsErrorText(Message.Text) ? ELogVerbosity::Error : Message.Verbosity;
-				return SNew(STableRow<int32>, Owner).Padding(FMargin(8.0f, 0.0f))
-				[
-					SNew(STextBlock).TextStyle(Small).ColorAndOpacity(FSlateColor(VerbosityColor(Shown)))
-					.Text(FString::Format("[{:8.3f}] {}: {}", Message.Time, Message.Category, Message.Text))
-				];
-			})
-		]
-	];
+	ChildSlot[SNew(SVerticalBox) +
+	          SVerticalBox::Slot().AutoHeight().Padding(FMargin(
+	              6.0f, 4.0f))[SNew(SHorizontalBox) +
+	                           SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))
+	                               [SNew(SEditableTextBox)
+	                                    .HintText(GENESIS_TEXT("Search Log"))
+	                                    .OnTextChanged([this](const FString& Text) { SetFilterText(Text); })] +
+	                           SHorizontalBox::Slot()
+	                               .AutoWidth()
+	                               .VAlign(VAlign_Center)
+	                               .Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))[Toggle("Errors", &FFilter::bErrors)] +
+	                           SHorizontalBox::Slot()
+	                               .AutoWidth()
+	                               .VAlign(VAlign_Center)
+	                               .Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))[Toggle("Warnings", &FFilter::bWarnings)] +
+	                           SHorizontalBox::Slot()
+	                               .AutoWidth()
+	                               .VAlign(VAlign_Center)
+	                               .Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))[Toggle("Messages", &FFilter::bMessages)] +
+	                           SHorizontalBox::Slot().AutoWidth()[SNew(SButton)
+	                                                                  .Text(GENESIS_TEXT("Clear"))
+	                                                                  .ToolTipText(GENESIS_TEXT("Clear the log"))
+	                                                                  .OnClicked(
+	                                                                      [this]
+	                                                                      {
+		                                                                      FOutputLogHistory::Get().Clear();
+		                                                                      All.clear();
+		                                                                      NextSerial = FOutputLogHistory::Get()
+		                                                                                       .GetNextSerial();
+		                                                                      Refilter();
+		                                                                      return FReply::Handled();
+	                                                                      })]] +
+	          SVerticalBox::Slot().FillHeight(1.0f)
+	              [SAssignNew(List, SListView<int32>)
+	                   .ListItemsSource(&Shown)
+	                   .SelectionMode(ESelectionMode::Multi)
+	                   .OnGenerateRow(
+	                       [this, Small](int32 Index, const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
+	                       {
+		                       const bool bValid = Index >= 0 && Index < static_cast<int32>(All.size());
+		                       const FOutputLogMessage Message =
+		                           bValid ? All[static_cast<SIZE_T>(Index)] : FOutputLogMessage();
+		                       const ELogVerbosity Shown =
+		                           IsErrorText(Message.Text) ? ELogVerbosity::Error : Message.Verbosity;
+		                       return SNew(STableRow<int32>, Owner)
+		                           .Padding(
+		                               FMargin(8.0f, 0.0f))[SNew(STextBlock)
+		                                                        .TextStyle(Small)
+		                                                        .ColorAndOpacity(FSlateColor(VerbosityColor(Shown)))
+		                                                        .Text(FString::Format("[{:8.3f}] {}: {}", Message.Time,
+		                                                                              Message.Category, Message.Text))];
+	                       })]];
 	Poll();
 	RegisterActiveTimer(0.1f, [this](double, float)
 	{

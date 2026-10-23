@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 // This executable deliberately links no Editor, MapCore, UI or RHI libraries.
 #include "Geometry/StaticMesh.h"
+#include "Templates/SharedPointer.h"
 #include "Landscape/Landscape.h"
 #include "Foliage/Foliage.h"
 #include "World/World.h"
@@ -18,7 +19,7 @@ int wmain(int Argc, wchar_t** Argv)
 	TOptional<FProjectContext> ScriptProject;
 	for (int I = 1; I < Argc; ++I)
 	{
-		const auto A = FString::FromWide(Argv[I]);
+		const FString A = FString::FromWide(Argv[I]);
 		if (A.StartsWith("-script="))
 			ScriptLanguage = A.Mid(8);
 		if (A.StartsWith("-module="))
@@ -42,30 +43,31 @@ int wmain(int Argc, wchar_t** Argv)
 	{
 		FString Error;
 		FScriptRuntimeRegistry Providers;
-		auto World = std::make_shared<FWorld>();
-		auto Actor = FActor::New("Runtime Script Actor");
-		auto Script = FActorComponent::New("Genesis.Script");
+		TSharedPtr<FWorld> World = std::make_shared<FWorld>();
+		FActor Actor = FActor::New("Runtime Script Actor");
+		FActorComponent Script = FActorComponent::New("Genesis.Script");
 		Script.Properties["Module"] = "main";
 		Actor.Components.push_back(Script);
-		auto Host = std::make_shared<FScriptBindingRegistry>(
-			EScriptPurpose::Gameplay, TArray<FString>{"API.Read", "Log.Write", "World.Read", "World.Write"});
+		TSharedPtr<FScriptBindingRegistry> Host = std::make_shared<FScriptBindingRegistry>(
+		    EScriptPurpose::Gameplay, TArray<FString>{"API.Read", "Log.Write", "World.Read", "World.Write"});
 		if (!RegisterBuiltinScriptProviders(Providers, Error) || !RegisterCoreScriptBindings(*Host, Error) ||
-			!RegisterWorldScriptBindings(*Host, World, Error) || !World->AddActor(Actor, Error))
+		    !RegisterWorldScriptBindings(*Host, World, Error) || !World->AddActor(Actor, Error))
 		{
 			std::fprintf(stderr, "%s\n", *Error);
 			return 20;
 		}
-		FScriptWorldSubsystem Scripts({ScriptLanguage, "Win64", EScriptPurpose::Gameplay}, World, Providers,
-									  Host, [&](const FString& Name, TArray<uint8>& Payload, FString& E) {
-										  if (ScriptProject)
-											  return ScriptProject->LoadScriptModule(Name, Payload, E);
-										  if (Name != "main" || !FFile::ReadAllBytes(ModulePath, Payload))
-										  {
-											  E = "Cannot read runtime script module.";
-											  return false;
-										  }
-										  return true;
-									  });
+		FScriptWorldSubsystem Scripts({ScriptLanguage, "Win64", EScriptPurpose::Gameplay}, World, Providers, Host,
+		    [&](const FString& Name, TArray<uint8>& Payload, FString& E)
+		{
+			if (ScriptProject)
+				return ScriptProject->LoadScriptModule(Name, Payload, E);
+			if (Name != "main" || !FFile::ReadAllBytes(ModulePath, Payload))
+			{
+				E = "Cannot read runtime script module.";
+				return false;
+			}
+			return true;
+		});
 		if (!Scripts.BeginPlay(Error))
 		{
 			std::fprintf(stderr, "%s\n", *Error);
@@ -79,22 +81,22 @@ int wmain(int Argc, wchar_t** Argv)
 			}
 		if (World->FindActor(Actor.Id)->Name != "Script Tick 3")
 			return 23;
-		auto Event = FJsonValue::MakeObject();
+		FJsonValue Event = FJsonValue::MakeObject();
 		Event["Name"] = "Runtime event passed";
-		if (!Scripts.SendEvent("Rename", Event, Error) ||
-			World->FindActor(Actor.Id)->Name != "Runtime event passed" || !Scripts.EndPlay(Error))
+		if (!Scripts.SendEvent("Rename", Event, Error) || World->FindActor(Actor.Id)->Name != "Runtime event passed" ||
+		    !Scripts.EndPlay(Error))
 		{
 			std::fprintf(stderr, "%s\n", *Error);
 			return 24;
 		}
-		std::printf("%s gameplay module: begin, tick, event and end passed without editor dependencies.\n",
-					*ScriptLanguage);
+		std::printf(
+		    "%s gameplay module: begin, tick, event and end passed without editor dependencies.\n", *ScriptLanguage);
 		return 0;
 	}
 	Landscape Terrain(32, 32, 16);
-	auto Grass = Terrain.MakeLayer("Grass", 80, 150, 50);
+	LandscapeLayer Grass = Terrain.MakeLayer("Grass", 80, 150, 50);
 	Grass.weights.assign(33 * 33, 1);
-	const auto Painted = Terrain.WithLayers({Grass});
+	const std::shared_ptr<const Landscape> Painted = Terrain.WithLayers({Grass});
 	if (!Painted || Painted->GetMesh()->GetNumVertices() != 33 * 33)
 		return 1;
 	float Depth = 0;
@@ -119,37 +121,36 @@ int wmain(int Argc, wchar_t** Argv)
 		return 4;
 	FString Error;
 	FWorld World;
-	auto Parent = FActor::New("Parent"), Child = FActor::New("Child");
+	FActor Parent = FActor::New("Parent"), Child = FActor::New("Child");
 	Child.ParentId = Parent.Id;
 	Child.Root.Transform.Location = Vector3d(10, 20, 30);
 	if (!World.AddActor(Parent, Error) || !World.AddActor(Child, Error))
 		return 5;
-	auto Back = FWorld::FromJson(World.ToJson(), Error);
+	TOptional<FWorld> Back = FWorld::FromJson(World.ToJson(), Error);
 	if (!Back || !Back->FindActor(Child.Id))
 		return 6;
 	if (Argc > 1)
 	{
 		FAssetPackage Package;
 		if (!FAssetPackageStore::Load(FString::FromWide(Argv[1]), Package, Error) ||
-			Package.Schema != "Genesis.World" || (Package.SchemaVersion < 2 || Package.SchemaVersion > 3))
+		    Package.Schema != "Genesis.World" || (Package.SchemaVersion < 2 || Package.SchemaVersion > 3))
 		{
 			std::fprintf(stderr, "Cannot load native runtime world: %s\n", *Error);
 			return 7;
 		}
-		auto Loaded = FWorld::FromJson(Package.Exports.Get("Scene"), Error);
+		TOptional<FWorld> Loaded = FWorld::FromJson(Package.Exports.Get("Scene"), Error);
 		if (!Loaded)
 		{
 			std::fprintf(stderr, "%s\n", *Error);
 			return 8;
 		}
-		for (const auto& Actor : Loaded->GetActors())
+		for (const FActor& Actor : Loaded->GetActors())
 		{
 			Matrix44 Matrix;
 			if (!Loaded->GetWorldTransform(Actor.Id, Matrix, Error))
 				return 9;
 		}
-		std::printf("Native runtime scene: %zu actors loaded without editor modules.\n",
-					Loaded->GetActors().size());
+		std::printf("Native runtime scene: %zu actors loaded without editor modules.\n", Loaded->GetActors().size());
 		if (Argc > 2)
 		{
 			FAssetRegistry Registry;
@@ -157,22 +158,23 @@ int wmain(int Argc, wchar_t** Argv)
 				return 10;
 			FRenderAssetLoader Loader(Registry);
 			int Assets = 0;
-			for (const auto& Actor : Loaded->GetActors())
-				for (const auto& C : Actor.Components)
+			for (const FActor& Actor : Loaded->GetActors())
+				for (const FActorComponent& C : Actor.Components)
 				{
 					if (C.Type == "Genesis.StaticMesh" && !C.Assets.empty())
 					{
-						const auto& Data = C.Properties.Get("Data");
-						const auto First = FAssetReference::FromJson(Data.Get("MaterialOverride"), Error);
+						const FJsonValue& Data = C.Properties.Get("Data");
+						const TOptional<FAssetReference> First =
+						    FAssetReference::FromJson(Data.Get("MaterialOverride"), Error);
 						if (!First)
 							return 11;
 						TArray<FAssetReference> Additional;
-						const auto& Values = Data.Get("AdditionalOverrides");
+						const FJsonValue& Values = Data.Get("AdditionalOverrides");
 						if (!Values.IsNull() && (!Values.IsArray() || Values.Num() > 63))
 							return 11;
-						for (const auto& V : Values.GetItems())
+						for (const FJsonValue& V : Values.GetItems())
 						{
-							auto Ref = FAssetReference::FromJson(V, Error);
+							TOptional<FAssetReference> Ref = FAssetReference::FromJson(V, Error);
 							if (!Ref)
 								return 11;
 							Additional.push_back(*Ref);
@@ -186,7 +188,7 @@ int wmain(int Argc, wchar_t** Argv)
 						++Assets;
 					}
 					else if (C.Type == "Genesis.Landscape")
-						for (const auto& Ref : C.Assets)
+						for (const FAssetReference& Ref : C.Assets)
 						{
 							FTextureAsset Texture;
 							if (!Loader.LoadTexture(Ref, Texture, Error))
@@ -197,7 +199,6 @@ int wmain(int Argc, wchar_t** Argv)
 			std::printf("Native mesh/material/texture dependencies: %d scene assets validated.\n", Assets);
 		}
 	}
-	std::printf(
-		"Runtime terrain, paint, raycast, spline mesh and foliage: passed. No editor dependencies.\n");
+	std::printf("Runtime terrain, paint, raycast, spline mesh and foliage: passed. No editor dependencies.\n");
 	return 0;
 }

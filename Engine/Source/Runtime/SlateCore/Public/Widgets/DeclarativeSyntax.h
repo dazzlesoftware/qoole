@@ -2,8 +2,8 @@
 //
 // Declarative widget construction (Engine/Documentation/Source/GenesisUI.md §6.5).
 //
-//   SNew(SButton).Text("OK").OnClicked(this, &SDialog::OnOk)
-//   SAssignNew(Button, SButton).Text("OK")
+//   SNew(SButton).Text(GENESIS_TEXT("OK")).OnClicked(this, &SDialog::OnOk)
+//   SAssignNew(Button, SButton).Text(GENESIS_TEXT("OK"))
 //   SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[ ... ]
 //   SNew(STableRow<FItemPtr>, OwnerTable).Padding(2)[ ... ]   // extra Construct arguments
 //
@@ -28,31 +28,81 @@
 #pragma once
 
 #include "Layout/Children.h"
+#include "Internationalization/TextLocalization.h"
 
 #include <tuple>
 
-template <typename WidgetType>
-using TWidgetArguments = typename WidgetType::FArguments;
+template <typename WidgetType> using TWidgetArguments = typename WidgetType::FArguments;
 
 // Common setters (visibility, tooltip, cursor...) on every FArguments.
-template <typename Derived>
-struct TWidgetArgsBase : public FWidgetCommonArgs
+template <typename Derived> struct TWidgetArgsBase : public FWidgetCommonArgs
 {
-	Derived& Visibility(TAttribute<EVisibility> In) { _Visibility = std::move(In); return Self(); }
-	Derived& IsEnabled(TAttribute<bool> In) { _IsEnabled = std::move(In); return Self(); }
-	Derived& ToolTipText(TAttribute<FString> In) { _ToolTipText = std::move(In); return Self(); }
-	Derived& ToolTip(TSharedPtr<IToolTip> In) { _ToolTip = std::move(In); return Self(); }
-	Derived& Cursor(TAttribute<TOptional<EMouseCursor>> In) { _Cursor = std::move(In); return Self(); }
-	Derived& Cursor(EMouseCursor In) { _Cursor = TOptional<EMouseCursor>(In); return Self(); }
-	Derived& Clipping(EWidgetClipping In) { _Clipping = In; return Self(); }
-	Derived& RenderTransform(TAttribute<TOptional<FTransform2D>> In) { _RenderTransform = std::move(In); return Self(); }
-	Derived& RenderTransformPivot(FVector2 In) { _RenderTransformPivot = In; return Self(); }
-	Derived& RenderOpacity(float In) { _RenderOpacity = In; return Self(); }
-	Derived& Tag(FName In) { _Tag = In; return Self(); }
-	Derived& ForceVolatile(bool In) { _ForceVolatile = In; return Self(); }
+	Derived& Visibility(TAttribute<EVisibility> In)
+	{
+		_Visibility = std::move(In);
+		return Self();
+	}
+	Derived& IsEnabled(TAttribute<bool> In)
+	{
+		_IsEnabled = std::move(In);
+		return Self();
+	}
+	Derived& ToolTipText(TAttribute<FString> In)
+	{
+		_ToolTipText = std::move(In);
+		return Self();
+	}
+	Derived& ToolTip(TSharedPtr<IToolTip> In)
+	{
+		_ToolTip = std::move(In);
+		return Self();
+	}
+	Derived& Cursor(TAttribute<TOptional<EMouseCursor>> In)
+	{
+		_Cursor = std::move(In);
+		return Self();
+	}
+	Derived& Cursor(EMouseCursor In)
+	{
+		_Cursor = TOptional<EMouseCursor>(In);
+		return Self();
+	}
+	Derived& Clipping(EWidgetClipping In)
+	{
+		_Clipping = In;
+		return Self();
+	}
+	Derived& RenderTransform(TAttribute<TOptional<FTransform2D>> In)
+	{
+		_RenderTransform = std::move(In);
+		return Self();
+	}
+	Derived& RenderTransformPivot(FVector2 In)
+	{
+		_RenderTransformPivot = In;
+		return Self();
+	}
+	Derived& RenderOpacity(float In)
+	{
+		_RenderOpacity = In;
+		return Self();
+	}
+	Derived& Tag(FName In)
+	{
+		_Tag = In;
+		return Self();
+	}
+	Derived& ForceVolatile(bool In)
+	{
+		_ForceVolatile = In;
+		return Self();
+	}
 
 protected:
-	Derived& Self() { return static_cast<Derived&>(*this); }
+	Derived& Self()
+	{
+		return static_cast<Derived&>(*this);
+	}
 };
 
 // Content given with [ ] or a named slot.
@@ -61,21 +111,29 @@ struct FWidgetSlotArg
 	TSharedPtr<SWidget> Widget;
 };
 
-template <typename WidgetType, typename... ExtraArgs>
-class TWidgetBuilder
+template <typename WidgetType, typename... ExtraArgs> class TWidgetBuilder
 {
 public:
-	TWidgetBuilder(TSharedPtr<WidgetType>* InAssignTo, ExtraArgs... InExtra) : AssignTo(InAssignTo), Extra(std::move(InExtra)...) {}
+	TWidgetBuilder(TSharedPtr<WidgetType>* InAssignTo, ExtraArgs... InExtra)
+	    : AssignTo(InAssignTo), Extra(std::move(InExtra)...)
+	{
+	}
 
-	TSharedRef<WidgetType> operator<<=(TWidgetArguments<WidgetType>& Args) { return Build(Args); }
-	TSharedRef<WidgetType> operator<<=(TWidgetArguments<WidgetType>&& Args) { return Build(Args); }
+	TSharedRef<WidgetType> operator<<=(TWidgetArguments<WidgetType>& Args)
+	{
+		return Build(Args);
+	}
+	TSharedRef<WidgetType> operator<<=(TWidgetArguments<WidgetType>&& Args)
+	{
+		return Build(Args);
+	}
 
 private:
 	TSharedRef<WidgetType> Build(TWidgetArguments<WidgetType>& Args)
 	{
 		TSharedRef<WidgetType> Widget(std::make_shared<WidgetType>());
 		Widget->SWidgetConstruct(Args);
-		std::apply([&](auto&... E) { Widget->Construct(Args, E...); }, Extra);
+		std::apply([&](ExtraArgs&... E) { Widget->Construct(Args, E...); }, Extra);
 		if (AssignTo)
 		{
 			*AssignTo = Widget.ToSharedPtr();
@@ -88,100 +146,163 @@ private:
 };
 
 template <typename WidgetType, typename... ExtraArgs>
-TWidgetBuilder<WidgetType, std::decay_t<ExtraArgs>...> MakeWidgetBuilder(TSharedPtr<WidgetType>* AssignTo, ExtraArgs&&... Extra)
+TWidgetBuilder<WidgetType, std::decay_t<ExtraArgs>...> MakeWidgetBuilder(
+    TSharedPtr<WidgetType>* AssignTo, ExtraArgs&&... Extra)
 {
 	return TWidgetBuilder<WidgetType, std::decay_t<ExtraArgs>...>(AssignTo, std::forward<ExtraArgs>(Extra)...);
 }
 
-#define SNew(WidgetType, ...) \
-	::MakeWidgetBuilder<WidgetType>(static_cast<TSharedPtr<WidgetType>*>(nullptr) __VA_OPT__(,) __VA_ARGS__) <<= ::TWidgetArguments<WidgetType>()
+#define SNew(WidgetType, ...)                                                                                          \
+	::MakeWidgetBuilder<WidgetType>(static_cast<TSharedPtr<WidgetType>*>(nullptr) __VA_OPT__(, ) __VA_ARGS__) <<=      \
+	    ::TWidgetArguments<WidgetType>()
 
 // Like SNew; also stores the new widget in Variable (a TSharedPtr of the
 // widget type or a base of it).
-#define SAssignNew(Variable, WidgetType, ...) \
-	::SlateAssignHelper(Variable) = SNew(WidgetType __VA_OPT__(,) __VA_ARGS__)
+#define SAssignNew(Variable, WidgetType, ...)                                                                          \
+	::SlateAssignHelper(Variable) = SNew(WidgetType __VA_OPT__(, ) __VA_ARGS__)
 
 // Lets SAssignNew assign a TSharedRef<Derived> to a TSharedPtr<Base>.
-template <typename VarType>
-struct TAssignHelper
+template <typename VarType> struct TAssignHelper
 {
 	TSharedPtr<VarType>& Var;
-	template <typename WidgetType>
-	TSharedRef<WidgetType> operator=(TSharedRef<WidgetType> Widget)
+	template <typename WidgetType> TSharedRef<WidgetType> operator=(TSharedRef<WidgetType> Widget)
 	{
 		Var = Widget.ToSharedPtr();
 		return Widget;
 	}
 };
-template <typename VarType>
-TAssignHelper<VarType> SlateAssignHelper(TSharedPtr<VarType>& Var) { return TAssignHelper<VarType>{ Var }; }
+template <typename VarType> TAssignHelper<VarType> SlateAssignHelper(TSharedPtr<VarType>& Var)
+{
+	return TAssignHelper<VarType>{Var};
+}
 
 // --- Argument declaration macros -----------------------------------------
 
-#define SLATE_BEGIN_ARGS(WidgetType) \
-	public: \
-	struct FArguments : public ::TWidgetArgsBase<FArguments> \
-	{ \
+#define SLATE_BEGIN_ARGS(WidgetType)                                                                                   \
+public:                                                                                                                \
+	struct FArguments : public ::TWidgetArgsBase<FArguments>                                                           \
+	{                                                                                                                  \
 		using WidgetArgsType = FArguments;
 
-#define SLATE_END_ARGS() \
-	};
+#define SLATE_END_ARGS()                                                                                               \
+	}                                                                                                                  \
+	;
 
 // A TAttribute<Type> argument: a value, a callable, or (Object, &Class::Getter).
-#define SLATE_ATTRIBUTE(Type, Name, Default) \
-	TAttribute<Type> _##Name = TAttribute<Type>(Default); \
-	WidgetArgsType& Name(TAttribute<Type> InAttribute) { _##Name = std::move(InAttribute); return *this; } \
-	template <typename UserClass> \
-	WidgetArgsType& Name(const UserClass* InObject, Type (UserClass::*InMethod)() const) { _##Name = TAttribute<Type>(InObject, InMethod); return *this; }
+#define SLATE_ATTRIBUTE(Type, Name, Default)                                                                           \
+	TAttribute<Type> _##Name = TAttribute<Type>(Default);                                                              \
+	WidgetArgsType& Name(TAttribute<Type> InAttribute)                                                                 \
+	{                                                                                                                  \
+		_##Name = std::move(InAttribute);                                                                              \
+		return *this;                                                                                                  \
+	}                                                                                                                  \
+	template <typename UserClass> WidgetArgsType& Name(const UserClass* InObject, Type (UserClass::*InMethod)() const) \
+	{                                                                                                                  \
+		_##Name = TAttribute<Type>(InObject, InMethod);                                                                \
+		return *this;                                                                                                  \
+	}
 
 // An unset TAttribute (IsSet() false unless given); for "use the style unless overridden".
-#define SLATE_OPTIONAL_ATTRIBUTE(Type, Name) \
-	TAttribute<Type> _##Name; \
-	WidgetArgsType& Name(TAttribute<Type> InAttribute) { _##Name = std::move(InAttribute); return *this; } \
-	template <typename UserClass> \
-	WidgetArgsType& Name(const UserClass* InObject, Type (UserClass::*InMethod)() const) { _##Name = TAttribute<Type>(InObject, InMethod); return *this; }
+#define SLATE_OPTIONAL_ATTRIBUTE(Type, Name)                                                                           \
+	TAttribute<Type> _##Name;                                                                                          \
+	WidgetArgsType& Name(TAttribute<Type> InAttribute)                                                                 \
+	{                                                                                                                  \
+		_##Name = std::move(InAttribute);                                                                              \
+		return *this;                                                                                                  \
+	}                                                                                                                  \
+	template <typename UserClass> WidgetArgsType& Name(const UserClass* InObject, Type (UserClass::*InMethod)() const) \
+	{                                                                                                                  \
+		_##Name = TAttribute<Type>(InObject, InMethod);                                                                \
+		return *this;                                                                                                  \
+	}
 
 // A plain value.
-#define SLATE_ARGUMENT(Type, Name, Default) \
-	Type _##Name = Default; \
-	WidgetArgsType& Name(Type InArg) { _##Name = std::move(InArg); return *this; }
+#define SLATE_ARGUMENT(Type, Name, Default)                                                                            \
+	Type _##Name = Default;                                                                                            \
+	WidgetArgsType& Name(Type InArg)                                                                                   \
+	{                                                                                                                  \
+		_##Name = std::move(InArg);                                                                                    \
+		return *this;                                                                                                  \
+	}
 
 // A style struct; nullptr means "the default style".
-#define SLATE_STYLE_ARGUMENT(StyleType, Name) \
-	const StyleType* _##Name = nullptr; \
-	WidgetArgsType& Name(const StyleType* InStyle) { _##Name = InStyle; return *this; }
+#define SLATE_STYLE_ARGUMENT(StyleType, Name)                                                                          \
+	const StyleType* _##Name = nullptr;                                                                                \
+	WidgetArgsType& Name(const StyleType* InStyle)                                                                     \
+	{                                                                                                                  \
+		_##Name = InStyle;                                                                                             \
+		return *this;                                                                                                  \
+	}
 
 // A delegate: a TDelegate, a callable, or (Object, &Class::Method).
-#define SLATE_EVENT(DelegateType, Name) \
-	DelegateType _##Name; \
-	WidgetArgsType& Name(const DelegateType& InDelegate) { _##Name = InDelegate; return *this; } \
-	template <typename FunctorType> \
-		requires(!std::same_as<std::remove_cvref_t<FunctorType>, DelegateType>) \
-	WidgetArgsType& Name(FunctorType&& InFunctor) { _##Name = DelegateType::CreateLambda(std::forward<FunctorType>(InFunctor)); return *this; } \
-	template <typename UserClass, typename MethodType> \
-	WidgetArgsType& Name(UserClass* InObject, MethodType InMethod) { _##Name = DelegateType::CreateRaw(InObject, InMethod); return *this; }
+#define SLATE_EVENT(DelegateType, Name)                                                                                \
+	DelegateType _##Name;                                                                                              \
+	WidgetArgsType& Name(const DelegateType& InDelegate)                                                               \
+	{                                                                                                                  \
+		_##Name = InDelegate;                                                                                          \
+		return *this;                                                                                                  \
+	}                                                                                                                  \
+	template <typename FunctorType>                                                                                    \
+	    requires(!std::same_as<std::remove_cvref_t<FunctorType>, DelegateType>)                                        \
+	WidgetArgsType& Name(FunctorType&& InFunctor)                                                                      \
+	{                                                                                                                  \
+		_##Name = DelegateType::CreateLambda(std::forward<FunctorType>(InFunctor));                                    \
+		return *this;                                                                                                  \
+	}                                                                                                                  \
+	template <typename UserClass, typename MethodType> WidgetArgsType& Name(UserClass* InObject, MethodType InMethod)  \
+	{                                                                                                                  \
+		_##Name = DelegateType::CreateRaw(InObject, InMethod);                                                         \
+		return *this;                                                                                                  \
+	}
 
 // Content given with operator[].
-#define SLATE_DEFAULT_SLOT(Name) \
-	::FWidgetSlotArg _##Name; \
-	WidgetArgsType& operator[](TSharedRef<SWidget> InChild) { _##Name.Widget = InChild.ToSharedPtr(); return *this; } \
-	template <typename ChildWidgetType> \
-		requires std::derived_from<ChildWidgetType, SWidget> \
-	WidgetArgsType& operator[](const TSharedRef<ChildWidgetType>& InChild) { _##Name.Widget = InChild.ToSharedPtr(); return *this; }
+#define SLATE_DEFAULT_SLOT(Name)                                                                                       \
+	::FWidgetSlotArg _##Name;                                                                                          \
+	WidgetArgsType& operator[](TSharedRef<SWidget> InChild)                                                            \
+	{                                                                                                                  \
+		_##Name.Widget = InChild.ToSharedPtr();                                                                        \
+		return *this;                                                                                                  \
+	}                                                                                                                  \
+	template <typename ChildWidgetType>                                                                                \
+	    requires std::derived_from<ChildWidgetType, SWidget>                                                           \
+	WidgetArgsType& operator[](const TSharedRef<ChildWidgetType>& InChild)                                             \
+	{                                                                                                                  \
+		_##Name.Widget = InChild.ToSharedPtr();                                                                        \
+		return *this;                                                                                                  \
+	}
 
 // Content given with .Name()[ ... ].
-#define SLATE_NAMED_SLOT(Name) \
-	::FWidgetSlotArg _##Name; \
-	struct F##Name##Proxy \
-	{ \
-		WidgetArgsType* Args; \
-		WidgetArgsType& operator[](TSharedRef<SWidget> InChild) const { Args->_##Name.Widget = InChild.ToSharedPtr(); return *Args; } \
-	}; \
-	F##Name##Proxy Name() { return F##Name##Proxy{ this }; } \
-	WidgetArgsType& Name(TSharedRef<SWidget> InChild) { _##Name.Widget = InChild.ToSharedPtr(); return *this; }
+#define SLATE_NAMED_SLOT(Name)                                                                                         \
+	::FWidgetSlotArg _##Name;                                                                                          \
+	struct F##Name##Proxy                                                                                              \
+	{                                                                                                                  \
+		WidgetArgsType* Args;                                                                                          \
+		WidgetArgsType& operator[](TSharedRef<SWidget> InChild) const                                                  \
+		{                                                                                                              \
+			Args->_##Name.Widget = InChild.ToSharedPtr();                                                              \
+			return *Args;                                                                                              \
+		}                                                                                                              \
+	};                                                                                                                 \
+	F##Name##Proxy Name()                                                                                              \
+	{                                                                                                                  \
+		return F##Name##Proxy{this};                                                                                   \
+	}                                                                                                                  \
+	WidgetArgsType& Name(TSharedRef<SWidget> InChild)                                                                  \
+	{                                                                                                                  \
+		_##Name.Widget = InChild.ToSharedPtr();                                                                        \
+		return *this;                                                                                                  \
+	}
 
 // A list of slots given with operator+.
-#define SLATE_SLOT_ARGUMENT(SlotType, Name) \
-	TArray<SlotType> _##Name; \
-	WidgetArgsType& operator+(SlotType& InSlot) { _##Name.push_back(std::move(InSlot)); return *this; } \
-	WidgetArgsType& operator+(SlotType&& InSlot) { _##Name.push_back(std::move(InSlot)); return *this; }
+#define SLATE_SLOT_ARGUMENT(SlotType, Name)                                                                            \
+	TArray<SlotType> _##Name;                                                                                          \
+	WidgetArgsType& operator+(SlotType& InSlot)                                                                        \
+	{                                                                                                                  \
+		_##Name.push_back(std::move(InSlot));                                                                          \
+		return *this;                                                                                                  \
+	}                                                                                                                  \
+	WidgetArgsType& operator+(SlotType&& InSlot)                                                                       \
+	{                                                                                                                  \
+		_##Name.push_back(std::move(InSlot));                                                                          \
+		return *this;                                                                                                  \
+	}

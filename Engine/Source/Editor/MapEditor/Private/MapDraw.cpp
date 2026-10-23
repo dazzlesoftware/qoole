@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapDraw.h"
+#include "Containers/ContainerAliases.h"
 
 #include "MapEditorPrivate.h"
 #include "MapLandscapeTextures.h"
@@ -12,12 +13,13 @@ namespace
 {
 	uint32 PackRGBA(FColor Color)
 	{
-		return static_cast<uint32>(Color.R) | (static_cast<uint32>(Color.G) << 8) | (static_cast<uint32>(Color.B) << 16) | (static_cast<uint32>(Color.A) << 24);
+		return static_cast<uint32>(Color.R) | (static_cast<uint32>(Color.G) << 8) |
+		    (static_cast<uint32>(Color.B) << 16) | (static_cast<uint32>(Color.A) << 24);
 	}
 
 	// Brightness per facing direction (FDraw's axisAlign: up, down, +Y, -Y,
 	// +X, -X), so the faces of a brush read as a solid without lighting.
-	constexpr float FaceShade[6] = { 1.0f, 0.45f, 0.8f, 0.62f, 0.72f, 0.9f };
+	constexpr float FaceShade[6] = {1.0f, 0.45f, 0.8f, 0.62f, 0.72f, 0.9f};
 
 	// Hue in degrees, saturation and value in [0, 1], times Shade.
 	FColor HsvToColor(float Hue, float Saturation, float Value, float Shade)
@@ -28,18 +30,37 @@ namespace
 		float R = 0.0f, G = 0.0f, B = 0.0f;
 		switch (static_cast<int>(H) % 6)
 		{
-		case 0: R = C; G = X; break;
-		case 1: R = X; G = C; break;
-		case 2: G = C; B = X; break;
-		case 3: G = X; B = C; break;
-		case 4: R = X; B = C; break;
-		default: R = C; B = X; break;
+		case 0:
+			R = C;
+			G = X;
+			break;
+		case 1:
+			R = X;
+			G = C;
+			break;
+		case 2:
+			G = C;
+			B = X;
+			break;
+		case 3:
+			G = X;
+			B = C;
+			break;
+		case 4:
+			R = X;
+			B = C;
+			break;
+		default:
+			R = C;
+			B = X;
+			break;
 		}
 		const float M = Value - C;
-		const auto Channel = [Shade](float V) { return static_cast<uint8>(FMath::Clamp((V * Shade) * 255.0f + 0.5f, 0.0f, 255.0f)); };
+		const TFunction<uint8(float)> Channel = [Shade](float V)
+		{ return static_cast<uint8>(FMath::Clamp((V * Shade) * 255.0f + 0.5f, 0.0f, 255.0f)); };
 		return FColor(Channel(R + M), Channel(G + M), Channel(B + M));
 	}
-}
+} // namespace
 
 FMapDraw::FMapDraw()
 {
@@ -98,11 +119,11 @@ void FMapDraw::Line(int X1, int Y1, int X2, int Y2)
 	const FVector2 Along = Dir * Half;
 	const FColor Color = GetPaletteColor(CurrentColor);
 	const uint32 Base = static_cast<uint32>(LineVertices.size());
-	LineVertices.push_back({ A - Along + Normal, FVector2(0.5f, 0.5f), Color });
-	LineVertices.push_back({ B + Along + Normal, FVector2(0.5f, 0.5f), Color });
-	LineVertices.push_back({ B + Along - Normal, FVector2(0.5f, 0.5f), Color });
-	LineVertices.push_back({ A - Along - Normal, FVector2(0.5f, 0.5f), Color });
-	for (uint32 Index : { 0u, 1u, 2u, 0u, 2u, 3u })
+	LineVertices.push_back({A - Along + Normal, FVector2(0.5f, 0.5f), Color});
+	LineVertices.push_back({B + Along + Normal, FVector2(0.5f, 0.5f), Color});
+	LineVertices.push_back({B + Along - Normal, FVector2(0.5f, 0.5f), Color});
+	LineVertices.push_back({A - Along - Normal, FVector2(0.5f, 0.5f), Color});
+	for (uint32 Index : {0u, 1u, 2u, 0u, 2u, 3u})
 	{
 		LineIndices.push_back(Base + Index);
 	}
@@ -114,7 +135,8 @@ void FMapDraw::FlushLines(FSlateWindowElementList& Out, int32 Layer)
 	{
 		return;
 	}
-	const FPaintGeometry Geometry = FPaintGeometry::Make(FVector2::Zero(), FVector2(static_cast<float>(width), static_cast<float>(height)), 1.0f);
+	const FPaintGeometry Geometry =
+	    FPaintGeometry::Make(FVector2::Zero(), FVector2(static_cast<float>(width), static_cast<float>(height)), 1.0f);
 	Out.AddCustomVerts(Layer, Geometry, nullptr, std::move(LineVertices), std::move(LineIndices));
 	LineVertices.clear();
 	LineIndices.clear();
@@ -125,7 +147,8 @@ FColor FMapDraw::ObjectColor(float Shade) const
 	// Landscapes in Unreal's neutral grey-green, not a color of their own.
 	if (zbufObject && zbufObject->HasLandscape())
 	{
-		const auto Channel = [Shade](float V) { return static_cast<uint8>(FMath::Clamp(V * Shade * 255.0f + 0.5f, 0.0f, 255.0f)); };
+		const TFunction<uint8(float)> Channel = [Shade](float V)
+		{ return static_cast<uint8>(FMath::Clamp(V * Shade * 255.0f + 0.5f, 0.0f, 255.0f)); };
 		return FColor(Channel(0.62f), Channel(0.66f), Channel(0.58f));
 	}
 	// FDraw::ZBufSetup made zbufColor from the object and the side; take the
@@ -142,7 +165,7 @@ void FMapDraw::AddVertex(const FMapVertex& Vertex, const Object* Textured)
 	{
 		FMapTriangleBatch Batch;
 		Batch.LandscapeKey = reinterpret_cast<uint64>(Textured);
-  Batch.Terrain=Textured?Textured->GetLandscapePtr():nullptr;
+		Batch.Terrain = Textured ? Textured->GetLandscapePtr() : nullptr;
 		Batch.FirstVertex = static_cast<uint32>(Triangles.size());
 		Batches.push_back(Batch);
 	}
@@ -181,8 +204,8 @@ void FMapDraw::ZBufTriangle(ZPoint Points[3])
 		}
 		else
 		{
-			Color = FColor(static_cast<uint8>(((zbufColor >> 11) & 31) << 3), static_cast<uint8>(((zbufColor >> 5) & 63) << 2),
-				static_cast<uint8>((zbufColor & 31) << 3));
+			Color = FColor(static_cast<uint8>(((zbufColor >> 11) & 31) << 3),
+			    static_cast<uint8>(((zbufColor >> 5) & 63) << 2), static_cast<uint8>((zbufColor & 31) << 3));
 		}
 	}
 	else
@@ -191,7 +214,7 @@ void FMapDraw::ZBufTriangle(ZPoint Points[3])
 		Color = ObjectColor(bShaded ? FaceShade[Axis] : 0.86f);
 	}
 	const uint32 Packed = PackRGBA(Color);
-	const uint32 Colors[3] = { Packed, Packed, Packed };
+	const uint32 Colors[3] = {Packed, Packed, Packed};
 	PushTriangle(Points, Colors);
 }
 
@@ -211,7 +234,8 @@ void FMapDraw::ZBufColoredTriangle(ZPoint Points[3], const float Shades[3], cons
 	for (int Index = 0; Index < 3; ++Index)
 	{
 		const float Shade = LitShade(Shades[Index]);
-		const auto Channel = [Shade](uint32 V) { return static_cast<uint8>(FMath::Clamp(static_cast<float>(V) * Shade + 0.5f, 0.0f, 255.0f)); };
+		const TFunction<uint8(uint32)> Channel = [Shade](uint32 V)
+		{ return static_cast<uint8>(FMath::Clamp(static_cast<float>(V) * Shade + 0.5f, 0.0f, 255.0f)); };
 		const uint32 C = Colors[Index];
 		Packed[Index] = PackRGBA(FColor(Channel(C & 0xFF), Channel((C >> 8) & 0xFF), Channel((C >> 16) & 0xFF)));
 	}
@@ -252,7 +276,7 @@ void FMapDraw::ZBufInstanceLight(const Vector3d& Light, const Vector3d& Up, floa
 
 bool FMapDraw::ZBufMeshInstance(const std::shared_ptr<const StaticMesh>& Mesh, const Matrix44& ToView)
 {
- return bInstancing && Mesh && Mesh->HasVertexColors() && AppendMeshInstance(InstanceBatches,Mesh,ToView);
+	return bInstancing && Mesh && Mesh->HasVertexColors() && AppendMeshInstance(InstanceBatches, Mesh, ToView);
 }
 
 void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float Q2)
@@ -269,7 +293,7 @@ void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float
 	// A little farther than it is, so faces in its plane cover it.
 	constexpr float Bias = 0.998f;
 	const uint32 Packed = PackRGBA(GetPaletteColor(CurrentColor));
-	const auto Vertex = [Packed](FVector2 P, float Q)
+	const TFunction<FMapVertex(FVector2, float)> Vertex = [Packed](FVector2 P, float Q)
 	{
 		FMapVertex V;
 		V.X = P.X;
@@ -280,8 +304,9 @@ void FMapDraw::DepthLine(float X1, float Y1, float Q1, float X2, float Y2, float
 		V.Color = Packed;
 		return V;
 	};
-	const FMapVertex Corners[4] = { Vertex(A + Normal, Q1), Vertex(B + Normal, Q2), Vertex(B - Normal, Q2), Vertex(A - Normal, Q1) };
-	for (const int32 Index : { 0, 1, 2, 0, 2, 3 })
+	const FMapVertex Corners[4] = {
+	    Vertex(A + Normal, Q1), Vertex(B + Normal, Q2), Vertex(B - Normal, Q2), Vertex(A - Normal, Q1)};
+	for (const int32 Index : {0, 1, 2, 0, 2, 3})
 	{
 		AddVertex(Corners[Index], nullptr);
 	}

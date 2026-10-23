@@ -85,6 +85,6 @@
 
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)AssetCore\AssetCore.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C02}</Project></ProjectReference></ItemGroup>
   <ItemGroup><ProjectReference Include="$(GenesisRuntimeDir)Renderer\Renderer.vcxproj"><Project>{83F172F1-AC93-4D8E-A9BA-282340E17C06}</Project></ProjectReference></ItemGroup>
-  <ItemGroup><ClCompile Include="Private\MapFeaturePanelHost.cpp" /><ClInclude Include="Public\MapFeaturePanelHost.h" /><ClInclude Include="Public\MapFeaturePanelWidgets.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\MapFeaturePanelHost.cpp" /><ClInclude Include="Public\MapFeaturePanelHost.h" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 <ItemGroup><ProjectReference Include="..\EditorFramework\EditorFramework.vcxproj"><Project>{42CE52BA-CEAB-45CF-8B3E-170E89F80122}</Project></ProjectReference></ItemGroup></Project>

@@ -13,8 +13,8 @@ namespace
 	{
 		std::shared_mutex Mutex;
 		// A deque keeps element addresses stable, so views stay valid.
-		std::deque<std::string> Entries{ std::string() };
-		std::unordered_map<std::string_view, uint32> Lookup{ { std::string_view(), 0u } };
+		std::deque<std::string> Entries{std::string()};
+		std::unordered_map<std::string_view, uint32> Lookup{{std::string_view(), 0u}};
 	};
 
 	FNameTable& GetTable()
@@ -22,7 +22,7 @@ namespace
 		static FNameTable Table;
 		return Table;
 	}
-}
+} // namespace
 
 FName::FName(std::string_view Text)
 {
@@ -34,7 +34,8 @@ FName::FName(std::string_view Text)
 	FNameTable& Table = GetTable();
 	{
 		std::shared_lock Lock(Table.Mutex);
-		if (auto It = Table.Lookup.find(Text); It != Table.Lookup.end())
+		if (std::unordered_map<std::string_view, uint32>::const_iterator It = Table.Lookup.find(Text);
+		    It != Table.Lookup.end())
 		{
 			Index = It->second;
 			return;
@@ -42,7 +43,8 @@ FName::FName(std::string_view Text)
 	}
 
 	std::unique_lock Lock(Table.Mutex);
-	if (auto It = Table.Lookup.find(Text); It != Table.Lookup.end())
+	if (std::unordered_map<std::string_view, uint32>::const_iterator It = Table.Lookup.find(Text);
+	    It != Table.Lookup.end())
 	{
 		Index = It->second;
 		return;

@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // FString conversions to and from the Windows ANSI code page.
 
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
 #include "Windows/WindowsPlatform.h"
 
 FString FString::FromAnsi(std::string_view Text)
@@ -38,7 +38,8 @@ std::string FString::ToAnsi() const
 	const std::wstring Wide = ToWide();
 	if (Wide.empty())
 		return std::string();
-	const int Length = WideCharToMultiByte(CP_ACP, 0, Wide.data(), static_cast<int>(Wide.size()), nullptr, 0, nullptr, nullptr);
+	const int Length =
+	    WideCharToMultiByte(CP_ACP, 0, Wide.data(), static_cast<int>(Wide.size()), nullptr, 0, nullptr, nullptr);
 	std::string Result(static_cast<size_t>(Length), '\0');
 	WideCharToMultiByte(CP_ACP, 0, Wide.data(), static_cast<int>(Wide.size()), Result.data(), Length, nullptr, nullptr);
 	return Result;

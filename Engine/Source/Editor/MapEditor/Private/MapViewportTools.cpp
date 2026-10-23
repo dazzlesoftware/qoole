@@ -4,6 +4,8 @@
 // clip and brush editing. Select and move are in MapViewportClient.cpp.
 
 #include "MapViewportClient.h"
+#include "Containers/ContainerAliases.h"
+#include "Internationalization/TextLocalization.h"
 
 #include "MapDraw.h"
 #include "MapEditorPrivate.h"
@@ -16,13 +18,20 @@ const char* ToString(EMapTool Tool)
 {
 	switch (Tool)
 	{
-	case EMapTool::Select: return "Select";
-	case EMapTool::Rotate: return "Rotate";
-	case EMapTool::Scale: return "Scale";
-	case EMapTool::Clip: return "Clip";
-	case EMapTool::Vertex: return "Vertices";
-	case EMapTool::Edge: return "Edges";
-	case EMapTool::Face: return "Faces";
+	case EMapTool::Select:
+		return "Select";
+	case EMapTool::Rotate:
+		return "Rotate";
+	case EMapTool::Scale:
+		return "Scale";
+	case EMapTool::Clip:
+		return "Clip";
+	case EMapTool::Vertex:
+		return "Vertices";
+	case EMapTool::Edge:
+		return "Edges";
+	case EMapTool::Face:
+		return "Faces";
 	}
 	return "?";
 }
@@ -40,17 +49,27 @@ namespace
 
 	void SetComponent(Vector3d& V, int32 Axis, float Value)
 	{
-		if (Axis == 0) V.SetX(Value);
-		else if (Axis == 1) V.SetY(Value);
-		else V.SetZ(Value);
+		if (Axis == 0)
+			V.SetX(Value);
+		else if (Axis == 1)
+			V.SetY(Value);
+		else
+			V.SetZ(Value);
 	}
 
 	int32 Dominant(const Vector3d& V, float& OutSign)
 	{
 		int32 Axis = 0;
 		float Best = FMath::Abs(V.GetX());
-		if (FMath::Abs(V.GetY()) > Best) { Axis = 1; Best = FMath::Abs(V.GetY()); }
-		if (FMath::Abs(V.GetZ()) > Best) { Axis = 2; }
+		if (FMath::Abs(V.GetY()) > Best)
+		{
+			Axis = 1;
+			Best = FMath::Abs(V.GetY());
+		}
+		if (FMath::Abs(V.GetZ()) > Best)
+		{
+			Axis = 2;
+		}
 		OutSign = Component(V, Axis) < 0.0f ? -1.0f : 1.0f;
 		return Axis;
 	}
@@ -59,7 +78,7 @@ namespace
 	// for a positive angle, per axis; measured once.
 	struct FRotationSigns
 	{
-		float Sign[3] = { 1.0f, 1.0f, 1.0f };
+		float Sign[3] = {1.0f, 1.0f, 1.0f};
 		FRotationSigns()
 		{
 			Matrix44 M;
@@ -83,9 +102,10 @@ namespace
 		// Counterclockwise on screen (y grows downwards), in degrees.
 		return RAD2DEG(std::atan2(-(To.Y - From.Y), To.X - From.X));
 	}
-}
+} // namespace
 
-void FMapViewportClient::GetViewAxes(int32& OutRight, float& OutRightSign, int32& OutUp, float& OutUpSign, int32& OutDepth) const
+void FMapViewportClient::GetViewAxes(
+    int32& OutRight, float& OutRightSign, int32& OutUp, float& OutUpSign, int32& OutDepth) const
 {
 	OutRight = Dominant(ViewToScope(Vector3d(1.0f, 0.0f, 0.0f)), OutRightSign);
 	OutUp = Dominant(ViewToScope(Vector3d(0.0f, 0.0f, 1.0f)), OutUpSign);
@@ -111,10 +131,18 @@ void FMapViewportClient::UpdateDotDisplay()
 	const bool bBrush = !IsPerspective() && GetSingleBrush() != nullptr;
 	switch (bBrush ? Settings.Tool : EMapTool::Select)
 	{
-	case EMapTool::Vertex: MapView->DisplayVertexPts(); break;
-	case EMapTool::Edge: MapView->DisplayEdgePts(); break;
-	case EMapTool::Face: MapView->DisplayFacePts(); break;
-	default: MapView->DisplayNoPts(); break;
+	case EMapTool::Vertex:
+		MapView->DisplayVertexPts();
+		break;
+	case EMapTool::Edge:
+		MapView->DisplayEdgePts();
+		break;
+	case EMapTool::Face:
+		MapView->DisplayFacePts();
+		break;
+	default:
+		MapView->DisplayNoPts();
+		break;
 	}
 }
 
@@ -190,7 +218,9 @@ bool FMapViewportClient::BeginToolDrag(FVector2 Local, const FPointerEvent& Even
 			Pivot = Center;
 			for (int32 Axis = 0; Axis < 3; ++Axis)
 			{
-				SetComponent(Pivot, Axis, Component(StartPoint, Axis) >= Component(Center, Axis) ? Component(Min, Axis) : Component(Max, Axis));
+				SetComponent(Pivot, Axis,
+				    Component(StartPoint, Axis) >= Component(Center, Axis) ? Component(Min, Axis)
+				                                                           : Component(Max, Axis));
 			}
 			ScaleApplied.NewVector(1.0f, 1.0f, 1.0f);
 			Document->BeginTransaction("Scale");
@@ -214,7 +244,7 @@ bool FMapViewportClient::BeginToolDrag(FVector2 Local, const FPointerEvent& Even
 			return false;
 		}
 		Drag = EDrag::BrushEdit;
-		static const char* const Names[] = { "", "Move Vertex", "Move Edge", "Move Face" };
+		static const char* const Names[] = {"", "Move Vertex", "Move Edge", "Move Face"};
 		Document->BeginBrushEdit(*Brush, Names[static_cast<int32>(GrabbedDot)]);
 		MoveApplied.NewVector(0.0f, 0.0f, 0.0f);
 		UpdateToolDrag(Local, Event);
@@ -244,8 +274,10 @@ void FMapViewportClient::UpdateToolDrag(FVector2 Local, const FPointerEvent& Eve
 			return;
 		}
 		float Angle = ScreenAngle(PivotLocal, Local) - ScreenAngle(PivotLocal, DragStart);
-		while (Angle > 180.0f) Angle -= 360.0f;
-		while (Angle < -180.0f) Angle += 360.0f;
+		while (Angle > 180.0f)
+			Angle -= 360.0f;
+		while (Angle < -180.0f)
+			Angle += 360.0f;
 		if (bSnap && Settings.GetRotateSnap() > 0.0f)
 		{
 			Angle = std::round(Angle / Settings.GetRotateSnap()) * Settings.GetRotateSnap();
@@ -297,19 +329,21 @@ void FMapViewportClient::UpdateToolDrag(FVector2 Local, const FPointerEvent& Eve
 				const float StartSize = Component(ScaleStartSize, Axis);
 				if (StartSize > 0.01f && Component(Wanted, Axis) != 1.0f)
 				{
-					const float Snapped = FMath::Max(Grid, std::round(StartSize * Component(Wanted, Axis) / Grid) * Grid);
+					const float Snapped =
+					    FMath::Max(Grid, std::round(StartSize * Component(Wanted, Axis) / Grid) * Grid);
 					SetComponent(Wanted, Axis, Snapped / StartSize);
 				}
 			}
 		}
-		const Vector3d Ratio(Wanted.GetX() / ScaleApplied.GetX(), Wanted.GetY() / ScaleApplied.GetY(), Wanted.GetZ() / ScaleApplied.GetZ());
+		const Vector3d Ratio(Wanted.GetX() / ScaleApplied.GetX(), Wanted.GetY() / ScaleApplied.GetY(),
+		    Wanted.GetZ() / ScaleApplied.GetZ());
 		if (!(Ratio == Vector3d(1.0f, 1.0f, 1.0f)))
 		{
 			Document->ScaleObjects(MovedObjects, Ratio, Pivot);
 			ScaleApplied = Wanted;
 		}
 		Message(FString::Format("Scale {:.0f} x {:.0f}", Component(ScaleStartSize, Right) * Component(Wanted, Right),
-			Component(ScaleStartSize, Up) * Component(Wanted, Up)));
+		    Component(ScaleStartSize, Up) * Component(Wanted, Up)));
 		break;
 	}
 	case EDrag::ClipLine:
@@ -318,7 +352,7 @@ void FMapViewportClient::UpdateToolDrag(FVector2 Local, const FPointerEvent& Eve
 		ScreenToMap(Local, ClipB);
 		if (bSnap)
 		{
-			for (const int32 Axis : { Right, Up })
+			for (const int32 Axis : {Right, Up})
 			{
 				SetComponent(ClipA, Axis, std::round(Component(ClipA, Axis) / Grid) * Grid);
 				SetComponent(ClipB, Axis, std::round(Component(ClipB, Axis) / Grid) * Grid);
@@ -334,7 +368,7 @@ void FMapViewportClient::UpdateToolDrag(FVector2 Local, const FPointerEvent& Eve
 		SetComponent(Wanted, Depth, 0.0f);
 		if (bSnap)
 		{
-			for (const int32 Axis : { Right, Up })
+			for (const int32 Axis : {Right, Up})
 			{
 				SetComponent(Wanted, Axis, std::round(Component(Wanted, Axis) / Grid) * Grid);
 			}
@@ -345,10 +379,17 @@ void FMapViewportClient::UpdateToolDrag(FVector2 Local, const FPointerEvent& Eve
 		{
 			switch (GrabbedDot)
 			{
-			case EDot::Vertex: Document->MoveBrushVertex(GrabbedVertex, Step); break;
-			case EDot::Edge: Document->MoveBrushEdge(*GrabbedEdge, Step); break;
-			case EDot::Face: Document->MoveBrushFace(*GrabbedFace, Step); break;
-			default: break;
+			case EDot::Vertex:
+				Document->MoveBrushVertex(GrabbedVertex, Step);
+				break;
+			case EDot::Edge:
+				Document->MoveBrushEdge(*GrabbedEdge, Step);
+				break;
+			case EDot::Face:
+				Document->MoveBrushFace(*GrabbedFace, Step);
+				break;
+			default:
+				break;
 			}
 			MoveApplied = Wanted;
 		}
@@ -461,7 +502,7 @@ FReply FMapViewportClient::ToolKeyDown(const FKeyEvent& Event)
 
 void FMapViewportClient::DrawTools(FMapDraw& Draw)
 {
-	const auto ToPixels = [this](const Vector3d& Point, int& OutX, int& OutY)
+	const TFunction<bool(const Vector3d&, int&, int&)> ToPixels = [this](const Vector3d& Point, int& OutX, int& OutY)
 	{
 		FVector2 Local;
 		if (!MapToScreen(Point, Local))
@@ -531,7 +572,8 @@ FString FMapViewportClient::GetToolHint() const
 	case EMapTool::Vertex:
 	case EMapTool::Edge:
 	case EMapTool::Face:
-		return GetSingleBrush() ? FString(ToString(Settings.Tool)) : FString::Format("{}: select one brush", ToString(Settings.Tool));
+		return GetSingleBrush() ? FString(ToString(Settings.Tool))
+		                        : FTextLocalization::Format("{}: select one brush", ToString(Settings.Tool));
 	default:
 		return FString(ToString(Settings.Tool));
 	}

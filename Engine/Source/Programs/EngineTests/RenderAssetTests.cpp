@@ -1,5 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "TestHelpers.h"
+#include "Templates/SharedPointer.h"
 #include "Assets/RenderAssets.h"
 #include "Geometry/StaticMesh.h"
 #undef Min
@@ -11,17 +12,17 @@ TEST_SUITE("RenderAssets")
 	TEST_CASE("Native meshes round trip topology normals UVs colors and material references")
 	{
 		FString Error;
-		auto Names = StaticMesh::GetBasicShapeNames();
-		for (const auto& Name : StaticMesh::GetFoliageMeshNames())
+		std::vector<std::string> Names = StaticMesh::GetBasicShapeNames();
+		for (const std::basic_string<char>& Name : StaticMesh::GetFoliageMeshNames())
 			Names.push_back(Name);
-		for (const auto& Name : StaticMesh::GetSplineMeshNames())
+		for (const std::basic_string<char>& Name : StaticMesh::GetSplineMeshNames())
 			Names.push_back(Name);
-		for (const auto& Name : Names)
+		for (const std::basic_string<char>& Name : Names)
 		{
 			FStaticMeshAsset Source{StaticMesh::Find(Name.c_str()), {FAssetId::New(), "/Game/Materials/Surface"}};
 			FAssetPackage P;
 			P.Id = FAssetId::New();
-			const auto Id = P.Id;
+			const FString Id = P.Id;
 			REQUIRE_MESSAGE(FRenderAssetCodec::EncodeMesh(Source, P, Error), Name, " ", *Error);
 			CHECK(P.Id == Id);
 			CHECK(P.Dependencies.size() == 1);
@@ -35,7 +36,7 @@ TEST_SUITE("RenderAssets")
 				CHECK(Back.Mesh->GetVertex(I) == Source.Mesh->GetVertex(I));
 			CHECK(Back.Mesh->GetVertexColors() == Source.Mesh->GetVertexColors());
 		}
-		auto Custom = std::make_shared<StaticMesh>("Custom");
+		TSharedPtr<StaticMesh> Custom = std::make_shared<StaticMesh>("Custom");
 		Custom->AddVertex(Vector3d());
 		Custom->AddVertex(Vector3d(1, 0, 0));
 		Custom->AddVertex(Vector3d(0, 1, 0));
@@ -63,14 +64,14 @@ TEST_SUITE("RenderAssets")
 		REQUIRE(FRenderAssetCodec::DecodeTexture(P, Back, Error));
 		CHECK(Back.Pixels == Texture.Pixels);
 		CHECK_FALSE(Back.bSRGB);
-		auto Broken = P;
+		FAssetPackage Broken = P;
 		Broken.Exports["Width"] = 8193;
 		CHECK_FALSE(FRenderAssetCodec::DecodeTexture(Broken, Back, Error));
 		CHECK(Back.Pixels == Texture.Pixels);
 		Broken = P;
 		Broken.Bulk.pop_back();
 		CHECK_FALSE(FRenderAssetCodec::DecodeTexture(Broken, Back, Error));
-		const auto Before = P;
+		const FAssetPackage Before = P;
 		Texture.Width = 0;
 		CHECK_FALSE(FRenderAssetCodec::EncodeTexture(Texture, P, Error));
 		CHECK(P.Exports == Before.Exports);
@@ -88,12 +89,12 @@ TEST_SUITE("RenderAssets")
 		CHECK(Mat.BaseColorTexture.Id == M.BaseColorTexture.Id);
 		CHECK(P.SchemaVersion == 3);
 		CHECK(Mat.NormalTexture.Id == M.NormalTexture.Id);
-		auto Old = P;
+		FAssetPackage Old = P;
 		Old.SchemaVersion = 1;
 		FMaterialAsset Legacy;
 		REQUIRE(FRenderAssetCodec::DecodeMaterial(Old, Legacy, Error));
 		CHECK(Legacy.NormalTexture.IsNull());
-		auto InvalidNormal = P;
+		FAssetPackage InvalidNormal = P;
 		InvalidNormal.Exports["NormalTexture"]["Id"] = "invalid";
 		CHECK_FALSE(FRenderAssetCodec::DecodeMaterial(InvalidNormal, Mat, Error));
 		M.Roughness = std::numeric_limits<float>::quiet_NaN();
@@ -108,7 +109,7 @@ TEST_SUITE("RenderAssets")
 		FAssetPackage P;
 		REQUIRE(FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Cube"), {}}, P, Error));
 		FStaticMeshAsset Out;
-		auto Bad = P;
+		FAssetPackage Bad = P;
 		Bad.Bulk.pop_back();
 		CHECK_FALSE(FRenderAssetCodec::DecodeMesh(Bad, Out, Error));
 		Bad = P;
@@ -135,7 +136,8 @@ TEST_CASE("Material blend modes round trip and older packages remain opaque" * d
 	FString Error;
 	FAssetPackage Package;
 	FMaterialAsset Source, Back;
-	for (auto Mode : {EMaterialBlendMode::Opaque, EMaterialBlendMode::Masked, EMaterialBlendMode::Translucent})
+	for (EMaterialBlendMode Mode :
+	    {EMaterialBlendMode::Opaque, EMaterialBlendMode::Masked, EMaterialBlendMode::Translucent})
 	{
 		Source.BlendMode = Mode;
 		Source.OpacityMaskClip = 0.61f;
@@ -149,24 +151,24 @@ TEST_CASE("Material blend modes round trip and older packages remain opaque" * d
 	}
 	for (int Version : {1, 2})
 	{
-		auto Old = Package;
+		FAssetPackage Old = Package;
 		Old.SchemaVersion = Version;
 		REQUIRE(FRenderAssetCodec::DecodeMaterial(Old, Back, Error));
 		CHECK(Back.BlendMode == EMaterialBlendMode::Opaque);
 	}
 	for (FJsonValue Bad : {FJsonValue(-1), FJsonValue(3), FJsonValue(0.5), FJsonValue("Masked"), FJsonValue()})
 	{
-		auto Corrupt = Package;
+		FAssetPackage Corrupt = Package;
 		Corrupt.Exports["BlendMode"] = Bad;
 		Back.Roughness = 0.77f;
 		CHECK_FALSE(FRenderAssetCodec::DecodeMaterial(Corrupt, Back, Error));
 		CHECK(Back.Roughness == doctest::Approx(0.77));
 	}
-	auto Corrupt = Package;
+	FAssetPackage Corrupt = Package;
 	Corrupt.Exports["OpacityMaskClip"] = 1.1f;
 	CHECK_FALSE(FRenderAssetCodec::DecodeMaterial(Corrupt, Back, Error));
 	Source.BlendMode = static_cast<EMaterialBlendMode>(9);
-	auto Original = Package.Exports.ToString();
+	FString Original = Package.Exports.ToString();
 	CHECK_FALSE(FRenderAssetCodec::EncodeMaterial(Source, Package, Error));
 	CHECK(Package.Exports.ToString() == Original);
 }
@@ -174,7 +176,7 @@ TEST_CASE("Material blend modes round trip and older packages remain opaque" * d
 TEST_CASE("Mesh material slots validate and version one meshes retain slot zero" * doctest::test_suite("RenderAssets"))
 {
 	FString Error;
-	auto Mesh = std::make_shared<StaticMesh>("Two slots");
+	TSharedPtr<StaticMesh> Mesh = std::make_shared<StaticMesh>("Two slots");
 	Mesh->AddVertex(Vector3d());
 	Mesh->AddVertex(Vector3d(1, 0, 0));
 	Mesh->AddVertex(Vector3d(0, 1, 0));
@@ -192,9 +194,9 @@ TEST_CASE("Mesh material slots validate and version one meshes retain slot zero"
 	CHECK(Back.GetNumMaterials() == 2);
 	CHECK(Back.Mesh->GetTriangles()[1].MaterialSlot == 1);
 	CHECK(Back.GetMaterial(1).Id == Source.GetMaterial(1).Id);
-	auto Broken = Package;
+	FAssetPackage Broken = Package;
 	Broken.Bulk[36 + 72] = 2;
-	const auto Original = Back.Mesh;
+	const std::shared_ptr<const StaticMesh> Original = Back.Mesh;
 	CHECK_FALSE(FRenderAssetCodec::DecodeMesh(Broken, Back, Error));
 	CHECK(Back.Mesh == Original);
 	Broken = Package;
@@ -205,17 +207,47 @@ TEST_CASE("Mesh material slots validate and version one meshes retain slot zero"
 	Source.AdditionalMaterials.clear();
 	CHECK_FALSE(FRenderAssetCodec::EncodeMesh(Source, Broken, Error));
 	// Build an actual legacy 72-byte triangle stream from the current geometry.
-	auto Legacy = Package;
+	FAssetPackage Legacy = Package;
 	Legacy.SchemaVersion = 1;
 	Legacy.Exports["Material"] = Source.Material.ToJson();
 	Legacy.Exports["MaterialSlotNames"] = FJsonValue();
 	Legacy.Bulk.clear();
 	Legacy.Bulk.insert(Legacy.Bulk.end(), Package.Bulk.begin(), Package.Bulk.begin() + 36);
 	for (int I = 0; I < 2; ++I)
-		Legacy.Bulk.insert(Legacy.Bulk.end(), Package.Bulk.begin() + 36 + I * 76,
-						   Package.Bulk.begin() + 36 + I * 76 + 72);
+		Legacy.Bulk.insert(
+		    Legacy.Bulk.end(), Package.Bulk.begin() + 36 + I * 76, Package.Bulk.begin() + 36 + I * 76 + 72);
 	REQUIRE(FRenderAssetCodec::DecodeMesh(Legacy, Back, Error));
 	CHECK(Back.GetNumMaterials() == 1);
-	for (const auto& T : Back.Mesh->GetTriangles())
+	for (const StaticMesh::Triangle& T : Back.Mesh->GetTriangles())
 		CHECK(T.MaterialSlot == 0);
+}
+
+TEST_CASE("Nested asset reader failures preserve outputs and recover on the next valid operation" *
+    doctest::test_suite("RenderAssets"))
+{
+	FString Error;
+	FAssetPackage Valid;
+	REQUIRE(FRenderAssetCodec::EncodeMesh({StaticMesh::Find("Cube"), {}}, Valid, Error));
+	FStaticMeshAsset Output;
+	REQUIRE(FRenderAssetCodec::DecodeMesh(Valid, Output, Error));
+	const std::shared_ptr<const StaticMesh> Original = Output.Mesh;
+	for (const char* Field : {"Vertices", "Triangles", "Edges"})
+	{
+		FAssetPackage Bad = Valid;
+		Bad.Exports[Field] = "invalid";
+		CHECK_FALSE(FRenderAssetCodec::DecodeMesh(Bad, Output, Error));
+		CHECK_FALSE(Error.IsEmpty());
+		CHECK(Output.Mesh == Original);
+		REQUIRE(FRenderAssetCodec::DecodeMesh(Valid, Output, Error));
+		CHECK(Error.IsEmpty());
+		Output.Mesh = Original;
+	}
+	FMaterialAsset Material;
+	Material.BaseColorTexture = {"invalid", "/Game/Textures/Test"};
+	const FAssetPackage Previous = Valid;
+	CHECK_FALSE(FRenderAssetCodec::EncodeMaterial(Material, Valid, Error));
+	CHECK_FALSE(Error.IsEmpty());
+	CHECK(Valid.Exports == Previous.Exports);
+	CHECK(Valid.Bulk == Previous.Bulk);
+	CHECK(Valid.Dependencies == Previous.Dependencies);
 }

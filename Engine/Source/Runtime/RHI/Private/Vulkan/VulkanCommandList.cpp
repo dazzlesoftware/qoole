@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Vulkan/VulkanRHI.h"
+#include "Containers/ContainerAliases.h"
 
 #include <cstring>
 
@@ -49,8 +50,10 @@ void FVulkanCommandList::BeginRenderPass(FRHISwapChain& InTarget, const TOptiona
 
 	// The first pass into this frame's image discards the old contents; later
 	// passes load what the earlier ones drew.
-	const VkImageLayout InitialLayout = Target.bRenderedThisFrame ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
-	const VkRenderPass RenderPass = Device.GetRenderPass(Target.GetVkFormat(), ClearColor.has_value(), InitialLayout, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	const VkImageLayout InitialLayout =
+	    Target.bRenderedThisFrame ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
+	const VkRenderPass RenderPass = Device.GetRenderPass(
+	    Target.GetVkFormat(), ClearColor.has_value(), InitialLayout, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	Target.bRenderedThisFrame = true;
 	const VkExtent2D Extent = Target.GetExtent();
 	BeginPass(RenderPass, Target.GetCurrentFramebuffer(), Extent.width, Extent.height, ClearColor);
@@ -67,7 +70,7 @@ void FVulkanCommandList::BeginRenderPass(FRHITexture& InTarget, const TOptional<
 		return;
 	}
 	const VkRenderPass RenderPass = Device.GetRenderPass(Target.GetVkFormat(), ClearColor.has_value(),
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	const VkFramebuffer Framebuffer = Target.GetFramebuffer(RenderPass);
 	if (!RenderPass || !Framebuffer)
 	{
@@ -77,21 +80,23 @@ void FVulkanCommandList::BeginRenderPass(FRHITexture& InTarget, const TOptional<
 	BeginPass(RenderPass, Framebuffer, Target.GetWidth(), Target.GetHeight(), ClearColor);
 }
 
-void FVulkanCommandList::BeginRenderPass(FRHITexture& InTarget, FRHITexture& InDepthTarget, const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth)
+void FVulkanCommandList::BeginRenderPass(FRHITexture& InTarget, FRHITexture& InDepthTarget,
+    const TOptional<FLinearColor>& ClearColor, const TOptional<float>& ClearDepth)
 {
 	check(CommandBuffer && !bInRenderPass);
 	FVulkanTexture& Target = static_cast<FVulkanTexture&>(InTarget);
 	FVulkanTexture& Depth = static_cast<FVulkanTexture&>(InDepthTarget);
 	bInRenderPass = true;
-	if (!ensuref(Target.GetDesc().bRenderTarget && IsDepthFormat(Depth.GetFormat())
-		&& Depth.GetWidth() == Target.GetWidth() && Depth.GetHeight() == Target.GetHeight(),
-		"Vulkan: BeginRenderPass needs a render target and a depth buffer of the same size"))
+	if (!ensuref(Target.GetDesc().bRenderTarget && IsDepthFormat(Depth.GetFormat()) &&
+	            Depth.GetWidth() == Target.GetWidth() && Depth.GetHeight() == Target.GetHeight(),
+	        "Vulkan: BeginRenderPass needs a render target and a depth buffer of the same size"))
 	{
 		bSkipPass = true;
 		return;
 	}
-	const VkRenderPass RenderPass = Device.GetRenderPass(Target.GetVkFormat(), ClearColor.has_value(),
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, Depth.GetVkFormat(), ClearDepth.has_value());
+	const VkRenderPass RenderPass =
+	    Device.GetRenderPass(Target.GetVkFormat(), ClearColor.has_value(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+	        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, Depth.GetVkFormat(), ClearDepth.has_value());
 	const VkFramebuffer Framebuffer = Target.GetFramebuffer(RenderPass, &Depth);
 	if (!RenderPass || !Framebuffer)
 	{
@@ -101,8 +106,8 @@ void FVulkanCommandList::BeginRenderPass(FRHITexture& InTarget, FRHITexture& InD
 	BeginPass(RenderPass, Framebuffer, Target.GetWidth(), Target.GetHeight(), ClearColor, true, ClearDepth);
 }
 
-void FVulkanCommandList::BeginPass(VkRenderPass RenderPass, VkFramebuffer Framebuffer, uint32 Width, uint32 Height, const TOptional<FLinearColor>& ClearColor,
-	bool bHasDepth, const TOptional<float>& ClearDepth)
+void FVulkanCommandList::BeginPass(VkRenderPass RenderPass, VkFramebuffer Framebuffer, uint32 Width, uint32 Height,
+    const TOptional<FLinearColor>& ClearColor, bool bHasDepth, const TOptional<float>& ClearDepth)
 {
 	// Clear values are indexed by attachment; unused ones are ignored.
 	VkClearValue ClearValues[2] = {};
@@ -115,10 +120,10 @@ void FVulkanCommandList::BeginPass(VkRenderPass RenderPass, VkFramebuffer Frameb
 	}
 	ClearValues[1].depthStencil.depth = ClearDepth.value_or(1.0f);
 	const uint32 ClearCount = bHasDepth && ClearDepth ? 2u : (ClearColor ? 1u : 0u);
-	VkRenderPassBeginInfo BeginInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+	VkRenderPassBeginInfo BeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
 	BeginInfo.renderPass = RenderPass;
 	BeginInfo.framebuffer = Framebuffer;
-	BeginInfo.renderArea = { { 0, 0 }, { Width, Height } };
+	BeginInfo.renderArea = {{0, 0}, {Width, Height}};
 	BeginInfo.clearValueCount = ClearCount;
 	BeginInfo.pClearValues = ClearCount ? ClearValues : nullptr;
 	vkCmdBeginRenderPass(CommandBuffer, &BeginInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -168,7 +173,7 @@ void FVulkanCommandList::SetScissor(const FIntRect& Rect)
 	const int32 Top = std::clamp(Rect.Top, 0, PassSize.Y);
 	const int32 Right = std::clamp(Rect.Right, Left, PassSize.X);
 	const int32 Bottom = std::clamp(Rect.Bottom, Top, PassSize.Y);
-	VkRect2D Scissor{ { Left, Top }, { static_cast<uint32>(Right - Left), static_cast<uint32>(Bottom - Top) } };
+	VkRect2D Scissor{{Left, Top}, {static_cast<uint32>(Right - Left), static_cast<uint32>(Bottom - Top)}};
 	vkCmdSetScissor(CommandBuffer, 0, 1, &Scissor);
 }
 
@@ -181,7 +186,11 @@ void FVulkanCommandList::SetPipeline(FRHIGraphicsPipeline& InPipeline)
 	}
 	// Layouts with other samplers or texture counts are not compatible, so
 	// switching rebinds the textures; push constants are re-pushed too.
-	const auto LayoutKey = [](const FRHIGraphicsPipelineDesc& Desc) { return GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress) | (Desc.NumTextures << 8) | (Desc.bUniformBuffer ? 1u << 16 : 0); };
+	const TFunction<unsigned int(const FRHIGraphicsPipelineDesc&)> LayoutKey = [](const FRHIGraphicsPipelineDesc& Desc)
+	{
+		return GetSamplerIndex(Desc.SamplerFilter, Desc.SamplerAddress) | (Desc.NumTextures << 8) |
+		    (Desc.bUniformBuffer ? 1u << 16 : 0);
+	};
 	if (!Pipeline || LayoutKey(Pipeline->GetDesc()) != LayoutKey(NewPipeline->GetDesc()))
 	{
 		bDescriptorDirty = true;
@@ -193,7 +202,8 @@ void FVulkanCommandList::SetPipeline(FRHIGraphicsPipeline& InPipeline)
 
 void FVulkanCommandList::SetPushConstants(const void* Data, uint32 Size)
 {
-	if (!ensuref(Size <= FVulkanDevice::MaxPushConstantSize && Size % 4 == 0, "Vulkan: push constants must be a multiple of 4 bytes, at most 64"))
+	if (!ensuref(Size <= FVulkanDevice::MaxPushConstantSize && Size % 4 == 0,
+	        "Vulkan: push constants must be a multiple of 4 bytes, at most 64"))
 	{
 		return;
 	}
@@ -203,9 +213,13 @@ void FVulkanCommandList::SetPushConstants(const void* Data, uint32 Size)
 
 void FVulkanCommandList::SetUniformBuffer(FRHIBuffer& Buffer)
 {
-    check(Buffer.GetDesc().Usage==EBufferUsage::Uniform);
-    auto* NewBuffer=&static_cast<FVulkanBuffer&>(Buffer);
-    if(UniformBuffer!=NewBuffer){UniformBuffer=NewBuffer;bDescriptorDirty=true;}
+	check(Buffer.GetDesc().Usage == EBufferUsage::Uniform);
+	FVulkanBuffer* NewBuffer = &static_cast<FVulkanBuffer&>(Buffer);
+	if (UniformBuffer != NewBuffer)
+	{
+		UniformBuffer = NewBuffer;
+		bDescriptorDirty = true;
+	}
 }
 
 void FVulkanCommandList::SetTexture(FRHITexture& InTexture, uint32 Slot)
@@ -233,7 +247,7 @@ void FVulkanCommandList::SetVertexBuffer(FRHIBuffer& Buffer, uint64 Offset, uint
 void FVulkanCommandList::SetIndexBuffer(FRHIBuffer& Buffer, uint64 Offset, EIndexFormat Format)
 {
 	vkCmdBindIndexBuffer(CommandBuffer, static_cast<FVulkanBuffer&>(Buffer).GetHandle(), Offset,
-		Format == EIndexFormat::UInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+	    Format == EIndexFormat::UInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 }
 
 void FVulkanCommandList::DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32 BaseVertex)
@@ -241,7 +255,8 @@ void FVulkanCommandList::DrawIndexed(uint32 IndexCount, uint32 FirstIndex, int32
 	DrawIndexedInstanced(IndexCount, 1, FirstIndex, BaseVertex, 0);
 }
 
-void FVulkanCommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance)
+void FVulkanCommandList::DrawIndexedInstanced(
+    uint32 IndexCount, uint32 InstanceCount, uint32 FirstIndex, int32 BaseVertex, uint32 FirstInstance)
 {
 	if (bSkipPass || IndexCount == 0 || InstanceCount == 0)
 	{
@@ -259,7 +274,7 @@ void FVulkanCommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 Instance
 	if (bDescriptorDirty)
 	{
 		// A set per slot; slots left empty read the white texture.
-		VkDescriptorSet Sets[MaxTextures+1];
+		VkDescriptorSet Sets[MaxTextures + 1];
 		for (uint32 Slot = 0; Slot < NumTextures; ++Slot)
 		{
 			FVulkanTexture& Bound = Textures[Slot] ? *Textures[Slot] : Device.GetWhiteTexture();
@@ -269,18 +284,22 @@ void FVulkanCommandList::DrawIndexedInstanced(uint32 IndexCount, uint32 Instance
 				return;
 			}
 		}
-        if(Desc.bUniformBuffer){
-            if(!ensuref(UniformBuffer && UniformBuffer->GetUniformSet(),"Pipeline requires a uniform buffer"))return;
-            Sets[NumTextures]=UniformBuffer->GetUniformSet();
-        }
-		vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Layout, 0, NumTextures+(Desc.bUniformBuffer?1:0), Sets, 0, nullptr);
+		if (Desc.bUniformBuffer)
+		{
+			if (!ensuref(UniformBuffer && UniformBuffer->GetUniformSet(), "Pipeline requires a uniform buffer"))
+				return;
+			Sets[NumTextures] = UniformBuffer->GetUniformSet();
+		}
+		vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Layout, 0,
+		    NumTextures + (Desc.bUniformBuffer ? 1 : 0), Sets, 0, nullptr);
 		bDescriptorDirty = false;
 	}
 	if (bPushConstantsDirty)
 	{
 		// Always the whole range (the unused tail keeps older bytes) so no part
 		// of the layout's 64-byte range is ever undefined.
-		vkCmdPushConstants(CommandBuffer, Layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, FVulkanDevice::MaxPushConstantSize, PushConstantData);
+		vkCmdPushConstants(CommandBuffer, Layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+		    FVulkanDevice::MaxPushConstantSize, PushConstantData);
 		bPushConstantsDirty = false;
 	}
 	vkCmdDrawIndexed(CommandBuffer, IndexCount, InstanceCount, FirstIndex, BaseVertex, FirstInstance);

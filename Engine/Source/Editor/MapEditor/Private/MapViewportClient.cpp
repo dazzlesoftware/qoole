@@ -1,6 +1,9 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "MapViewportClient.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
+#include "Internationalization/TextLocalization.h"
 
 #include "MapDraw.h"
 
@@ -9,7 +12,6 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontCache.h"
 #include "Styling/SlateStyle.h"
-
 
 #include <algorithm>
 #include <cmath>
@@ -21,14 +23,22 @@ const char* ToString(EMapViewType Type)
 {
 	switch (Type)
 	{
-	case EMapViewType::Top: return "Top";
-	case EMapViewType::Front: return "Front";
-	case EMapViewType::Right: return "Right";
-	case EMapViewType::Perspective: return "Perspective";
-	case EMapViewType::Bottom: return "Bottom";
-	case EMapViewType::Back: return "Back";
-	case EMapViewType::Left: return "Left";
-	case EMapViewType::Count: break;
+	case EMapViewType::Top:
+		return "Top";
+	case EMapViewType::Front:
+		return "Front";
+	case EMapViewType::Right:
+		return "Right";
+	case EMapViewType::Perspective:
+		return "Perspective";
+	case EMapViewType::Bottom:
+		return "Bottom";
+	case EMapViewType::Back:
+		return "Back";
+	case EMapViewType::Left:
+		return "Left";
+	case EMapViewType::Count:
+		break;
 	}
 	return "?";
 }
@@ -49,9 +59,12 @@ const char* ToString(EMapViewMode Mode)
 {
 	switch (Mode)
 	{
-	case EMapViewMode::Wireframe: return "Wireframe";
-	case EMapViewMode::Unlit: return "Unlit";
-	case EMapViewMode::Lit: return "Lit";
+	case EMapViewMode::Wireframe:
+		return "Wireframe";
+	case EMapViewMode::Unlit:
+		return "Unlit";
+	case EMapViewMode::Lit:
+		return "Lit";
 	}
 	return "?";
 }
@@ -64,14 +77,14 @@ namespace
 	constexpr float ClipDepth2D = 65536.0f;
 	constexpr float ClipDepth3D = 65536.0f;
 	constexpr float DropDepth3D = 4096.0f; // the ground counts for drops this near
-	constexpr float DragThreshold = 4.0f; // logical pixels before a press becomes a drag
+	constexpr float DragThreshold = 4.0f;  // logical pixels before a press becomes a drag
 	constexpr float MinZoom = 0.02f;
 	constexpr float MaxZoom = 16.0f;
-	constexpr float LookSpeed = 0.0035f;  // radians per raw mouse count
-	constexpr float OrbitSpeed = 0.008f;  // radians per logical pixel
-	constexpr float FlySpeed = 640.0f;    // map units per second, at camera speed 1
+	constexpr float LookSpeed = 0.0035f;    // radians per raw mouse count
+	constexpr float OrbitSpeed = 0.008f;    // radians per logical pixel
+	constexpr float FlySpeed = 640.0f;      // map units per second, at camera speed 1
 	constexpr float FocusDistance = 512.0f; // what a 3D camera looks at, without a selection ahead
-	constexpr float NearPlane = 2.0f;     // the perspective grid stops there
+	constexpr float NearPlane = 2.0f;       // the perspective grid stops there
 	const Vector3d DefaultCameraOffset(-384.0f, -384.0f, 256.0f); // 3D camera from what it looks at
 
 	// Palette entries the editor draws with, besides View's VRC_* colors.
@@ -107,9 +120,12 @@ namespace
 
 	void SetAxisComponent(Vector3d& V, int Axis, float Value)
 	{
-		if (Axis == 0) V.SetX(Value);
-		else if (Axis == 1) V.SetY(Value);
-		else V.SetZ(Value);
+		if (Axis == 0)
+			V.SetX(Value);
+		else if (Axis == 1)
+			V.SetY(Value);
+		else
+			V.SetZ(Value);
 	}
 
 	// The scope axis a view direction runs along (2D views are axis-aligned),
@@ -118,8 +134,15 @@ namespace
 	{
 		int Axis = 0;
 		float Best = FMath::Abs(V.GetX());
-		if (FMath::Abs(V.GetY()) > Best) { Axis = 1; Best = FMath::Abs(V.GetY()); }
-		if (FMath::Abs(V.GetZ()) > Best) { Axis = 2; }
+		if (FMath::Abs(V.GetY()) > Best)
+		{
+			Axis = 1;
+			Best = FMath::Abs(V.GetY());
+		}
+		if (FMath::Abs(V.GetZ()) > Best)
+		{
+			Axis = 2;
+		}
 		OutSign = AxisComponent(V, Axis) < 0.0f ? -1.0f : 1.0f;
 		return Axis;
 	}
@@ -139,7 +162,7 @@ namespace
 		{
 			Vector3d Front, Top;
 			SphrVector::Sphr2Rect(SphrVector(0.1f, 0.0f, 0.0f), Front, Top);
-			Yaw = Front.GetX() > 0.0f ? 1.0f : -1.0f;  // forward is +Y; right is +X
+			Yaw = Front.GetX() > 0.0f ? 1.0f : -1.0f; // forward is +Y; right is +X
 			SphrVector::Sphr2Rect(SphrVector(0.0f, 0.1f, 0.0f), Front, Top);
 			Pitch = Front.GetZ() > 0.0f ? 1.0f : -1.0f;
 		}
@@ -157,13 +180,26 @@ namespace
 		SphrVector Orientation;
 		switch (Type)
 		{
-		case EMapViewType::Top: Orientation.NewVector(0.0f, Signs.Pitch * DEG2RAD(-90.0f), 0.0f); break;
-		case EMapViewType::Bottom: Orientation.NewVector(0.0f, Signs.Pitch * DEG2RAD(90.0f), 0.0f); break;
-		case EMapViewType::Front: Orientation.NewVector(0.0f, 0.0f, 0.0f); break;
-		case EMapViewType::Back: Orientation.NewVector(DEG2RAD(180.0f), 0.0f, 0.0f); break;
-		case EMapViewType::Right: Orientation.NewVector(Signs.Yaw * DEG2RAD(-90.0f), 0.0f, 0.0f); break;
-		case EMapViewType::Left: Orientation.NewVector(Signs.Yaw * DEG2RAD(90.0f), 0.0f, 0.0f); break;
-		default: break;
+		case EMapViewType::Top:
+			Orientation.NewVector(0.0f, Signs.Pitch * DEG2RAD(-90.0f), 0.0f);
+			break;
+		case EMapViewType::Bottom:
+			Orientation.NewVector(0.0f, Signs.Pitch * DEG2RAD(90.0f), 0.0f);
+			break;
+		case EMapViewType::Front:
+			Orientation.NewVector(0.0f, 0.0f, 0.0f);
+			break;
+		case EMapViewType::Back:
+			Orientation.NewVector(DEG2RAD(180.0f), 0.0f, 0.0f);
+			break;
+		case EMapViewType::Right:
+			Orientation.NewVector(Signs.Yaw * DEG2RAD(-90.0f), 0.0f, 0.0f);
+			break;
+		case EMapViewType::Left:
+			Orientation.NewVector(Signs.Yaw * DEG2RAD(90.0f), 0.0f, 0.0f);
+			break;
+		default:
+			break;
 		}
 		return Orientation;
 	}
@@ -182,13 +218,19 @@ namespace
 	class FScopedEntityDisplay
 	{
 	public:
-		explicit FScopedEntityDisplay(bool bShow) : bWasShown(View::EntitiesDisplayed()) { View::DisplayEntities(bShow); }
-		~FScopedEntityDisplay() { View::DisplayEntities(bWasShown); }
+		explicit FScopedEntityDisplay(bool bShow) : bWasShown(View::EntitiesDisplayed())
+		{
+			View::DisplayEntities(bShow);
+		}
+		~FScopedEntityDisplay()
+		{
+			View::DisplayEntities(bWasShown);
+		}
 
 	private:
 		bool bWasShown;
 	};
-}
+} // namespace
 
 // ---------------------------------------------------------------------------
 
@@ -205,13 +247,10 @@ FMapRenderResources::~FMapRenderResources() = default;
 
 // ---------------------------------------------------------------------------
 
-FMapViewportClient::FMapViewportClient(FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer, FMapRenderResources& InResources,
-	FMapViewSettings& InSettings, EMapViewType InType)
-	: FRenderTargetViewportClient(InDevice, InRenderer)
-	, Resources(InResources)
-	, Settings(InSettings)
-	, Type(InType)
-	, MapDraw(std::make_unique<FMapDraw>())
+FMapViewportClient::FMapViewportClient(FRHIDevice& InDevice, FSlateRHIRenderingPolicy& InRenderer,
+    FMapRenderResources& InResources, FMapViewSettings& InSettings, EMapViewType InType)
+    : FRenderTargetViewportClient(InDevice, InRenderer), Resources(InResources), Settings(InSettings), Type(InType),
+      MapDraw(std::make_unique<FMapDraw>())
 {
 	MapDraw->SetZoomPtr(&DrawZoom);
 	SetPalette(*MapDraw);
@@ -356,8 +395,8 @@ void FMapViewportClient::PlaceCamera(const Vector3d& Center, float Distance)
 	{
 		Orientation = OrthoOrientation(Type);
 	}
-	MapView->SetNewView(Document->GetScope(), Document->GetSelector(), true, &Position, &Orientation, IsPerspective(), 1,
-		IsPerspective() ? ClipDepth3D : ClipDepth2D);
+	MapView->SetNewView(Document->GetScope(), Document->GetSelector(), true, &Position, &Orientation, IsPerspective(),
+	    1, IsPerspective() ? ClipDepth3D : ClipDepth2D);
 	UpdateProjection();
 	RequestRedraw();
 }
@@ -514,7 +553,7 @@ void FMapViewportClient::FollowScope()
 	}
 	bHasClipLine = false;
 	MapView->SetNewView(NewScope, Document->GetSelector(), true, &Position, &Orientation, IsPerspective(), 1,
-		IsPerspective() ? ClipDepth3D : ClipDepth2D);
+	    IsPerspective() ? ClipDepth3D : ClipDepth2D);
 	UpdateProjection();
 }
 
@@ -648,7 +687,8 @@ bool FMapViewportClient::MapToScreen(const Vector3d& Point, FVector2& OutLocal) 
 		X *= GetDrawZoom();
 		Y *= GetDrawZoom();
 	}
-	OutLocal = FVector2((static_cast<float>(FMath::Max(PixelSize.X, 1) / 2) + X) / Scale, (static_cast<float>(FMath::Max(PixelSize.Y, 1) / 2) - Y) / Scale);
+	OutLocal = FVector2((static_cast<float>(FMath::Max(PixelSize.X, 1) / 2) + X) / Scale,
+	    (static_cast<float>(FMath::Max(PixelSize.Y, 1) / 2) - Y) / Scale);
 	return true;
 }
 
@@ -717,8 +757,10 @@ void FMapViewportClient::FrameSelection()
 				bAny = true;
 				continue;
 			}
-			Min.NewVector(FMath::Min(Min.GetX(), ObjMin.GetX()), FMath::Min(Min.GetY(), ObjMin.GetY()), FMath::Min(Min.GetZ(), ObjMin.GetZ()));
-			Max.NewVector(FMath::Max(Max.GetX(), ObjMax.GetX()), FMath::Max(Max.GetY(), ObjMax.GetY()), FMath::Max(Max.GetZ(), ObjMax.GetZ()));
+			Min.NewVector(FMath::Min(Min.GetX(), ObjMin.GetX()), FMath::Min(Min.GetY(), ObjMin.GetY()),
+			    FMath::Min(Min.GetZ(), ObjMin.GetZ()));
+			Max.NewVector(FMath::Max(Max.GetX(), ObjMax.GetX()), FMath::Max(Max.GetY(), ObjMax.GetY()),
+			    FMath::Max(Max.GetZ(), ObjMax.GetZ()));
 		}
 		if (!bAny)
 		{
@@ -772,7 +814,8 @@ FReply FMapViewportClient::OnMouseButtonDown(const FGeometry& Geometry, const FP
 	DragStart = DragLast = Local;
 	DragButton = Event.GetEffectingButton();
 	bAltDrag = IsPerspective() && Event.IsAltDown();
-	if (DragButton == EMouseButton::Left && !bAltDrag && Settings.EditorMode && Settings.EditorMode->InputPress(*this, Local, Event))
+	if (DragButton == EMouseButton::Left && !bAltDrag && Settings.EditorMode &&
+	    Settings.EditorMode->InputPress(*this, Local, Event))
 	{
 		Drag = EDrag::Mode;
 		LastModeTime = FPlatformTime::Seconds();
@@ -909,8 +952,8 @@ FReply FMapViewportClient::OnMouseMove(const FGeometry& Geometry, const FPointer
 		float X, Y;
 		ToScreen(DragStart, X, Y);
 		const FScopedEntityDisplay Entities(ShowFlags.bEntities);
-		const bool bOnSelection = !IsPerspective() && !Event.IsShiftDown() && !Event.IsControlDown()
-			&& Document->GetSelector().GetNumMSelectedObjects() > 0 && MapView->IsMultiSelectionHit(X, Y);
+		const bool bOnSelection = !IsPerspective() && !Event.IsShiftDown() && !Event.IsControlDown() &&
+		    Document->GetSelector().GetNumMSelectedObjects() > 0 && MapView->IsMultiSelectionHit(X, Y);
 		if (bOnSelection)
 		{
 			Drag = EDrag::Move;
@@ -918,7 +961,8 @@ FReply FMapViewportClient::OnMouseMove(const FGeometry& Geometry, const FPointer
 			Vector3d Max;
 			Document->GetSelectionBounds(MoveReference, Max);
 			MoveApplied.NewVector(0.0f, 0.0f, 0.0f);
-			Document->BeginTransaction(MovedObjects.size() == 1 ? "Move Object" : FString::Format("Move {} Objects", MovedObjects.size()));
+			Document->BeginTransaction(
+			    MovedObjects.size() == 1 ? "Move Object" : FString::Format("Move {} Objects", MovedObjects.size()));
 			UpdateMove(Local, Settings.bSnapToGrid && !Event.IsAltDown());
 		}
 		else
@@ -967,7 +1011,7 @@ FReply FMapViewportClient::OnMouseWheel(const FGeometry& Geometry, const FPointe
 	{
 		// While looking around, the wheel sets how fast W/A/S/D fly.
 		SetCameraSpeed(CameraSpeed * std::pow(1.25f, Wheel));
-		Message(FString::Format("Camera speed {:.2f}", CameraSpeed));
+		Message(FTextLocalization::Format("Camera speed {:.2f}", CameraSpeed));
 		return FReply::Handled();
 	}
 	if (IsPerspective())
@@ -1076,9 +1120,18 @@ FReply FMapViewportClient::OnKeyDown(const FGeometry&, const FKeyEvent& Event)
 	{
 		switch (Event.GetKey())
 		{
-		case EKey::W: case EKey::A: case EKey::S: case EKey::D: case EKey::Q: case EKey::E:
-		case EKey::Up: case EKey::Down: case EKey::Left: case EKey::Right:
-		case EKey::LeftShift: case EKey::RightShift:
+		case EKey::W:
+		case EKey::A:
+		case EKey::S:
+		case EKey::D:
+		case EKey::Q:
+		case EKey::E:
+		case EKey::Up:
+		case EKey::Down:
+		case EKey::Left:
+		case EKey::Right:
+		case EKey::LeftShift:
+		case EKey::RightShift:
 			FlyKeys.insert(Event.GetKey());
 			return FReply::Handled();
 		default:
@@ -1106,12 +1159,16 @@ FCursorReply FMapViewportClient::OnCursorQuery(const FGeometry&, const FPointerE
 {
 	switch (Drag)
 	{
-	case EDrag::Move: return FCursorReply::Cursor(EMouseCursor::CardinalCross);
+	case EDrag::Move:
+		return FCursorReply::Cursor(EMouseCursor::CardinalCross);
 	case EDrag::Pan:
 	case EDrag::Orbit:
-	case EDrag::Dolly: return FCursorReply::Cursor(EMouseCursor::GrabHand);
-	case EDrag::Look: return FCursorReply::Cursor(EMouseCursor::None);
-	default: break;
+	case EDrag::Dolly:
+		return FCursorReply::Cursor(EMouseCursor::GrabHand);
+	case EDrag::Look:
+		return FCursorReply::Cursor(EMouseCursor::None);
+	default:
+		break;
 	}
 	return FCursorReply::Cursor(EMouseCursor::Default);
 }
@@ -1132,7 +1189,7 @@ void FMapViewportClient::SelectAt(FVector2 Local, const FPointerEvent& Event)
 	}
 	// Clicking again cycles through the objects under the cursor.
 	Object* Hit = Event.IsAltDown() ? MapView->MultiReverseSelect(X, Y) : MapView->MultiForwardSelect(X, Y);
-	Document->SetSelection(Hit ? TArray<Object*>{ Hit } : TArray<Object*>{});
+	Document->SetSelection(Hit ? TArray<Object*>{Hit} : TArray<Object*>{});
 }
 
 void FMapViewportClient::UpdateBoxSelection(bool bFinal)
@@ -1143,7 +1200,8 @@ void FMapViewportClient::UpdateBoxSelection(bool bFinal)
 	ToScreen(DragStart, X1, Y1);
 	ToScreen(DragLast, X2, Y2);
 	LinkList<ObjectPtr> Found;
-	MapView->DragSelectMultiObjects(FMath::Min(X1, X2), FMath::Min(Y1, Y2), FMath::Max(X1, X2), FMath::Max(Y1, Y2), Found);
+	MapView->DragSelectMultiObjects(
+	    FMath::Min(X1, X2), FMath::Min(Y1, Y2), FMath::Max(X1, X2), FMath::Max(Y1, Y2), Found);
 	TArray<Object*> Selection = bDragAdd ? SelectionBeforeBox : TArray<Object*>{};
 	for (Object* Obj : ToArray(Found))
 	{
@@ -1175,7 +1233,7 @@ void FMapViewportClient::UpdateMove(FVector2 Local, bool bSnap)
 		float Sign;
 		const int RightAxis = DominantAxis(ViewToScope(Vector3d(1.0f, 0.0f, 0.0f)), Sign);
 		const int UpAxis = DominantAxis(ViewToScope(Vector3d(0.0f, 0.0f, 1.0f)), Sign);
-		for (const int Axis : { RightAxis, UpAxis })
+		for (const int Axis : {RightAxis, UpAxis})
 		{
 			const float Grid = Settings.GridSize;
 			SetAxisComponent(Goal, Axis, std::round(AxisComponent(Goal, Axis) / Grid) * Grid);
@@ -1207,8 +1265,8 @@ void FMapViewportClient::ReportCursor(FVector2 Local)
 	float Sign;
 	const int RightAxis = DominantAxis(ViewToScope(Vector3d(1.0f, 0.0f, 0.0f)), Sign);
 	const int UpAxis = DominantAxis(ViewToScope(Vector3d(0.0f, 0.0f, 1.0f)), Sign);
-	Settings.OnCursorText(FString::Format("{} {:.0f}   {} {:.0f}", AxisName(RightAxis), AxisComponent(Point, RightAxis), AxisName(UpAxis),
-		AxisComponent(Point, UpAxis)));
+	Settings.OnCursorText(FString::Format("{} {:.0f}   {} {:.0f}", AxisName(RightAxis), AxisComponent(Point, RightAxis),
+	    AxisName(UpAxis), AxisComponent(Point, UpAxis)));
 }
 
 void FMapViewportClient::Fly(float DeltaSeconds)
@@ -1217,14 +1275,21 @@ void FMapViewportClient::Fly(float DeltaSeconds)
 	{
 		return;
 	}
-	const auto Held = [this](EKey A, EKey B) { return FlyKeys.contains(A) || FlyKeys.contains(B); };
+	const TFunction<bool(EKey, EKey)> Held = [this](EKey A, EKey B)
+	{ return FlyKeys.contains(A) || FlyKeys.contains(B); };
 	Vector3d Move(0.0f, 0.0f, 0.0f);
-	if (Held(EKey::W, EKey::Up)) Move.SetY(Move.GetY() + 1.0f);
-	if (Held(EKey::S, EKey::Down)) Move.SetY(Move.GetY() - 1.0f);
-	if (Held(EKey::D, EKey::Right)) Move.SetX(Move.GetX() + 1.0f);
-	if (Held(EKey::A, EKey::Left)) Move.SetX(Move.GetX() - 1.0f);
-	if (Held(EKey::E, EKey::E)) Move.SetZ(Move.GetZ() + 1.0f);
-	if (Held(EKey::Q, EKey::Q)) Move.SetZ(Move.GetZ() - 1.0f);
+	if (Held(EKey::W, EKey::Up))
+		Move.SetY(Move.GetY() + 1.0f);
+	if (Held(EKey::S, EKey::Down))
+		Move.SetY(Move.GetY() - 1.0f);
+	if (Held(EKey::D, EKey::Right))
+		Move.SetX(Move.GetX() + 1.0f);
+	if (Held(EKey::A, EKey::Left))
+		Move.SetX(Move.GetX() - 1.0f);
+	if (Held(EKey::E, EKey::E))
+		Move.SetZ(Move.GetZ() + 1.0f);
+	if (Held(EKey::Q, EKey::Q))
+		Move.SetZ(Move.GetZ() - 1.0f);
 	const bool bFast = Held(EKey::LeftShift, EKey::RightShift);
 	Move.MultVector(FlySpeed * CameraSpeed * (bFast ? 4.0f : 1.0f) * FMath::Min(DeltaSeconds, 0.1f));
 	MapView->MoveRelPosition(Move);
@@ -1261,12 +1326,13 @@ void FMapViewportClient::DrawGrid(FMapDraw& Draw)
 		Major *= 2.0f;
 	}
 
-	const auto ScreenX = [&](float Value) { return OrgX + RightSign * (Value - CameraRight) * DrawZoom; };
-	const auto ScreenY = [&](float Value) { return OrgY - UpSign * (Value - CameraUp) * DrawZoom; };
+	const TFunction<float(float)> ScreenX = [&](float Value)
+	{ return OrgX + RightSign * (Value - CameraRight) * DrawZoom; };
+	const TFunction<float(float)> ScreenY = [&](float Value) { return OrgY - UpSign * (Value - CameraUp) * DrawZoom; };
 	const float HalfW = OrgX / DrawZoom + Minor;
 	const float HalfH = OrgY / DrawZoom + Minor;
 
-	for (const int Pass : { 0, 1 })
+	for (const int Pass : {0, 1})
 	{
 		const float Step = Pass == 0 ? Minor : Major;
 		Draw.Color(Pass == 0 ? ColorGridMinor : ColorGridMajor);
@@ -1320,7 +1386,7 @@ void FMapViewportClient::DrawPerspectiveGrid(FMapDraw& Draw, bool bDepthTested)
 	const float CenterX = std::round(Camera.GetX() / Step) * Step;
 	const float CenterY = std::round(Camera.GetY() / Step) * Step;
 
-	const auto Segment = [&](Vector3d A, Vector3d B)
+	const TFunction<void(Vector3d, Vector3d)> Segment = [&](Vector3d A, Vector3d B)
 	{
 		ToView.Transform(A);
 		ToView.Transform(B);
@@ -1333,7 +1399,8 @@ void FMapViewportClient::DrawPerspectiveGrid(FMapDraw& Draw, bool bDepthTested)
 			Vector3d& Behind = A.GetY() < NearPlane ? A : B;
 			const Vector3d& Ahead = A.GetY() < NearPlane ? B : A;
 			const float T = (NearPlane - Behind.GetY()) / (Ahead.GetY() - Behind.GetY());
-			Behind.NewVector(Behind.GetX() + (Ahead.GetX() - Behind.GetX()) * T, NearPlane, Behind.GetZ() + (Ahead.GetZ() - Behind.GetZ()) * T);
+			Behind.NewVector(Behind.GetX() + (Ahead.GetX() - Behind.GetX()) * T, NearPlane,
+			    Behind.GetZ() + (Ahead.GetZ() - Behind.GetZ()) * T);
 		}
 		const float X1 = OrgX + A.GetX() * WinWidth / A.GetY();
 		const float Y1 = OrgY - A.GetZ() * WinWidth / A.GetY();
@@ -1353,7 +1420,7 @@ void FMapViewportClient::DrawPerspectiveGrid(FMapDraw& Draw, bool bDepthTested)
 	{
 		const float X = CenterX + static_cast<float>(Index) * Step;
 		const float Y = CenterY + static_cast<float>(Index) * Step;
-		for (const bool bAlongY : { true, false })
+		for (const bool bAlongY : {true, false})
 		{
 			const float Value = bAlongY ? X : Y;
 			const bool bAxis = FMath::Abs(Value) < 0.01f;
@@ -1388,9 +1455,9 @@ void FMapViewportClient::DrawAxes(FSlateWindowElementList& Out, FIntPoint PixelS
 		float Depth;
 	};
 	FAxis Axes[3] = {
-		{ "X", Vector3d(1.0f, 0.0f, 0.0f), FColor(232, 74, 74), 0.0f },
-		{ "Y", Vector3d(0.0f, 1.0f, 0.0f), FColor(118, 200, 72), 0.0f },
-		{ "Z", Vector3d(0.0f, 0.0f, 1.0f), FColor(72, 132, 244), 0.0f },
+	    {"X", Vector3d(1.0f, 0.0f, 0.0f), FColor(232, 74, 74), 0.0f},
+	    {"Y", Vector3d(0.0f, 1.0f, 0.0f), FColor(118, 200, 72), 0.0f},
+	    {"Z", Vector3d(0.0f, 0.0f, 1.0f), FColor(72, 132, 244), 0.0f},
 	};
 	for (FAxis& Axis : Axes)
 	{
@@ -1409,10 +1476,11 @@ void FMapViewportClient::DrawAxes(FSlateWindowElementList& Out, FIntPoint PixelS
 			continue; // pointing at or away from the camera
 		}
 		const FVector2 Tip = Origin + Direction * 18.0f;
-		Out.AddLines(6, Whole, { Origin, Tip }, Axis.Color, 2.0f);
+		Out.AddLines(6, Whole, {Origin, Tip}, Axis.Color, 2.0f);
 		if (Font.Font)
 		{
-			const TSharedRef<const FShapedGlyphSequence> Label = Fonts.ShapeText(FString(Axis.Name).View(), FSlateFontInfo(Font.Font, 10.0f), Scale);
+			const TSharedRef<const FShapedGlyphSequence> Label =
+			    Fonts.ShapeText(FString(Axis.Name).View(), FSlateFontInfo(Font.Font, 10.0f), Scale);
 			const FVector2 LabelSize = Label->GetLogicalSize();
 			const FVector2 At = Origin + Direction * 27.0f - LabelSize * 0.5f;
 			Out.AddText(7, FPaintGeometry::Make(At, LabelSize, Scale), Label, Axis.Color);
@@ -1435,20 +1503,26 @@ void FMapViewportClient::DrawScaleBar(FSlateWindowElementList& Out, FIntPoint Pi
 	const FVector2 End = Start + FVector2(Length, 0.0f);
 	const FColor Color(176, 184, 198);
 	const FPaintGeometry Whole = FPaintGeometry::Make(FVector2::Zero(), LocalSize, Scale);
-	Out.AddLines(6, Whole, { Start - FVector2(0.0f, 5.0f), Start, End, End - FVector2(0.0f, 5.0f) }, Color, 1.0f);
+	Out.AddLines(6, Whole, {Start - FVector2(0.0f, 5.0f), Start, End, End - FVector2(0.0f, 5.0f)}, Color, 1.0f);
 	const FSlateFontInfo Font = FAppStyle::Get().GetFont("NormalFont");
 	if (Font.Font)
 	{
 		const FString Text = FString::Format("{:.0f} units", Units);
-		const TSharedRef<const FShapedGlyphSequence> Label = FSlateApplication::Get().GetFontCache().ShapeText(Text.View(), FSlateFontInfo(Font.Font, 10.0f), Scale);
+		const TSharedRef<const FShapedGlyphSequence> Label =
+		    FSlateApplication::Get().GetFontCache().ShapeText(Text.View(), FSlateFontInfo(Font.Font, 10.0f), Scale);
 		const FVector2 LabelSize = Label->GetLogicalSize();
-		Out.AddText(7, FPaintGeometry::Make(FVector2(Start.X + (Length - LabelSize.X) * 0.5f, Start.Y - 6.0f - LabelSize.Y), LabelSize, Scale), Label, Color);
+		Out.AddText(7,
+		    FPaintGeometry::Make(
+		        FVector2(Start.X + (Length - LabelSize.X) * 0.5f, Start.Y - 6.0f - LabelSize.Y), LabelSize, Scale),
+		    Label, Color);
 	}
 }
 
-TMulticastDelegate<void(const FMapDocument&, const FMapViewportClient&, FSlateWindowElementList&, float)>& MapSceneOverlays()
+TMulticastDelegate<void(const FMapDocument&, const FMapViewportClient&, FSlateWindowElementList&, float)>&
+MapSceneOverlays()
 {
-	static TMulticastDelegate<void(const FMapDocument&, const FMapViewportClient&, FSlateWindowElementList&, float)> Overlays;
+	static TMulticastDelegate<void(const FMapDocument&, const FMapViewportClient&, FSlateWindowElementList&, float)>
+	    Overlays;
 	return Overlays;
 }
 
@@ -1460,15 +1534,16 @@ void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint Pix
 	{
 		MapSceneOverlays().Broadcast(*Document, *this, Out, Scale);
 	}
-	const auto Geo = [Scale](FVector2 Position, FVector2 Extent) { return FPaintGeometry::Make(Position, Extent, Scale); };
+	const TFunction<FPaintGeometry(FVector2, FVector2)> Geo = [Scale](FVector2 Position, FVector2 Extent)
+	{ return FPaintGeometry::Make(Position, Extent, Scale); };
 
 	if (Drag == EDrag::BoxSelect)
 	{
 		const FVector2 Min(FMath::Min(DragStart.X, DragLast.X), FMath::Min(DragStart.Y, DragLast.Y));
 		const FVector2 Max(FMath::Max(DragStart.X, DragLast.X), FMath::Max(DragStart.Y, DragLast.Y));
 		Out.AddSolidBox(2, Geo(Min, Max - Min), FColor(120, 170, 255, 40));
-		Out.AddLines(3, Geo(FVector2::Zero(), PixelSize.ToVector2() / Scale), { Min, FVector2(Max.X, Min.Y), Max, FVector2(Min.X, Max.Y) },
-			FColor(120, 170, 255), 1.0f, true);
+		Out.AddLines(3, Geo(FVector2::Zero(), PixelSize.ToVector2() / Scale),
+		    {Min, FVector2(Max.X, Min.Y), Max, FVector2(Min.X, Max.Y)}, FColor(120, 170, 255), 1.0f, true);
 	}
 	if (MapView && Settings.EditorMode)
 	{
@@ -1498,7 +1573,7 @@ void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint Pix
 	{
 		if (bLooking)
 		{
-			Parts.push_back(FString::Format("Camera speed {:.2f}", CameraSpeed));
+			Parts.push_back(FTextLocalization::Format("Camera speed {:.2f}", CameraSpeed));
 		}
 	}
 	else if (MapView)
@@ -1528,7 +1603,8 @@ void FMapViewportClient::DrawOverlay(FSlateWindowElementList& Out, FIntPoint Pix
 		Label += FString::Format("  ·  {}", Parts[Index]);
 	}
 	FSlateFontCache& Fonts = FSlateApplication::Get().GetFontCache();
-	const TSharedRef<const FShapedGlyphSequence> Text = Fonts.ShapeText(Label.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
+	const TSharedRef<const FShapedGlyphSequence> Text =
+	    Fonts.ShapeText(Label.View(), FSlateFontInfo(Font.Font, 11.0f), Scale);
 	const FVector2 TextSize = Text->GetLogicalSize();
 	Out.AddRoundedBox(4, Geo(FVector2(6.0f, 6.0f), TextSize + FVector2(12.0f, 6.0f)), FColor(12, 13, 16, 190), 4.0f);
 	Out.AddText(5, Geo(FVector2(12.0f, 9.0f), TextSize), Text, FColor(176, 184, 198));
@@ -1570,7 +1646,8 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	if (bSolid)
 	{
 		MapDraw->SetShaded(Mode == EMapViewMode::Lit);
-		MapDraw->bMaterials = Resources.bMeshMaterials && Resources.GetNativeMeshRenderer().GetPipeline(RenderTarget.GetTexture().GetFormat()) != nullptr;
+		MapDraw->bMaterials = Resources.bMeshMaterials &&
+		    Resources.GetNativeMeshRenderer().GetPipeline(RenderTarget.GetTexture().GetFormat()) != nullptr;
 		MapDraw->ZBufTextured(false);
 		MapView->RenderSolid(false);
 		if (bGrid)
@@ -1601,10 +1678,12 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	DrawOverlay(Elements, PixelSize);
 
 	const TArray<FMapVertex>& Triangles = MapDraw->GetTriangles();
-	const auto& MaterialVertices = MapDraw->GetMaterialVertices();
+	const TArray<FMapMaterialVertex>& MaterialVertices = MapDraw->GetMaterialVertices();
 	const TArray<FMapInstanceBatch>& InstanceBatches = MapDraw->GetInstanceBatches();
-	FRHIGraphicsPipeline* Pipeline = bSolid && (!Triangles.empty() || !InstanceBatches.empty() || !MaterialVertices.empty())
-		? Resources.GetSceneRenderer().GetSolidPipeline(RenderTarget.GetTexture().GetFormat()) : nullptr;
+	FRHIGraphicsPipeline* Pipeline =
+	    bSolid && (!Triangles.empty() || !InstanceBatches.empty() || !MaterialVertices.empty())
+	    ? Resources.GetSceneRenderer().GetSolidPipeline(RenderTarget.GetTexture().GetFormat())
+	    : nullptr;
 	Resources.Trim();
 	if (!Pipeline)
 	{
@@ -1612,7 +1691,8 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 		return;
 	}
 
-	if (!DepthBuffer || DepthBuffer->GetWidth() != static_cast<uint32>(PixelSize.X) || DepthBuffer->GetHeight() != static_cast<uint32>(PixelSize.Y))
+	if (!DepthBuffer || DepthBuffer->GetWidth() != static_cast<uint32>(PixelSize.X) ||
+	    DepthBuffer->GetHeight() != static_cast<uint32>(PixelSize.Y))
 	{
 		if (DepthBuffer)
 		{
@@ -1627,18 +1707,18 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	}
 
 	FString MaterialError;
-	auto& NativeMeshes = Resources.GetNativeMeshRenderer();
-	auto MaterialFrame =
-		NativeMeshes.Prepare(MapDraw->GetMaterialDrawList(), RenderTarget.GetTexture().GetFormat(), MaterialError);
+	FNativeMeshRenderer& NativeMeshes = Resources.GetNativeMeshRenderer();
+	TUniquePtr<FNativeMeshFrame> MaterialFrame =
+	    NativeMeshes.Prepare(MapDraw->GetMaterialDrawList(), RenderTarget.GetTexture().GetFormat(), MaterialError);
 	if (!MaterialError.IsEmpty())
-		UE_LOG(LogMapEditor, Warning, "{}", MaterialError);
+		GENESIS_LOG(LogMapEditor, Warning, "{}", MaterialError);
 	FNativeMeshView MaterialView;
 	MaterialView.Width = RenderTarget.GetTexture().GetWidth();
 	MaterialView.Height = RenderTarget.GetTexture().GetHeight();
 	MaterialView.ProjectionScale = MapDraw->GetInstanceWinWidth();
 	MaterialView.bLit = MapDraw->IsShaded();
-	const auto& NativeLight = MapDraw->GetInstanceLight();
-	const auto& NativeUp = MapDraw->GetInstanceUp();
+	const Vector3d& NativeLight = MapDraw->GetInstanceLight();
+	const Vector3d& NativeUp = MapDraw->GetInstanceUp();
 	MaterialView.Light[0] = NativeLight.GetX();
 	MaterialView.Light[1] = NativeLight.GetY();
 	MaterialView.Light[2] = NativeLight.GetZ();
@@ -1651,13 +1731,13 @@ void FMapViewportClient::Draw(FRHICommandList& CommandList, FSlateRenderTargetRH
 	SceneView.CenterX = MapDraw->GetOrigin().X;
 	SceneView.CenterY = MapDraw->GetOrigin().Y;
 	FString SceneError;
-	auto& Scene = Resources.GetSceneRenderer();
-	auto SceneFrame = Scene.Prepare(Triangles, MapDraw->GetBatches(), InstanceBatches,
-									RenderTarget.GetTexture().GetFormat(), SceneError);
+	FProjectedSceneRenderer& Scene = Resources.GetSceneRenderer();
+	TUniquePtr<FProjectedSceneFrame> SceneFrame = Scene.Prepare(
+	    Triangles, MapDraw->GetBatches(), InstanceBatches, RenderTarget.GetTexture().GetFormat(), SceneError);
 	if (!SceneFrame || !DepthBuffer)
 	{
 		if (!SceneError.IsEmpty())
-			UE_LOG(LogMapEditor, Warning, "{}", SceneError);
+			GENESIS_LOG(LogMapEditor, Warning, "{}", SceneError);
 		Renderer.Render(CommandList, RenderTarget.GetTexture(), Elements, Clear);
 		return;
 	}

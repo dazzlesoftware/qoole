@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // Modal message boxes, replacing direct MessageBox calls.
 
 #include "CoreTypes.h"
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
 
 enum class EMessageType : uint8
 {
@@ -55,8 +55,8 @@ public:
 	virtual ~IMessageDialog() = default;
 
 	// An empty caption means the application name (FApp::GetName()).
-	virtual EMessageResult Show(EMessageType Type, EMessageButtons Buttons,
-								const FString& Text, const FString& Caption = FString()) = 0;
+	virtual EMessageResult Show(
+	    EMessageType Type, EMessageButtons Buttons, const FString& Text, const FString& Caption = FString()) = 0;
 };
 
 // Default without a UI: logs the message and answers with the choice that
@@ -64,6 +64,6 @@ public:
 class FLogMessageDialog : public IMessageDialog
 {
 public:
-	EMessageResult Show(EMessageType Type, EMessageButtons Buttons,
-						const FString& Text, const FString& Caption = FString()) override;
+	EMessageResult Show(
+	    EMessageType Type, EMessageButtons Buttons, const FString& Text, const FString& Caption = FString()) override;
 };

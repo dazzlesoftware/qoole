@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Widgets/Layout/SGridPanel.h"
+#include "Containers/ContainerAliases.h"
 
 #include "Layout/LayoutUtils.h"
 
@@ -96,7 +97,8 @@ FVector2 SGridPanel::ComputeDesiredSize(float) const
 {
 	TArray<float> Columns, Rows;
 	ComputeTracks(Columns, Rows);
-	return FVector2(std::accumulate(Columns.begin(), Columns.end(), 0.0f), std::accumulate(Rows.begin(), Rows.end(), 0.0f));
+	return FVector2(
+	    std::accumulate(Columns.begin(), Columns.end(), 0.0f), std::accumulate(Rows.begin(), Rows.end(), 0.0f));
 }
 
 void SGridPanel::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const
@@ -104,7 +106,8 @@ void SGridPanel::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedC
 	TArray<float> Columns, Rows;
 	ComputeTracks(Columns, Rows);
 
-	const auto Distribute = [](TArray<float>& Tracks, const TArray<float>& Fill, float Available)
+	const TFunction<void(TArray<float>&, const TArray<float>&, float)> Distribute =
+	    [](TArray<float>& Tracks, const TArray<float>& Fill, float Available)
 	{
 		const float Used = std::accumulate(Tracks.begin(), Tracks.end(), 0.0f);
 		float TotalWeight = 0.0f;
@@ -139,7 +142,8 @@ void SGridPanel::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedC
 	{
 		const FSlot& Slot = Children[I];
 		const FVector2 Offset(ColumnStart[Slot.Column], RowStart[Slot.Row]);
-		const FVector2 Size(ColumnStart[Slot.Column + Slot.ColumnSpanValue] - Offset.X, RowStart[Slot.Row + Slot.RowSpanValue] - Offset.Y);
+		const FVector2 Size(ColumnStart[Slot.Column + Slot.ColumnSpanValue] - Offset.X,
+		    RowStart[Slot.Row + Slot.RowSpanValue] - Offset.Y);
 		ArrangeSlotChild(AllottedGeometry, ArrangedChildren, Slot, Offset, Size);
 	}
 }

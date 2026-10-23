@@ -24,7 +24,7 @@
 #include <string>
 
 #ifndef DO_CHECK
-	#define DO_CHECK UE_BUILD_DEBUG
+#define DO_CHECK GENESIS_BUILD_DEBUG
 #endif
 
 struct FAssertion
@@ -40,32 +40,71 @@ struct FAssertion
 	// Always returns false.
 	static bool EnsureFailed(const char* Expr, const char* File, int32 Line, bool& bFired, const std::string& Message);
 
-	template <typename... Args>
-	static std::string FormatText(std::format_string<Args...> Fmt, Args&&... InArgs)
+	template <typename... Args> static std::string FormatText(std::format_string<Args...> Fmt, Args&&... InArgs)
 	{
 		return std::format(Fmt, std::forward<Args>(InArgs)...);
 	}
 
-	static std::string FormatText() { return {}; }
+	static std::string FormatText()
+	{
+		return {};
+	}
 };
 
 #if DO_CHECK
-	#define check(expr) \
-		do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, {}); } } while (0)
-	#define checkf(expr, fmt, ...) \
-		do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, ::FAssertion::FormatText(fmt __VA_OPT__(,) __VA_ARGS__)); } } while (0)
-	#define checkNoEntry() ::FAssertion::Fatal("unreachable code", __FILE__, __LINE__, {})
+#define check(expr)                                                                                                    \
+	do                                                                                                                 \
+	{                                                                                                                  \
+		if (!(expr)) [[unlikely]]                                                                                      \
+		{                                                                                                              \
+			::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, {});                                                  \
+		}                                                                                                              \
+	} while (0)
+#define checkf(expr, fmt, ...)                                                                                         \
+	do                                                                                                                 \
+	{                                                                                                                  \
+		if (!(expr)) [[unlikely]]                                                                                      \
+		{                                                                                                              \
+			::FAssertion::CheckFailed(                                                                                 \
+			    #expr, __FILE__, __LINE__, ::FAssertion::FormatText(fmt __VA_OPT__(, ) __VA_ARGS__));                  \
+		}                                                                                                              \
+	} while (0)
+#define checkNoEntry() ::FAssertion::Fatal("unreachable code", __FILE__, __LINE__, {})
 #else
-	#define check(expr) do { } while (0)
-	#define checkf(expr, fmt, ...) do { } while (0)
-	#define checkNoEntry() do { } while (0)
+#define check(expr)                                                                                                    \
+	do                                                                                                                 \
+	{                                                                                                                  \
+	} while (0)
+#define checkf(expr, fmt, ...)                                                                                         \
+	do                                                                                                                 \
+	{                                                                                                                  \
+	} while (0)
+#define checkNoEntry()                                                                                                 \
+	do                                                                                                                 \
+	{                                                                                                                  \
+	} while (0)
 #endif
 
-#define verify(expr) \
-	do { if (!(expr)) [[unlikely]] { ::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, {}); } } while (0)
+#define verify(expr)                                                                                                   \
+	do                                                                                                                 \
+	{                                                                                                                  \
+		if (!(expr)) [[unlikely]]                                                                                      \
+		{                                                                                                              \
+			::FAssertion::CheckFailed(#expr, __FILE__, __LINE__, {});                                                  \
+		}                                                                                                              \
+	} while (0)
 
-#define ensure(expr) \
-	((expr) ? true : [&]() { static bool bFired = false; return ::FAssertion::EnsureFailed(#expr, __FILE__, __LINE__, bFired, {}); }())
+#define ensure(expr)                                                                                                   \
+	((expr) ? true : [&]()                                                                                             \
+	{                                                                                                                  \
+		static bool bFired = false;                                                                                    \
+		return ::FAssertion::EnsureFailed(#expr, __FILE__, __LINE__, bFired, {});                                      \
+	}())
 
-#define ensuref(expr, fmt, ...) \
-	((expr) ? true : [&]() { static bool bFired = false; return ::FAssertion::EnsureFailed(#expr, __FILE__, __LINE__, bFired, ::FAssertion::FormatText(fmt __VA_OPT__(,) __VA_ARGS__)); }())
+#define ensuref(expr, fmt, ...)                                                                                        \
+	((expr) ? true : [&]()                                                                                             \
+	{                                                                                                                  \
+		static bool bFired = false;                                                                                    \
+		return ::FAssertion::EnsureFailed(                                                                             \
+		    #expr, __FILE__, __LINE__, bFired, ::FAssertion::FormatText(fmt __VA_OPT__(, ) __VA_ARGS__));              \
+	}())

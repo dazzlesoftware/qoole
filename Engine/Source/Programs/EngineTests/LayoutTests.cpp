@@ -3,6 +3,7 @@
 // Headless layout tests of the widget core and the layout panels.
 
 #include "UITestHelpers.h"
+#include "Templates/SharedPointer.h"
 
 #include "Widgets/Layout/SBoxPanel.h"
 #include "Widgets/Layout/SGridPanel.h"
@@ -20,11 +21,17 @@ namespace
 	{
 	public:
 		SLATE_BEGIN_ARGS(STestLeaf)
-			SLATE_ATTRIBUTE(FVector2, Size, (FVector2(10.0f, 10.0f)))
+		SLATE_ATTRIBUTE(FVector2, Size, (FVector2(10.0f, 10.0f)))
 		SLATE_END_ARGS()
 
-		void Construct(const FArguments& Args) { Size.Assign(Args._Size); }
-		void SetSize(TAttribute<FVector2> InSize) { Size.Assign(InSize); }
+		void Construct(const FArguments& Args)
+		{
+			Size.Assign(Args._Size);
+		}
+		void SetSize(TAttribute<FVector2> InSize)
+		{
+			Size.Assign(InSize);
+		}
 
 		mutable int32 MeasureCount = 0;
 		mutable int32 PaintCount = 0;
@@ -35,7 +42,8 @@ namespace
 			++MeasureCount;
 			return Size.Get();
 		}
-		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle&) const override
+		int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out,
+		    int32 LayerId, const FWidgetStyle&) const override
 		{
 			++PaintCount;
 			Out.AddSolidBox(LayerId, Geometry.ToPaintGeometry(), FColor::White());
@@ -43,7 +51,7 @@ namespace
 		}
 
 	private:
-		TWidgetAttribute<FVector2, EInvalidateWidgetReason::Layout> Size{ *this };
+		TWidgetAttribute<FVector2, EInvalidateWidgetReason::Layout> Size{*this};
 	};
 
 	TSharedRef<STestLeaf> Leaf(float W, float H)
@@ -53,10 +61,10 @@ namespace
 
 	bool RectNear(const FRect& A, const FRect& B, float Tolerance = 0.01f)
 	{
-		return FMath::IsNearlyEqual(A.Left, B.Left, Tolerance) && FMath::IsNearlyEqual(A.Top, B.Top, Tolerance)
-			&& FMath::IsNearlyEqual(A.Right, B.Right, Tolerance) && FMath::IsNearlyEqual(A.Bottom, B.Bottom, Tolerance);
+		return FMath::IsNearlyEqual(A.Left, B.Left, Tolerance) && FMath::IsNearlyEqual(A.Top, B.Top, Tolerance) &&
+		    FMath::IsNearlyEqual(A.Right, B.Right, Tolerance) && FMath::IsNearlyEqual(A.Bottom, B.Bottom, Tolerance);
 	}
-}
+} // namespace
 
 TEST_SUITE("UILayout")
 {
@@ -64,10 +72,10 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STestLeaf> A, B, C;
-		const TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight().Padding(5.0f)[SAssignNew(A, STestLeaf).Size(FVector2(50.0f, 20.0f))]
-			+ SVerticalBox::Slot().FillHeight(1.0f)[SAssignNew(B, STestLeaf)]
-			+ SVerticalBox::Slot().FillHeight(3.0f)[SAssignNew(C, STestLeaf)];
+		const TSharedRef<SVerticalBox> Box = SNew(SVerticalBox) +
+		    SVerticalBox::Slot().AutoHeight().Padding(5.0f)[SAssignNew(A, STestLeaf).Size(FVector2(50.0f, 20.0f))] +
+		    SVerticalBox::Slot().FillHeight(1.0f)[SAssignNew(B, STestLeaf)] +
+		    SVerticalBox::Slot().FillHeight(3.0f)[SAssignNew(C, STestLeaf)];
 		T.AddWindow(Box, FVector2(200.0f, 330.0f));
 
 		// A: 20 tall + 10 padding; 300 left for B and C at 1:3.
@@ -81,10 +89,15 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STestLeaf> A, B;
-		T.AddWindow(SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SAssignNew(A, STestLeaf).Size(FVector2(40.0f, 20.0f))]
-			+ SHorizontalBox::Slot().FillWidth(1.0f).MaxWidth(100.0f).HAlign(HAlign_Right).VAlign(VAlign_Bottom)[SAssignNew(B, STestLeaf).Size(FVector2(30.0f, 10.0f))],
-			FVector2(400.0f, 100.0f));
+		T.AddWindow(SNew(SHorizontalBox) +
+		        SHorizontalBox::Slot().AutoWidth().VAlign(
+		            VAlign_Center)[SAssignNew(A, STestLeaf).Size(FVector2(40.0f, 20.0f))] +
+		        SHorizontalBox::Slot()
+		            .FillWidth(1.0f)
+		            .MaxWidth(100.0f)
+		            .HAlign(HAlign_Right)
+		            .VAlign(VAlign_Bottom)[SAssignNew(B, STestLeaf).Size(FVector2(30.0f, 10.0f))],
+		    FVector2(400.0f, 100.0f));
 		CHECK(RectNear(FUITestApp::RectOf(*A), FRect(0.0f, 40.0f, 40.0f, 60.0f)));
 		CHECK(RectNear(FUITestApp::RectOf(*B), FRect(110.0f, 90.0f, 140.0f, 100.0f)));
 	}
@@ -93,10 +106,11 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STestLeaf> Back, Front;
-		const TSharedRef<SWindow> Window = T.AddWindow(SNew(SOverlay)
-			+ SOverlay::Slot()[SAssignNew(Back, STestLeaf)]
-			+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SAssignNew(Front, STestLeaf).Size(FVector2(20.0f, 10.0f))],
-			FVector2(100.0f, 100.0f));
+		const TSharedRef<SWindow> Window = T.AddWindow(SNew(SOverlay) + SOverlay::Slot()[SAssignNew(Back, STestLeaf)] +
+		        SOverlay::Slot()
+		            .HAlign(HAlign_Center)
+		            .VAlign(VAlign_Center)[SAssignNew(Front, STestLeaf).Size(FVector2(20.0f, 10.0f))],
+		    FVector2(100.0f, 100.0f));
 		CHECK(RectNear(FUITestApp::RectOf(*Back), FRect(0.0f, 0.0f, 100.0f, 100.0f)));
 		CHECK(RectNear(FUITestApp::RectOf(*Front), FRect(40.0f, 45.0f, 60.0f, 55.0f)));
 
@@ -114,10 +128,9 @@ TEST_SUITE("UILayout")
 		FUITestApp T;
 		TSharedPtr<SGridPanel> Grid;
 		TSharedPtr<STestLeaf> A, B, Wide;
-		SAssignNew(Grid, SGridPanel)
-			+ SGridPanel::Slot(0, 0)[SAssignNew(A, STestLeaf).Size(FVector2(30.0f, 10.0f))]
-			+ SGridPanel::Slot(1, 0)[SAssignNew(B, STestLeaf).Size(FVector2(50.0f, 20.0f))]
-			+ SGridPanel::Slot(0, 1).ColumnSpan(2)[SAssignNew(Wide, STestLeaf).Size(FVector2(100.0f, 10.0f))];
+		SAssignNew(Grid, SGridPanel) + SGridPanel::Slot(0, 0)[SAssignNew(A, STestLeaf).Size(FVector2(30.0f, 10.0f))] +
+		    SGridPanel::Slot(1, 0)[SAssignNew(B, STestLeaf).Size(FVector2(50.0f, 20.0f))] +
+		    SGridPanel::Slot(0, 1).ColumnSpan(2)[SAssignNew(Wide, STestLeaf).Size(FVector2(100.0f, 10.0f))];
 		Grid->SetColumnFill(1, 1.0f);
 		T.AddWindow(ToSharedRef(Grid), FVector2(200.0f, 100.0f));
 
@@ -133,12 +146,12 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STestLeaf> L[4];
-		T.AddWindow(SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2(5.0f, 5.0f))
-			+ SWrapBox::Slot()[SAssignNew(L[0], STestLeaf).Size(FVector2(40.0f, 10.0f))]
-			+ SWrapBox::Slot()[SAssignNew(L[1], STestLeaf).Size(FVector2(40.0f, 20.0f))]
-			+ SWrapBox::Slot()[SAssignNew(L[2], STestLeaf).Size(FVector2(40.0f, 10.0f))]
-			+ SWrapBox::Slot()[SAssignNew(L[3], STestLeaf).Size(FVector2(40.0f, 10.0f))],
-			FVector2(100.0f, 100.0f));
+		T.AddWindow(SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2(5.0f, 5.0f)) +
+		        SWrapBox::Slot()[SAssignNew(L[0], STestLeaf).Size(FVector2(40.0f, 10.0f))] +
+		        SWrapBox::Slot()[SAssignNew(L[1], STestLeaf).Size(FVector2(40.0f, 20.0f))] +
+		        SWrapBox::Slot()[SAssignNew(L[2], STestLeaf).Size(FVector2(40.0f, 10.0f))] +
+		        SWrapBox::Slot()[SAssignNew(L[3], STestLeaf).Size(FVector2(40.0f, 10.0f))],
+		    FVector2(100.0f, 100.0f));
 		CHECK(FUITestApp::RectOf(*L[0]).GetTopLeft() == FVector2(0.0f, 0.0f));
 		CHECK(FUITestApp::RectOf(*L[1]).GetTopLeft() == FVector2(45.0f, 0.0f));
 		CHECK(FUITestApp::RectOf(*L[2]).GetTopLeft() == FVector2(0.0f, 25.0f)); // line height 20 + 5
@@ -149,11 +162,16 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STestLeaf> Point, Stretched, Centered;
-		T.AddWindow(SNew(SCanvas)
-			+ SCanvas::Slot().Offset(FMargin(10.0f, 20.0f, 30.0f, 40.0f))[SAssignNew(Point, STestLeaf)]
-			+ SCanvas::Slot().Anchors(FAnchors(0.0f, 1.0f, 1.0f, 1.0f)).Offset(FMargin(5.0f, -30.0f, 5.0f, 20.0f))[SAssignNew(Stretched, STestLeaf)]
-			+ SCanvas::Slot().Anchors(FAnchors(0.5f)).Alignment(FVector2(0.5f, 0.5f)).AutoSize(true)[SAssignNew(Centered, STestLeaf).Size(FVector2(20.0f, 10.0f))],
-			FVector2(200.0f, 100.0f));
+		T.AddWindow(SNew(SCanvas) +
+		        SCanvas::Slot().Offset(FMargin(10.0f, 20.0f, 30.0f, 40.0f))[SAssignNew(Point, STestLeaf)] +
+		        SCanvas::Slot()
+		            .Anchors(FAnchors(0.0f, 1.0f, 1.0f, 1.0f))
+		            .Offset(FMargin(5.0f, -30.0f, 5.0f, 20.0f))[SAssignNew(Stretched, STestLeaf)] +
+		        SCanvas::Slot()
+		            .Anchors(FAnchors(0.5f))
+		            .Alignment(FVector2(0.5f, 0.5f))
+		            .AutoSize(true)[SAssignNew(Centered, STestLeaf).Size(FVector2(20.0f, 10.0f))],
+		    FVector2(200.0f, 100.0f));
 		CHECK(RectNear(FUITestApp::RectOf(*Point), FRect(10.0f, 20.0f, 40.0f, 60.0f)));
 		CHECK(RectNear(FUITestApp::RectOf(*Stretched), FRect(5.0f, 70.0f, 195.0f, 90.0f)));
 		CHECK(RectNear(FUITestApp::RectOf(*Centered), FRect(90.0f, 45.0f, 110.0f, 55.0f)));
@@ -164,7 +182,9 @@ TEST_SUITE("UILayout")
 		FUITestApp T;
 		TSharedPtr<STestLeaf> Child;
 		TSharedPtr<SScaleBox> Scale;
-		T.AddWindow(SAssignNew(Scale, SScaleBox).Stretch(EStretch::ScaleToFit)[SAssignNew(Child, STestLeaf).Size(FVector2(50.0f, 25.0f))], FVector2(200.0f, 200.0f));
+		T.AddWindow(SAssignNew(Scale, SScaleBox)
+		                .Stretch(EStretch::ScaleToFit)[SAssignNew(Child, STestLeaf).Size(FVector2(50.0f, 25.0f))],
+		    FVector2(200.0f, 200.0f));
 		CHECK(Scale->GetContentScale() == doctest::Approx(4.0f));
 		CHECK(RectNear(FUITestApp::RectOf(*Child), FRect(0.0f, 50.0f, 200.0f, 150.0f)));
 		// The child's local space is scaled: local size stays 50x25.
@@ -175,9 +195,13 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<SBox> Fixed, Limited;
-		T.AddWindow(SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)[SAssignNew(Fixed, SBox).WidthOverride(TOptional<float>(80.0f)).HeightOverride(TOptional<float>(30.0f))[Leaf(10.0f, 10.0f)]]
-			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)[SAssignNew(Limited, SBox).MinDesiredWidth(TOptional<float>(60.0f)).MaxDesiredHeight(TOptional<float>(5.0f))[Leaf(10.0f, 10.0f)]]);
+		T.AddWindow(SNew(SVerticalBox) +
+		    SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)[SAssignNew(Fixed, SBox)
+		            .WidthOverride(TOptional<float>(80.0f))
+		            .HeightOverride(TOptional<float>(30.0f))[Leaf(10.0f, 10.0f)]] +
+		    SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)[SAssignNew(Limited, SBox)
+		            .MinDesiredWidth(TOptional<float>(60.0f))
+		            .MaxDesiredHeight(TOptional<float>(5.0f))[Leaf(10.0f, 10.0f)]]);
 		CHECK(FUITestApp::RectOf(*Fixed).GetSize() == FVector2(80.0f, 30.0f));
 		CHECK(FUITestApp::RectOf(*Limited).GetSize() == FVector2(60.0f, 5.0f));
 	}
@@ -186,9 +210,8 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STestLeaf> A, B;
-		T.AddWindow(SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox)[SAssignNew(A, STestLeaf)]]
-			+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox)[SAssignNew(B, STestLeaf)]]);
+		T.AddWindow(SNew(SHorizontalBox) + SHorizontalBox::Slot().AutoWidth()[SNew(SBox)[SAssignNew(A, STestLeaf)]] +
+		    SHorizontalBox::Slot().AutoWidth()[SNew(SBox)[SAssignNew(B, STestLeaf)]]);
 		const int32 MeasuredA = A->MeasureCount;
 		const int32 MeasuredB = B->MeasureCount;
 		const int32 PaintedB = B->PaintCount;
@@ -202,8 +225,8 @@ TEST_SUITE("UILayout")
 		A->SetSize(FVector2(25.0f, 10.0f));
 		T.Tick();
 		CHECK(A->MeasureCount == MeasuredA + 1);
-		CHECK(B->MeasureCount == MeasuredB);         // sibling branch untouched
-		CHECK(B->PaintCount == PaintedB + 1);        // the window repainted
+		CHECK(B->MeasureCount == MeasuredB);                          // sibling branch untouched
+		CHECK(B->PaintCount == PaintedB + 1);                         // the window repainted
 		CHECK(FUITestApp::RectOf(*B).Left == doctest::Approx(25.0f)); // and B moved
 	}
 
@@ -212,7 +235,9 @@ TEST_SUITE("UILayout")
 		FUITestApp T;
 		float Width = 10.0f;
 		TSharedPtr<STestLeaf> A;
-		T.AddWindow(SNew(SHorizontalBox) + SHorizontalBox::Slot().AutoWidth()[SAssignNew(A, STestLeaf).Size([&Width] { return FVector2(Width, 10.0f); })]);
+		T.AddWindow(SNew(SHorizontalBox) +
+		    SHorizontalBox::Slot()
+		        .AutoWidth()[SAssignNew(A, STestLeaf).Size([&Width] { return FVector2(Width, 10.0f); })]);
 		const int32 Measured = A->MeasureCount;
 		T.Tick();
 		CHECK(A->MeasureCount == Measured);
@@ -226,9 +251,9 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STestLeaf> A, B;
-		T.AddWindow(SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth()[SAssignNew(A, STestLeaf).Size(FVector2(30.0f, 10.0f))]
-			+ SHorizontalBox::Slot().AutoWidth()[SAssignNew(B, STestLeaf).Size(FVector2(30.0f, 10.0f))]);
+		T.AddWindow(SNew(SHorizontalBox) +
+		    SHorizontalBox::Slot().AutoWidth()[SAssignNew(A, STestLeaf).Size(FVector2(30.0f, 10.0f))] +
+		    SHorizontalBox::Slot().AutoWidth()[SAssignNew(B, STestLeaf).Size(FVector2(30.0f, 10.0f))]);
 		A->SetVisibility(EVisibility::Hidden);
 		T.Tick();
 		CHECK(FUITestApp::RectOf(*B).Left == doctest::Approx(30.0f));
@@ -241,7 +266,8 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T(1.0f);
 		TSharedPtr<STestLeaf> A;
-		const TSharedRef<SWindow> Window = T.AddWindow(SNew(SBox).Padding(FMargin(10.0f))[SAssignNew(A, STestLeaf)], FVector2(100.0f, 100.0f));
+		const TSharedRef<SWindow> Window =
+		    T.AddWindow(SNew(SBox).Padding(FMargin(10.0f))[SAssignNew(A, STestLeaf)], FVector2(100.0f, 100.0f));
 		CHECK(A->GetCachedGeometry().GetLayoutBoundingRect() == FRect(10.0f, 10.0f, 90.0f, 90.0f));
 		T.Native(Window).SimulateDpiChange(2.0f);
 		T.Tick();
@@ -254,8 +280,11 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STextBlock> Text;
-		T.AddWindow(SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[SAssignNew(Text, STextBlock)
-			.Text("The quick brown fox jumps over the lazy dog and keeps running far away").AutoWrapText(true)], FVector2(150.0f, 200.0f));
+		T.AddWindow(SNew(SVerticalBox) +
+		        SVerticalBox::Slot().AutoHeight()[SAssignNew(Text, STextBlock)
+		                .Text("The quick brown fox jumps over the lazy dog and keeps running far away")
+		                .AutoWrapText(true)],
+		    FVector2(150.0f, 200.0f));
 		const FTextLayout& Layout = Text->GetTextLayout();
 		CHECK(Layout.GetLines().size() >= 3);
 		for (const FTextLine& Line : Layout.GetLines())
@@ -283,7 +312,7 @@ TEST_SUITE("UILayout")
 		REQUIRE(Layout.GetLines().size() == 2);
 		CHECK(Layout.GetLines()[1].Begin == 6);
 		CHECK(Layout.GetLineIndex(8) == 1);
-		for (int32 Index : { 0, 2, 5, 6, 9, 16 })
+		for (int32 Index : {0, 2, 5, 6, 9, 16})
 		{
 			const FRect Caret = Layout.GetCaretRect(Index, 500.0f);
 			CHECK(Layout.HitTest(FVector2(Caret.Left + 0.1f, Caret.GetCenter().Y), 500.0f) == Index);
@@ -329,10 +358,10 @@ TEST_SUITE("UILayout")
 	{
 		FUITestApp T;
 		TSharedPtr<STestLeaf> A, B;
-		const TSharedRef<SWindow> Window = T.AddWindow(SNew(SSplitter)
-			+ SSplitter::Slot().Value(1.0f)[SAssignNew(A, STestLeaf)]
-			+ SSplitter::Slot().Value(1.0f)[SAssignNew(B, STestLeaf)],
-			FVector2(205.0f, 100.0f));
+		const TSharedRef<SWindow> Window =
+		    T.AddWindow(SNew(SSplitter) + SSplitter::Slot().Value(1.0f)[SAssignNew(A, STestLeaf)] +
+		            SSplitter::Slot().Value(1.0f)[SAssignNew(B, STestLeaf)],
+		        FVector2(205.0f, 100.0f));
 		CHECK(FUITestApp::RectOf(*A).Width() == doctest::Approx(100.0f));
 		CHECK(FUITestApp::RectOf(*B).Left == doctest::Approx(105.0f));
 
@@ -353,9 +382,8 @@ TEST_SUITE("UILayout")
 		FUITestApp T;
 		TSharedPtr<SWidgetSwitcher> Switcher;
 		TSharedPtr<STestLeaf> A, B;
-		const TSharedRef<SWindow> Window = T.AddWindow(SAssignNew(Switcher, SWidgetSwitcher)
-			+ SWidgetSwitcher::Slot()[SAssignNew(A, STestLeaf)]
-			+ SWidgetSwitcher::Slot()[SAssignNew(B, STestLeaf)]);
+		const TSharedRef<SWindow> Window = T.AddWindow(SAssignNew(Switcher, SWidgetSwitcher) +
+		    SWidgetSwitcher::Slot()[SAssignNew(A, STestLeaf)] + SWidgetSwitcher::Slot()[SAssignNew(B, STestLeaf)]);
 		CHECK(&Window->HitTestAt(FVector2(10.0f, 10.0f)).back().Get() == A.get());
 		Switcher->SetActiveWidgetIndex(1);
 		T.Tick();

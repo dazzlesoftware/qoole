@@ -126,6 +126,15 @@ depth 16, at most 64 refreshed dependencies, embedded metadata limited to
 Invalid references/types/unknown expressions fail. Saved shaders whose generated
 source contract changes require recooking.
 
+Codec and compiler validation uses explicit error returns. The checked graph
+serializer `Encode(Graph, Out, Error)` preserves `Out` on failure; the convenience
+snapshot overload returns null for invalid bounded structure. Collection runtime
+instances are created with `FMaterialParameterCollectionInstance::Create`, which
+returns an empty pointer and localized diagnostic for invalid inputs. Failed
+collection refresh preserves the original graph and change flag. No exceptions
+are used to signal ordinary malformed asset or graph data in these paths.
+
+
 Targets are desktop D3D12 and Vulkan. Switch 2, Xbox Series X/S and PS5 require
 licensed compilers, RHIs, capability profiles, packaging and hardware tests.
 Additional UV sets/texture dimensions, scene inputs, time/noise, custom HLSL,

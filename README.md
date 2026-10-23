@@ -205,8 +205,8 @@ Pass a map on the command line to open it. `-vulkan` and `-d3d12` choose the
 backend over the preference, `-appscale=1.25` adds an application scale, `-resetlayout` starts
 from the default layout and key bindings, `-nodebug` / `-debug` turn the
 D3D12 debug layer or Vulkan validation off or on (on by default in Debug
-builds), and `-selftest=<dir>` runs a scripted check that saves screenshots
-and a log. Settings and saved prefabs are kept in
+builds). Run `GenesisEditorTest.exe -selftest=<dir>` for the separate scripted
+check that saves screenshots and a log. Settings and saved prefabs are kept in
 `%LOCALAPPDATA%\Genesis\Editor`.
 
 The MFC editor, its `GenesisDraw*` renderer plugins, `GenesisEditor.pak` and
@@ -332,3 +332,9 @@ Capture.bmp` loads a saved world and checks offscreen readback without editor/UI
 modules; the capture argument is optional. Unsupported legacy components are
 reported explicitly. See Engine/Documentation/Source/Renderer.md for the boundary
 and remaining editor migration.
+
+
+First-party C++ formatting is configured in `.clang-format`. The code audit and
+remaining feature gaps are recorded in `Engine/Documentation/Source/CodeAudit.md`.
+`-localizationcatalog=<path>` loads a UTF-8 JSON object mapping source display
+strings to translations before the editor UI is constructed.

@@ -4,6 +4,8 @@
 // editing operations are in MapDocumentOps.cpp.
 
 #include "MapDocument.h"
+#include "Containers/ContainerAliases.h"
+#include "Internationalization/TextLocalization.h"
 #include "MapPackage.h"
 #include "MapAssetLibrary.h"
 
@@ -26,8 +28,8 @@ void MapEditorPrivate::GetObjectBounds(Object& Obj, Vector3d& OutMin, Vector3d& 
 	bool bFirst = true;
 	for (int Corner = 0; Corner < 8; ++Corner)
 	{
-		Vector3d Point((Corner & 1) ? LocalMax.GetX() : LocalMin.GetX(), (Corner & 2) ? LocalMax.GetY() : LocalMin.GetY(),
-			(Corner & 4) ? LocalMax.GetZ() : LocalMin.GetZ());
+		Vector3d Point((Corner & 1) ? LocalMax.GetX() : LocalMin.GetX(),
+		    (Corner & 2) ? LocalMax.GetY() : LocalMin.GetY(), (Corner & 4) ? LocalMax.GetZ() : LocalMin.GetZ());
 		Transform.Transform(Point);
 		if (bFirst)
 		{
@@ -35,8 +37,10 @@ void MapEditorPrivate::GetObjectBounds(Object& Obj, Vector3d& OutMin, Vector3d& 
 			bFirst = false;
 			continue;
 		}
-		OutMin.NewVector(FMath::Min(OutMin.GetX(), Point.GetX()), FMath::Min(OutMin.GetY(), Point.GetY()), FMath::Min(OutMin.GetZ(), Point.GetZ()));
-		OutMax.NewVector(FMath::Max(OutMax.GetX(), Point.GetX()), FMath::Max(OutMax.GetY(), Point.GetY()), FMath::Max(OutMax.GetZ(), Point.GetZ()));
+		OutMin.NewVector(FMath::Min(OutMin.GetX(), Point.GetX()), FMath::Min(OutMin.GetY(), Point.GetY()),
+		    FMath::Min(OutMin.GetZ(), Point.GetZ()));
+		OutMax.NewVector(FMath::Max(OutMax.GetX(), Point.GetX()), FMath::Max(OutMax.GetY(), Point.GetY()),
+		    FMath::Max(OutMax.GetZ(), Point.GetZ()));
 	}
 }
 
@@ -46,7 +50,7 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	// Take everything out first: the map core only lets a leaf without an
 	// entity change its brush, and only a leaf without a brush take a point
 	// entity.
-	const auto TakeChildren = [](Object& Obj)
+	const TFunction<TArray<Object*>(Object&)> TakeChildren = [](Object& Obj)
 	{
 		TArray<Object*> Children;
 		while (Obj.GetNumChildren() > 0)
@@ -69,7 +73,7 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	std::shared_ptr<const Landscape> LandB = B.SetLandscape(nullptr);
 	std::shared_ptr<const Foliage> FoliageA = A.SetFoliage(nullptr);
 	std::shared_ptr<const Foliage> FoliageB = B.SetFoliage(nullptr);
-	const auto AssetA = A.GetMeshAsset(), AssetB = B.GetMeshAsset();
+	const std::shared_ptr<const FLoadedMeshAsset> AssetA = A.GetMeshAsset(), AssetB = B.GetMeshAsset();
 	std::shared_ptr<const StaticMesh> MeshA = A.SetMesh(nullptr);
 	std::shared_ptr<const StaticMesh> MeshB = B.SetMesh(nullptr);
 
@@ -79,8 +83,10 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 	B.SetMesh(MeshA);
 	A.SetLandscape(LandB); // with its own mesh
 	B.SetLandscape(LandA);
-	if (AssetB) A.SetMeshAsset(AssetB);
-	if (AssetA) B.SetMeshAsset(AssetA);
+	if (AssetB)
+		A.SetMeshAsset(AssetB);
+	if (AssetA)
+		B.SetMeshAsset(AssetA);
 	A.SetFoliage(FoliageB);
 	B.SetFoliage(FoliageA);
 	A.SetEntity(EntityB, false);
@@ -105,9 +111,7 @@ void MapEditorPrivate::SwapContents(Object& A, Object& B)
 // ---------------------------------------------------------------------------
 
 FMapDocument::FMapDocument(Object* InRoot, const FMapGameSet& InGameSet)
-	: Root(InRoot)
-	, Scope(InRoot)
-	, GameSet(InGameSet)
+    : Root(InRoot), Scope(InRoot), GameSet(InGameSet)
 {
 	SelectorPtr = new Selector(*Root);
 }
@@ -198,18 +202,19 @@ namespace
 
 	FString NativeImportDestination(const FString& Source)
 	{
-		const FString Native = FString::FromWide(std::filesystem::path(Source.ToWide()).replace_extension(L".gmap").wstring());
+		const FString Native =
+		    FString::FromWide(std::filesystem::path(Source.ToWide()).replace_extension(L".gmap").wstring());
 		// If a native level already exists beside an import, ask for a save
 		// destination through the ordinary untitled-document Save As flow.
 		return FFileHelper::FileExists(Native) ? FString() : Native;
 	}
-}
+} // namespace
 
 TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutError)
 {
 	if (!FFileHelper::FileExists(InPath))
 	{
-		OutError = FString::Format("{} does not exist.", InPath);
+		OutError = FTextLocalization::Format("{} does not exist.", InPath);
 		return nullptr;
 	}
 	const std::string AnsiPath = InPath.ToAnsi();
@@ -217,14 +222,16 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 	{
 		FString Id;
 		bool Upgraded = false;
-		auto Loaded = FMapPackage::Load(InPath, Id, OutError, false, {}, &Upgraded);
-		if (!Loaded) return nullptr;
+		TUniquePtr<Object> Loaded = FMapPackage::Load(InPath, Id, OutError, false, {}, &Upgraded);
+		if (!Loaded)
+			return nullptr;
 		const FMapGameSet* Active = FMapEditorEnvironment::GetActiveGameSet();
 		check(Active);
 		TUniquePtr<FMapDocument> Doc(new FMapDocument(Loaded.release(), *Active));
 		Doc->Path = InPath;
 		Doc->PackageId = Id;
-		if (Upgraded) Doc->SavedVersion = -1;
+		if (Upgraded)
+			Doc->SavedVersion = -1;
 		return Doc;
 	}
 
@@ -235,7 +242,8 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 		Object* Root = MapIO::ReadMap(AnsiPath.c_str());
 		if (!Root)
 		{
-			OutError = FString::Format("{} could not be read as a .map file.", FPaths::GetCleanFilename(InPath));
+			OutError =
+			    FTextLocalization::Format("{} could not be read as a .map file.", FPaths::GetCleanFilename(InPath));
 			return nullptr;
 		}
 		TUniquePtr<FMapDocument> Doc(new FMapDocument(Root, *Active));
@@ -255,7 +263,8 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 		{
 			// A map of a game the editor no longer has (Qoole's Quake, Half-Life...):
 			// it opens with the built-in game and saves as a Genesis map.
-			UE_LOG(LogMapEditor, Display, "{} is a {} map; opening it as a Genesis map", FPaths::GetCleanFilename(InPath), Header.Game);
+			GENESIS_LOG(LogMapEditor, Display, "{} is a {} map; opening it as a Genesis map",
+			    FPaths::GetCleanFilename(InPath), Header.Game);
 			Set = &FMapEditorEnvironment::GetBuiltInGameSet();
 			bConverted = true;
 		}
@@ -275,7 +284,7 @@ TUniquePtr<FMapDocument> FMapDocument::Open(const FString& InPath, FString& OutE
 	if (!Root->LoadObjFile(AnsiPath.c_str()))
 	{
 		delete Root;
-		OutError = FString::Format("{} could not be read.", FPaths::GetCleanFilename(InPath));
+		OutError = FTextLocalization::Format("{} could not be read.", FPaths::GetCleanFilename(InPath));
 		return nullptr;
 	}
 	if (!Root->HasEntity())
@@ -298,27 +307,32 @@ bool FMapDocument::Save(const FString& InPath, FString& OutError)
 	{
 		// Save As creates a distinct package; ordinary saves keep its identity.
 		FString Id = Path == InPath ? PackageId : FString();
-		if (!FMapPackage::Save(InPath, *Root, Id, OutError)) return false;
+		if (!FMapPackage::Save(InPath, *Root, Id, OutError))
+			return false;
 		PackageId = Id;
 		Path = InPath;
 		SavedVersion = Version;
 		Changed(EMapChange::File);
 		return true;
 	}
-	if(FMapAssetLibrary::HasNativeAssets(*Root)) { OutError="Save as .gmap to preserve native mesh, material and texture references."; return false; }
+	if (FMapAssetLibrary::HasNativeAssets(*Root))
+	{
+		OutError = "Save as .gmap to preserve native mesh, material and texture references.";
+		return false;
+	}
 	const std::string AnsiPath = InPath.ToAnsi();
 	if (HasExtension(InPath, "map"))
 	{
 		if (!MapIO::WriteMap(AnsiPath.c_str(), *Root, nullptr))
 		{
-			OutError = FString::Format("{} could not be written.", InPath);
+			OutError = FTextLocalization::Format("{} could not be written.", InPath);
 			return false;
 		}
 		return true;
 	}
 	if (!WriteQleHeader(InPath, GameSet) || !Root->SaveObjFile(AnsiPath.c_str(), true))
 	{
-		OutError = FString::Format("{} could not be written.", InPath);
+		OutError = FTextLocalization::Format("{} could not be written.", InPath);
 		return false;
 	}
 	Path = InPath;
@@ -389,7 +403,7 @@ void FMapDocument::ApplyScope(Object& NewScope)
 
 Object* FMapDocument::FindActorObject(const FString& ActorId) const
 {
-	TArray<Object*> Nodes{ Root };
+	TArray<Object*> Nodes{Root};
 	while (!Nodes.empty())
 	{
 		Object* Node = Nodes.back();
@@ -444,7 +458,7 @@ void FMapDocument::ScopeUp()
 	}
 	Object* Group = Scope;
 	SetScope(*Scope->GetParentPtr());
-	SetSelection({ Group });
+	SetSelection({Group});
 }
 
 // ----- Selection -----
@@ -477,7 +491,7 @@ void FMapDocument::ApplyActorSelection(const TArray<FString>& ActorIds)
 	for (const FString& Id : ActorIds)
 	{
 		const std::string Key = Id.ToStdString();
-		const auto Found = Children.find(Key);
+		const TMap<std::string, Object*>::iterator Found = Children.find(Key);
 		if (Found != Children.end() && Seen.insert(Key).second)
 		{
 			Resolved.push_back(Found->second);
@@ -492,7 +506,7 @@ void FMapDocument::ApplyActorSelection(const TArray<FString>& ActorIds)
 
 void FMapDocument::SetSelectedActorIds(const TArray<FString>& ActorIds)
 {
-	const auto Before = GetSelectedActorIds();
+	const TArray<FString> Before = GetSelectedActorIds();
 	ApplyActorSelection(ActorIds);
 	if (GetSelectedActorIds() != Before)
 	{
@@ -549,7 +563,7 @@ void FMapDocument::AddToSelection(const TArray<Object*>& Objects)
 void FMapDocument::ToggleSelection(Object* Obj)
 {
 	TArray<Object*> Selection = GetSelection();
-	const auto It = std::find(Selection.begin(), Selection.end(), Obj);
+	const TArray<Object*>::iterator It = std::find(Selection.begin(), Selection.end(), Obj);
 	if (It != Selection.end())
 	{
 		Selection.erase(It);
@@ -585,8 +599,10 @@ bool FMapDocument::GetSelectionBounds(Vector3d& OutMin, Vector3d& OutMax) const
 			bFirst = false;
 			continue;
 		}
-		OutMin.NewVector(FMath::Min(OutMin.GetX(), Min.GetX()), FMath::Min(OutMin.GetY(), Min.GetY()), FMath::Min(OutMin.GetZ(), Min.GetZ()));
-		OutMax.NewVector(FMath::Max(OutMax.GetX(), Max.GetX()), FMath::Max(OutMax.GetY(), Max.GetY()), FMath::Max(OutMax.GetZ(), Max.GetZ()));
+		OutMin.NewVector(FMath::Min(OutMin.GetX(), Min.GetX()), FMath::Min(OutMin.GetY(), Min.GetY()),
+		    FMath::Min(OutMin.GetZ(), Min.GetZ()));
+		OutMax.NewVector(FMath::Max(OutMax.GetX(), Max.GetX()), FMath::Max(OutMax.GetY(), Max.GetY()),
+		    FMath::Max(OutMax.GetZ(), Max.GetZ()));
 	}
 	return !bFirst;
 }

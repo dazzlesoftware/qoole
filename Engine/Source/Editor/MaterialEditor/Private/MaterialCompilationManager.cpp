@@ -1,10 +1,9 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "MaterialCompilationManager.h"
+#include "Internationalization/TextLocalization.h"
 #include "MaterialEditingLibrary.h"
 #include <exception>
-FMaterialCompilationManager::FMaterialCompilationManager() : Worker([this] { Run(); })
-{
-}
+FMaterialCompilationManager::FMaterialCompilationManager() : Worker([this] { Run(); }) {}
 FMaterialCompilationManager::~FMaterialCompilationManager()
 {
 	{
@@ -28,7 +27,7 @@ void FMaterialCompilationManager::Submit(const FMaterialAsset& M, uint64 Revisio
 TOptional<FMaterialCompilationResult> FMaterialCompilationManager::TakeCompleted()
 {
 	std::lock_guard Lock(Mutex);
-	auto Result = std::move(Completed);
+	TOptional<FMaterialCompilationResult> Result = std::move(Completed);
 	Completed.reset();
 	return Result;
 }
@@ -61,7 +60,7 @@ void FMaterialCompilationManager::Run()
 		}
 		catch (...)
 		{
-			Job.Error = "Material compiler failed with an unknown exception.";
+			Job.Error = GENESIS_TEXT("Material compiler failed with an unknown exception.");
 		}
 		{
 			std::lock_guard Lock(Mutex);

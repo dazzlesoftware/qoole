@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
 
 struct FPlatformTime
 {

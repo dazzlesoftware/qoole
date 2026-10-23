@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "Misc/App.h"
+#include "Containers/ContainerAliases.h"
 
 #include <atomic>
 
@@ -37,7 +38,7 @@ namespace
 	}
 
 	std::atomic<bool> bExitRequested = false;
-}
+} // namespace
 
 const FString& FApp::GetName()
 {

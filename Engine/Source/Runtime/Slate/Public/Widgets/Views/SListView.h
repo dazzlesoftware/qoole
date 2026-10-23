@@ -27,8 +27,7 @@
 
 #include <unordered_set>
 
-template <typename ItemType>
-class ITypedTableView
+template <typename ItemType> class ITypedTableView
 {
 public:
 	virtual ~ITypedTableView() = default;
@@ -54,7 +53,8 @@ public:
 	SLATE_BEGIN_ARGS(SExpanderArrow)
 	SLATE_END_ARGS()
 
-	void Construct(const FArguments&, TFunction<bool()> InIsExpanded, TFunction<bool()> InHasChildren, TFunction<void()> InToggle)
+	void Construct(
+	    const FArguments&, TFunction<bool()> InIsExpanded, TFunction<bool()> InHasChildren, TFunction<void()> InToggle)
 	{
 		IsExpanded = std::move(InIsExpanded);
 		HasChildren = std::move(InHasChildren);
@@ -72,18 +72,23 @@ public:
 	}
 
 protected:
-	FVector2 ComputeDesiredSize(float) const override { return FVector2(16.0f, 16.0f); }
-	int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out, int32 LayerId, const FWidgetStyle& Style) const override
+	FVector2 ComputeDesiredSize(float) const override
+	{
+		return FVector2(16.0f, 16.0f);
+	}
+	int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& Out,
+	    int32 LayerId, const FWidgetStyle& Style) const override
 	{
 		if (!HasChildren())
 		{
 			return LayerId;
 		}
 		const FVector2 C = Geometry.Size * 0.5f;
-		const FColor Color = IsHovered() ? Style.Tinted(FSlateColor(EStyleColor::ForegroundHover).Resolve()) : Style.GetForegroundColor();
+		const FColor Color = IsHovered() ? Style.Tinted(FSlateColor(EStyleColor::ForegroundHover).Resolve())
+		                                 : Style.GetForegroundColor();
 		const TArray<FVector2> Points = IsExpanded()
-			? TArray<FVector2>{ C + FVector2(-4.0f, -2.0f), C + FVector2(0.0f, 2.5f), C + FVector2(4.0f, -2.0f) }
-			: TArray<FVector2>{ C + FVector2(-2.0f, -4.0f), C + FVector2(2.5f, 0.0f), C + FVector2(-2.0f, 4.0f) };
+		    ? TArray<FVector2>{C + FVector2(-4.0f, -2.0f), C + FVector2(0.0f, 2.5f), C + FVector2(4.0f, -2.0f)}
+		    : TArray<FVector2>{C + FVector2(-2.0f, -4.0f), C + FVector2(2.5f, 0.0f), C + FVector2(-2.0f, 4.0f)};
 		Out.AddLines(LayerId, Geometry.ToPaintGeometry(), Points, Color, 1.5f);
 		return LayerId;
 	}
@@ -96,17 +101,16 @@ private:
 
 // One row of a list or tree: background by state, the content, and for
 // trees the indentation and expander.
-template <typename ItemType>
-class STableRow : public SCompoundWidget, public ITableRow
+template <typename ItemType> class STableRow : public SCompoundWidget, public ITableRow
 {
 public:
 	SLATE_BEGIN_ARGS(STableRow)
-		SLATE_STYLE_ARGUMENT(FTableRowStyle, Style)
-		SLATE_ARGUMENT(FMargin, Padding, FMargin(4.0f, 2.0f))
-		SLATE_EVENT(FOnDragRowDetected, OnDragDetected)
-		SLATE_EVENT(FOnRowDrop, OnDrop)
-		SLATE_EVENT(FOnCanAcceptRowDrop, OnCanAcceptDrop)
-		SLATE_DEFAULT_SLOT(Content)
+	SLATE_STYLE_ARGUMENT(FTableRowStyle, Style)
+	SLATE_ARGUMENT(FMargin, Padding, FMargin(4.0f, 2.0f))
+	SLATE_EVENT(FOnDragRowDetected, OnDragDetected)
+	SLATE_EVENT(FOnRowDrop, OnDrop)
+	SLATE_EVENT(FOnCanAcceptRowDrop, OnCanAcceptDrop)
+	SLATE_DEFAULT_SLOT(Content)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args, const TSharedRef<STableViewBase>& InOwner)
@@ -131,10 +135,16 @@ public:
 			BuildContent();
 		}
 	}
-	const ItemType& GetItem() const { return Item; }
+	const ItemType& GetItem() const
+	{
+		return Item;
+	}
 
 	// ITableRow
-	TSharedRef<SWidget> AsWidget() override { return SharedThis(this); }
+	TSharedRef<SWidget> AsWidget() override
+	{
+		return SharedThis(this);
+	}
 	void SetIndexInList(int32 Index) override
 	{
 		if (IndexInList != Index)
@@ -143,7 +153,10 @@ public:
 			Invalidate(EInvalidateWidgetReason::Layout); // indentation may change
 		}
 	}
-	int32 GetIndexInList() const override { return IndexInList; }
+	int32 GetIndexInList() const override
+	{
+		return IndexInList;
+	}
 
 	FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent& Event) override
 	{
@@ -191,7 +204,10 @@ public:
 		bDropTarget = false;
 		Invalidate(EInvalidateWidgetReason::Paint);
 	}
-	FReply OnDragOver(const FGeometry&, const FDragDropEvent&) override { return bDropTarget ? FReply::Handled() : FReply::Unhandled(); }
+	FReply OnDragOver(const FGeometry&, const FDragDropEvent&) override
+	{
+		return bDropTarget ? FReply::Handled() : FReply::Unhandled();
+	}
 	FReply OnDrop(const FGeometry&, const FDragDropEvent& Event) override
 	{
 		bDropTarget = false;
@@ -200,15 +216,19 @@ public:
 	}
 
 protected:
-	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-		int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
+	int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+	    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 	{
 		const ITypedTableView<ItemType>* View = GetView();
-		const FTableRowStyle& RowStyle = Style ? *Style : (View ? View->Private_GetRowStyle() : FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("TableRow"));
+		const FTableRowStyle& RowStyle = Style
+		    ? *Style
+		    : (View ? View->Private_GetRowStyle() : FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("TableRow"));
 		const bool bSelected = View && View->Private_IsItemSelected(Item);
 		const bool bFocused = View && View->Private_IsViewFocused();
-		const FSlateBrush& Brush = bSelected ? (IsHovered() ? RowStyle.SelectedHovered : (bFocused ? RowStyle.ActiveSelected : RowStyle.InactiveSelected))
-			: (IsHovered() ? RowStyle.Hovered : (IndexInList % 2 ? RowStyle.Odd : RowStyle.Even));
+		const FSlateBrush& Brush = bSelected
+		    ? (IsHovered() ? RowStyle.SelectedHovered
+		                   : (bFocused ? RowStyle.ActiveSelected : RowStyle.InactiveSelected))
+		    : (IsHovered() ? RowStyle.Hovered : (IndexInList % 2 ? RowStyle.Odd : RowStyle.Even));
 		Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 
 		FWidgetStyle ChildStyle = MakeChildStyle(InWidgetStyle);
@@ -216,7 +236,8 @@ protected:
 		int32 MaxLayer = PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, ChildStyle);
 		if (bDropTarget)
 		{
-			OutDrawElements.AddRoundedBox(++MaxLayer, Geometry.ToPaintGeometry(), FColor::Transparent(), 2.0f, InWidgetStyle.Tinted(RowStyle.DropIndicator.Resolve()), 1.5f);
+			OutDrawElements.AddRoundedBox(++MaxLayer, Geometry.ToPaintGeometry(), FColor::Transparent(), 2.0f,
+			    InWidgetStyle.Tinted(RowStyle.DropIndicator.Resolve()), 1.5f);
 		}
 		return MaxLayer;
 	}
@@ -240,15 +261,28 @@ private:
 		}
 		// Tree rows: indentation and the expander before the content.
 		const TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
-		Row->AddSlot().AutoWidth()[SAssignNew(Indent, SSpacer).Size([this]
+		Row->AddSlot().AutoWidth()[SAssignNew(Indent, SSpacer)
+		        .Size([this]
 		{
 			const ITypedTableView<ItemType>* V = GetView();
 			const float Step = V ? V->Private_GetRowStyle().IndentSize : 14.0f;
 			return FVector2(V ? Step * static_cast<float>(V->Private_GetNestingDepth(IndexInList)) : 0.0f, 0.0f);
 		})];
-		TFunction<bool()> IsExpanded = [this] { const ITypedTableView<ItemType>* V = GetView(); return V && V->Private_IsItemExpanded(Item); };
-		TFunction<bool()> HasKids = [this] { const ITypedTableView<ItemType>* V = GetView(); return V && V->Private_DoesItemHaveChildren(IndexInList); };
-		TFunction<void()> Toggle = [this] { if (ITypedTableView<ItemType>* V = GetView()) V->Private_SetItemExpansion(Item, !V->Private_IsItemExpanded(Item)); };
+		TFunction<bool()> IsExpanded = [this]
+		{
+			const ITypedTableView<ItemType>* V = GetView();
+			return V && V->Private_IsItemExpanded(Item);
+		};
+		TFunction<bool()> HasKids = [this]
+		{
+			const ITypedTableView<ItemType>* V = GetView();
+			return V && V->Private_DoesItemHaveChildren(IndexInList);
+		};
+		TFunction<void()> Toggle = [this]
+		{
+			if (ITypedTableView<ItemType>* V = GetView())
+				V->Private_SetItemExpansion(Item, !V->Private_IsItemExpanded(Item));
+		};
 		Row->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SExpanderArrow, IsExpanded, HasKids, Toggle)];
 		Row->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)[ToSharedRef(Content)];
 		ChildSlot.Padding(Padding)[Row];
@@ -268,8 +302,7 @@ private:
 	bool bDropTarget = false;
 };
 
-template <typename ItemType>
-class SListView : public STableViewBase, public ITypedTableView<ItemType>
+template <typename ItemType> class SListView : public STableViewBase, public ITypedTableView<ItemType>
 {
 public:
 	using FOnGenerateRow = TDelegate<TSharedRef<ITableRow>(ItemType, const TSharedRef<STableViewBase>&)>;
@@ -277,22 +310,23 @@ public:
 	using FOnMouseButtonDoubleClick = TDelegate<void(ItemType)>;
 
 	SLATE_BEGIN_ARGS(SListView)
-		SLATE_ARGUMENT(const TArray<ItemType>*, ListItemsSource, nullptr)
-		SLATE_EVENT(FOnGenerateRow, OnGenerateRow)
-		SLATE_EVENT(FOnSelectionChanged, OnSelectionChanged)
-		SLATE_EVENT(FOnMouseButtonDoubleClick, OnMouseButtonDoubleClick)
-		SLATE_ARGUMENT(ESelectionMode, SelectionMode, ESelectionMode::Single)
-		SLATE_STYLE_ARGUMENT(FTableRowStyle, RowStyle)
-		SLATE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
-		SLATE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible)
-		SLATE_ARGUMENT(float, WheelScrollAmount, 48.0f)
+	SLATE_ARGUMENT(const TArray<ItemType>*, ListItemsSource, nullptr)
+	SLATE_EVENT(FOnGenerateRow, OnGenerateRow)
+	SLATE_EVENT(FOnSelectionChanged, OnSelectionChanged)
+	SLATE_EVENT(FOnMouseButtonDoubleClick, OnMouseButtonDoubleClick)
+	SLATE_ARGUMENT(ESelectionMode, SelectionMode, ESelectionMode::Single)
+	SLATE_STYLE_ARGUMENT(FTableRowStyle, RowStyle)
+	SLATE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
+	SLATE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible)
+	SLATE_ARGUMENT(float, WheelScrollAmount, 48.0f)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args)
 	{
 		ItemsSource = Args._ListItemsSource;
-		ConstructCommon(Args._OnGenerateRow, Args._OnSelectionChanged, Args._OnMouseButtonDoubleClick, Args._SelectionMode, Args._RowStyle,
-			Args._ScrollBarStyle, Args._WheelScrollAmount, Args._ScrollBarVisibility);
+		ConstructCommon(Args._OnGenerateRow, Args._OnSelectionChanged, Args._OnMouseButtonDoubleClick,
+		    Args._SelectionMode, Args._RowStyle, Args._ScrollBarStyle, Args._WheelScrollAmount,
+		    Args._ScrollBarVisibility);
 	}
 
 	// --- Items -------------------------------------------------------------------
@@ -303,12 +337,18 @@ public:
 		RequestListRefresh();
 	}
 	// Regenerates every row at the next layout.
-	void RequestListRefresh() { RebuildAllRows(); }
-	int32 GetNumItems() const override { return GetItems() ? static_cast<int32>(GetItems()->size()) : 0; }
+	void RequestListRefresh()
+	{
+		RebuildAllRows();
+	}
+	int32 GetNumItems() const override
+	{
+		return GetItems() ? static_cast<int32>(GetItems()->size()) : 0;
+	}
 	// The row widget of an item, if it is currently generated.
 	TSharedPtr<ITableRow> WidgetFromItem(const ItemType& Item) const
 	{
-		auto It = Rows.find(Item);
+		typename std::unordered_map<ItemType, TSharedRef<ITableRow>>::const_iterator It = Rows.find(Item);
 		return It == Rows.end() ? nullptr : It->second.ToSharedPtr();
 	}
 
@@ -329,8 +369,14 @@ public:
 		}
 		return Result;
 	}
-	int32 GetNumItemsSelected() const { return static_cast<int32>(Selected.size()); }
-	bool IsItemSelected(const ItemType& Item) const { return Selected.contains(Item); }
+	int32 GetNumItemsSelected() const
+	{
+		return static_cast<int32>(Selected.size());
+	}
+	bool IsItemSelected(const ItemType& Item) const
+	{
+		return Selected.contains(Item);
+	}
 	void SetSelection(const ItemType& Item, ESelectInfo Info = ESelectInfo::Direct)
 	{
 		Selected.clear();
@@ -386,12 +432,24 @@ public:
 		int32 Target = INDEX_NONE;
 		switch (Event.GetKey())
 		{
-		case EKey::Up: Target = Current == INDEX_NONE ? 0 : FMath::Max(0, Current - 1); break;
-		case EKey::Down: Target = Current == INDEX_NONE ? 0 : FMath::Min(Count - 1, Current + 1); break;
-		case EKey::Home: Target = 0; break;
-		case EKey::End: Target = Count - 1; break;
-		case EKey::PageUp: Target = FMath::Max(0, (Current == INDEX_NONE ? 0 : Current) - Page); break;
-		case EKey::PageDown: Target = FMath::Min(Count - 1, (Current == INDEX_NONE ? 0 : Current) + Page); break;
+		case EKey::Up:
+			Target = Current == INDEX_NONE ? 0 : FMath::Max(0, Current - 1);
+			break;
+		case EKey::Down:
+			Target = Current == INDEX_NONE ? 0 : FMath::Min(Count - 1, Current + 1);
+			break;
+		case EKey::Home:
+			Target = 0;
+			break;
+		case EKey::End:
+			Target = Count - 1;
+			break;
+		case EKey::PageUp:
+			Target = FMath::Max(0, (Current == INDEX_NONE ? 0 : Current) - Page);
+			break;
+		case EKey::PageDown:
+			Target = FMath::Min(Count - 1, (Current == INDEX_NONE ? 0 : Current) + Page);
+			break;
 		case EKey::A:
 			if (Event.IsControlDown() && SelectionMode == ESelectionMode::Multi)
 			{
@@ -462,18 +520,41 @@ public:
 			SetSelection(Item, ESelectInfo::OnMouseClick);
 		}
 	}
-	void Private_OnRowDoubleClicked(const ItemType& Item) override { OnMouseButtonDoubleClick.ExecuteIfBound(Item); }
-	bool Private_IsItemSelected(const ItemType& Item) const override { return Selected.contains(Item); }
-	bool Private_IsViewFocused() const override { return HasKeyboardFocus() || HasFocusedDescendants(); }
-	int32 Private_GetNestingDepth(int32) const override { return -1; }
-	bool Private_DoesItemHaveChildren(int32) const override { return false; }
-	bool Private_IsItemExpanded(const ItemType&) const override { return false; }
+	void Private_OnRowDoubleClicked(const ItemType& Item) override
+	{
+		OnMouseButtonDoubleClick.ExecuteIfBound(Item);
+	}
+	bool Private_IsItemSelected(const ItemType& Item) const override
+	{
+		return Selected.contains(Item);
+	}
+	bool Private_IsViewFocused() const override
+	{
+		return HasKeyboardFocus() || HasFocusedDescendants();
+	}
+	int32 Private_GetNestingDepth(int32) const override
+	{
+		return -1;
+	}
+	bool Private_DoesItemHaveChildren(int32) const override
+	{
+		return false;
+	}
+	bool Private_IsItemExpanded(const ItemType&) const override
+	{
+		return false;
+	}
 	void Private_SetItemExpansion(const ItemType&, bool) override {}
-	const FTableRowStyle& Private_GetRowStyle() const override { return *RowStyle; }
+	const FTableRowStyle& Private_GetRowStyle() const override
+	{
+		return *RowStyle;
+	}
 
 protected:
-	void ConstructCommon(const FOnGenerateRow& InOnGenerateRow, const FOnSelectionChanged& InOnSelectionChanged, const FOnMouseButtonDoubleClick& InOnDoubleClick,
-		ESelectionMode InSelectionMode, const FTableRowStyle* InRowStyle, const FScrollBarStyle* InScrollBarStyle, float InWheelScrollAmount, EVisibility InScrollBarVisibility)
+	void ConstructCommon(const FOnGenerateRow& InOnGenerateRow, const FOnSelectionChanged& InOnSelectionChanged,
+	    const FOnMouseButtonDoubleClick& InOnDoubleClick, ESelectionMode InSelectionMode,
+	    const FTableRowStyle* InRowStyle, const FScrollBarStyle* InScrollBarStyle, float InWheelScrollAmount,
+	    EVisibility InScrollBarVisibility)
 	{
 		OnGenerateRow = InOnGenerateRow;
 		OnSelectionChanged = InOnSelectionChanged;
@@ -484,8 +565,16 @@ protected:
 	}
 
 	// The items in display order (a tree's flattened, visible items).
-	virtual const TArray<ItemType>* GetItems() const { return ItemsSource; }
-	virtual FReply OnTreeKeyDown(const FKeyEvent& Event, int32 Current) { (void)Event; (void)Current; return FReply::Unhandled(); }
+	virtual const TArray<ItemType>* GetItems() const
+	{
+		return ItemsSource;
+	}
+	virtual FReply OnTreeKeyDown(const FKeyEvent& Event, int32 Current)
+	{
+		(void)Event;
+		(void)Current;
+		return FReply::Unhandled();
+	}
 
 	int32 IndexOf(const ItemType& Item) const
 	{
@@ -494,7 +583,7 @@ protected:
 		{
 			return INDEX_NONE;
 		}
-		const auto It = std::find(Items->begin(), Items->end(), Item);
+		const typename TArray<ItemType>::const_iterator It = std::find(Items->begin(), Items->end(), Item);
 		return It == Items->end() ? INDEX_NONE : static_cast<int32>(It - Items->begin());
 	}
 
@@ -526,7 +615,7 @@ protected:
 	TSharedRef<SWidget> GetRowWidgetForIndex(int32 Index) override
 	{
 		const ItemType& Item = (*GetItems())[Index];
-		auto It = Rows.find(Item);
+		typename std::unordered_map<ItemType, TSharedRef<ITableRow>>::const_iterator It = Rows.find(Item);
 		TSharedPtr<ITableRow> Row;
 		if (It != Rows.end())
 		{
@@ -549,10 +638,15 @@ protected:
 		Used.insert(Item);
 		return Row->AsWidget();
 	}
-	void BeginGeneration() override { Used.clear(); }
+	void BeginGeneration() override
+	{
+		Used.clear();
+	}
 	void EndGeneration() override
 	{
-		std::erase_if(Rows, [this](const auto& Entry) { return !Used.contains(Entry.first); });
+		std::erase_if(Rows,
+		    [this](const typename std::unordered_map<ItemType, TSharedRef<ITableRow>>::value_type& Entry)
+		{ return !Used.contains(Entry.first); });
 	}
 
 	const TArray<ItemType>* ItemsSource = nullptr;
@@ -568,8 +662,7 @@ protected:
 	std::unordered_set<ItemType> Used;
 };
 
-template <typename ItemType>
-class STreeView : public SListView<ItemType>
+template <typename ItemType> class STreeView : public SListView<ItemType>
 {
 public:
 	using Super = SListView<ItemType>;
@@ -580,17 +673,17 @@ public:
 	using FOnMouseButtonDoubleClick = typename Super::FOnMouseButtonDoubleClick;
 
 	SLATE_BEGIN_ARGS(STreeView)
-		SLATE_ARGUMENT(const TArray<ItemType>*, TreeItemsSource, nullptr)
-		SLATE_EVENT(FOnGetChildren, OnGetChildren)
-		SLATE_EVENT(FOnExpansionChanged, OnExpansionChanged)
-		SLATE_EVENT(FOnGenerateRow, OnGenerateRow)
-		SLATE_EVENT(FOnSelectionChanged, OnSelectionChanged)
-		SLATE_EVENT(FOnMouseButtonDoubleClick, OnMouseButtonDoubleClick)
-		SLATE_ARGUMENT(ESelectionMode, SelectionMode, ESelectionMode::Single)
-		SLATE_STYLE_ARGUMENT(FTableRowStyle, RowStyle)
-		SLATE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
-		SLATE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible)
-		SLATE_ARGUMENT(float, WheelScrollAmount, 48.0f)
+	SLATE_ARGUMENT(const TArray<ItemType>*, TreeItemsSource, nullptr)
+	SLATE_EVENT(FOnGetChildren, OnGetChildren)
+	SLATE_EVENT(FOnExpansionChanged, OnExpansionChanged)
+	SLATE_EVENT(FOnGenerateRow, OnGenerateRow)
+	SLATE_EVENT(FOnSelectionChanged, OnSelectionChanged)
+	SLATE_EVENT(FOnMouseButtonDoubleClick, OnMouseButtonDoubleClick)
+	SLATE_ARGUMENT(ESelectionMode, SelectionMode, ESelectionMode::Single)
+	SLATE_STYLE_ARGUMENT(FTableRowStyle, RowStyle)
+	SLATE_STYLE_ARGUMENT(FScrollBarStyle, ScrollBarStyle)
+	SLATE_ARGUMENT(EVisibility, ScrollBarVisibility, EVisibility::Visible)
+	SLATE_ARGUMENT(float, WheelScrollAmount, 48.0f)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args)
@@ -598,8 +691,9 @@ public:
 		RootItems = Args._TreeItemsSource;
 		OnGetChildren = Args._OnGetChildren;
 		OnExpansionChanged = Args._OnExpansionChanged;
-		this->ConstructCommon(Args._OnGenerateRow, Args._OnSelectionChanged, Args._OnMouseButtonDoubleClick, Args._SelectionMode, Args._RowStyle,
-			Args._ScrollBarStyle, Args._WheelScrollAmount, Args._ScrollBarVisibility);
+		this->ConstructCommon(Args._OnGenerateRow, Args._OnSelectionChanged, Args._OnMouseButtonDoubleClick,
+		    Args._SelectionMode, Args._RowStyle, Args._ScrollBarStyle, Args._WheelScrollAmount,
+		    Args._ScrollBarVisibility);
 		bTreeDirty = true;
 	}
 
@@ -614,7 +708,10 @@ public:
 		bTreeDirty = true;
 		this->RequestListRefresh();
 	}
-	bool IsItemExpanded(const ItemType& Item) const { return Expanded.contains(Item); }
+	bool IsItemExpanded(const ItemType& Item) const
+	{
+		return Expanded.contains(Item);
+	}
 	void SetItemExpansion(const ItemType& Item, bool bExpand)
 	{
 		if (bExpand == IsItemExpanded(Item))
@@ -651,8 +748,14 @@ public:
 		RebuildIfNeeded();
 		return Index >= 0 && Index < static_cast<int32>(HasChildren.size()) && HasChildren[Index];
 	}
-	bool Private_IsItemExpanded(const ItemType& Item) const override { return IsItemExpanded(Item); }
-	void Private_SetItemExpansion(const ItemType& Item, bool bExpanded) override { SetItemExpansion(Item, bExpanded); }
+	bool Private_IsItemExpanded(const ItemType& Item) const override
+	{
+		return IsItemExpanded(Item);
+	}
+	void Private_SetItemExpansion(const ItemType& Item, bool bExpanded) override
+	{
+		SetItemExpansion(Item, bExpanded);
+	}
 
 protected:
 	const TArray<ItemType>* GetItems() const override

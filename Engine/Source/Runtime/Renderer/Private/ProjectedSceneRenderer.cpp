@@ -1,5 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "Renderer/ProjectedSceneRenderer.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 #include "Geometry/StaticMesh.h"
 #include <cmath>
 #include <cstring>
@@ -21,14 +23,14 @@ FRHIGraphicsPipeline* FProjectedSceneRenderer::GetSolidPipeline(EPixelFormat Tar
 	FRHIGraphicsPipelineDesc Desc;
 	const bool bVulkan = Device.GetBackend() == ERHIBackend::Vulkan;
 	Desc.VertexShader = bVulkan ? FRHIShaderBytecode{g_SceneShaders_VSMain_SPIRV, sizeof(g_SceneShaders_VSMain_SPIRV)}
-								: FRHIShaderBytecode{g_SceneShaders_VSMain_DXIL, sizeof(g_SceneShaders_VSMain_DXIL)};
-	Desc.PixelShader =
-		bVulkan ? FRHIShaderBytecode{g_SceneShaders_PSTextured_SPIRV, sizeof(g_SceneShaders_PSTextured_SPIRV)}
-				: FRHIShaderBytecode{g_SceneShaders_PSTextured_DXIL, sizeof(g_SceneShaders_PSTextured_DXIL)};
+	                            : FRHIShaderBytecode{g_SceneShaders_VSMain_DXIL, sizeof(g_SceneShaders_VSMain_DXIL)};
+	Desc.PixelShader = bVulkan
+	    ? FRHIShaderBytecode{g_SceneShaders_PSTextured_SPIRV, sizeof(g_SceneShaders_PSTextured_SPIRV)}
+	    : FRHIShaderBytecode{g_SceneShaders_PSTextured_DXIL, sizeof(g_SceneShaders_PSTextured_DXIL)};
 	Desc.VertexAttributes = {
-		{"POSITION", 0, EVertexFormat::Float3, offsetof(FProjectedVertex, X)},
-		{"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FProjectedVertex, U)},
-		{"COLOR", 0, EVertexFormat::UByte4N, offsetof(FProjectedVertex, Color)},
+	    {"POSITION", 0, EVertexFormat::Float3, offsetof(FProjectedVertex, X)},
+	    {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FProjectedVertex, U)},
+	    {"COLOR", 0, EVertexFormat::UByte4N, offsetof(FProjectedVertex, Color)},
 	};
 	Desc.VertexStride = sizeof(FProjectedVertex);
 	Desc.BlendMode = EBlendMode::Opaque;
@@ -57,9 +59,9 @@ FRHIGraphicsPipeline* FProjectedSceneRenderer::GetLandscapePipeline(EPixelFormat
 	}
 	FRHIGraphicsPipelineDesc Desc = Solid->GetDesc();
 	const bool bVulkan = Device.GetBackend() == ERHIBackend::Vulkan;
-	Desc.PixelShader =
-		bVulkan ? FRHIShaderBytecode{g_SceneShaders_PSLandscape_SPIRV, sizeof(g_SceneShaders_PSLandscape_SPIRV)}
-				: FRHIShaderBytecode{g_SceneShaders_PSLandscape_DXIL, sizeof(g_SceneShaders_PSLandscape_DXIL)};
+	Desc.PixelShader = bVulkan
+	    ? FRHIShaderBytecode{g_SceneShaders_PSLandscape_SPIRV, sizeof(g_SceneShaders_PSLandscape_SPIRV)}
+	    : FRHIShaderBytecode{g_SceneShaders_PSLandscape_DXIL, sizeof(g_SceneShaders_PSLandscape_DXIL)};
 	// Slot 0 unused, then the weights and the layers' textures (which repeat).
 	Desc.NumTextures = 3;
 	Desc.SamplerAddress = ESamplerAddress::Wrap;
@@ -73,25 +75,25 @@ FRHIGraphicsPipeline* FProjectedSceneRenderer::GetLandscapePipeline(EPixelFormat
 
 namespace
 {
-// A corner of a mesh's triangle for the instanced pipeline.
-struct FInstancedVertex
-{
-	float Position[3];
-	float Normal[3];
-	uint32 Color; // RGBA8, R in the low byte
-};
+	// A corner of a mesh's triangle for the instanced pipeline.
+	struct FInstancedVertex
+	{
+		float Position[3];
+		float Normal[3];
+		uint32 Color; // RGBA8, R in the low byte
+	};
 } // namespace
 
 FRHIGraphicsPipeline* FProjectedSceneRenderer::GetInstancedPipeline(EPixelFormat TargetFormat, bool Mirrored)
 {
 	if (Mirrored)
 	{
-		auto* Base = GetInstancedPipeline(TargetFormat, false);
+		FRHIGraphicsPipeline* Base = GetInstancedPipeline(TargetFormat, false);
 		if (!Base)
 			return nullptr;
 		if (!MirroredInstancedPipeline)
 		{
-			auto Desc = Base->GetDesc();
+			FRHIGraphicsPipelineDesc Desc = Base->GetDesc();
 			Desc.CullMode = ECullMode::Back;
 			Desc.DebugName = "Mirrored instanced scene meshes";
 			MirroredInstancedPipeline = Device.CreateGraphicsPipeline(Desc);
@@ -110,16 +112,16 @@ FRHIGraphicsPipeline* FProjectedSceneRenderer::GetInstancedPipeline(EPixelFormat
 	FRHIGraphicsPipelineDesc Desc = Solid->GetDesc();
 	const bool bVulkan = Device.GetBackend() == ERHIBackend::Vulkan;
 	Desc.VertexShader = bVulkan
-							? FRHIShaderBytecode{g_SceneShaders_VSFoliage_SPIRV, sizeof(g_SceneShaders_VSFoliage_SPIRV)}
-							: FRHIShaderBytecode{g_SceneShaders_VSFoliage_DXIL, sizeof(g_SceneShaders_VSFoliage_DXIL)};
+	    ? FRHIShaderBytecode{g_SceneShaders_VSFoliage_SPIRV, sizeof(g_SceneShaders_VSFoliage_SPIRV)}
+	    : FRHIShaderBytecode{g_SceneShaders_VSFoliage_DXIL, sizeof(g_SceneShaders_VSFoliage_DXIL)};
 	// The mesh's corners, then each copy's object-to-view rows.
 	Desc.VertexAttributes = {
-		{"POSITION", 0, EVertexFormat::Float3, offsetof(FInstancedVertex, Position), 0},
-		{"NORMAL", 0, EVertexFormat::Float3, offsetof(FInstancedVertex, Normal), 0},
-		{"COLOR", 0, EVertexFormat::UByte4N, offsetof(FInstancedVertex, Color), 0},
-		{"TEXCOORD", 1, EVertexFormat::Float4, 0, 1},
-		{"TEXCOORD", 2, EVertexFormat::Float4, 16, 1},
-		{"TEXCOORD", 3, EVertexFormat::Float4, 32, 1},
+	    {"POSITION", 0, EVertexFormat::Float3, offsetof(FInstancedVertex, Position), 0},
+	    {"NORMAL", 0, EVertexFormat::Float3, offsetof(FInstancedVertex, Normal), 0},
+	    {"COLOR", 0, EVertexFormat::UByte4N, offsetof(FInstancedVertex, Color), 0},
+	    {"TEXCOORD", 1, EVertexFormat::Float4, 0, 1},
+	    {"TEXCOORD", 2, EVertexFormat::Float4, 16, 1},
+	    {"TEXCOORD", 3, EVertexFormat::Float4, 32, 1},
 	};
 	Desc.VertexStride = sizeof(FInstancedVertex);
 	Desc.InstanceStride = 12 * sizeof(float);
@@ -145,7 +147,8 @@ const FInstanceMeshBuffers* FProjectedSceneRenderer::GetMeshBuffers(const std::s
 	if (!Snapshot)
 		return nullptr;
 	const StaticMesh& Mesh = *Snapshot;
-	if (const auto Found = MeshBuffers.find(&Mesh); Found != MeshBuffers.end())
+	if (const std::map<const StaticMesh*, FInstanceMeshBuffers>::iterator Found = MeshBuffers.find(&Mesh);
+	    Found != MeshBuffers.end())
 	{
 		Found->second.LastUsed = Frame;
 		return &Found->second;
@@ -167,9 +170,8 @@ const FInstanceMeshBuffers* FProjectedSceneRenderer::GetMeshBuffers(const std::s
 				return nullptr;
 			if (Mesh.HasVertexColors() && static_cast<size_t>(Triangle.v[Corner]) >= Mesh.GetVertexColors().size())
 				return nullptr;
-			FInstancedVertex Vertex{{P.GetX(), P.GetY(), P.GetZ()},
-									{N.GetX(), N.GetY(), N.GetZ()},
-									Mesh.HasVertexColors() ? Mesh.GetVertexColor(Triangle.v[Corner]) : 0xFFFFFFFFu};
+			FInstancedVertex Vertex{{P.GetX(), P.GetY(), P.GetZ()}, {N.GetX(), N.GetY(), N.GetZ()},
+			    Mesh.HasVertexColors() ? Mesh.GetVertexColor(Triangle.v[Corner]) : 0xFFFFFFFFu};
 			Corners.push_back(Vertex);
 		}
 	}
@@ -213,18 +215,24 @@ const FInstanceMeshBuffers* FProjectedSceneRenderer::GetMeshBuffers(const std::s
 
 FProjectedSceneRenderer::~FProjectedSceneRenderer()
 {
-	for (auto* P : {&SolidPipeline, &LandscapePipeline, &InstancedPipeline, &MirroredInstancedPipeline})
+	for (std::shared_ptr<FRHIGraphicsPipeline>* P :
+	    {&SolidPipeline, &LandscapePipeline, &InstancedPipeline, &MirroredInstancedPipeline})
 		if (*P)
 			Device.DeferRelease(*P);
 	if (WhiteTexture)
 		Device.DeferRelease(WhiteTexture);
-	for (auto& [Mesh, Buffers] : MeshBuffers)
+	for (std::pair<const StaticMesh* const, FInstanceMeshBuffers>& MeshBinding : MeshBuffers)
 	{
+		FInstanceMeshBuffers& Buffers = MeshBinding.second;
+
 		Device.DeferRelease(Buffers.Vertices);
 		Device.DeferRelease(Buffers.Indices);
 	}
-	for (auto& [Land, Entry] : Landscapes)
+	for (std::pair<const unsigned long long, std::unique_ptr<FProjectedSceneRenderer::FLandscapeEntry>>& LandBinding :
+	    Landscapes)
 	{
+		std::unique_ptr<FProjectedSceneRenderer::FLandscapeEntry>& Entry = LandBinding.second;
+
 		Release(*Entry);
 	}
 }
@@ -252,8 +260,8 @@ FProjectedSceneRenderer::FLandscapeEntry& FProjectedSceneRenderer::FindEntry(uin
 	return *Entry;
 }
 
-bool FProjectedSceneRenderer::GetLandscapeLayers(uint64 Key, const std::shared_ptr<const Landscape>& Land,
-												 FRHITexture*& OutWeights, FRHITexture*& OutLayers)
+bool FProjectedSceneRenderer::GetLandscapeLayers(
+    uint64 Key, const std::shared_ptr<const Landscape>& Land, FRHITexture*& OutWeights, FRHITexture*& OutLayers)
 {
 	OutWeights = OutLayers = nullptr;
 	if (!bBlendLandscapeLayers || !Land || !FLandscapeLayerImages::CanBlend(*Land))
@@ -269,7 +277,7 @@ bool FProjectedSceneRenderer::GetLandscapeLayers(uint64 Key, const std::shared_p
 	const uint32 PointsX = static_cast<uint32>(Images.GetPointsX());
 	const uint32 PointsY = static_cast<uint32>(Images.GetPointsY());
 	if (!Entry.WeightTexture || Entry.WeightTexture->GetWidth() != PointsX ||
-		Entry.WeightTexture->GetHeight() != PointsY)
+	    Entry.WeightTexture->GetHeight() != PointsY)
 	{
 		if (Entry.WeightTexture)
 		{
@@ -289,7 +297,7 @@ bool FProjectedSceneRenderer::GetLandscapeLayers(uint64 Key, const std::shared_p
 		for (uint32 Slice = 0; Slice < 2; ++Slice)
 		{
 			const uint8* First = Images.GetWeights().data() + SIZE_T(Pitch) * PointsY * Slice +
-								 SIZE_T(Changed.Top) * Pitch + SIZE_T(Changed.Left) * 4;
+			    SIZE_T(Changed.Top) * Pitch + SIZE_T(Changed.Left) * 4;
 			Device.UpdateTexture(*Entry.WeightTexture, Changed, First, Pitch, Slice);
 		}
 	}
@@ -344,7 +352,7 @@ FRHITexture* FProjectedSceneRenderer::GetLandscapeTexture(uint64 Key, const std:
 	{
 		const uint32 Pitch = Width * 4;
 		const uint8* First = Entry->Bake.GetPixels().data() + static_cast<SIZE_T>(Baked.Top) * Pitch +
-							 static_cast<SIZE_T>(Baked.Left) * 4;
+		    static_cast<SIZE_T>(Baked.Left) * 4;
 		Device.UpdateTexture(*Entry->Texture, Baked, First, Pitch);
 	}
 	return Entry->Texture.get();
@@ -356,7 +364,7 @@ void FProjectedSceneRenderer::Trim()
 	// seconds (deleted, or its layers cleared) goes.
 	++Frame;
 
-	for (auto It = MeshBuffers.begin(); It != MeshBuffers.end();)
+	for (std::map<const StaticMesh*, FInstanceMeshBuffers>::iterator It = MeshBuffers.begin(); It != MeshBuffers.end();)
 	{
 		if (Frame - It->second.LastUsed > 300)
 		{
@@ -368,7 +376,7 @@ void FProjectedSceneRenderer::Trim()
 			++It;
 	}
 
-	for (auto It = Landscapes.begin(); It != Landscapes.end();)
+	for (std::map<uint64, std::unique_ptr<FLandscapeEntry>>::iterator It = Landscapes.begin(); It != Landscapes.end();)
 	{
 		if (Frame - It->second->LastUsed > 300)
 		{
@@ -384,7 +392,7 @@ void FProjectedSceneRenderer::Trim()
 
 const FLandscapeBake* FProjectedSceneRenderer::FindLandscapeBake(uint64 Key) const
 {
-	const auto Found = Landscapes.find(Key);
+	const std::map<uint64, std::unique_ptr<FLandscapeEntry>>::const_iterator Found = Landscapes.find(Key);
 	return Found != Landscapes.end() ? &Found->second->Bake : nullptr;
 }
 
@@ -404,19 +412,19 @@ FRHITexture* FProjectedSceneRenderer::GetWhiteTexture()
 
 FProjectedSceneFrame::~FProjectedSceneFrame()
 {
-	for (auto& Draw : Draws)
-		for (auto* T : {&Draw.Texture, &Draw.Weights, &Draw.Layers})
+	for (FProjectedSceneFrame::FDraw& Draw : Draws)
+		for (std::shared_ptr<FRHITexture>* T : {&Draw.Texture, &Draw.Weights, &Draw.Layers})
 			if (*T)
 				Device.DeferRelease(*T);
-	for (auto& Draw : Instances)
+	for (FProjectedSceneFrame::FInstanceDraw& Draw : Instances)
 	{
 		Device.DeferRelease(Draw.Mesh.Vertices);
 		Device.DeferRelease(Draw.Mesh.Indices);
 	}
-	for (auto* B : {&Vertices, &Indices, &InstanceRows})
+	for (std::shared_ptr<FRHIBuffer>* B : {&Vertices, &Indices, &InstanceRows})
 		if (*B)
 			Device.DeferRelease(*B);
-	for (auto* P : {&Solid, &LandscapePipeline, &Instanced, &MirroredInstanced})
+	for (std::shared_ptr<FRHIGraphicsPipeline>* P : {&Solid, &LandscapePipeline, &Instanced, &MirroredInstanced})
 		if (*P)
 			Device.DeferRelease(*P);
 	if (White)
@@ -424,27 +432,28 @@ FProjectedSceneFrame::~FProjectedSceneFrame()
 }
 
 TUniquePtr<FProjectedSceneFrame> FProjectedSceneRenderer::Prepare(const TArray<FProjectedVertex>& Vertices,
-																  const TArray<FProjectedTriangleBatch>& Batches,
-																  const TArray<FMeshInstanceBatch>& Instances,
-																  EPixelFormat Format, FString& Error)
+    const TArray<FProjectedTriangleBatch>& Batches, const TArray<FMeshInstanceBatch>& Instances, EPixelFormat Format,
+    FString& Error)
 {
 	Error.Empty();
-	const auto Fail = [&](const char* Why) -> TUniquePtr<FProjectedSceneFrame> {
+	const TFunction<TUniquePtr<FProjectedSceneFrame>(const char*)> Fail =
+	    [&](const char* Why) -> TUniquePtr<FProjectedSceneFrame>
+	{
 		Error = Why;
 		return {};
 	};
 	if (Vertices.size() > std::numeric_limits<uint32>::max())
 		return Fail("Too many projected vertices.");
-	for (const auto& V : Vertices)
+	for (const FProjectedVertex& V : Vertices)
 		if (!std::isfinite(V.X) || !std::isfinite(V.Y) || !std::isfinite(V.Q) || V.Q <= 0 || !std::isfinite(V.U) ||
-			!std::isfinite(V.V))
+		    !std::isfinite(V.V))
 			return Fail("Invalid projected vertex.");
-	for (const auto& B : Batches)
+	for (const FProjectedTriangleBatch& B : Batches)
 		if (B.FirstVertex > Vertices.size() || B.NumVertices > Vertices.size() - B.FirstVertex ||
-			B.NumVertices % 3 != 0)
+		    B.NumVertices % 3 != 0)
 			return Fail("Invalid projected triangle range.");
 	size_t Total = 0;
-	for (const auto& B : Instances)
+	for (const FMeshInstanceBatch& B : Instances)
 	{
 		if (!B.Mesh || B.Rows.size() % 12 != 0 || B.Rows.size() / 12 > std::numeric_limits<uint32>::max() - Total)
 			return Fail("Invalid mesh instance batch.");
@@ -456,7 +465,7 @@ TUniquePtr<FProjectedSceneFrame> FProjectedSceneRenderer::Prepare(const TArray<F
 		}
 		Total += B.Rows.size() / 12;
 	}
-	auto Out = TUniquePtr<FProjectedSceneFrame>(new FProjectedSceneFrame(Device));
+	TUniquePtr<FProjectedSceneFrame> Out = TUniquePtr<FProjectedSceneFrame>(new FProjectedSceneFrame(Device));
 	GetSolidPipeline(Format);
 	Out->Solid = SolidPipeline;
 	if (!Out->Solid)
@@ -484,7 +493,7 @@ TUniquePtr<FProjectedSceneFrame> FProjectedSceneRenderer::Prepare(const TArray<F
 		if (!Out->Vertices || !Out->Indices)
 			return Fail("Projected scene buffer creation failed.");
 	}
-	for (const auto& B : Batches)
+	for (const FProjectedTriangleBatch& B : Batches)
 	{
 		if (!B.NumVertices)
 			continue;
@@ -497,7 +506,7 @@ TUniquePtr<FProjectedSceneFrame> FProjectedSceneRenderer::Prepare(const TArray<F
 			FRHITexture* Layers = nullptr;
 			if (GetLandscapePipeline(Format) && GetLandscapeLayers(B.LandscapeKey, B.Terrain, Weights, Layers))
 			{
-				const auto& E = *Landscapes.at(B.LandscapeKey);
+				FProjectedSceneRenderer::FLandscapeEntry const& E = *Landscapes.at(B.LandscapeKey);
 				Draw.Weights = E.WeightTexture;
 				Draw.Layers = E.LayerTexture;
 				FLandscapeLayerImages::GetConstants(*B.Terrain, Draw.Constants);
@@ -516,11 +525,11 @@ TUniquePtr<FProjectedSceneFrame> FProjectedSceneRenderer::Prepare(const TArray<F
 		TArray<float> Rows;
 		Rows.reserve(Total * 12);
 		uint32 First = 0;
-		for (const auto& B : Instances)
+		for (const FMeshInstanceBatch& B : Instances)
 		{
 			if (!B.Count())
 				continue;
-			const auto* Mesh = GetMeshBuffers(B.Mesh);
+			const FInstanceMeshBuffers* Mesh = GetMeshBuffers(B.Mesh);
 			if (!Mesh)
 				return Fail("Instance mesh buffers could not be created.");
 			if (B.bMirrored)
@@ -544,15 +553,15 @@ TUniquePtr<FProjectedSceneFrame> FProjectedSceneRenderer::Prepare(const TArray<F
 	}
 	return Out;
 }
-void FProjectedSceneRenderer::DrawGeometry(FRHICommandList& Cmd, const FProjectedSceneFrame& Prepared,
-										   const FProjectedSceneView& View)
+void FProjectedSceneRenderer::DrawGeometry(
+    FRHICommandList& Cmd, const FProjectedSceneFrame& Prepared, const FProjectedSceneView& View)
 {
 	if (Prepared.Draws.empty() || !View.Width || !View.Height)
 		return;
 	float Constants[16] = {2.0f / View.Width, 2.0f / View.Height};
 	Cmd.SetVertexBuffer(*Prepared.Vertices, 0, sizeof(FProjectedVertex));
 	Cmd.SetIndexBuffer(*Prepared.Indices, 0, EIndexFormat::UInt32);
-	for (const auto& Draw : Prepared.Draws)
+	for (const FProjectedSceneFrame::FDraw& Draw : Prepared.Draws)
 	{
 		Cmd.SetPipeline(Draw.Layers ? *Prepared.LandscapePipeline : *Prepared.Solid);
 		if (Draw.Layers)
@@ -571,31 +580,17 @@ void FProjectedSceneRenderer::DrawGeometry(FRHICommandList& Cmd, const FProjecte
 		Cmd.DrawIndexed(Draw.Count, Draw.First, 0);
 	}
 }
-void FProjectedSceneRenderer::DrawInstances(FRHICommandList& Cmd, const FProjectedSceneFrame& Prepared,
-											const FProjectedSceneView& View)
+void FProjectedSceneRenderer::DrawInstances(
+    FRHICommandList& Cmd, const FProjectedSceneFrame& Prepared, const FProjectedSceneView& View)
 {
 	if (Prepared.Instances.empty() || !View.Width || !View.Height)
 		return;
-	const float C[16] = {2.0f / View.Width,
-						 2.0f / View.Height,
-						 0,
-						 0,
-						 View.CenterX,
-						 View.CenterY,
-						 View.ProjectionScale,
-						 View.bLit ? 1.0f : 0.0f,
-						 View.Light[0],
-						 View.Light[1],
-						 View.Light[2],
-						 0,
-						 View.Up[0],
-						 View.Up[1],
-						 View.Up[2],
-						 0};
+	const float C[16] = {2.0f / View.Width, 2.0f / View.Height, 0, 0, View.CenterX, View.CenterY, View.ProjectionScale,
+	    View.bLit ? 1.0f : 0.0f, View.Light[0], View.Light[1], View.Light[2], 0, View.Up[0], View.Up[1], View.Up[2], 0};
 	FRHIGraphicsPipeline* Bound = nullptr;
-	for (const auto& Draw : Prepared.Instances)
+	for (const FProjectedSceneFrame::FInstanceDraw& Draw : Prepared.Instances)
 	{
-		auto* Wanted = Draw.bMirrored ? Prepared.MirroredInstanced.get() : Prepared.Instanced.get();
+		FRHIGraphicsPipeline* Wanted = Draw.bMirrored ? Prepared.MirroredInstanced.get() : Prepared.Instanced.get();
 		if (Wanted != Bound)
 		{
 			Cmd.SetPipeline(*Wanted);

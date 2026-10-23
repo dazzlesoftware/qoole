@@ -1,5 +1,6 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "TestHelpers.h"
+#include "Templates/SharedPointer.h"
 #include "Renderer/NativeMeshDrawList.h"
 #include "Geometry/StaticMesh.h"
 #include "Renderer/LandscapeRenderPlan.h"
@@ -16,15 +17,15 @@
 #include <limits>
 namespace
 {
-std::shared_ptr<FLoadedMeshAsset> CubeSnapshot(bool Transparent = false)
-{
-	auto Asset = std::make_shared<FLoadedMeshAsset>();
-	Asset->Data.Mesh = StaticMesh::Find("Cube");
-	Asset->Material = FMaterialAsset{};
-	if (Transparent)
-		Asset->Material->BlendMode = EMaterialBlendMode::Translucent;
-	return Asset;
-}
+	std::shared_ptr<FLoadedMeshAsset> CubeSnapshot(bool Transparent = false)
+	{
+		TSharedPtr<FLoadedMeshAsset> Asset = std::make_shared<FLoadedMeshAsset>();
+		Asset->Data.Mesh = StaticMesh::Find("Cube");
+		Asset->Material = FMaterialAsset{};
+		if (Transparent)
+			Asset->Material->BlendMode = EMaterialBlendMode::Translucent;
+		return Asset;
+	}
 } // namespace
 TEST_SUITE("NativeRenderer")
 {
@@ -32,14 +33,14 @@ TEST_SUITE("NativeRenderer")
 	{
 		FString Error;
 		FNativeMeshDrawList List;
-		auto Asset = CubeSnapshot();
+		std::shared_ptr<FLoadedMeshAsset> Asset = CubeSnapshot();
 		std::weak_ptr<const FLoadedMeshAsset> Weak = Asset;
 		Matrix44 View;
 		View.SetTranslation(Vector3d(0, 400, 0));
 		REQUIRE(List.Append(Asset, View, Error));
 		REQUIRE_FALSE(List.Vertices.empty());
 		REQUIRE(List.Batches.size() == 1);
-		const auto Count = List.Vertices.size();
+		const unsigned long long Count = List.Vertices.size();
 		View.SetTranslation(Vector3d(0, 700, 0));
 		REQUIRE(List.Append(Asset, View, Error));
 		CHECK(List.Vertices.size() == Count * 2);
@@ -57,23 +58,23 @@ TEST_SUITE("NativeRenderer")
 	{
 		FString Error;
 		FNativeMeshDrawList List;
-		auto Asset = CubeSnapshot();
+		std::shared_ptr<FLoadedMeshAsset> Asset = CubeSnapshot();
 		Matrix44 View;
 		View.SetTranslation(Vector3d(0, 400, 0));
 		REQUIRE(List.Append(Asset, View, Error));
-		const auto Count = List.Vertices.size(), Batches = List.Batches.size();
-		const auto Tail = List.Batches.back().NumVertices;
+		const unsigned long long Count = List.Vertices.size(), Batches = List.Batches.size();
+		const uint32 Tail = List.Batches.back().NumVertices;
 		Matrix44 Singular;
 		Singular.SetScale(Vector3d(0, 1, 1));
 		CHECK_FALSE(List.Append(Asset, Singular, Error));
-		auto Bad = std::make_shared<StaticMesh>("Bad");
+		TSharedPtr<StaticMesh> Bad = std::make_shared<StaticMesh>("Bad");
 		Bad->AddVertex(Vector3d(-1, 0, -1));
 		Bad->AddVertex(Vector3d(1, 0, -1));
 		Bad->AddVertex(Vector3d(0, 0, 1));
 		Bad->AddFlatTriangle(0, 1, 2);
 		Bad->SetTriangleMaterial(0, 3);
 		Bad->Finish();
-		auto Invalid = CubeSnapshot();
+		std::shared_ptr<FLoadedMeshAsset> Invalid = CubeSnapshot();
 		Invalid->Data.Mesh = Bad;
 		CHECK_FALSE(List.Append(Invalid, View, Error));
 		Bad->SetTriangleMaterial(0, 0);
@@ -89,14 +90,14 @@ TEST_SUITE("NativeRenderer")
 	{
 		FString Error;
 		FNativeMeshDrawList List;
-		auto Asset = CubeSnapshot(true);
+		std::shared_ptr<FLoadedMeshAsset> Asset = CubeSnapshot(true);
 		Matrix44 View;
 		for (float Depth : {400.0f, 800.0f, 400.0f})
 		{
 			View.SetTranslation(Vector3d(0, Depth, 0));
 			REQUIRE(List.Append(Asset, View, Error));
 		}
-		const auto Order = List.GetDrawOrder(true);
+		const TArray<size_t> Order = List.GetDrawOrder(true);
 		REQUIRE(Order.size() == List.Batches.size());
 		REQUIRE(Order.size() > 2);
 		CHECK(List.GetDrawOrder(false).empty());
@@ -111,7 +112,7 @@ TEST_SUITE("NativeRenderer")
 	{
 		FString Error;
 		FNativeMeshDrawList List;
-		auto Asset = CubeSnapshot();
+		std::shared_ptr<FLoadedMeshAsset> Asset = CubeSnapshot();
 		Matrix44 Parent, Rotation, Child, View;
 		Parent.SetScale(Vector3d(-2, 0.5f, 3));
 		Rotation.SetRotateZ(0.4f);
@@ -124,8 +125,8 @@ TEST_SUITE("NativeRenderer")
 		REQUIRE_FALSE(List.Vertices.empty());
 		for (size_t I = 0; I < List.Vertices.size(); I += 3)
 		{
-			const auto& A = List.Vertices[I];
-			const auto& B = List.Vertices[I + 1];
+			FNativeMeshVertex const& A = List.Vertices[I];
+			FNativeMeshVertex const& B = List.Vertices[I + 1];
 			Vector3d Edge(B.Position[0] - A.Position[0], B.Position[1] - A.Position[1], B.Position[2] - A.Position[2]);
 			Edge.Normalize();
 			Vector3d N(A.Normal[0], A.Normal[1], A.Normal[2]);
@@ -179,7 +180,7 @@ TEST_SUITE("NativeRenderer")
 	{
 		std::vector<float> Heights(65 * 33);
 		Heights[1 * 65 + 32] = 20;
-		auto Land = Landscape::Create(64, 32, 1, Heights);
+		std::shared_ptr<const Landscape> Land = Landscape::Create(64, 32, 1, Heights);
 		REQUIRE(Land);
 		FLandscapeRenderPlan Plan;
 		Plan.cxs = 2;
@@ -196,8 +197,8 @@ TEST_SUITE("NativeRenderer")
 		CHECK(Fine.Points[1 * 33 + 32].GetZ() == doctest::Approx(0));
 		for (int Row = 0; Row < 9; Row++)
 		{
-			const auto& A = Fine.Points[Row * 4 * 33 + 32];
-			const auto& B = Coarse.Points[Row * 9];
+			Vector3d const& A = Fine.Points[Row * 4 * 33 + 32];
+			Vector3d const& B = Coarse.Points[Row * 9];
 			CHECK(A.GetX() == doctest::Approx(B.GetX()));
 			CHECK(A.GetY() == doctest::Approx(B.GetY()));
 			CHECK(A.GetZ() == doctest::Approx(B.GetZ()));
@@ -236,7 +237,7 @@ TEST_SUITE("NativeRenderer")
 	TEST_CASE("Runtime instance batching retains snapshots and rejects invalid transforms atomically")
 	{
 		TArray<FMeshInstanceBatch> Batches;
-		auto Mesh = std::make_shared<StaticMesh>("Transient triangle");
+		TSharedPtr<StaticMesh> Mesh = std::make_shared<StaticMesh>("Transient triangle");
 		Mesh->AddVertex(Vector3d(0, 0, 0));
 		Mesh->AddVertex(Vector3d(1, 0, 0));
 		Mesh->AddVertex(Vector3d(0, 1, 0));
@@ -306,13 +307,13 @@ TEST_SUITE("NativeRenderer")
 		FRHIDeviceDesc Desc;
 		Desc.Backend = ERHIBackend::D3D12;
 		Desc.bSoftwareAdapter = true;
-		auto Device = FRHIDevice::Create(Desc);
+		TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(Desc);
 		REQUIRE(Device);
 		{
 			FProjectedSceneRenderer Renderer(*Device);
 			FString Error;
 			TArray<FProjectedVertex> V = {
-				{0, 0, .01f, 0, 0, 0xFFFFFFFF}, {20, 0, .01f, 1, 0, 0xFFFFFFFF}, {0, 20, .01f, 0, 1, 0xFFFFFFFF}};
+			    {0, 0, .01f, 0, 0, 0xFFFFFFFF}, {20, 0, .01f, 1, 0, 0xFFFFFFFF}, {0, 20, .01f, 0, 1, 0xFFFFFFFF}};
 			TArray<FProjectedTriangleBatch> B = {{0, nullptr, 0, 3}};
 			B[0].NumVertices = 4;
 			CHECK_FALSE(Renderer.Prepare(V, B, {}, EPixelFormat::R8G8B8A8_UNORM, Error));
@@ -326,13 +327,13 @@ TEST_SUITE("NativeRenderer")
 			Invalid.Rows = {1};
 			CHECK_FALSE(Renderer.Prepare(V, B, {Invalid}, EPixelFormat::R8G8B8A8_UNORM, Error));
 			Landscape Ground(4, 4, 32);
-			auto Layer = Ground.MakeLayer("Grass", 50, 180, 40);
+			LandscapeLayer Layer = Ground.MakeLayer("Grass", 50, 180, 40);
 			Layer.texture = "builtin:Grass";
-			auto Land = Ground.WithLayers({Layer});
+			std::shared_ptr<const Landscape> Land = Ground.WithLayers({Layer});
 			B[0].Terrain = Land;
 			B[0].LandscapeKey = 9;
 			Device->BeginFrame();
-			auto Prepared = Renderer.Prepare(V, B, {}, EPixelFormat::R8G8B8A8_UNORM, Error);
+			TUniquePtr<FProjectedSceneFrame> Prepared = Renderer.Prepare(V, B, {}, EPixelFormat::R8G8B8A8_UNORM, Error);
 			REQUIRE(Prepared);
 			CHECK(Error.IsEmpty());
 			CHECK(Renderer.GetNumLandscapeTextures() == 1);
@@ -374,8 +375,8 @@ TEST_SUITE("NativeRenderer")
 		REQUIRE(Stats.Components == 1);
 		CHECK(Stats.Triangles == static_cast<int>(Sink.Triangles.size()));
 		bool FoundClippedUV = false;
-		for (const auto& T : Sink.Triangles)
-			for (const auto& V : T.Vertices)
+		for (const FLandscapeTriangle& T : Sink.Triangles)
+			for (const FLandscapeTriangleVertex& V : T.Vertices)
 			{
 				CHECK(V.Position.GetY() >= 1);
 				CHECK(std::abs(V.Position.GetX()) <= V.Position.GetY() + .001f);
@@ -398,11 +399,11 @@ TEST_SUITE("NativeRenderer")
 		View.bLit = false;
 		TArray<FProjectedVertex> Vertices;
 		TArray<FProjectedTriangleBatch> Batches;
-		auto Layer = Land.MakeLayer("Rock", 180, 160, 140);
+		LandscapeLayer Layer = Land.MakeLayer("Rock", 180, 160, 140);
 		Layer.texture = "builtin:Rock";
-		auto Painted = Land.WithLayers({Layer});
-		AppendProjectedLandscape(Painted, 12, ToView, World, Vector3d(1, 1, 1), Volume, View, 1, Vertices, Batches,
-								 Stats);
+		std::shared_ptr<const Landscape> Painted = Land.WithLayers({Layer});
+		AppendProjectedLandscape(
+		    Painted, 12, ToView, World, Vector3d(1, 1, 1), Volume, View, 1, Vertices, Batches, Stats);
 		REQUIRE(Batches.size() == 1);
 		CHECK(Batches[0].Terrain == Painted);
 		CHECK(Batches[0].NumVertices == Vertices.size());
@@ -418,7 +419,7 @@ TEST_SUITE("WorldGeometry")
 		FString Error;
 		FJsonValue Data;
 		Landscape Terrain(8, 4, 32);
-		auto Layer = Terrain.MakeLayer("Grass", 50, 160, 80);
+		LandscapeLayer Layer = Terrain.MakeLayer("Grass", 50, 160, 80);
 		Layer.texture = "builtin:Grass";
 		Layer.weights[7] = .75f;
 		LandscapeSpline Spline;
@@ -430,7 +431,7 @@ TEST_SUITE("WorldGeometry")
 		A.joint = 3;
 		Spline.points = {A, B};
 		Spline.mesh = "Road";
-		auto Painted = Terrain.WithLayers({Layer})->WithSplines({Spline});
+		std::shared_ptr<const Landscape> Painted = Terrain.WithLayers({Layer})->WithSplines({Spline});
 		REQUIRE(FWorldGeometryCodec::EncodeLandscape(*Painted, Package, Data, Error));
 		std::shared_ptr<const Landscape> Back;
 		REQUIRE(FWorldGeometryCodec::DecodeLandscape(Package, Data, Back, Error));
@@ -439,16 +440,16 @@ TEST_SUITE("WorldGeometry")
 		REQUIRE(Back->GetSplines().size() == 1);
 		CHECK(Back->GetSplines()[0].points[0].joint == 3);
 		CHECK(Back->GetSplines()[0].points[0].tangent.GetZ() == 4);
-		const auto Previous = Back;
-		auto Bad = Data;
+		const std::shared_ptr<const Landscape> Previous = Back;
+		FJsonValue Bad = Data;
 		Bad["Heights"]["Offset"] = static_cast<double>(Package.Bulk.size());
 		CHECK_FALSE(FWorldGeometryCodec::DecodeLandscape(Package, Bad, Back, Error));
 		CHECK(Back == Previous);
-		const auto Size = Package.Bulk.size();
-		const auto OriginalData = Data;
-		auto BadLayer = Layer;
+		const unsigned long long Size = Package.Bulk.size();
+		const FJsonValue OriginalData = Data;
+		LandscapeLayer BadLayer = Layer;
 		BadLayer.texture = "asset:invalid";
-		auto Invalid = Terrain.WithLayers({BadLayer});
+		std::shared_ptr<const Landscape> Invalid = Terrain.WithLayers({BadLayer});
 		CHECK_FALSE(FWorldGeometryCodec::EncodeLandscape(*Invalid, Package, Data, Error));
 		CHECK(Package.Bulk.size() == Size);
 		CHECK(Data == OriginalData);
@@ -474,21 +475,21 @@ TEST_SUITE("WorldGeometry")
 		Package.SchemaVersion = 3;
 		FWorld Scene;
 		FString Error;
-		auto Parent = FActor::New("Parent");
+		FActor Parent = FActor::New("Parent");
 		Parent.Root.Transform.Location = Vector3d(10, 20, 0);
-		auto Metadata = FActorComponent::New("Genesis.LegacyEntity");
+		FActorComponent Metadata = FActorComponent::New("Genesis.LegacyEntity");
 		Metadata.Properties["Data"]["Class"] = "worldspawn";
 		Parent.Components.push_back(Metadata);
 		REQUIRE(Scene.AddActor(Parent, Error));
-		auto Cube = FActor::New("Cube");
+		FActor Cube = FActor::New("Cube");
 		Cube.ParentId = Parent.Id;
-		auto Mesh = FActorComponent::New("Genesis.StaticMesh");
+		FActorComponent Mesh = FActorComponent::New("Genesis.StaticMesh");
 		Mesh.Properties["Data"] = "Cube";
 		Cube.Components.push_back(Mesh);
 		REQUIRE(Scene.AddActor(Cube, Error));
-		auto TerrainActor = FActor::New("Ground");
+		FActor TerrainActor = FActor::New("Ground");
 		Landscape Ground(8, 8, 32);
-		auto Terrain = FActorComponent::New("Genesis.Landscape");
+		FActorComponent Terrain = FActorComponent::New("Genesis.Landscape");
 		FJsonValue Data;
 		REQUIRE(FWorldGeometryCodec::EncodeLandscape(Ground, Package, Data, Error));
 		Terrain.Properties["Data"] = Data;
@@ -499,8 +500,8 @@ TEST_SUITE("WorldGeometry")
 		FoliageInstance I;
 		I.position = Vector3d(100, 0, 0);
 		Foliage Plants({Type}, {I});
-		auto PlantsActor = FActor::New("Plants");
-		auto PlantsComponent = FActorComponent::New("Genesis.Foliage");
+		FActor PlantsActor = FActor::New("Plants");
+		FActorComponent PlantsComponent = FActorComponent::New("Genesis.Foliage");
 		REQUIRE(FWorldGeometryCodec::EncodeFoliage(Plants, Package, Data, Error));
 		PlantsComponent.Properties["Data"] = Data;
 		PlantsActor.Components.push_back(PlantsComponent);
@@ -530,11 +531,11 @@ TEST_SUITE("WorldGeometry")
 		CHECK(List.TerrainTriangles > 0);
 		CHECK(List.FoliageInstances == 1);
 		CHECK_FALSE(List.Meshes.Vertices.empty());
-		const auto PreviousVertices = List.Vertices.size();
+		const unsigned long long PreviousVertices = List.Vertices.size();
 		View.Width = 0;
 		CHECK_FALSE(List.Build(Snapshot, ToView, Volume, View, 8, Error));
 		CHECK(List.Vertices.size() == PreviousVertices);
-		auto Unsupported = FActor::New("Brush");
+		FActor Unsupported = FActor::New("Brush");
 		Unsupported.Components.push_back(FActorComponent::New("Genesis.LegacyBrush"));
 		REQUIRE(Scene.AddActor(Unsupported, Error));
 		Package.Exports["Scene"] = Scene.ToJson();
@@ -570,14 +571,14 @@ TEST_SUITE("WorldGeometry")
 		REQUIRE(References.size() == 2);
 		CHECK(References[0].Id == Native.Asset.Id);
 		CHECK(References[1].Id == Native.AdditionalOverrides[1].Id);
-		auto Bad = Data;
+		FJsonValue Bad = Data;
 		Bad["AdditionalOverrides"] = FJsonValue::MakeArray();
 		Bad["AdditionalOverrides"].Push("invalid");
 		CHECK_FALSE(FWorldGeometryCodec::DecodeMesh(Bad, Back, Error));
 		CHECK(Back.Asset.Id == Native.Asset.Id);
 		CHECK(Back.AdditionalOverrides.size() == 2);
 		Native.AdditionalOverrides.resize(64);
-		const auto Before = Data;
+		const FJsonValue Before = Data;
 		CHECK_FALSE(FWorldGeometryCodec::EncodeMesh(Native, Data, Error));
 		CHECK(Data == Before);
 		BuiltIn.MaterialOverride = {FAssetId::New(), "/Game/Material"};
@@ -592,7 +593,7 @@ TEST_SUITE("NativeRenderer")
 		FRHIDeviceDesc Desc;
 		Desc.Backend = ERHIBackend::D3D12;
 		Desc.bSoftwareAdapter = true;
-		auto Device = FRHIDevice::Create(Desc);
+		TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(Desc);
 		REQUIRE(Device);
 		FNativeMeshRenderer Renderer(*Device);
 		FNativeMeshDrawList List;
@@ -602,8 +603,8 @@ TEST_SUITE("NativeRenderer")
 		REQUIRE(List.Append(CubeSnapshot(), T, Error));
 		REQUIRE_FALSE(List.Vertices.empty());
 		REQUIRE_FALSE(List.Batches.empty());
-		const auto Original = List.Vertices[0];
-		const auto Batch = List.Batches[0];
+		FNativeMeshVertex const Original = List.Vertices[0];
+		FNativeMeshBatch const Batch = List.Batches[0];
 		List.Vertices[0].UV[0] = std::numeric_limits<float>::quiet_NaN();
 		CHECK_FALSE(Renderer.Prepare(List, EPixelFormat::R8G8B8A8_UNORM, Error));
 		CHECK_FALSE(Error.IsEmpty());
@@ -626,7 +627,7 @@ TEST_SUITE("NativeRenderer")
 TEST_CASE("Runtime terrain attachment preserves floating foliage and local coordinate transforms")
 {
 	Landscape Before(4, 4, 16);
-	const auto After = Before.WithHeights(std::vector<float>(25, 20.0f));
+	const std::shared_ptr<const Landscape> After = Before.WithHeights(std::vector<float>(25, 20.0f));
 	REQUIRE(After);
 	FoliageType Type;
 	Type.mesh = "Grass";
@@ -637,13 +638,14 @@ TEST_CASE("Runtime terrain attachment preserves floating foliage and local coord
 	Grounded.scale = 1.5f;
 	Floating.position = Vector3d(0, 0, 12);
 	Outside.position = Vector3d(100, 0, 3);
-	Foliage Plants({ Type }, { Grounded, Floating, Outside });
+	Foliage Plants({Type}, {Grounded, Floating, Outside});
 	Matrix44 ToTerrain, ToPlants;
 	ToTerrain.SetScale(Vector3d(2, 1, 2));
 	ToTerrain.SetMatrix(2, 3, -3);
 	ToPlants.SetScale(Vector3d(0.5f, 1, 0.5f));
 	ToPlants.SetMatrix(2, 3, 1.5f);
-	const auto Snapped = SnapFoliageToHeightfield(Plants, Before, *After, ToTerrain, ToPlants);
+	const std::shared_ptr<const Foliage> Snapped =
+	    SnapFoliageToHeightfield(Plants, Before, *After, ToTerrain, ToPlants);
 	REQUIRE(Snapped);
 	REQUIRE(Snapped->GetNumInstances() == 3);
 	CHECK(Snapped->GetInstances()[0].position.GetZ() == doctest::Approx(13));
@@ -657,4 +659,48 @@ TEST_CASE("Runtime terrain attachment preserves floating foliage and local coord
 	CHECK_FALSE(SnapFoliageToHeightfield(Plants, Before, *After, ToTerrain, ToPlants, -1));
 	ToTerrain.SetMatrix(0, 0, std::numeric_limits<float>::quiet_NaN());
 	CHECK_FALSE(SnapFoliageToHeightfield(Plants, Before, *After, ToTerrain, ToPlants));
+}
+
+TEST_CASE(
+    "Malformed nested terrain and foliage data leave existing results intact" * doctest::test_suite("NativeRenderer"))
+{
+	FString Error;
+	FAssetPackage Package;
+	Landscape Terrain(4, 4, 32);
+	LandscapeSpline Spline;
+	LandscapeSplinePoint Point;
+	Spline.points = {Point};
+	const std::shared_ptr<const Landscape> Source = Terrain.WithSplines({Spline});
+	REQUIRE(Source);
+	FJsonValue Data;
+	REQUIRE(FWorldGeometryCodec::EncodeLandscape(*Source, Package, Data, Error));
+	std::shared_ptr<const Landscape> Output = Source;
+	for (const char* Field : {"QuadsX", "Layers", "Splines"})
+	{
+		FJsonValue Bad = Data;
+		Bad[Field] = "invalid";
+		CHECK_FALSE(FWorldGeometryCodec::DecodeLandscape(Package, Bad, Output, Error));
+		CHECK_FALSE(Error.IsEmpty());
+		CHECK(Output == Source);
+	}
+	FJsonValue Bad = Data;
+	Bad["Splines"][0]["Points"][0]["Position"] = FJsonValue::MakeArray();
+	CHECK_FALSE(FWorldGeometryCodec::DecodeLandscape(Package, Bad, Output, Error));
+	CHECK(Output == Source);
+	FoliageType Type;
+	Type.mesh = "Cube";
+	Type.name = "Plants";
+	FoliageInstance Instance;
+	Foliage Plants({Type}, {Instance});
+	REQUIRE(FWorldGeometryCodec::EncodeFoliage(Plants, Package, Data, Error));
+	std::shared_ptr<const Foliage> FoliageOutput;
+	REQUIRE(FWorldGeometryCodec::DecodeFoliage(Package, Data, FoliageOutput, Error));
+	const std::shared_ptr<const Foliage> Previous = FoliageOutput;
+	Bad = Data;
+	Bad["Instances"]["Count"] = "invalid";
+	CHECK_FALSE(FWorldGeometryCodec::DecodeFoliage(Package, Bad, FoliageOutput, Error));
+	CHECK_FALSE(Error.IsEmpty());
+	CHECK(FoliageOutput == Previous);
+	REQUIRE(FWorldGeometryCodec::DecodeFoliage(Package, Data, FoliageOutput, Error));
+	CHECK(Error.IsEmpty());
 }

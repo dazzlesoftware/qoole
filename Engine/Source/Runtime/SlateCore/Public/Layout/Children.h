@@ -9,7 +9,7 @@
 //   SNew(SVerticalBox)
 //   + SVerticalBox::Slot().AutoHeight().Padding(4)
 //   [
-//       SNew(STextBlock).Text("Hello")
+//       SNew(STextBlock).Text(GENESIS_TEXT("Hello"))
 //   ]
 //
 // and live in the panel's TPanelChildren afterwards, where changing them
@@ -18,6 +18,7 @@
 #pragma once
 
 #include "Widgets/SWidget.h"
+#include "Internationalization/TextLocalization.h"
 
 // The shared empty widget used for unfilled slots.
 class SNullWidget
@@ -34,8 +35,14 @@ public:
 	FSlotBase& operator=(FSlotBase&& Other) noexcept;
 	virtual ~FSlotBase();
 
-	const TSharedRef<SWidget>& GetWidget() const { return Widget; }
-	SWidget* GetOwnerWidget() const { return Owner; }
+	const TSharedRef<SWidget>& GetWidget() const
+	{
+		return Widget;
+	}
+	SWidget* GetOwnerWidget() const
+	{
+		return Owner;
+	}
 
 	void AttachWidget(TSharedRef<SWidget> InWidget);
 	// Replaces the content with the null widget; returns the old content.
@@ -51,8 +58,7 @@ private:
 	TSharedRef<SWidget> Widget;
 };
 
-template <typename SlotType>
-class TSlotBase : public FSlotBase
+template <typename SlotType> class TSlotBase : public FSlotBase
 {
 public:
 	SlotType& operator[](TSharedRef<SWidget> InWidget)
@@ -61,7 +67,7 @@ public:
 		return static_cast<SlotType&>(*this);
 	}
 	template <typename WidgetType>
-		requires std::derived_from<WidgetType, SWidget>
+	    requires std::derived_from<WidgetType, SWidget>
 	SlotType& operator[](const TSharedRef<WidgetType>& InWidget)
 	{
 		AttachWidget(TSharedRef<SWidget>(InWidget));
@@ -69,8 +75,7 @@ public:
 	}
 };
 
-template <typename SlotType>
-class TPaddingMixin
+template <typename SlotType> class TPaddingMixin
 {
 public:
 	SlotType& Padding(const FMargin& InPadding)
@@ -79,20 +84,34 @@ public:
 		static_cast<SlotType*>(this)->InvalidateSlot(EInvalidateWidgetReason::Layout);
 		return static_cast<SlotType&>(*this);
 	}
-	SlotType& Padding(float Uniform) { return Padding(FMargin(Uniform)); }
-	SlotType& Padding(float Horizontal, float Vertical) { return Padding(FMargin(Horizontal, Vertical)); }
-	SlotType& Padding(float Left, float Top, float Right, float Bottom) { return Padding(FMargin(Left, Top, Right, Bottom)); }
-	const FMargin& GetPadding() const { return SlotPadding; }
+	SlotType& Padding(float Uniform)
+	{
+		return Padding(FMargin(Uniform));
+	}
+	SlotType& Padding(float Horizontal, float Vertical)
+	{
+		return Padding(FMargin(Horizontal, Vertical));
+	}
+	SlotType& Padding(float Left, float Top, float Right, float Bottom)
+	{
+		return Padding(FMargin(Left, Top, Right, Bottom));
+	}
+	const FMargin& GetPadding() const
+	{
+		return SlotPadding;
+	}
 
 protected:
 	FMargin SlotPadding;
 };
 
-template <typename SlotType>
-class TAlignmentMixin
+template <typename SlotType> class TAlignmentMixin
 {
 public:
-	TAlignmentMixin(EHorizontalAlignment H = HAlign_Fill, EVerticalAlignment V = VAlign_Fill) : HAlignment(H), VAlignment(V) {}
+	TAlignmentMixin(EHorizontalAlignment H = HAlign_Fill, EVerticalAlignment V = VAlign_Fill)
+	    : HAlignment(H), VAlignment(V)
+	{
+	}
 
 	SlotType& HAlign(EHorizontalAlignment InAlignment)
 	{
@@ -106,8 +125,14 @@ public:
 		static_cast<SlotType*>(this)->InvalidateSlot(EInvalidateWidgetReason::Layout);
 		return static_cast<SlotType&>(*this);
 	}
-	EHorizontalAlignment GetHAlign() const { return HAlignment; }
-	EVerticalAlignment GetVAlign() const { return VAlignment; }
+	EHorizontalAlignment GetHAlign() const
+	{
+		return HAlignment;
+	}
+	EVerticalAlignment GetVAlign() const
+	{
+		return VAlignment;
+	}
 
 protected:
 	EHorizontalAlignment HAlignment;
@@ -115,7 +140,9 @@ protected:
 };
 
 // The slot of compound widgets and simple containers: padding + alignment.
-class FSimpleSlot : public TSlotBase<FSimpleSlot>, public TPaddingMixin<FSimpleSlot>, public TAlignmentMixin<FSimpleSlot>
+class FSimpleSlot : public TSlotBase<FSimpleSlot>,
+                    public TPaddingMixin<FSimpleSlot>,
+                    public TAlignmentMixin<FSimpleSlot>
 {
 };
 
@@ -131,7 +158,10 @@ public:
 	virtual int32 Num() const = 0;
 	virtual const TSharedRef<SWidget>& GetChildAt(int32 Index) const = 0;
 	virtual const FSlotBase& GetSlotAt(int32 Index) const = 0;
-	SWidget& GetOwner() const { return *Owner; }
+	SWidget& GetOwner() const
+	{
+		return *Owner;
+	}
 
 protected:
 	SWidget* Owner;
@@ -141,44 +171,75 @@ class FNoChildren final : public FChildren
 {
 public:
 	FNoChildren() : FChildren(nullptr) {}
-	int32 Num() const override { return 0; }
+	int32 Num() const override
+	{
+		return 0;
+	}
 	const TSharedRef<SWidget>& GetChildAt(int32) const override;
 	const FSlotBase& GetSlotAt(int32) const override;
 };
 
 // Exactly one slot (compound widgets, borders, boxes).
-template <typename SlotType>
-class TSingleWidgetChildren final : public FChildren
+template <typename SlotType> class TSingleWidgetChildren final : public FChildren
 {
 public:
-	explicit TSingleWidgetChildren(SWidget* InOwner) : FChildren(InOwner) { Slot.SetOwner(InOwner); }
+	explicit TSingleWidgetChildren(SWidget* InOwner) : FChildren(InOwner)
+	{
+		Slot.SetOwner(InOwner);
+	}
 
-	int32 Num() const override { return 1; }
-	const TSharedRef<SWidget>& GetChildAt(int32) const override { return Slot.GetWidget(); }
-	const FSlotBase& GetSlotAt(int32) const override { return Slot; }
+	int32 Num() const override
+	{
+		return 1;
+	}
+	const TSharedRef<SWidget>& GetChildAt(int32) const override
+	{
+		return Slot.GetWidget();
+	}
+	const FSlotBase& GetSlotAt(int32) const override
+	{
+		return Slot;
+	}
 
 	SlotType Slot;
 };
 
 // Many slots of one type (panels).
-template <typename SlotType>
-class TPanelChildren final : public FChildren
+template <typename SlotType> class TPanelChildren final : public FChildren
 {
 public:
 	explicit TPanelChildren(SWidget* InOwner) : FChildren(InOwner) {}
 
-	int32 Num() const override { return static_cast<int32>(Slots.size()); }
-	const TSharedRef<SWidget>& GetChildAt(int32 Index) const override { return Slots[Index]->GetWidget(); }
-	const FSlotBase& GetSlotAt(int32 Index) const override { return *Slots[Index]; }
+	int32 Num() const override
+	{
+		return static_cast<int32>(Slots.size());
+	}
+	const TSharedRef<SWidget>& GetChildAt(int32 Index) const override
+	{
+		return Slots[Index]->GetWidget();
+	}
+	const FSlotBase& GetSlotAt(int32 Index) const override
+	{
+		return *Slots[Index];
+	}
 
-	SlotType& operator[](int32 Index) { return *Slots[Index]; }
-	const SlotType& operator[](int32 Index) const { return *Slots[Index]; }
+	SlotType& operator[](int32 Index)
+	{
+		return *Slots[Index];
+	}
+	const SlotType& operator[](int32 Index) const
+	{
+		return *Slots[Index];
+	}
 
-	SlotType& Add(SlotType&& Slot) { return Insert(std::move(Slot), Num()); }
+	SlotType& Add(SlotType&& Slot)
+	{
+		return Insert(std::move(Slot), Num());
+	}
 
 	SlotType& Insert(SlotType&& Slot, int32 Index)
 	{
-		auto Owned = MakeUnique<SlotType>(std::move(Slot));
+		TUniquePtr<SlotType> Owned = MakeUnique<SlotType>(std::move(Slot));
 		SlotType& Ref = *Owned;
 		Slots.insert(Slots.begin() + FMath::Clamp(Index, 0, Num()), std::move(Owned));
 		Ref.SetOwner(Owner);
@@ -209,7 +270,7 @@ public:
 
 	void Move(int32 From, int32 To)
 	{
-		auto Slot = std::move(Slots[From]);
+		TUniquePtr<SlotType> Slot = std::move(Slots[From]);
 		Slots.erase(Slots.begin() + From);
 		Slots.insert(Slots.begin() + FMath::Clamp(To, 0, Num()), std::move(Slot));
 		Owner->Invalidate(EInvalidateWidgetReason::ChildOrder);
@@ -221,7 +282,7 @@ public:
 		{
 			return;
 		}
-		for (auto& Slot : Slots)
+		for (TUniquePtr<SlotType>& Slot : Slots)
 		{
 			Slot->SetOwner(nullptr);
 		}

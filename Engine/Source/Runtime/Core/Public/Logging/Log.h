@@ -5,13 +5,14 @@
 //
 //   DECLARE_LOG_CATEGORY_EXTERN(LogRHI, Log);   // in a header
 //   DEFINE_LOG_CATEGORY(LogRHI, Log);           // in one .cpp
-//   UE_LOG(LogRHI, Warning, "Swapchain {}x{} lost", Width, Height);
+//   GENESIS_LOG(LogRHI, Warning, "Swapchain {}x{} lost", Width, Height);
 //
 // Categories filter by verbosity at runtime; Fatal always breaks/aborts.
 
 #pragma once
 
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
+#include "Internationalization/TextLocalization.h"
 #include "Misc/AssertionMacros.h"
 
 enum class ELogVerbosity : uint8
@@ -32,7 +33,10 @@ struct FLogCategory
 	const char* Name;
 	ELogVerbosity Verbosity; // messages more verbose than this are dropped
 
-	bool IsSuppressed(ELogVerbosity Level) const { return Level > Verbosity; }
+	bool IsSuppressed(ELogVerbosity Level) const
+	{
+		return Level > Verbosity;
+	}
 };
 
 class FOutputDevice
@@ -55,15 +59,20 @@ public:
 };
 
 #define DECLARE_LOG_CATEGORY_EXTERN(CategoryName, DefaultVerbosity) extern FLogCategory CategoryName
-#define DEFINE_LOG_CATEGORY(CategoryName, DefaultVerbosity) FLogCategory CategoryName{ #CategoryName, ELogVerbosity::DefaultVerbosity }
+#define DEFINE_LOG_CATEGORY(CategoryName, DefaultVerbosity)                                                            \
+	FLogCategory CategoryName                                                                                          \
+	{                                                                                                                  \
+		#CategoryName, ELogVerbosity::DefaultVerbosity                                                                 \
+	}
 
-#define UE_LOG(Category, VerbosityName, Fmt, ...) \
-	do \
-	{ \
-		if (!(Category).IsSuppressed(ELogVerbosity::VerbosityName)) \
-		{ \
-			::FLog::Write(Category, ELogVerbosity::VerbosityName, ::FAssertion::FormatText(Fmt __VA_OPT__(,) __VA_ARGS__)); \
-		} \
+#define GENESIS_LOG(Category, VerbosityName, Fmt, ...)                                                                 \
+	do                                                                                                                 \
+	{                                                                                                                  \
+		if (!(Category).IsSuppressed(ELogVerbosity::VerbosityName))                                                    \
+		{                                                                                                              \
+			::FLog::Write(Category, ELogVerbosity::VerbosityName,                                                      \
+			    ::FTextLocalization::Format(Fmt __VA_OPT__(, ) __VA_ARGS__).ToStdString());                            \
+		}                                                                                                              \
 	} while (0)
 
 DECLARE_LOG_CATEGORY_EXTERN(LogCore, Log);

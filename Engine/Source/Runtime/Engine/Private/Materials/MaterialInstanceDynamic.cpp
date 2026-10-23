@@ -1,24 +1,23 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Internationalization/TextLocalization.h"
 #include <algorithm>
-TUniquePtr<FMaterialInstanceDynamic> FMaterialInstanceDynamic::Create(const FMaterialAsset& Parent,
-																	  FString& Error)
+TUniquePtr<FMaterialInstanceDynamic> FMaterialInstanceDynamic::Create(const FMaterialAsset& Parent, FString& Error)
 {
 	if (!Parent.Graph)
 	{
-		Error = "Dynamic material instances require graph materials.";
+		Error = GENESIS_TEXT("Dynamic material instances require graph materials.");
 		return {};
 	}
 	FMaterialGraphProgram Program;
 	if (!FMaterialGraphCompiler::Compile(*Parent.Graph, Program, Error))
 		return {};
-	if (Program.PixelShaderSource != Parent.CookedGraphSource || Parent.GraphDXIL.empty() ||
-		Parent.GraphSPIRV.empty())
+	if (Program.PixelShaderSource != Parent.CookedGraphSource || Parent.GraphDXIL.empty() || Parent.GraphSPIRV.empty())
 	{
-		Error = "Dynamic material instance parent requires a valid cook.";
+		Error = GENESIS_TEXT("Dynamic material instance parent requires a valid cook.");
 		return {};
 	}
-	auto Result = MakeUnique<FMaterialInstanceDynamic>();
+	TUniquePtr<FMaterialInstanceDynamic> Result = MakeUnique<FMaterialInstanceDynamic>();
 	Result->Parent = Parent;
 	Result->Resolved = Parent;
 	Result->Overrides.Parent.Path = "/Engine/Transient";
@@ -36,9 +35,9 @@ bool FMaterialInstanceDynamic::Commit(FMaterialInstanceAsset Candidate, FString&
 }
 bool FMaterialInstanceDynamic::SetParameter(FMaterialParameterOverride Value, FString& Error)
 {
-	auto Candidate = Overrides;
-	auto It = std::find_if(Candidate.Parameters.begin(), Candidate.Parameters.end(),
-						   [&](const auto& P) { return P.Name == Value.Name; });
+	FMaterialInstanceAsset Candidate = Overrides;
+	TArray<FMaterialParameterOverride>::iterator It = std::find_if(Candidate.Parameters.begin(),
+	    Candidate.Parameters.end(), [&](const FMaterialParameterOverride& P) { return P.Name == Value.Name; });
 	if (It == Candidate.Parameters.end())
 		Candidate.Parameters.push_back(std::move(Value));
 	else
@@ -49,17 +48,16 @@ bool FMaterialInstanceDynamic::SetScalarParameterValue(const FString& Name, floa
 {
 	return SetParameter({Name, 1, {Value, 0, 0, 0}}, Error);
 }
-bool FMaterialInstanceDynamic::SetVectorParameterValue(const FString& Name, const FLinearColor& Value,
-													   FString& Error)
+bool FMaterialInstanceDynamic::SetVectorParameterValue(const FString& Name, const FLinearColor& Value, FString& Error)
 {
 	return SetParameter({Name, 4, {Value.R, Value.G, Value.B, Value.A}}, Error);
 }
-bool FMaterialInstanceDynamic::SetTextureParameterValue(const FString& Name, const FAssetReference& Texture,
-														FString& Error)
+bool FMaterialInstanceDynamic::SetTextureParameterValue(
+    const FString& Name, const FAssetReference& Texture, FString& Error)
 {
-	auto Candidate = Overrides;
-	auto It = std::find_if(Candidate.Textures.begin(), Candidate.Textures.end(),
-						   [&](const auto& P) { return P.Name == Name; });
+	FMaterialInstanceAsset Candidate = Overrides;
+	TArray<FMaterialTextureParameterOverride>::iterator It = std::find_if(Candidate.Textures.begin(),
+	    Candidate.Textures.end(), [&](const FMaterialTextureParameterOverride& P) { return P.Name == Name; });
 	if (It == Candidate.Textures.end())
 		Candidate.Textures.push_back({Name, Texture});
 	else
@@ -68,8 +66,8 @@ bool FMaterialInstanceDynamic::SetTextureParameterValue(const FString& Name, con
 }
 bool FMaterialInstanceDynamic::ClearParameterValue(const FString& Name, FString& Error)
 {
-	auto Candidate = Overrides;
-	std::erase_if(Candidate.Parameters, [&](const auto& P) { return P.Name == Name; });
-	std::erase_if(Candidate.Textures, [&](const auto& P) { return P.Name == Name; });
+	FMaterialInstanceAsset Candidate = Overrides;
+	std::erase_if(Candidate.Parameters, [&](const FMaterialParameterOverride& P) { return P.Name == Name; });
+	std::erase_if(Candidate.Textures, [&](const FMaterialTextureParameterOverride& P) { return P.Name == Name; });
 	return Commit(std::move(Candidate), Error);
 }

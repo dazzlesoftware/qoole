@@ -1,6 +1,9 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Framework/MultiBox/MenuRegistry.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
+#include "Internationalization/TextLocalization.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/Input/SMenuAnchor.h"
@@ -34,7 +37,7 @@ namespace
 		}
 		return Entry.Command ? Context.FindListFor(*Entry.Command) : nullptr;
 	}
-}
+} // namespace
 
 bool FMenuEntry::IsEnabled(const FMenuContext& Context) const
 {
@@ -109,7 +112,8 @@ FMenuEntry& FMenuSection::AddEntryInternal(FMenuEntry Entry)
 	return Entries.back();
 }
 
-FMenuEntry& FMenuSection::AddCommand(const TSharedPtr<FUICommandInfo>& Command, FString LabelOverride, TSharedPtr<FUICommandList> CommandList)
+FMenuEntry& FMenuSection::AddCommand(
+    const TSharedPtr<FUICommandInfo>& Command, FString LabelOverride, TSharedPtr<FUICommandList> CommandList)
 {
 	check(Command);
 	FMenuEntry Entry;
@@ -121,7 +125,8 @@ FMenuEntry& FMenuSection::AddCommand(const TSharedPtr<FUICommandInfo>& Command, 
 	return AddEntryInternal(std::move(Entry));
 }
 
-FMenuEntry& FMenuSection::AddEntry(FName EntryName, FString EntryLabel, FString ToolTip, FUIAction Action, EUserInterfaceActionType Type)
+FMenuEntry& FMenuSection::AddEntry(
+    FName EntryName, FString EntryLabel, FString ToolTip, FUIAction Action, EUserInterfaceActionType Type)
 {
 	FMenuEntry Entry;
 	Entry.Name = EntryName;
@@ -262,7 +267,7 @@ FMenuDefinition& FMenuRegistry::ExtendMenu(FName MenuName)
 
 bool FMenuRegistry::IsMenuRegistered(FName MenuName) const
 {
-	auto It = Menus.find(MenuName);
+	TMap<FName, TSharedPtr<FMenuDefinition>>::const_iterator It = Menus.find(MenuName);
 	return It != Menus.end() && It->second->bRegistered;
 }
 
@@ -280,8 +285,7 @@ namespace
 {
 	// Orders items: default ones in add order, then each positioned item
 	// placed relative to the item it names (or at the end if missing).
-	template <typename T>
-	TArray<T> ApplyInsertOrder(const TArray<T>& Items)
+	template <typename T> TArray<T> ApplyInsertOrder(const TArray<T>& Items)
 	{
 		TArray<T> Result;
 		for (const T& Item : Items)
@@ -303,7 +307,8 @@ namespace
 				Result.insert(Result.begin(), Item);
 				continue;
 			}
-			auto It = std::find_if(Result.begin(), Result.end(), [&Insert](const T& Other) { return Other.Name == Insert.Name; });
+			typename TArray<T>::iterator It = std::find_if(
+			    Result.begin(), Result.end(), [&Insert](const T& Other) { return Other.Name == Insert.Name; });
 			if (It == Result.end())
 			{
 				Result.push_back(Item);
@@ -327,13 +332,13 @@ namespace
 		{
 			Entry.SubMenuBuilder(Section, Context);
 		}
-		return { Section };
+		return {Section};
 	}
-}
+} // namespace
 
 TArray<FMenuSection> FMenuRegistry::ResolveMenu(FName MenuName, const FMenuContext& Context) const
 {
-	auto It = Menus.find(MenuName);
+	TMap<FName, TSharedPtr<FMenuDefinition>>::const_iterator It = Menus.find(MenuName);
 	if (It == Menus.end())
 	{
 		return {};
@@ -347,7 +352,8 @@ TArray<FMenuSection> FMenuRegistry::ResolveMenu(FName MenuName, const FMenuConte
 	}
 	for (const FMenuSection& Own : Menu.Sections)
 	{
-		auto Existing = std::find_if(Sections.begin(), Sections.end(), [&Own](const FMenuSection& S) { return S.Name == Own.Name; });
+		TArray<FMenuSection>::iterator Existing = std::find_if(
+		    Sections.begin(), Sections.end(), [&Own](const FMenuSection& S) { return S.Name == Own.Name; });
 		if (Existing == Sections.end())
 		{
 			Sections.push_back(Own);
@@ -403,10 +409,15 @@ namespace
 		case EMenuEntryKind::Separator:
 			return SNew(SSeparator);
 		case EMenuEntryKind::Widget:
-			return SNew(SBox).Padding(FMargin(10.0f, 3.0f))[Entry.MakeWidget ? Entry.MakeWidget(Context) : SNullWidget::NullWidget()];
+			return SNew(SBox).Padding(
+			    FMargin(10.0f, 3.0f))[Entry.MakeWidget ? Entry.MakeWidget(Context) : SNullWidget::NullWidget()];
 		case EMenuEntryKind::SubMenu:
-			return SNew(SMenuEntry).Text(Entry.GetLabel()).ToolTipText(Entry.GetToolTip()).ShowCheck(bShowCheck)
-				.OnGetSubMenu([Entry, Context]() { return FMenuRegistry::Get().GenerateMenuWidget(ResolveSubMenuSections(Entry, Context), Context); });
+			return SNew(SMenuEntry)
+			    .Text(Entry.GetLabel())
+			    .ToolTipText(Entry.GetToolTip())
+			    .ShowCheck(bShowCheck)
+			    .OnGetSubMenu([Entry, Context]()
+			{ return FMenuRegistry::Get().GenerateMenuWidget(ResolveSubMenuSections(Entry, Context), Context); });
 		default:
 			break;
 		}
@@ -417,22 +428,24 @@ namespace
 			Gesture = TAttribute<FString>([Command] { return Command->GetInputText(); });
 		}
 		return SNew(SMenuEntry)
-			.Text(Entry.GetLabel())
-			.ToolTipText(Entry.GetToolTip())
-			.InputGesture(Gesture.IsSet() ? Gesture : TAttribute<FString>(""))
-			.ShowCheck(bShowCheck)
-			.CheckState([Entry, Context] { return Entry.GetCheckState(Context); })
-			.IsEnabled([Entry, Context] { return Entry.IsEnabled(Context); })
-			.OnSelected([Entry, Context] { Entry.Run(Context); });
+		    .Text(Entry.GetLabel())
+		    .ToolTipText(Entry.GetToolTip())
+		    .InputGesture(Gesture.IsSet() ? Gesture : TAttribute<FString>(""))
+		    .ShowCheck(bShowCheck)
+		    .CheckState([Entry, Context] { return Entry.GetCheckState(Context); })
+		    .IsEnabled([Entry, Context] {
+			return Entry.IsEnabled(Context);
+		}).OnSelected([Entry, Context] { Entry.Run(Context); });
 	}
-}
+} // namespace
 
 TSharedRef<SWidget> FMenuRegistry::GenerateMenuWidget(FName MenuName, const FMenuContext& Context) const
 {
 	return GenerateMenuWidget(ResolveMenu(MenuName, Context), Context);
 }
 
-TSharedRef<SWidget> FMenuRegistry::GenerateMenuWidget(const TArray<FMenuSection>& Sections, const FMenuContext& Context) const
+TSharedRef<SWidget> FMenuRegistry::GenerateMenuWidget(
+    const TArray<FMenuSection>& Sections, const FMenuContext& Context) const
 {
 	// A check column for everyone if anyone needs one, so labels line up.
 	bool bShowCheck = false;
@@ -441,7 +454,8 @@ TSharedRef<SWidget> FMenuRegistry::GenerateMenuWidget(const TArray<FMenuSection>
 		for (const FMenuEntry& Entry : Section.Entries)
 		{
 			const EUserInterfaceActionType Type = Entry.GetActionType();
-			bShowCheck |= (Entry.Kind == EMenuEntryKind::Command || Entry.Kind == EMenuEntryKind::Action) && Type != EUserInterfaceActionType::Button;
+			bShowCheck |= (Entry.Kind == EMenuEntryKind::Command || Entry.Kind == EMenuEntryKind::Action) &&
+			    Type != EUserInterfaceActionType::Button;
 		}
 	}
 
@@ -455,8 +469,9 @@ TSharedRef<SWidget> FMenuRegistry::GenerateMenuWidget(const TArray<FMenuSection>
 		}
 		if (!Section.Label.IsEmpty())
 		{
-			Box->AddSlot().AutoHeight().Padding(FMargin(10.0f, 4.0f, 10.0f, 2.0f))
-				[SNew(STextBlock).Text(Section.Label).TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"))];
+			Box->AddSlot().AutoHeight().Padding(FMargin(10.0f, 4.0f, 10.0f, 2.0f))[SNew(STextBlock)
+			        .Text(Section.Label)
+			        .TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"))];
 		}
 		for (const FMenuEntry& Entry : Section.Entries)
 		{
@@ -465,7 +480,9 @@ TSharedRef<SWidget> FMenuRegistry::GenerateMenuWidget(const TArray<FMenuSection>
 	}
 	if (Sections.empty())
 	{
-		Box->AddSlot().AutoHeight().Padding(FMargin(10.0f, 4.0f))[SNew(STextBlock).Text("(empty)").TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"))];
+		Box->AddSlot().AutoHeight().Padding(FMargin(10.0f, 4.0f))[SNew(STextBlock)
+		        .Text(GENESIS_TEXT("(empty)"))
+		        .TextStyle(&FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("SmallText"))];
 	}
 	return Box;
 }
@@ -518,25 +535,25 @@ namespace
 
 		bool IsAnyOpen() const
 		{
-			return std::any_of(Items.begin(), Items.end(), [](const TSharedPtr<SMenuBarItem>& I) { return I->Combo->IsOpen(); });
+			return std::any_of(
+			    Items.begin(), Items.end(), [](const TSharedPtr<SMenuBarItem>& I) { return I->Combo->IsOpen(); });
 		}
 
 		TArray<TSharedPtr<SMenuBarItem>> Items;
 	};
 
-	void SMenuBarItem::Construct(const FArguments&, SMenuBar* InBar, const FMenuEntry& Entry, const FMenuContext& Context)
+	void SMenuBarItem::Construct(
+	    const FArguments&, SMenuBar* InBar, const FMenuEntry& Entry, const FMenuContext& Context)
 	{
 		Bar = InBar;
-		ChildSlot
-		[
-			SAssignNew(Combo, SComboButton)
-			.Text(Entry.GetLabel())
-			.HasDownArrow(false)
-			.IsFocusable(false)
-			.Placement(EMenuPlacement::BelowAnchor)
-			.ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton"))
-			.OnGetMenuContent([Entry, Context]() { return FMenuRegistry::Get().GenerateMenuWidget(ResolveSubMenuSections(Entry, Context), Context); })
-		];
+		ChildSlot[SAssignNew(Combo, SComboButton)
+		        .Text(Entry.GetLabel())
+		        .HasDownArrow(false)
+		        .IsFocusable(false)
+		        .Placement(EMenuPlacement::BelowAnchor)
+		        .ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("FlatButton"))
+		        .OnGetMenuContent([Entry, Context]()
+		{ return FMenuRegistry::Get().GenerateMenuWidget(ResolveSubMenuSections(Entry, Context), Context); })];
 	}
 
 	void SMenuBarItem::OnMouseEnter(const FGeometry&, const FPointerEvent&)
@@ -570,37 +587,44 @@ namespace
 			{
 				Tip += "\n" + Entry.GetToolTip();
 			}
-			const FSlateBrush* Icon = Entry.Command && !Entry.Command->GetIcon().IsNone() ? FAppStyle::Get().Find<FSlateBrush>(Entry.Command->GetIcon())
-				: (!Entry.Icon.IsNone() ? FAppStyle::Get().Find<FSlateBrush>(Entry.Icon) : nullptr);
+			const FSlateBrush* Icon = Entry.Command && !Entry.Command->GetIcon().IsNone()
+			    ? FAppStyle::Get().Find<FSlateBrush>(Entry.Command->GetIcon())
+			    : (!Entry.Icon.IsNone() ? FAppStyle::Get().Find<FSlateBrush>(Entry.Icon) : nullptr);
 			const TSharedRef<SHorizontalBox> Content = SNew(SHorizontalBox);
 			if (Icon)
 			{
-				Content->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.0f, 0.0f, 5.0f, 0.0f))[SNew(SImage).Image(Icon)];
+				Content->AddSlot()
+				    .AutoWidth()
+				    .VAlign(VAlign_Center)
+				    .Padding(FMargin(0.0f, 0.0f, 5.0f, 0.0f))[SNew(SImage).Image(Icon)];
 			}
-			Content->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(Entry.GetLabel()).TextStyle(&Style->LabelText)];
-			ChildSlot
-			[
-				SAssignNew(Button, SButton)
-				.ButtonStyle(&Style->Button)
-				.IsFocusable(false)
-				.ToolTipText(Tip)
-				.IsEnabled([this] { return Entry.IsEnabled(Context); })
-				.OnClicked([this] { Entry.Run(Context); return FReply::Handled(); })
-				[Content]
-			];
+			Content->AddSlot().AutoWidth().VAlign(
+			    VAlign_Center)[SNew(STextBlock).Text(Entry.GetLabel()).TextStyle(&Style->LabelText)];
+			ChildSlot[SAssignNew(Button, SButton)
+			        .ButtonStyle(&Style->Button)
+			        .IsFocusable(false)
+			        .ToolTipText(Tip)
+			        .IsEnabled([this] { return Entry.IsEnabled(Context); })
+			        .OnClicked([this]
+			{
+				Entry.Run(Context);
+				return FReply::Handled();
+			})[Content]];
 		}
 
 	protected:
-		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-			int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
+		int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+		    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const override
 		{
 			const bool bCheckable = Entry.GetActionType() != EUserInterfaceActionType::Button;
 			if (bCheckable && Entry.GetCheckState(Context) == ECheckBoxState::Checked)
 			{
-				const FSlateBrush& Brush = IsHovered() ? Style->ToggleButtonChecked.Hovered : Style->ToggleButtonChecked.Normal;
+				const FSlateBrush& Brush =
+				    IsHovered() ? Style->ToggleButtonChecked.Hovered : Style->ToggleButtonChecked.Normal;
 				Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 			}
-			return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, MakeChildStyle(InWidgetStyle));
+			return PaintArrangedChildren(
+			    Args, CullingRect, OutDrawElements, LayerId + 1, MakeChildStyle(InWidgetStyle));
 		}
 
 	private:
@@ -609,7 +633,7 @@ namespace
 		const FToolBarStyle* Style = nullptr;
 		TSharedPtr<SButton> Button;
 	};
-}
+} // namespace
 
 TSharedRef<SWidget> FMenuRegistry::GenerateMenuBar(FName MenuName, const FMenuContext& Context) const
 {
@@ -625,7 +649,8 @@ TSharedRef<SWidget> FMenuRegistry::GenerateToolBar(FName MenuName, const FMenuCo
 	{
 		if (S > 0)
 		{
-			Row->AddSlot().AutoWidth().Padding(FMargin(4.0f, 2.0f))[SNew(SSeparator).Orientation(EOrientation::Vertical).Padding(0.0f)];
+			Row->AddSlot().AutoWidth().Padding(
+			    FMargin(4.0f, 2.0f))[SNew(SSeparator).Orientation(EOrientation::Vertical).Padding(0.0f)];
 		}
 		for (const FMenuEntry& Entry : Sections[S].Entries)
 		{
@@ -639,8 +664,13 @@ TSharedRef<SWidget> FMenuRegistry::GenerateToolBar(FName MenuName, const FMenuCo
 				Widget = Entry.MakeWidget ? Entry.MakeWidget(Context).ToSharedPtr() : nullptr;
 				break;
 			case EMenuEntryKind::SubMenu:
-				Widget = SNew(SComboButton).Text(Entry.GetLabel()).ButtonStyle(&Style.Button).IsFocusable(false).ToolTipText(Entry.GetToolTip())
-					.OnGetMenuContent([Entry, Context]() { return FMenuRegistry::Get().GenerateMenuWidget(ResolveSubMenuSections(Entry, Context), Context); });
+				Widget = SNew(SComboButton)
+				             .Text(Entry.GetLabel())
+				             .ButtonStyle(&Style.Button)
+				             .IsFocusable(false)
+				             .ToolTipText(Entry.GetToolTip())
+				             .OnGetMenuContent([Entry, Context]()
+				{ return FMenuRegistry::Get().GenerateMenuWidget(ResolveSubMenuSections(Entry, Context), Context); });
 				break;
 			default:
 				Widget = SNew(SToolBarButton, Entry, Context);

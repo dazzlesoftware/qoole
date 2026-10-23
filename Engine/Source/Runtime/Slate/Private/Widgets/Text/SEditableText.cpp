@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Widgets/Text/SEditableText.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include "Framework/Application/SlateApplication.h"
 
@@ -32,7 +34,7 @@ namespace
 		}
 		return Index;
 	}
-}
+} // namespace
 
 // The IME's view of an editable text.
 class FEditableTextInputContext final : public ITextInputMethodContext
@@ -40,7 +42,10 @@ class FEditableTextInputContext final : public ITextInputMethodContext
 public:
 	explicit FEditableTextInputContext(SEditableText& InOwner) : Owner(&InOwner) {}
 
-	void Detach() { Owner = nullptr; }
+	void Detach()
+	{
+		Owner = nullptr;
+	}
 
 	void BeginComposition() override
 	{
@@ -86,7 +91,10 @@ public:
 		Owner->Invalidate(EInvalidateWidgetReason::Layout);
 	}
 
-	FIntRect GetCaretRect() const override { return Owner ? Owner->GetCaretScreenRect() : FIntRect(); }
+	FIntRect GetCaretRect() const override
+	{
+		return Owner ? Owner->GetCaretScreenRect() : FIntRect();
+	}
 
 	TSharedPtr<IPlatformWindow> GetWindow() const override
 	{
@@ -208,7 +216,8 @@ void SEditableText::OnCaretMoved()
 	{
 		if (ITextInputMethodSystem* Ime = FSlateApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
 		{
-			Ime->UpdateContextLayout(TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
+			Ime->UpdateContextLayout(
+			    TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
 		}
 	}
 }
@@ -233,7 +242,8 @@ int32 SEditableText::ToDisplayIndex(int32 TextIndex) const
 {
 	if (IsPassword.Get())
 	{
-		return FUtf8::CountCodePoints(EditedText.View().substr(0, static_cast<SIZE_T>(FMath::Clamp(TextIndex, 0, EditedText.Len()))));
+		return FUtf8::CountCodePoints(
+		    EditedText.View().substr(0, static_cast<SIZE_T>(FMath::Clamp(TextIndex, 0, EditedText.Len()))));
 	}
 	if (bComposing && TextIndex >= CompositionStart)
 	{
@@ -256,7 +266,8 @@ int32 SEditableText::ToTextIndex(int32 DisplayIndex) const
 	}
 	if (bComposing && DisplayIndex > CompositionStart)
 	{
-		return DisplayIndex < CompositionStart + CompositionText.Len() ? CompositionStart : DisplayIndex - CompositionText.Len();
+		return DisplayIndex < CompositionStart + CompositionText.Len() ? CompositionStart
+		                                                               : DisplayIndex - CompositionText.Len();
 	}
 	return DisplayIndex;
 }
@@ -324,7 +335,8 @@ void SEditableText::EnsureCaretVisible()
 		{
 			NewScroll.X = Caret.Right - View.X + Margin;
 		}
-		NewScroll.X = FMath::Clamp(NewScroll.X, 0.0f, FMath::Max(0.0f, Layout.GetSize().X + Style->CaretWidth - View.X));
+		NewScroll.X =
+		    FMath::Clamp(NewScroll.X, 0.0f, FMath::Max(0.0f, Layout.GetSize().X + Style->CaretWidth - View.X));
 	}
 	if (bMultiLine)
 	{
@@ -352,7 +364,8 @@ FIntRect SEditableText::GetCaretScreenRect() const
 	const FRect Caret = Layout.GetCaretRect(DisplayCaret, Geometry.Size.X, Style->CaretWidth).Offset(-ScrollOffset);
 	const FVector2 TopLeft = Geometry.LocalToAbsolute(Caret.GetTopLeft());
 	const FVector2 BottomRight = Geometry.LocalToAbsolute(Caret.GetBottomRight());
-	return FIntRect(FMath::FloorToInt(TopLeft.X), FMath::FloorToInt(TopLeft.Y), FMath::CeilToInt(BottomRight.X), FMath::CeilToInt(BottomRight.Y));
+	return FIntRect(FMath::FloorToInt(TopLeft.X), FMath::FloorToInt(TopLeft.Y), FMath::CeilToInt(BottomRight.X),
+	    FMath::CeilToInt(BottomRight.Y));
 }
 
 // ---------------------------------------------------------------------------
@@ -380,13 +393,17 @@ int32 SEditableText::NextWordBoundary(int32 Index) const
 	// Over the rest of this word (or this run of punctuation), then the spaces.
 	if (Index < Len && IsWordByte(static_cast<unsigned char>(EditedText[Index])))
 	{
-		while (Index < Len && IsWordByte(static_cast<unsigned char>(EditedText[Index]))) ++Index;
+		while (Index < Len && IsWordByte(static_cast<unsigned char>(EditedText[Index])))
+			++Index;
 	}
 	else if (Index < Len && !IsSpaceByte(static_cast<unsigned char>(EditedText[Index])))
 	{
-		while (Index < Len && !IsWordByte(static_cast<unsigned char>(EditedText[Index])) && !IsSpaceByte(static_cast<unsigned char>(EditedText[Index]))) ++Index;
+		while (Index < Len && !IsWordByte(static_cast<unsigned char>(EditedText[Index])) &&
+		    !IsSpaceByte(static_cast<unsigned char>(EditedText[Index])))
+			++Index;
 	}
-	while (Index < Len && IsSpaceByte(static_cast<unsigned char>(EditedText[Index])) && EditedText[Index] != '\n') ++Index;
+	while (Index < Len && IsSpaceByte(static_cast<unsigned char>(EditedText[Index])) && EditedText[Index] != '\n')
+		++Index;
 	return Index;
 }
 
@@ -396,14 +413,18 @@ int32 SEditableText::PreviousWordBoundary(int32 Index) const
 	{
 		return 0;
 	}
-	while (Index > 0 && IsSpaceByte(static_cast<unsigned char>(EditedText[Index - 1])) && EditedText[Index - 1] != '\n') --Index;
+	while (Index > 0 && IsSpaceByte(static_cast<unsigned char>(EditedText[Index - 1])) && EditedText[Index - 1] != '\n')
+		--Index;
 	if (Index > 0 && IsWordByte(static_cast<unsigned char>(EditedText[Index - 1])))
 	{
-		while (Index > 0 && IsWordByte(static_cast<unsigned char>(EditedText[Index - 1]))) --Index;
+		while (Index > 0 && IsWordByte(static_cast<unsigned char>(EditedText[Index - 1])))
+			--Index;
 	}
 	else if (Index > 0 && !IsSpaceByte(static_cast<unsigned char>(EditedText[Index - 1])))
 	{
-		while (Index > 0 && !IsWordByte(static_cast<unsigned char>(EditedText[Index - 1])) && !IsSpaceByte(static_cast<unsigned char>(EditedText[Index - 1]))) --Index;
+		while (Index > 0 && !IsWordByte(static_cast<unsigned char>(EditedText[Index - 1])) &&
+		    !IsSpaceByte(static_cast<unsigned char>(EditedText[Index - 1])))
+			--Index;
 	}
 	else if (Index > 0)
 	{
@@ -416,21 +437,27 @@ TPair<int32, int32> SEditableText::WordAt(int32 Index) const
 {
 	if (IsPassword.Get())
 	{
-		return { 0, EditedText.Len() };
+		return {0, EditedText.Len()};
 	}
 	const int32 Len = EditedText.Len();
 	Index = FMath::Clamp(Index, 0, Len);
-	const auto Kind = [this](int32 I) { const unsigned char C = static_cast<unsigned char>(EditedText[I]); return IsWordByte(C) ? 0 : (IsSpaceByte(C) ? 1 : 2); };
+	const TFunction<int(int32)> Kind = [this](int32 I)
+	{
+		const unsigned char C = static_cast<unsigned char>(EditedText[I]);
+		return IsWordByte(C) ? 0 : (IsSpaceByte(C) ? 1 : 2);
+	};
 	if (Len == 0)
 	{
-		return { 0, 0 };
+		return {0, 0};
 	}
 	const int32 Probe = Index < Len ? Index : Len - 1;
 	const int32 K = Kind(Probe);
 	int32 Begin = Probe, End = Probe;
-	while (Begin > 0 && Kind(Begin - 1) == K) --Begin;
-	while (End < Len && Kind(End) == K) ++End;
-	return { Begin, End };
+	while (Begin > 0 && Kind(Begin - 1) == K)
+		--Begin;
+	while (End < Len && Kind(End) == K)
+		++End;
+	return {Begin, End};
 }
 
 int32 SEditableText::LineStart(int32 Index) const
@@ -482,7 +509,7 @@ void SEditableText::BeginEdit(EEditKind Kind)
 	// Consecutive typing (or deleting) is one undo step.
 	if (Kind == EEditKind::Other || Kind != LastEdit || UndoStack.empty())
 	{
-		UndoStack.push_back({ EditedText, CaretIndex, SelectionAnchor });
+		UndoStack.push_back({EditedText, CaretIndex, SelectionAnchor});
 		if (static_cast<int32>(UndoStack.size()) > MaxUndo)
 		{
 			UndoStack.erase(UndoStack.begin());
@@ -541,7 +568,7 @@ bool SEditableText::Undo()
 	{
 		return false;
 	}
-	RedoStack.push_back({ EditedText, CaretIndex, SelectionAnchor });
+	RedoStack.push_back({EditedText, CaretIndex, SelectionAnchor});
 	const FUndoState State = UndoStack.back();
 	UndoStack.pop_back();
 	EditedText = State.Text;
@@ -558,7 +585,7 @@ bool SEditableText::Redo()
 	{
 		return false;
 	}
-	UndoStack.push_back({ EditedText, CaretIndex, SelectionAnchor });
+	UndoStack.push_back({EditedText, CaretIndex, SelectionAnchor});
 	const FUndoState State = RedoStack.back();
 	RedoStack.pop_back();
 	EditedText = State.Text;
@@ -664,7 +691,9 @@ FReply SEditableText::OnKeyDown(const FGeometry&, const FKeyEvent& Event)
 		{
 			PreferredCaretX = Layout.GetCaretX(ToDisplayIndex(CaretIndex), GetCachedGeometry().Size.X);
 		}
-		const int32 Page = Layout.GetLines().empty() ? 1 : FMath::Max(1, FMath::FloorToInt(GetCachedGeometry().Size.Y / Layout.GetLines()[0].Height));
+		const int32 Page = Layout.GetLines().empty()
+		    ? 1
+		    : FMath::Max(1, FMath::FloorToInt(GetCachedGeometry().Size.Y / Layout.GetLines()[0].Height));
 		const int32 Lines = Key == EKey::Up ? -1 : (Key == EKey::Down ? 1 : (Key == EKey::PageUp ? -Page : Page));
 		const float KeepX = PreferredCaretX;
 		SetCaret(VerticalMove(CaretIndex, Lines), bShift);
@@ -684,7 +713,8 @@ FReply SEditableText::OnKeyDown(const FGeometry&, const FKeyEvent& Event)
 		else if (CaretIndex > 0)
 		{
 			BeginEdit(bControl ? EEditKind::Other : EEditKind::Deleting);
-			ReplaceRange(bControl ? PreviousWordBoundary(CaretIndex) : PreviousCaret(CaretIndex), CaretIndex, FString());
+			ReplaceRange(
+			    bControl ? PreviousWordBoundary(CaretIndex) : PreviousCaret(CaretIndex), CaretIndex, FString());
 		}
 		return FReply::Handled();
 	case EKey::Delete:
@@ -744,9 +774,15 @@ FReply SEditableText::OnKeyDown(const FGeometry&, const FKeyEvent& Event)
 	{
 		switch (Key)
 		{
-		case EKey::A: SelectAll(); return FReply::Handled();
-		case EKey::C: CopySelection(); return FReply::Handled();
-		case EKey::X: CutSelection(); return FReply::Handled();
+		case EKey::A:
+			SelectAll();
+			return FReply::Handled();
+		case EKey::C:
+			CopySelection();
+			return FReply::Handled();
+		case EKey::X:
+			CutSelection();
+			return FReply::Handled();
 		case EKey::V:
 			if (!bReadOnly)
 			{
@@ -763,9 +799,14 @@ FReply SEditableText::OnKeyDown(const FGeometry&, const FKeyEvent& Event)
 				Undo();
 			}
 			return FReply::Handled();
-		case EKey::Y: Redo(); return FReply::Handled();
-		case EKey::Insert: CopySelection(); return FReply::Handled();
-		default: break;
+		case EKey::Y:
+			Redo();
+			return FReply::Handled();
+		case EKey::Insert:
+			CopySelection();
+			return FReply::Handled();
+		default:
+			break;
 		}
 	}
 	if (bShift && Key == EKey::Insert && !bReadOnly)
@@ -781,10 +822,10 @@ FReply SEditableText::OnKeyDown(const FGeometry&, const FKeyEvent& Event)
 	// Printable keys arrive as OnKeyChar; claim them so they do not trigger
 	// shortcuts elsewhere while typing.
 	const uint32 Code = static_cast<uint32>(Key);
-	const bool bPrintable = (Code >= '0' && Code <= '9') || (Code >= 'A' && Code <= 'Z') || Key == EKey::SpaceBar
-		|| (Code >= static_cast<uint32>(EKey::Semicolon) && Code <= static_cast<uint32>(EKey::Tilde))
-		|| (Code >= static_cast<uint32>(EKey::LeftBracket) && Code <= static_cast<uint32>(EKey::Apostrophe))
-		|| (Code >= static_cast<uint32>(EKey::NumPad0) && Code <= static_cast<uint32>(EKey::Divide));
+	const bool bPrintable = (Code >= '0' && Code <= '9') || (Code >= 'A' && Code <= 'Z') || Key == EKey::SpaceBar ||
+	    (Code >= static_cast<uint32>(EKey::Semicolon) && Code <= static_cast<uint32>(EKey::Tilde)) ||
+	    (Code >= static_cast<uint32>(EKey::LeftBracket) && Code <= static_cast<uint32>(EKey::Apostrophe)) ||
+	    (Code >= static_cast<uint32>(EKey::NumPad0) && Code <= static_cast<uint32>(EKey::Divide));
 	return bPrintable && !bControl && !Event.IsAltDown() ? FReply::Handled() : FReply::Unhandled();
 }
 
@@ -866,7 +907,10 @@ FReply SEditableText::OnMouseButtonDoubleClick(const FGeometry& Geometry, const 
 	{
 		return FReply::Unhandled();
 	}
-	const auto [Begin, End] = WordAt(HitTestText(Geometry, Event.GetAbsolutePosition()));
+	const std::pair<int, int> BeginBinding = WordAt(HitTestText(Geometry, Event.GetAbsolutePosition()));
+	const int& Begin = BeginBinding.first;
+	const int& End = BeginBinding.second;
+
 	SelectionAnchor = Begin;
 	CaretIndex = End;
 	OnCaretMoved();
@@ -892,7 +936,8 @@ FReply SEditableText::OnFocusReceived(const FGeometry&, const FFocusEvent& Event
 	{
 		if (ITextInputMethodSystem* Ime = FSlateApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
 		{
-			Ime->ActivateContext(TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
+			Ime->ActivateContext(
+			    TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
 		}
 	}
 	return FReply::Handled();
@@ -902,7 +947,8 @@ void SEditableText::OnFocusLost(const FFocusEvent&)
 {
 	if (ITextInputMethodSystem* Ime = FSlateApplication::Get().GetPlatformApplication().GetTextInputMethodSystem())
 	{
-		Ime->DeactivateContext(TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
+		Ime->DeactivateContext(
+		    TSharedRef<ITextInputMethodContext>(StaticCastSharedPtr<ITextInputMethodContext>(InputContext)));
 	}
 	if (bComposing)
 	{
@@ -943,14 +989,15 @@ bool SEditableText::IsCaretVisibleNow() const
 		return true;
 	}
 	const double Since = FSlateApplication::Get().GetTime() - LastCaretActivity;
-	return FMath::Fmod(static_cast<float>(Since), static_cast<float>(CaretBlinkPeriod * 2.0)) < static_cast<float>(CaretBlinkPeriod);
+	return FMath::Fmod(static_cast<float>(Since), static_cast<float>(CaretBlinkPeriod * 2.0)) <
+	    static_cast<float>(CaretBlinkPeriod);
 }
 
 // ---------------------------------------------------------------------------
 // Paint
 
-int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect&,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	if (!FSlateApplication::IsInitialized())
 	{
@@ -967,7 +1014,8 @@ int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 	{
 		TArray<FRect> Rects;
 		Layout.GetSelectionRects(ToDisplayIndex(GetSelectionBegin()), ToDisplayIndex(GetSelectionEnd()), Width, Rects);
-		const FColor Color = InWidgetStyle.Tinted((bFocused ? Style->SelectionColor : Style->InactiveSelectionColor).Resolve());
+		const FColor Color =
+		    InWidgetStyle.Tinted((bFocused ? Style->SelectionColor : Style->InactiveSelectionColor).Resolve());
 		for (const FRect& Rect : Rects)
 		{
 			OutDrawElements.AddSolidBox(LayerId, Geometry.ToPaintGeometry(Rect.Offset(Offset)), Color);
@@ -985,12 +1033,15 @@ int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 			HintLayout.SetText(Hint);
 			HintLayout.SetScale(Geometry.ToPaintGeometry().GetScale());
 			HintLayout.UpdateIfNeeded(FontCache);
-			HintLayout.Paint(FontCache, OutDrawElements, LayerId + 1, Geometry, Offset, Width, InWidgetStyle.Tinted(Style->HintColor.Resolve()));
+			HintLayout.Paint(FontCache, OutDrawElements, LayerId + 1, Geometry, Offset, Width,
+			    InWidgetStyle.Tinted(Style->HintColor.Resolve()));
 		}
 	}
 	else
 	{
-		const FColor Color = Args.bEnabled ? InWidgetStyle.Tinted(Style->Color.Resolve()) : InWidgetStyle.Tinted(FSlateColor(EStyleColor::ForegroundDisabled).Resolve());
+		const FColor Color = Args.bEnabled
+		    ? InWidgetStyle.Tinted(Style->Color.Resolve())
+		    : InWidgetStyle.Tinted(FSlateColor(EStyleColor::ForegroundDisabled).Resolve());
 		Layout.Paint(FontCache, OutDrawElements, LayerId + 1, Geometry, Offset, Width, Color);
 	}
 
@@ -1002,7 +1053,10 @@ int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 		const FColor Color = InWidgetStyle.Tinted(Style->CompositionUnderline.Resolve());
 		for (const FRect& Rect : Rects)
 		{
-			OutDrawElements.AddSolidBox(LayerId + 1, Geometry.ToPaintGeometry(FRect(Rect.Left, Rect.Bottom - 2.0f, Rect.Right, Rect.Bottom - 1.0f).Offset(Offset)), Color);
+			OutDrawElements.AddSolidBox(LayerId + 1,
+			    Geometry.ToPaintGeometry(
+			        FRect(Rect.Left, Rect.Bottom - 2.0f, Rect.Right, Rect.Bottom - 1.0f).Offset(Offset)),
+			    Color);
 		}
 	}
 
@@ -1011,7 +1065,8 @@ int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 	{
 		const int32 DisplayCaret = bComposing ? CompositionStart + CompositionCaret : ToDisplayIndex(CaretIndex);
 		const FRect Caret = Layout.GetCaretRect(DisplayCaret, Width, Style->CaretWidth);
-		OutDrawElements.AddSolidBox(LayerId + 2, Geometry.ToPaintGeometry(Caret.Offset(Offset)), InWidgetStyle.Tinted(Style->CaretColor.Resolve()));
+		OutDrawElements.AddSolidBox(LayerId + 2, Geometry.ToPaintGeometry(Caret.Offset(Offset)),
+		    InWidgetStyle.Tinted(Style->CaretColor.Resolve()));
 	}
 	return LayerId + 2;
 }
@@ -1022,23 +1077,21 @@ int32 SEditableText::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 void SEditableTextBox::Construct(const FArguments& Args)
 {
 	Style = Args._Style ? Args._Style : &FAppStyle::Get().GetWidgetStyle<FEditableTextBoxStyle>("EditableTextBox");
-	ChildSlot.Padding(Args._Padding.IsSet() ? Args._Padding.Get() : Style->Padding).VAlign(Args._IsMultiLine ? VAlign_Fill : VAlign_Center)
-	[
-		SAssignNew(EditableText, SEditableText)
-		.Style(&Style->Text)
-		.Text(Args._Text)
-		.HintText(Args._HintText)
-		.IsReadOnly(Args._IsReadOnly)
-		.IsPassword(Args._IsPassword)
-		.IsMultiLine(Args._IsMultiLine)
-		.AutoWrapText(Args._AutoWrapText)
-		.SelectAllTextWhenFocused(Args._SelectAllTextWhenFocused)
-		.RevertTextOnEscape(Args._RevertTextOnEscape)
-		.ClearKeyboardFocusOnCommit(Args._ClearKeyboardFocusOnCommit)
-		.MinDesiredWidth(Args._MinDesiredWidth)
-		.OnTextChanged(Args._OnTextChanged)
-		.OnTextCommitted(Args._OnTextCommitted)
-	];
+	ChildSlot.Padding(Args._Padding.IsSet() ? Args._Padding.Get() : Style->Padding)
+	    .VAlign(Args._IsMultiLine ? VAlign_Fill : VAlign_Center)[SAssignNew(EditableText, SEditableText)
+	            .Style(&Style->Text)
+	            .Text(Args._Text)
+	            .HintText(Args._HintText)
+	            .IsReadOnly(Args._IsReadOnly)
+	            .IsPassword(Args._IsPassword)
+	            .IsMultiLine(Args._IsMultiLine)
+	            .AutoWrapText(Args._AutoWrapText)
+	            .SelectAllTextWhenFocused(Args._SelectAllTextWhenFocused)
+	            .RevertTextOnEscape(Args._RevertTextOnEscape)
+	            .ClearKeyboardFocusOnCommit(Args._ClearKeyboardFocusOnCommit)
+	            .MinDesiredWidth(Args._MinDesiredWidth)
+	            .OnTextChanged(Args._OnTextChanged)
+	            .OnTextCommitted(Args._OnTextCommitted)];
 }
 
 FReply SEditableTextBox::OnMouseButtonDown(const FGeometry&, const FPointerEvent& Event)
@@ -1046,16 +1099,18 @@ FReply SEditableTextBox::OnMouseButtonDown(const FGeometry&, const FPointerEvent
 	// Clicks on the frame's padding focus the text.
 	if (Event.GetEffectingButton() == EMouseButton::Left && !EditableText->HasKeyboardFocus())
 	{
-		return FReply::Handled().SetUserFocus(ToSharedRef(StaticCastSharedPtr<SWidget>(EditableText)), EFocusCause::Mouse);
+		return FReply::Handled().SetUserFocus(
+		    ToSharedRef(StaticCastSharedPtr<SWidget>(EditableText)), EFocusCause::Mouse);
 	}
 	return FReply::Unhandled();
 }
 
-int32 SEditableTextBox::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SEditableTextBox::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
-	const FSlateBrush& Brush = EditableText->IsTextReadOnly() ? Style->ReadOnly
-		: (EditableText->HasKeyboardFocus() ? Style->Focused : (IsHovered() ? Style->Hovered : Style->Normal));
+	const FSlateBrush& Brush = EditableText->IsTextReadOnly()
+	    ? Style->ReadOnly
+	    : (EditableText->HasKeyboardFocus() ? Style->Focused : (IsHovered() ? Style->Hovered : Style->Normal));
 	Brush.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 	return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, MakeChildStyle(InWidgetStyle));
 }

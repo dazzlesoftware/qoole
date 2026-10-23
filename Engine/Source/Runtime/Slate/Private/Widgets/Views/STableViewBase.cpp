@@ -12,9 +12,15 @@ public:
 	SLATE_BEGIN_ARGS(SListPanel)
 	SLATE_END_ARGS()
 
-	void Construct(const FArguments&, STableViewBase* InOwner) { Owner = InOwner; }
+	void Construct(const FArguments&, STableViewBase* InOwner)
+	{
+		Owner = InOwner;
+	}
 
-	FChildren* GetChildren() override { return &Children; }
+	FChildren* GetChildren() override
+	{
+		return &Children;
+	}
 
 	// Replaces the rows if they changed; heights are local units.
 	void SetRows(const TArray<TPair<TSharedRef<SWidget>, float>>& Rows, float InFirstRowOffset)
@@ -25,7 +31,7 @@ public:
 			bSame = &Children[I].GetWidget().Get() == &Rows[I].first.Get();
 		}
 		Heights.clear();
-		for (const auto& Row : Rows)
+		for (const std::pair<TSharedRef<SWidget>, float>& Row : Rows)
 		{
 			Heights.push_back(Row.second);
 		}
@@ -33,7 +39,7 @@ public:
 		if (!bSame)
 		{
 			Children.Empty();
-			for (const auto& Row : Rows)
+			for (const std::pair<TSharedRef<SWidget>, float>& Row : Rows)
 			{
 				FSimpleSlot Slot;
 				Slot[Row.first];
@@ -42,7 +48,7 @@ public:
 		}
 	}
 
-	TPanelChildren<FSimpleSlot> Children{ this };
+	TPanelChildren<FSimpleSlot> Children{this};
 
 protected:
 	FVector2 ComputeDesiredSize(float) const override
@@ -57,7 +63,10 @@ protected:
 		return FVector2(Width, Owner->GetEstimatedContentHeight());
 	}
 
-	void OnPreArrange(const FGeometry& AllottedGeometry) override { Owner->GeneratePanelRows(AllottedGeometry); }
+	void OnPreArrange(const FGeometry& AllottedGeometry) override
+	{
+		Owner->GeneratePanelRows(AllottedGeometry);
+	}
 
 	void OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const override
 	{
@@ -65,7 +74,9 @@ protected:
 		for (int32 I = 0; I < Children.Num() && I < static_cast<int32>(Heights.size()); ++I)
 		{
 			const TSharedRef<SWidget>& Row = Children[I].GetWidget();
-			ArrangedChildren.AddWidget(Row->GetVisibility(), FArrangedWidget(Row, AllottedGeometry.MakeChild(FVector2(0.0f, Y), FVector2(AllottedGeometry.Size.X, Heights[I]))));
+			ArrangedChildren.AddWidget(Row->GetVisibility(),
+			    FArrangedWidget(
+			        Row, AllottedGeometry.MakeChild(FVector2(0.0f, Y), FVector2(AllottedGeometry.Size.X, Heights[I]))));
 			Y += Heights[I];
 		}
 	}
@@ -76,21 +87,19 @@ private:
 	float FirstRowOffset = 0.0f;
 };
 
-void STableViewBase::ConstructTableView(const FScrollBarStyle* ScrollBarStyle, float InWheelScrollAmount, EVisibility ScrollBarVisibility)
+void STableViewBase::ConstructTableView(
+    const FScrollBarStyle* ScrollBarStyle, float InWheelScrollAmount, EVisibility ScrollBarVisibility)
 {
 	WheelScrollAmount = InWheelScrollAmount;
 	bScrollBarAllowed = ScrollBarVisibility != EVisibility::Collapsed;
 	SAssignNew(Panel, SListPanel, this).Clipping(EWidgetClipping::ClipToBounds);
 	SAssignNew(ScrollBar, SScrollBar)
-		.Style(ScrollBarStyle)
-		.Visibility(EVisibility::Collapsed)
-		.OnUserScrolled([this](float Fraction) { SetScrollOffset(Fraction * static_cast<double>(GetNumItems())); });
-	ChildSlot
-	[
-		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().FillWidth(1.0f)[ToSharedRef(StaticCastSharedPtr<SWidget>(Panel))]
-		+ SHorizontalBox::Slot().AutoWidth()[ToSharedRef(StaticCastSharedPtr<SWidget>(ScrollBar))]
-	];
+	    .Style(ScrollBarStyle)
+	    .Visibility(EVisibility::Collapsed)
+	    .OnUserScrolled([this](float Fraction) { SetScrollOffset(Fraction * static_cast<double>(GetNumItems())); });
+	ChildSlot[SNew(SHorizontalBox) +
+	    SHorizontalBox::Slot().FillWidth(1.0f)[ToSharedRef(StaticCastSharedPtr<SWidget>(Panel))] +
+	    SHorizontalBox::Slot().AutoWidth()[ToSharedRef(StaticCastSharedPtr<SWidget>(ScrollBar))]];
 }
 
 int32 STableViewBase::GetNumGeneratedRows() const
@@ -132,7 +141,8 @@ FReply STableViewBase::OnMouseWheel(const FGeometry&, const FPointerEvent& Event
 	return ScrollOffset != Before ? FReply::Handled() : FReply::Unhandled();
 }
 
-float STableViewBase::GenerateFrom(double Offset, float ViewHeight, float LayoutScale, TArray<TPair<TSharedRef<SWidget>, float>>& OutRows)
+float STableViewBase::GenerateFrom(
+    double Offset, float ViewHeight, float LayoutScale, TArray<TPair<TSharedRef<SWidget>, float>>& OutRows)
 {
 	OutRows.clear();
 	const int32 Count = GetNumItems();
@@ -147,7 +157,7 @@ float STableViewBase::GenerateFrom(double Offset, float ViewHeight, float Layout
 		{
 			Y -= static_cast<float>(Offset - First) * Height;
 		}
-		OutRows.push_back({ Row, Height });
+		OutRows.push_back({Row, Height});
 		Y += Height;
 		if (Y >= ViewHeight)
 		{
@@ -245,7 +255,7 @@ void STableViewBase::GeneratePanelRows(const FGeometry& PanelGeometry)
 	EndGeneration();
 
 	float Total = 0.0f;
-	for (const auto& Row : Rows)
+	for (const std::pair<TSharedRef<SWidget>, float>& Row : Rows)
 	{
 		Total += Row.second;
 	}
@@ -253,7 +263,8 @@ void STableViewBase::GeneratePanelRows(const FGeometry& PanelGeometry)
 	{
 		AverageRowHeight = Total / static_cast<float>(Rows.size());
 	}
-	const float FirstOffset = Rows.empty() ? 0.0f : static_cast<float>(ScrollOffset - static_cast<int32>(ScrollOffset)) * Rows[0].second;
+	const float FirstOffset =
+	    Rows.empty() ? 0.0f : static_cast<float>(ScrollOffset - static_cast<int32>(ScrollOffset)) * Rows[0].second;
 	Panel->SetRows(Rows, FirstOffset);
 	(void)Covered;
 	UpdateScrollBar(ViewHeight);
@@ -272,8 +283,8 @@ void STableViewBase::UpdateScrollBar(float ViewHeight)
 	}
 }
 
-int32 STableViewBase::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 STableViewBase::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	(void)Geometry;
 	return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId, MakeChildStyle(InWidgetStyle));

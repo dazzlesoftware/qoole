@@ -28,10 +28,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 bool FMemoryConfigStore::GetString(const FString& Section, const FString& Key, FString& OutValue) const
 {
-	const auto SectionIt = Sections.find(Section);
+	const TMap<FString, FSection>::const_iterator SectionIt = Sections.find(Section);
 	if (SectionIt == Sections.end())
 		return false;
-	const auto KeyIt = SectionIt->second.find(Key);
+	const FSection::const_iterator KeyIt = SectionIt->second.find(Key);
 	if (KeyIt == SectionIt->second.end())
 		return false;
 	OutValue = KeyIt->second;
@@ -46,8 +46,8 @@ bool FMemoryConfigStore::GetInt(const FString& Section, const FString& Key, int3
 
 	const std::string_view View = Text.View();
 	int32 Value = 0;
-	const auto [End, Error] = std::from_chars(View.data(), View.data() + View.size(), Value);
-	if (Error != std::errc() || End != View.data() + View.size())
+	const std::from_chars_result Result = std::from_chars(View.data(), View.data() + View.size(), Value);
+	if (Result.ec != std::errc() || Result.ptr != View.data() + View.size())
 		return false;
 	OutValue = Value;
 	return true;
@@ -83,8 +83,8 @@ bool FIniConfigStore::Flush()
 FString FIniConfigStore::ToText() const
 {
 	TArray<const FString*> SectionNames;
-	for (const auto& [Name, Keys] : Sections)
-		SectionNames.push_back(&Name);
+	for (const TPair<const FString, FSection>& Section : Sections)
+		SectionNames.push_back(&Section.first);
 	std::sort(SectionNames.begin(), SectionNames.end(), [](const FString* A, const FString* B) { return *A < *B; });
 
 	FString Text;
@@ -92,14 +92,16 @@ FString FIniConfigStore::ToText() const
 	{
 		const FSection& Keys = Sections.at(*SectionName);
 		TArray<const std::pair<const FString, FString>*> Entries;
-		for (const auto& Entry : Keys)
+		for (const std::pair<const FString, FString>& Entry : Keys)
 			Entries.push_back(&Entry);
-		std::sort(Entries.begin(), Entries.end(), [](const auto* A, const auto* B) { return A->first < B->first; });
+		std::sort(Entries.begin(), Entries.end(),
+		    [](const TPair<const FString, FString>* A, const TPair<const FString, FString>* B)
+		{ return A->first < B->first; });
 
 		if (!Text.IsEmpty())
 			Text += "\n";
 		Text += "[" + *SectionName + "]\n";
-		for (const auto* Entry : Entries)
+		for (const std::pair<const FString, FString>* Entry : Entries)
 			Text += Entry->first + "=" + Entry->second + "\n";
 	}
 	return Text;
@@ -130,6 +132,6 @@ void FIniConfigStore::FromText(const FString& Text)
 		if (Equals == std::string_view::npos)
 			continue;
 		SetString(Section, FString(View.substr(0, Equals)).TrimStartAndEnd(),
-				  FString(View.substr(Equals + 1)).TrimStartAndEnd());
+		    FString(View.substr(Equals + 1)).TrimStartAndEnd());
 	}
 }

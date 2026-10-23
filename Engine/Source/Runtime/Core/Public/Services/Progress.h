@@ -31,15 +31,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //   // The progress UI closes when Task is destroyed.
 
 #include "CoreTypes.h"
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
 #include "Templates/SharedPointer.h"
 
 struct FProgressOptions
 {
-	FString Text;					// what is being done
+	FString Text; // what is being done
 	FString Title = "Progress";
 	bool bCancellable = true;
-	bool bBusyCursor = false;		// show the wait cursor while running
+	bool bBusyCursor = false; // show the wait cursor while running
 };
 
 class IProgressTask

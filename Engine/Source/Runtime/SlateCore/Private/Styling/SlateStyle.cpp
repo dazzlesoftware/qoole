@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Styling/SlateStyle.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 DEFINE_LOG_CATEGORY(LogStyle, Log);
 
@@ -23,15 +25,37 @@ namespace
 		static TSharedPtr<FSlateStyleSet> Set;
 		return Set;
 	}
-}
+} // namespace
 
 const char* ToString(EStyleColor Color)
 {
 	static const char* const Names[] = {
-		"Background", "Recessed", "Panel", "Header", "Input", "Dropdown", "Hover", "Pressed", "Border",
-		"Foreground", "ForegroundHover", "ForegroundSecondary", "ForegroundDisabled", "ForegroundInverted",
-		"Primary", "PrimaryHover", "PrimaryPressed", "Select", "SelectInactive", "SelectHover",
-		"Error", "Warning", "Success", "White", "Black", "Transparent",
+	    "Background",
+	    "Recessed",
+	    "Panel",
+	    "Header",
+	    "Input",
+	    "Dropdown",
+	    "Hover",
+	    "Pressed",
+	    "Border",
+	    "Foreground",
+	    "ForegroundHover",
+	    "ForegroundSecondary",
+	    "ForegroundDisabled",
+	    "ForegroundInverted",
+	    "Primary",
+	    "PrimaryHover",
+	    "PrimaryPressed",
+	    "Select",
+	    "SelectInactive",
+	    "SelectHover",
+	    "Error",
+	    "Warning",
+	    "Success",
+	    "White",
+	    "Black",
+	    "Transparent",
 	};
 	static_assert(std::size(Names) == static_cast<SIZE_T>(EStyleColor::Count));
 	return Color < EStyleColor::Count ? Names[static_cast<int32>(Color)] : "?";
@@ -95,9 +119,10 @@ FVector2 FSlateBrush::GetImageSize() const
 
 void FSlateBrush::Paint(FSlateWindowElementList& Out, int32 Layer, const FPaintGeometry& Geometry, FColor Tint) const
 {
-	const auto Multiply = [](FColor A, FColor B)
+	const TFunction<FColor(FColor, FColor)> Multiply = [](FColor A, FColor B)
 	{
-		return FColor(uint8((A.R * B.R + 127) / 255), uint8((A.G * B.G + 127) / 255), uint8((A.B * B.B + 127) / 255), uint8((A.A * B.A + 127) / 255));
+		return FColor(uint8((A.R * B.R + 127) / 255), uint8((A.G * B.G + 127) / 255), uint8((A.B * B.B + 127) / 255),
+		    uint8((A.A * B.A + 127) / 255));
 	};
 	const FColor FillColor = Multiply(Fill.Resolve(), Tint);
 	switch (Type)
@@ -121,7 +146,7 @@ void FSlateBrush::Paint(FSlateWindowElementList& Out, int32 Layer, const FPaintG
 
 void FSlateStyleSet::ReportMissing(FName Key) const
 {
-	UE_LOG(LogStyle, Warning, "Style set \"{}\" has no value \"{}\" of the requested type", Name, Key);
+	GENESIS_LOG(LogStyle, Warning, "Style set \"{}\" has no value \"{}\" of the requested type", Name, Key);
 }
 
 void FSlateStyleSet::Register(const TSharedRef<FSlateStyleSet>& Set)
@@ -136,7 +161,7 @@ void FSlateStyleSet::Unregister(FName SetName)
 
 TSharedPtr<FSlateStyleSet> FSlateStyleSet::FindSet(FName SetName)
 {
-	auto It = Registry().find(SetName);
+	TMap<FName, TSharedPtr<FSlateStyleSet>>::iterator It = Registry().find(SetName);
 	return It == Registry().end() ? nullptr : It->second;
 }
 

@@ -3,6 +3,7 @@
 // Headless tests of SEditableText / SEditableTextBox.
 
 #include "UITestHelpers.h"
+#include "Templates/SharedPointer.h"
 
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBoxPanel.h"
@@ -20,18 +21,21 @@ namespace
 
 		explicit FTextFixture(const char* Initial = "", bool bMultiLine = false, bool bPassword = false)
 		{
-			T.AddWindow(SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[SAssignNew(Box, SEditableTextBox).Text(Initial).IsMultiLine(bMultiLine).IsPassword(bPassword)
-					.RevertTextOnEscape(true)
-					.OnTextChanged([this](const FString&) { ++Changes; })
-					.OnTextCommitted([this](const FString& S, ETextCommit How) { Commits.push_back({ S, How }); })]
-				+ SVerticalBox::Slot().AutoHeight()[SNew(SButton).Text("Other")]);
+			T.AddWindow(SNew(SVerticalBox) +
+			    SVerticalBox::Slot().AutoHeight()[SAssignNew(Box, SEditableTextBox)
+			            .Text(Initial)
+			            .IsMultiLine(bMultiLine)
+			            .IsPassword(bPassword)
+			            .RevertTextOnEscape(true)
+			            .OnTextChanged([this](const FString&) { ++Changes; })
+			            .OnTextCommitted([this](const FString& S, ETextCommit How) { Commits.push_back({S, How}); })] +
+			    SVerticalBox::Slot().AutoHeight()[SNew(SButton).Text("Other")]);
 			Text = Box->GetEditableText().ToSharedPtr();
 			T.GetApp().SetKeyboardFocus(Text);
 			T.Tick();
 		}
 	};
-}
+} // namespace
 
 TEST_SUITE("UIEditableText")
 {
@@ -207,7 +211,9 @@ TEST_SUITE("UIEditableText")
 		Platform.QueueCompositionEnd("\xE6\xBC\xA2");
 		F.T.Tick();
 		CHECK(!F.Text->IsComposing());
-		CHECK(F.Text->GetText() == "a\xE6\xBC\xA2" "b");
+		CHECK(F.Text->GetText() ==
+		    "a\xE6\xBC\xA2"
+		    "b");
 		CHECK(F.Text->GetCaretIndex() == 4);
 
 		// Losing focus deactivates the context.
@@ -219,7 +225,8 @@ TEST_SUITE("UIEditableText")
 	{
 		FUITestApp T;
 		TSharedPtr<SEditableTextBox> Box;
-		T.AddWindow(SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[SAssignNew(Box, SEditableTextBox).Text("fixed").IsReadOnly(true)]);
+		T.AddWindow(SNew(SVerticalBox) +
+		    SVerticalBox::Slot().AutoHeight()[SAssignNew(Box, SEditableTextBox).Text("fixed").IsReadOnly(true)]);
 		T.GetApp().SetKeyboardFocus(Box->GetEditableText());
 		T.Type("x");
 		T.Key(EKey::BackSpace);

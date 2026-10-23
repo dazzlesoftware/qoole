@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -26,7 +26,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // ===========================================================================
 // Texture
 
-Texture::Texture(TexEntry *entry, Game *_game) {
+Texture::Texture(TexEntry* entry, Game* _game)
+{
 	cached = false;
 	pInfo = NULL;
 	tInfo = 0;
@@ -34,23 +35,25 @@ Texture::Texture(TexEntry *entry, Game *_game) {
 	game = _game;
 }
 
-Texture::~Texture(void) {
-	if(cached)
-		for(int i = 0; i < mips; i++)
+Texture::~Texture(void)
+{
+	if (cached)
+		for (int i = 0; i < mips; i++)
 			free(mip[i]);
 
-	if(pInfo)
+	if (pInfo)
 		free(pInfo);
 }
 
-char *
-Texture::GetFilename(void) {
+char* Texture::GetFilename(void)
+{
 	static char filename[_MAX_PATH];
 
-	TexDir *texDir = game->GetTexDB()->GetTexDir(texEntry->texDir);
+	TexDir* texDir = game->GetTexDB()->GetTexDir(texEntry->texDir);
 	strcpy(filename, texDir->dirName);
 
-	if(!texEntry->wadEntry.offset) {
+	if (!texEntry->wadEntry.offset)
+	{
 		// we're a .wal dir then, so append name
 		strcat(filename, "\\");
 		strcat(filename, texEntry->name);
@@ -60,18 +63,20 @@ Texture::GetFilename(void) {
 	return filename;
 }
 
-bool
-Texture::Cache(void) {
-	if(cached)
+bool Texture::Cache(void)
+{
+	if (cached)
 		return true;
 
-	if(texEntry->wadEntry.offset == -1) {
-//		check(false);
+	if (texEntry->wadEntry.offset == -1)
+	{
+		//		check(false);
 		return false;
 	}
 
-	if(!game->LoadTexture(this, GetFilename(), texEntry->wadEntry.offset)) {
-//		check(false);
+	if (!game->LoadTexture(this, GetFilename(), texEntry->wadEntry.offset))
+	{
+		//		check(false);
 		return false;
 	}
 
@@ -90,12 +95,14 @@ Texture::Cache(void) {
 	divWidth = (float)realWidth / (float)width;
 	divHeight = (float)realHeight / (float)height;
 
-	if(width != realWidth || height != realHeight) {
+	if (width != realWidth || height != realHeight)
+	{
 		int m, w, h, rw, rh, x, y;
 		void *oldMip, *newMip;
 
 		// we have to stretch all mips
-		for(m = 0; m < mips; m++) {
+		for (m = 0; m < mips; m++)
+		{
 			w = width / (1 << m);
 			h = height / (1 << m);
 			rw = realWidth / (1 << m);
@@ -104,25 +111,29 @@ Texture::Cache(void) {
 			oldMip = mip[m];
 			newMip = malloc(w * h * bits / 8);
 
-			if(bits == 8) {
-				unsigned char *oldPtr;
-				unsigned char *newPtr = (unsigned char *)newMip;
-				for(y = 0; y < h; y++) {
-					oldPtr = (unsigned char *)oldMip + (int)((float)y * divHeight) * rw;
-					for(x = 0; x < w; x++)
+			if (bits == 8)
+			{
+				unsigned char* oldPtr;
+				unsigned char* newPtr = (unsigned char*)newMip;
+				for (y = 0; y < h; y++)
+				{
+					oldPtr = (unsigned char*)oldMip + (int)((float)y * divHeight) * rw;
+					for (x = 0; x < w; x++)
 						*newPtr++ = *(oldPtr + (int)((float)x * divWidth));
 				}
 			}
-			else if(bits == 16) {
-				unsigned short *oldPtr;
-				unsigned short *newPtr = (unsigned short *)newMip;
-				for(y = 0; y < h; y++) {
-					oldPtr = (unsigned short *)oldMip + (int)((float)y * divHeight) * rw;
-					for(x = 0; x < w; x++)
+			else if (bits == 16)
+			{
+				unsigned short* oldPtr;
+				unsigned short* newPtr = (unsigned short*)newMip;
+				for (y = 0; y < h; y++)
+				{
+					oldPtr = (unsigned short*)oldMip + (int)((float)y * divHeight) * rw;
+					for (x = 0; x < w; x++)
 						*newPtr++ = *(oldPtr + (int)((float)x * divWidth));
 				}
 			}
-			
+
 			free(mip[m]);
 			mip[m] = newMip;
 		}
@@ -134,18 +145,18 @@ Texture::Cache(void) {
 	return true;
 }
 
-char *
-Texture::GetShortName(void) {
+char* Texture::GetShortName(void)
+{
 	static char shortName[32];
 
-	char *c = strrchr(texEntry->name, '/');
-	if(c)
+	char* c = strrchr(texEntry->name, '/');
+	if (c)
 		strcpy(shortName, c + 1);
 	else
 		strcpy(shortName, texEntry->name);
 
 	c = strrchr(shortName, '.');
-	if(c)
+	if (c)
 		*c = '\0';
 
 	strlwr(shortName);
@@ -153,17 +164,18 @@ Texture::GetShortName(void) {
 	return shortName;
 }
 
-char *
-Texture::GetTexListName(TexDB *texDB) {
+char* Texture::GetTexListName(TexDB* texDB)
+{
 	static char name[256];
 
 	strcpy(name, "");
 
-	TexDir *texDir = texDB->GetTexDir(texEntry->texDir);
+	TexDir* texDir = texDB->GetTexDir(texEntry->texDir);
 
-	if(texDir->game->UsesWadFile()) {
-		char *c = strrchr(texDir->dirName, '\\');
-		if(c)
+	if (texDir->game->UsesWadFile())
+	{
+		char* c = strrchr(texDir->dirName, '\\');
+		if (c)
 			strcpy(name, c + 1);
 		else
 			strcpy(name, texDir->dirName);
@@ -175,59 +187,66 @@ Texture::GetTexListName(TexDB *texDB) {
 	return name;
 }
 
-short *
-Texture::GetSolidInfo(void) {
-	if(texEntry->solid[7])
+short* Texture::GetSolidInfo(void)
+{
+	if (texEntry->solid[7])
 		return texEntry->solid;
 
-	if(!Cache()) {
-		static short tmp[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	if (!Cache())
+	{
+		static short tmp[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 		return tmp;
 	}
 
 	// build solid info
-	if(bits == 8) {
+	if (bits == 8)
+	{
 		int i, j, table[256];
 		int best, high;
-		unsigned char *surf = (unsigned char *)surface;
-	
-		for(i = 0; i < 256; i++)
+		unsigned char* surf = (unsigned char*)surface;
+
+		for (i = 0; i < 256; i++)
 			table[i] = 0;
 
-		for(i = 0; i < width * height; i++)
+		for (i = 0; i < width * height; i++)
 			table[*surf++]++;
 
-		for(j = 0; j < 7; j++) {
+		for (j = 0; j < 7; j++)
+		{
 			high = 0;
-			for(i = 1; i < 256; i++)
-				if(table[i] > high) {
+			for (i = 1; i < 256; i++)
+				if (table[i] > high)
+				{
 					best = i;
 					high = table[i];
 				}
-				texEntry->solid[j] = best;
-				table[best] = 0;
+			texEntry->solid[j] = best;
+			table[best] = 0;
 		}
 	}
-	else {
+	else
+	{
 		int i, j, table[65536];
 		int best, high;
-		unsigned short *surf = (unsigned short *)surface;
-	
-		for(i = 0; i < 65536; i++)
+		unsigned short* surf = (unsigned short*)surface;
+
+		for (i = 0; i < 65536; i++)
 			table[i] = 0;
 
-		for(i = 0; i < width * height; i++)
+		for (i = 0; i < width * height; i++)
 			table[*surf++]++;
 
-		for(j = 0; j < 7; j++) {
+		for (j = 0; j < 7; j++)
+		{
 			high = 0;
-			for(i = 1; i < 65536; i++)
-				if(table[i] > high) {
+			for (i = 1; i < 65536; i++)
+				if (table[i] > high)
+				{
 					best = i;
 					high = table[i];
 				}
-				texEntry->solid[j] = best;
-				table[best] = 0;
+			texEntry->solid[j] = best;
+			table[best] = 0;
 		}
 	}
 
@@ -236,53 +255,57 @@ Texture::GetSolidInfo(void) {
 	return texEntry->solid;
 }
 
-
 // ===========================================================================
 // TexList
 
-TexList::TexList(char *_filename, Game *game) {
+TexList::TexList(char* _filename, Game* game)
+{
 	strcpy(filename, _filename);
 	texDB = game->GetTexDB();
 
 	LFile file;
-	if(!file.Open(filename))
+	if (!file.Open(filename))
 		return;
 
-	while(file.GetNextLine())
+	while (file.GetNextLine())
 		Add(file.GetLine());
 }
 
-TexList::~TexList() {
-}
+TexList::~TexList() {}
 
-Texture *TexList::Add(char *texName) {
-	Texture *texture = texDB->AddTexture(texName);
+Texture* TexList::Add(char* texName)
+{
+	Texture* texture = texDB->AddTexture(texName);
 	textures.push_back(texture);
 	return texture;
 }
 
-void TexList::Remove(char *texName) {
-	for(int i = 0; i < (int)textures.size(); i++) {
-		Texture *texture = textures[i];
-		if(!strcmp(texName, texture->GetName())) {
+void TexList::Remove(char* texName)
+{
+	for (int i = 0; i < (int)textures.size(); i++)
+	{
+		Texture* texture = textures[i];
+		if (!strcmp(texName, texture->GetName()))
+		{
 			textures.erase(textures.begin() + i);
 			return;
 		}
 	}
 }
 
-void TexList::Save(void) {
-	if(textures.empty())
+void TexList::Save(void)
+{
+	if (textures.empty())
 		return;
 
 	LFile file;
 	char buf[256];
 
 	FDraw::OutputText("Loading TexList: %s... ", filename);
-	if(LFile::Exist(filename))
+	if (LFile::Exist(filename))
 	{
 		// The list may be read-only (e.g. installed from a CD).
-		if(!FFile::Delete(FString::FromAnsi(filename), true))
+		if (!FFile::Delete(FString::FromAnsi(filename), true))
 		{
 			FDraw::OutputText("Error. Couldn't save TexList.\n");
 			LError("Error saving TexList '%s'", filename);
@@ -293,26 +316,26 @@ void TexList::Save(void) {
 		FDraw::OutputText("Error. Couldn't open TexList.\n");
 
 	file.Open(filename, LFILE_WRITE);
-	for(int i = 0; i < (int)textures.size(); i++) {
-		Texture *texture = textures[i];
+	for (int i = 0; i < (int)textures.size(); i++)
+	{
+		Texture* texture = textures[i];
 		sprintf(buf, "%s\r\n", texture->GetTexListName(texDB));
 		file.Write(buf, (int)strlen(buf));
 	}
 	FDraw::OutputText("OK.\n");
 }
 
-
 // ===========================================================================
 // TexDB
 
-TexDB::TexDB(Game *_game) {
+TexDB::TexDB(Game* _game)
+{
 	game = _game;
 
 	int i;
 	int ver;
 
-	sprintf(filename, "%s\\texlists\\%s.db",
-		LFile::GetInitDir(), game->GetName());
+	sprintf(filename, "%s\\texlists\\%s.db", LFile::GetInitDir(), game->GetName());
 
 	texEntries = 0;
 	texAlloc = 0;
@@ -323,14 +346,14 @@ TexDB::TexDB(Game *_game) {
 
 	LFile file;
 	FDraw::OutputText("Loading textures database: %s ... ", filename);
-	if(!file.Open(filename))
+	if (!file.Open(filename))
 	{
 		FDraw::OutputText("Error. Couldn't open the database.\n");
 		return;
 	}
 
 	file.Read(&ver, sizeof(ver));
-	if(ver != TEXDB_VER)
+	if (ver != TEXDB_VER)
 	{
 		FDraw::OutputText("Error.\nDB version is %d, should be %d.\n", ver, TEXDB_VER);
 		return;
@@ -339,13 +362,14 @@ TexDB::TexDB(Game *_game) {
 	file.Read(&texEntries, sizeof(texEntries));
 	texAlloc = texEntries / TEXDB_ALLOC + 1;
 	texAlloc *= TEXDB_ALLOC;
-	texEntry = (TexEntry *)malloc(sizeof(TexEntry) * texAlloc);
-	texture = (Texture **)malloc(sizeof(Texture *) * texAlloc);
+	texEntry = (TexEntry*)malloc(sizeof(TexEntry) * texAlloc);
+	texture = (Texture**)malloc(sizeof(Texture*) * texAlloc);
 
 	file.Read(texEntry, sizeof(TexEntry), texEntries);
 	file.Read(&texDirs, sizeof(texDirs));
 	texDirs = GeometryMath::Min(texDirs, TEXDIR_MAX);
-	for(i = 0; i < texDirs; i++) {
+	for (i = 0; i < texDirs; i++)
+	{
 		TexDirFile dirFile;
 		file.Read(&dirFile, sizeof(TexDirFile), 1);
 		memcpy(texDir[i].dirName, dirFile.dirName, sizeof(texDir[i].dirName));
@@ -353,14 +377,15 @@ TexDB::TexDB(Game *_game) {
 		texDir[i].game = game;
 	}
 
-	for(i = 0; i < texEntries; i++)
+	for (i = 0; i < texEntries; i++)
 		texture[i] = new Texture(&texEntry[i], game);
 	FDraw::OutputText("OK.\n");
 }
 
-TexDB::~TexDB() {
+TexDB::~TexDB()
+{
 	LFile file;
-	if(!file.Open(filename, LFILE_WRITE))
+	if (!file.Open(filename, LFILE_WRITE))
 		return;
 
 	int ver = TEXDB_VER;
@@ -370,7 +395,8 @@ TexDB::~TexDB() {
 	file.Write(texEntry, sizeof(TexEntry), texEntries);
 
 	file.Write(&texDirs, sizeof(texDirs));
-	for(int i = 0; i < texDirs; i++) {
+	for (int i = 0; i < texDirs; i++)
+	{
 		TexDirFile dirFile;
 		memset(&dirFile, 0, sizeof(dirFile));
 		memcpy(dirFile.dirName, texDir[i].dirName, sizeof(dirFile.dirName));
@@ -378,72 +404,79 @@ TexDB::~TexDB() {
 		file.Write(&dirFile, sizeof(TexDirFile), 1);
 	}
 
-	for(int i = 0; i < texEntries; i++)
+	for (int i = 0; i < texEntries; i++)
 		delete texture[i];
 
 	free(texEntry);
 	free(texture);
 }
 
-Texture *
-TexDB::AddTexture(char *name) {
+Texture* TexDB::AddTexture(char* name)
+{
 	char fullName[256];
 	char texName[32];
 	char dirName[128];
-	char *c;
+	char* c;
 
 	strcpy(fullName, name);
 	c = strchr(fullName, 13);
-	if(c)
+	if (c)
 		*c = '\0';
 
 	strcpy(dirName, fullName);
 	c = strrchr(dirName, '\\');
-	if(c) {
+	if (c)
+	{
 		*c = '\0';
 		strcpy(texName, c + 1);
 	}
-	else {
+	else
+	{
 		strcpy(texName, fullName);
 		strcpy(dirName, "");
 	}
 
 	// strip .wal from texName
-	if(!game->UsesWadFile()) {
+	if (!game->UsesWadFile())
+	{
 		c = strstr(texName, game->GetTexExt());
-		if(c)
+		if (c)
 			*c = '\0';
 	}
 
-	Texture *tex = FindTexture(texName, false);
-	if(tex)
+	Texture* tex = FindTexture(texName, false);
+	if (tex)
 		return tex;
 
 	int texDir = FindTexDir(dirName);
 	WadEntry wadEntry;
 
-	if(texDir == -1) {
-//		if(strlen(dirName) && (LFile::Exist(dirName) || LFile::ExistDir(dirName)))
-		if(strlen(dirName) && (strchr(dirName, '\\') || strchr(dirName, '/')))
+	if (texDir == -1)
+	{
+		//		if(strlen(dirName) && (LFile::Exist(dirName) || LFile::ExistDir(dirName)))
+		if (strlen(dirName) && (strchr(dirName, '\\') || strchr(dirName, '/')))
 			texDir = AddTexDir(dirName);
-		else {
+		else
+		{
 			char oldName[128];
 			strcpy(oldName, dirName);
 			strcpy(dirName, game->GetTexDir());
-			if(strlen(oldName))
+			if (strlen(oldName))
 				strcat(dirName, "\\");
 			strcat(dirName, oldName);
 
-			if(LFile::Exist(dirName) || LFile::ExistDir(dirName))
+			if (LFile::Exist(dirName) || LFile::ExistDir(dirName))
 				texDir = AddTexDir(dirName);
 		}
 	}
 
 	int result = -1;
 	char walName[32];
-	if(texDir != -1) {
+	if (texDir != -1)
+	{
 		result = GetWadEntry(dirName, texName, &wadEntry);
-		if(result == -1) {
+		if (result == -1)
+		{
 			sprintf(walName, "%s%s", texName, game->GetTexExt());
 			result = GetWadEntry(dirName, walName, &wadEntry);
 		}
@@ -451,14 +484,15 @@ TexDB::AddTexture(char *name) {
 
 	/*
 	if(result == -1 && tryExtract) {
-		game->ExtractTextures();
-		result = GetWadEntry(dirName, texName, &wadEntry);
-		if(result == -1)
-			result = GetWadEntry(dirName, walName, &wadEntry);
+	    game->ExtractTextures();
+	    result = GetWadEntry(dirName, texName, &wadEntry);
+	    if(result == -1)
+	        result = GetWadEntry(dirName, walName, &wadEntry);
 	}
 	*/
 
-	if(result == -1) {
+	if (result == -1)
+	{
 		LTrace("TexDB::AddTexture: couldn't find texture '%s'\n", fullName);
 		static TexEntry notFoundEntry;
 		static Texture notFoundTex(&notFoundEntry, game);
@@ -467,23 +501,26 @@ TexDB::AddTexture(char *name) {
 		return &notFoundTex;
 	}
 
-	if(texEntries == texAlloc) {
+	if (texEntries == texAlloc)
+	{
 		texAlloc += TEXDB_ALLOC;
-		texEntry = (TexEntry *)realloc(texEntry, sizeof(TexEntry) * texAlloc);
-		texture = (Texture **)realloc(texture, sizeof(Texture *) * texAlloc);
+		texEntry = (TexEntry*)realloc(texEntry, sizeof(TexEntry) * texAlloc);
+		texture = (Texture**)realloc(texture, sizeof(Texture*) * texAlloc);
 
-		for(int i = 0; i < texEntries; i++)
+		for (int i = 0; i < texEntries; i++)
 			texture[i]->texEntry = &texEntry[i];
 	}
 
-	TexEntry *entry = &texEntry[texEntries];
+	TexEntry* entry = &texEntry[texEntries];
 
-	if(result > 0)
+	if (result > 0)
 		strcpy(entry->name, wadEntry.name);
-	else {
-		if(strlen(texName) < 16)
+	else
+	{
+		if (strlen(texName) < 16)
 			strcpy(wadEntry.name, texName);
-		else {
+		else
+		{
 			strncpy(wadEntry.name, texName, 15);
 			wadEntry.name[15] = '\0';
 		}
@@ -500,48 +537,48 @@ TexDB::AddTexture(char *name) {
 	return tex;
 }
 
-Texture *
-TexDB::FindTexture(char *name, bool iterate) {
+Texture* TexDB::FindTexture(char* name, bool iterate)
+{
 	static bool adding = false;
-	if(adding)
+	if (adding)
 		return NULL;
 
-	if(!name)
+	if (!name)
 		return NULL;
 
-	if(!strlen(name))
+	if (!strlen(name))
 		return NULL;
 
 	int i;
 
-	for(i = 0; i < texEntries; i++)
-		if(game == GetTexDir(texEntry[i].texDir)->game &&
-			!strcmpi(name, texEntry[i].name))
+	for (i = 0; i < texEntries; i++)
+		if (game == GetTexDir(texEntry[i].texDir)->game && !strcmpi(name, texEntry[i].name))
 			return texture[i];
 
-	if(!iterate)
+	if (!iterate)
 		return NULL;
 
 	// iterate through texdirs
-	for(i = 0; i < texDirs; i++) {
+	for (i = 0; i < texDirs; i++)
+	{
 		char checkName[128];
 		sprintf(checkName, "%s\\%s", texDir[i].dirName, name);
 
 		adding = true;
-		Texture *texture = AddTexture(checkName);
+		Texture* texture = AddTexture(checkName);
 		adding = false;
 
-		if(texture && texture->texEntry->wadEntry.offset != -1)
+		if (texture && texture->texEntry->wadEntry.offset != -1)
 			return texture;
 	}
 
 	return NULL;
 }
 
-int
-TexDB::AddTexDir(char *name) {
+int TexDB::AddTexDir(char* name)
+{
 	int val = FindTexDir(name);
-	if(val != -1)
+	if (val != -1)
 		return val;
 
 	strcpy(texDir[texDirs].dirName, name);
@@ -551,100 +588,104 @@ TexDB::AddTexDir(char *name) {
 	return texDirs++;
 }
 
-int
-TexDB::FindTexDir(char *name) {
-	for(int i = 0; i < texDirs; i++)
-		if(!strcmpi(name, texDir[i].dirName))
+int TexDB::FindTexDir(char* name)
+{
+	for (int i = 0; i < texDirs; i++)
+		if (!strcmpi(name, texDir[i].dirName))
 			return i;
 
 	return -1;
 }
 
-void
-TexDB::DelTexDir(TexDir *texDir) {
+void TexDB::DelTexDir(TexDir* texDir)
+{
 	bool found = false;
-	for(int i = 0; i < texDirs; i++) {
-		if(texDir == &texDir[i])
+	for (int i = 0; i < texDirs; i++)
+	{
+		if (texDir == &texDir[i])
 			found = true;
-		if(found && i + 1 < texDirs)
+		if (found && i + 1 < texDirs)
 			texDir[i] = texDir[i + 1];
 	}
 	texDirs--;
 }
 
-int
-TexDB::GetWadEntry(char *dirName, char *texName, WadEntry *rtnWadEntry) {
-	if(LFile::ExistDir(dirName)) {
+int TexDB::GetWadEntry(char* dirName, char* texName, WadEntry* rtnWadEntry)
+{
+	if (LFile::ExistDir(dirName))
+	{
 		char filename[_MAX_PATH];
 		sprintf(filename, "%s\\%s", dirName, texName);
-		if(LFile::Exist(filename)) {
+		if (LFile::Exist(filename))
+		{
 			rtnWadEntry->offset = 0;
 			return 0;
 		}
 		else
 			return -1;
 	}
-	else {
+	else
+	{
 		WadHeader wadHeader;
-		WadEntry *wadEntry;
+		WadEntry* wadEntry;
 
 		LFile file;
-		if(!file.Open(dirName))
+		if (!file.Open(dirName))
 			return -1;
 
 		file.Read(&wadHeader, sizeof(WadHeader));
-		if(strncmp(wadHeader.magic, "WAD2", 4) &&
-			strncmp(wadHeader.magic, "WAD3", 4))
+		if (strncmp(wadHeader.magic, "WAD2", 4) && strncmp(wadHeader.magic, "WAD3", 4))
 			return -1;
-		
+
 		wadEntry = new WadEntry[wadHeader.entries];
 		file.Seek(wadHeader.offset);
 		file.Read(wadEntry, sizeof(WadEntry), wadHeader.entries);
 
 		int rtn = -1;
-		for(int i = 0; i < wadHeader.entries; i++)
-			if(!strcmpi(texName, wadEntry[i].name)) {
+		for (int i = 0; i < wadHeader.entries; i++)
+			if (!strcmpi(texName, wadEntry[i].name))
+			{
 				*rtnWadEntry = wadEntry[i];
 				rtn = wadEntry[i].offset;
 				break;
 			}
 
-		delete [] wadEntry;
+		delete[] wadEntry;
 
 		return rtn;
 	}
 }
 
-void
-TexDB::ResetUsed(void) {
-	for(int i = 0; i < texEntries; i++)
+void TexDB::ResetUsed(void)
+{
+	for (int i = 0; i < texEntries; i++)
 		texEntry[i].used = false;
 }
 
-void
-TexDB::BuildWadFromUsed(char *filename) {
+void TexDB::BuildWadFromUsed(char* filename)
+{
 	int i, c;
 
 	WadHeader wadHeader;
 	wadHeader.entries = 0;
 
-	for(i = 0; i < texEntries; i++)
-		if(texEntry[i].used)
+	for (i = 0; i < texEntries; i++)
+		if (texEntry[i].used)
 			wadHeader.entries++;
 
 	char building[256];
-	const char *c1 = strrchr(filename, '\\');
+	const char* c1 = strrchr(filename, '\\');
 	sprintf(building, "Building %s", (c1 != NULL ? c1 + 1 : filename));
 
 	FProgressOptions progressOptions;
 	progressOptions.Text = FString::FromAnsi(building);
 	progressOptions.bCancellable = false;
-	TUniquePtr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
+	std::unique_ptr<IProgressTask> progress = FServices::GetProgress().Begin(progressOptions);
 
-	WadEntry *wadEntry = new WadEntry[wadHeader.entries];
+	WadEntry* wadEntry = new WadEntry[wadHeader.entries];
 
 	// hack!!
-	if(!strcmp(game->GetName(), "Half-Life"))
+	if (!strcmp(game->GetName(), "Half-Life"))
 		strncpy(wadHeader.magic, "WAD3", 4);
 	else
 		strncpy(wadHeader.magic, "WAD2", 4);
@@ -661,8 +702,9 @@ TexDB::BuildWadFromUsed(char *filename) {
 	wadHeader.offset += 4;
 
 	c = 0;
-	for(i = 0; i < texEntries; i++) {
-		if(!texEntry[i].used)
+	for (i = 0; i < texEntries; i++)
+	{
+		if (!texEntry[i].used)
 			continue;
 
 		int size = texEntry[i].wadEntry.dsize;
@@ -671,7 +713,7 @@ TexDB::BuildWadFromUsed(char *filename) {
 		inFile.Open(texture[i]->GetFilename());
 		inFile.Seek(texEntry[i].wadEntry.offset);
 
-		char *buf = (char *)malloc(size);
+		char* buf = (char*)malloc(size);
 		inFile.Read(buf, size);
 		outFile.Write(buf, size);
 		free(buf);
@@ -689,29 +731,31 @@ TexDB::BuildWadFromUsed(char *filename) {
 	outFile.Write(&wadHeader, sizeof(WadHeader));
 }
 
-char *
-TexDB::BuildWadListFromUsed(void) {
+char* TexDB::BuildWadListFromUsed(void)
+{
 	static char list[1024];
 
 	bool dirUsed[TEXDIR_MAX];
 	int i;
 
-	for(i = 0; i < texDirs; i++)
+	for (i = 0; i < texDirs; i++)
 		dirUsed[i] = false;
 
-	for(i = 0; i < texEntries; i++)
-		if(texEntry[i].used)
+	for (i = 0; i < texEntries; i++)
+		if (texEntry[i].used)
 			dirUsed[texEntry[i].texDir] = true;
 
 	strcpy(list, "");
 
-	for(i = 0; i < texDirs; i++) {
-		if(dirUsed[i]) {
-			if(strlen(list))
+	for (i = 0; i < texDirs; i++)
+	{
+		if (dirUsed[i])
+		{
+			if (strlen(list))
 				strcat(list, ";");
 			strcat(list, texDir[i].dirName);
 		}
 	}
 
 	return list;
-}	
+}

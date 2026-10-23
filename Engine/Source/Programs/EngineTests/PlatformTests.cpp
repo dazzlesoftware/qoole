@@ -9,14 +9,25 @@ namespace
 	class FRecordingHandler final : public IPlatformMessageHandler
 	{
 	public:
-		bool OnKeyDown(EKey Key, uint32, bool) override { Log.push_back(FString::Format("down {}", ToString(Key))); return true; }
-		bool OnKeyChar(char32_t Character, bool) override { Log.push_back(FString::Format("char {}", static_cast<uint32>(Character))); return true; }
+		bool OnKeyDown(EKey Key, uint32, bool) override
+		{
+			Log.push_back(FString::Format("down {}", ToString(Key)));
+			return true;
+		}
+		bool OnKeyChar(char32_t Character, bool) override
+		{
+			Log.push_back(FString::Format("char {}", static_cast<uint32>(Character)));
+			return true;
+		}
 		bool OnMouseDown(const TSharedRef<IPlatformWindow>&, EMouseButton, FVector2 Position) override
 		{
 			Log.push_back(FString::Format("click {},{}", Position.X, Position.Y));
 			return true;
 		}
-		void OnDpiScaleChanged(const TSharedRef<IPlatformWindow>&, float NewScale) override { Log.push_back(FString::Format("dpi {}", NewScale)); }
+		void OnDpiScaleChanged(const TSharedRef<IPlatformWindow>&, float NewScale) override
+		{
+			Log.push_back(FString::Format("dpi {}", NewScale));
+		}
 		void OnSizeChanged(const TSharedRef<IPlatformWindow>&, int32 Width, int32 Height, bool bMinimized) override
 		{
 			Log.push_back(FString::Format("size {}x{}{}", Width, Height, bMinimized ? " min" : ""));
@@ -24,7 +35,7 @@ namespace
 
 		TArray<FString> Log;
 	};
-}
+} // namespace
 
 TEST_SUITE("Platform")
 {
@@ -32,7 +43,7 @@ TEST_SUITE("Platform")
 	{
 		FNullPlatformApplication App(1.5f);
 		FWindowDesc Desc;
-		Desc.Size = { 400.0f, 300.0f };
+		Desc.Size = {400.0f, 300.0f};
 		const TSharedRef<IPlatformWindow> Window = App.MakeWindow(Desc);
 		CHECK(Window->GetDpiScale() == 1.5f);
 		CHECK(Window->GetClientSize() == FIntPoint(600, 450));
@@ -43,13 +54,13 @@ TEST_SUITE("Platform")
 	TEST_CASE("Null platform: scripted input is deferred until ProcessDeferredEvents")
 	{
 		FNullPlatformApplication App;
-		auto Handler = std::make_shared<FRecordingHandler>();
+		std::shared_ptr<FRecordingHandler> Handler = std::make_shared<FRecordingHandler>();
 		App.SetMessageHandler(TSharedRef<IPlatformMessageHandler>(Handler));
 		const TSharedRef<IPlatformWindow> Window = App.MakeWindow(FWindowDesc());
 
 		App.QueueKeyDown(EKey::A);
 		App.QueueChar(U'é');
-		App.QueueMouseDown(Window, EMouseButton::Left, { 12.0f, 34.0f });
+		App.QueueMouseDown(Window, EMouseButton::Left, {12.0f, 34.0f});
 		CHECK(Handler->Log.empty());
 		CHECK(App.GetPendingEventCount() == 3);
 
@@ -64,10 +75,10 @@ TEST_SUITE("Platform")
 	TEST_CASE("Null platform: DPI changes and minimize reach the handler immediately")
 	{
 		FNullPlatformApplication App;
-		auto Handler = std::make_shared<FRecordingHandler>();
+		std::shared_ptr<FRecordingHandler> Handler = std::make_shared<FRecordingHandler>();
 		App.SetMessageHandler(TSharedRef<IPlatformMessageHandler>(Handler));
 		FWindowDesc Desc;
-		Desc.Size = { 200.0f, 100.0f };
+		Desc.Size = {200.0f, 100.0f};
 		const TSharedRef<IPlatformWindow> Window = App.MakeWindow(Desc);
 
 		static_cast<FNullPlatformWindow&>(Window.Get()).SimulateDpiChange(2.0f);
@@ -84,7 +95,7 @@ TEST_SUITE("Platform")
 	TEST_CASE("Null platform: clipboard and raw mouse")
 	{
 		FNullPlatformApplication App;
-		auto Handler = std::make_shared<FRecordingHandler>();
+		std::shared_ptr<FRecordingHandler> Handler = std::make_shared<FRecordingHandler>();
 		App.SetMessageHandler(TSharedRef<IPlatformMessageHandler>(Handler));
 		App.ClipboardCopy("copied");
 		CHECK(App.ClipboardPaste() == "copied");

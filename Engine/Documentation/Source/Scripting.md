@@ -150,6 +150,34 @@ Tests execute actual Lua modules, host calls and descriptor validation. They als
 cover VM isolation, errors, memory/bytecode limits, invalid result shapes, failed
 module replacement, cross-thread rejection and finalizer rejection. Separate Python/.NET tests execute real modules and the same world API scenarios.
 
+## Validation and foreign error boundaries
+
+Native runtime/world/asset bindings and editor/terrain/material bindings report
+expected validation failures through explicit results and localized error text.
+Private readers share `FValidationContext`; their callers check failure before
+using a value or mutating a document. Failed world edits preserve the previous
+world, and failed editor edits cancel only transactions owned by the scripting
+host. A binding publishes its result only after its declared contract validates.
+Asset authoring uses nonthrowing filesystem queries before writing packages.
+
+The native Lua, Python and .NET bridges also return validation errors explicitly.
+All reject empty, oversized or embedded-NUL API names before host invocation.
+`Scripting/ScriptLimits.h` owns the shared native name and JSON transfer budgets.
+Lua marshalling stops at the first invalid nested value and reports failure to
+Lua's protected call; Python uses its error API; the managed ABI returns a failure
+status and diagnostic. Failed calls preserve the caller's result, and subsequent
+valid calls remain usable. None of these paths throws a native C++ exception to
+signal ordinary validation failure.
+
+Exception barriers remain around external binding callbacks, provider factories,
+lifecycle callbacks and foreign ABI calls. Lua's protected error mechanism and
+Python/managed language exceptions remain part of their language contracts;
+foreign runtime diagnostics are forwarded as supplied. The native source policy
+rejects explicit `throw` statements in scripting code while retaining these
+boundary catches. Regression tests live only under `Programs/EngineTests` and
+exercise all three installed providers, rollback, malformed arguments, rejected
+host responses and injected external callback failures.
+
 ## Python and .NET execution
 
 Run `Engine/Build/SetupScriptingRuntimes.ps1` before scripting tests. It installs

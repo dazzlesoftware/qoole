@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "TestHelpers.h"
+#include "Templates/SharedPointer.h"
 
 #include "Rendering/DrawElements.h"
 
@@ -8,7 +9,7 @@ namespace
 {
 	FPaintGeometry Box(float X, float Y, float W = 10.0f, float H = 10.0f, float Scale = 1.0f)
 	{
-		return FPaintGeometry::Make({ X, Y }, { W, H }, Scale);
+		return FPaintGeometry::Make({X, Y}, {W, H}, Scale);
 	}
 
 	FBatchedElements BatchList(const FSlateWindowElementList& List, FSlateFontCache* Fonts = nullptr)
@@ -23,7 +24,7 @@ namespace
 	{
 		return FSlateTextureData::CreateSolid(W, H, FColor::White());
 	}
-}
+} // namespace
 
 TEST_SUITE("Batcher")
 {
@@ -44,13 +45,13 @@ TEST_SUITE("Batcher")
 
 	TEST_CASE("Layers sort the draw order; submission order breaks ties")
 	{
-		const auto ImageA = MakeImage(4, 4);
-		const auto ImageB = MakeImage(4, 4);
+		const TSharedRef<FSlateTextureData> ImageA = MakeImage(4, 4);
+		const TSharedRef<FSlateTextureData> ImageB = MakeImage(4, 4);
 		FSlateWindowElementList List;
-		List.AddSolidBox(2, Box(0, 0), FColor::Green());        // drawn last
+		List.AddSolidBox(2, Box(0, 0), FColor::Green()); // drawn last
 		List.AddBox(1, Box(0, 0), FBrush::FromImage(ImageB));
 		List.AddBox(1, Box(0, 0), FBrush::FromImage(ImageA));
-		List.AddSolidBox(0, Box(0, 0), FColor::Red());        // drawn first
+		List.AddSolidBox(0, Box(0, 0), FColor::Red()); // drawn first
 
 		const FBatchedElements Out = BatchList(List);
 		REQUIRE(Out.Batches.size() == 4);
@@ -72,8 +73,8 @@ TEST_SUITE("Batcher")
 
 	TEST_CASE("Interleaved textures in one layer are not reordered")
 	{
-		const auto ImageA = MakeImage(4, 4);
-		const auto ImageB = MakeImage(4, 4);
+		const TSharedRef<FSlateTextureData> ImageA = MakeImage(4, 4);
+		const TSharedRef<FSlateTextureData> ImageB = MakeImage(4, 4);
 		FSlateWindowElementList List;
 		List.AddBox(0, Box(0, 0), FBrush::FromImage(ImageA));
 		List.AddBox(0, Box(0, 0), FBrush::FromImage(ImageB));
@@ -105,7 +106,7 @@ TEST_SUITE("Batcher")
 		List.AddSolidBox(0, Box(0, 0), FColor::Red());
 		List.AddRoundedBox(0, Box(0, 0, 40, 20), FColor::Red(), 4.0f, FColor::White(), 1.0f);
 		List.AddRoundedBox(0, Box(0, 30, 40, 20), FColor::Red(), 4.0f);
-		List.AddLines(0, Box(0, 0), { { 0, 0 }, { 10, 10 }, { 20, 0 } }, FColor::White(), 2.0f);
+		List.AddLines(0, Box(0, 0), {{0, 0}, {10, 10}, {20, 0}}, FColor::White(), 2.0f);
 		List.AddSolidBox(0, Box(0, 0), FColor::Red());
 		const FBatchedElements Out = BatchList(List);
 		REQUIRE(Out.Batches.size() == 4);
@@ -122,9 +123,12 @@ TEST_SUITE("Batcher")
 	{
 		struct FFakeTarget final : ISlateRenderTarget
 		{
-			FIntPoint GetSize() const override { return { 64, 64 }; }
+			FIntPoint GetSize() const override
+			{
+				return {64, 64};
+			}
 		};
-		auto Target = std::make_shared<FFakeTarget>();
+		TSharedPtr<FFakeTarget> Target = std::make_shared<FFakeTarget>();
 		FSlateWindowElementList List;
 		List.AddViewport(0, Box(0, 0, 64, 64), Target);
 		List.AddViewport(0, Box(0, 0, 64, 64), Target, true);
@@ -137,7 +141,7 @@ TEST_SUITE("Batcher")
 
 	TEST_CASE("9-slice boxes tessellate into nine quads, borders into eight")
 	{
-		const auto Image = MakeImage(16, 16);
+		const TSharedRef<FSlateTextureData> Image = MakeImage(16, 16);
 		FSlateWindowElementList List;
 		List.AddBox(0, Box(0, 0, 100, 60), FBrush::NineSlice(Image, FMargin(4.0f)));
 		List.AddBox(0, Box(0, 0, 100, 60), FBrush::NineSlice(Image, FMargin(4.0f), FColor::White(), false));
@@ -174,13 +178,13 @@ TEST_SUITE("Batcher")
 		REQUIRE(Fonts.IsValid());
 		const float Scale = 1.5f;
 		const FSlateFontInfo Font(Fonts.Latin, 14.0f);
-		const auto Shaped = Fonts.Cache.ShapeText("Hi there", Font, Scale);
+		const TSharedRef<const FShapedGlyphSequence> Shaped = Fonts.Cache.ShapeText("Hi there", Font, Scale);
 
 		FSlateWindowElementList List;
-		List.AddText(0, FPaintGeometry::Make({ 10.0f, 10.0f }, Shaped->GetLogicalSize(), Scale), Shaped, FColor::White());
+		List.AddText(0, FPaintGeometry::Make({10.0f, 10.0f}, Shaped->GetLogicalSize(), Scale), Shaped, FColor::White());
 		const FBatchedElements Out = BatchList(List, &Fonts.Cache);
 		REQUIRE(Out.Batches.size() == 1);
-		CHECK(Out.Batches[0].Texture == 100); // glyph page 0
+		CHECK(Out.Batches[0].Texture == 100);      // glyph page 0
 		CHECK(Out.Batches[0].NumIndices == 7 * 6); // eight glyphs, one is a space
 		for (const FSlateVertex& V : Out.Vertices)
 		{

@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Styling/StarshipCoreStyle.h"
+#include "Templates/SharedPointer.h"
 
 #include "HAL/PlatformMisc.h"
 
@@ -16,11 +17,11 @@ FStarshipCoreFonts FStarshipCoreFonts::Load(FSlateFontCache& FontCache, FString 
 	const TSharedPtr<FFontFace> Devanagari = FontCache.LoadFace(FontDirectory + "NotoSansDevanagari-Regular.ttf");
 	if (!Regular || !Bold)
 	{
-		UE_LOG(LogStyle, Error, "Genesis fonts not found in \"{}\"", FontDirectory);
+		GENESIS_LOG(LogStyle, Error, "Genesis fonts not found in \"{}\"", FontDirectory);
 		return Fonts;
 	}
-	TArray<TSharedPtr<FFontFace>> RegularFaces{ Regular };
-	TArray<TSharedPtr<FFontFace>> BoldFaces{ Bold };
+	TArray<TSharedPtr<FFontFace>> RegularFaces{Regular};
+	TArray<TSharedPtr<FFontFace>> BoldFaces{Bold};
 	if (Devanagari)
 	{
 		RegularFaces.push_back(Devanagari);
@@ -34,7 +35,7 @@ FStarshipCoreFonts FStarshipCoreFonts::Load(FSlateFontCache& FontCache, FString 
 TSharedRef<FSlateStyleSet> FStarshipCoreStyle::Create(const FStarshipCoreFonts& Fonts)
 {
 	using C = EStyleColor;
-	auto Set = MakeShared<FSlateStyleSet>(FName(SetName));
+	TSharedRef<FSlateStyleSet> Set = MakeShared<FSlateStyleSet>(FName(SetName));
 	constexpr float Radius = 4.0f;
 	constexpr float FontSize = 13.0f;
 
@@ -46,7 +47,8 @@ TSharedRef<FSlateStyleSet> FStarshipCoreStyle::Create(const FStarshipCoreFonts& 
 	Set->Set("NormalText", Normal);
 	Set->Set("SmallText", FTextBlockStyle(Normal).SetFontSize(11.0f).SetColor(C::ForegroundSecondary));
 	Set->Set("BoldText", FTextBlockStyle(Normal).SetFont(FSlateFontInfo(Fonts.Bold, FontSize)));
-	Set->Set("HeadingText", FTextBlockStyle(Normal).SetFont(FSlateFontInfo(Fonts.Bold, 18.0f)).SetColor(C::ForegroundHover));
+	Set->Set(
+	    "HeadingText", FTextBlockStyle(Normal).SetFont(FSlateFontInfo(Fonts.Bold, 18.0f)).SetColor(C::ForegroundHover));
 
 	// Brushes.
 	Set->Set("WhiteBrush", FSlateBrush::Solid(FColor::White()));

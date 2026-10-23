@@ -5,6 +5,8 @@
 // SlateApplicationInput.cpp.
 
 #include "SlateApplicationPrivate.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include "Widgets/SToolTip.h"
 
@@ -21,7 +23,7 @@ namespace
 	}
 
 	constexpr int32 MaxUsers = 8;
-}
+} // namespace
 
 // ---------------------------------------------------------------------------
 // SMenuHost
@@ -75,8 +77,8 @@ FReply SMenuHost::OnMouseButtonDown(const FGeometry&, const FPointerEvent&)
 	return FReply::Handled();
 }
 
-int32 SMenuHost::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SMenuHost::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	Style->Background.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 	return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId + 1, MakeChildStyle(InWidgetStyle));
@@ -85,10 +87,11 @@ int32 SMenuHost::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, cons
 // ---------------------------------------------------------------------------
 // Setup
 
-TSharedRef<FSlateApplication> FSlateApplication::Create(const TSharedRef<IPlatformApplication>& Platform, const TSharedRef<FSlateFontCache>& FontCache)
+TSharedRef<FSlateApplication> FSlateApplication::Create(
+    const TSharedRef<IPlatformApplication>& Platform, const TSharedRef<FSlateFontCache>& FontCache)
 {
 	checkf(!Instance(), "Only one FSlateApplication may exist");
-	auto App = std::make_shared<FSlateApplication>(Platform, FontCache);
+	TSharedPtr<FSlateApplication> App = std::make_shared<FSlateApplication>(Platform, FontCache);
 	Instance() = App;
 	SetCurrent(App.get());
 	Platform->SetMessageHandler(TSharedRef<IPlatformMessageHandler>(StaticCastSharedPtr<IPlatformMessageHandler>(App)));
@@ -120,10 +123,10 @@ void FSlateApplication::Shutdown()
 	App.reset();
 }
 
-FSlateApplication::FSlateApplication(const TSharedRef<IPlatformApplication>& InPlatform, const TSharedRef<FSlateFontCache>& InFontCache)
-	: Platform(InPlatform.ToSharedPtr())
-	, FontCache(InFontCache.ToSharedPtr())
-	, NavigationConfig(std::make_shared<FNavigationConfig>())
+FSlateApplication::FSlateApplication(
+    const TSharedRef<IPlatformApplication>& InPlatform, const TSharedRef<FSlateFontCache>& InFontCache)
+    : Platform(InPlatform.ToSharedPtr()), FontCache(InFontCache.ToSharedPtr()),
+      NavigationConfig(std::make_shared<FNavigationConfig>())
 {
 	Users.resize(MaxUsers);
 	for (int32 I = 0; I < MaxUsers; ++I)
@@ -227,7 +230,7 @@ TSharedRef<SWindow> FSlateApplication::AddWindow(const TSharedRef<SWindow>& Wind
 
 TSharedPtr<SWindow> FSlateApplication::GetActiveModalWindow() const
 {
-	for (auto It = Windows.rbegin(); It != Windows.rend(); ++It)
+	for (TArray<TSharedRef<SWindow>>::const_reverse_iterator It = Windows.rbegin(); It != Windows.rend(); ++It)
 	{
 		if ((*It)->IsModal() && !(*It)->IsClosed())
 		{
@@ -328,7 +331,8 @@ void FSlateApplication::DestroyPendingWindows()
 		}
 		for (FSlateUser& User : Users)
 		{
-			if (const TSharedPtr<SWidget> Focused = User.FocusedWidget.lock(); Focused && Window->IsAncestorOf(Focused.get()))
+			if (const TSharedPtr<SWidget> Focused = User.FocusedWidget.lock();
+			    Focused && Window->IsAncestorOf(Focused.get()))
 			{
 				SetUserFocus(User.UserIndex, nullptr, EFocusCause::OtherWidgetLostFocus);
 			}
@@ -495,7 +499,7 @@ void FSlateApplication::PaintWindows(bool bOnlyDirty, SWindow* OnlyWindow)
 		}
 		Window->UpdateLayout();
 		Window->PaintWindow(Args);
-		Requests.push_back({ Native.get(), &Window->GetDrawElements(), FLinearColor(0.0f, 0.0f, 0.0f, 1.0f) });
+		Requests.push_back({Native.get(), &Window->GetDrawElements(), FLinearColor(0.0f, 0.0f, 0.0f, 1.0f)});
 	}
 	if (Renderer && !Requests.empty())
 	{
@@ -543,7 +547,8 @@ void FSlateApplication::TickTimersAndWidgets()
 	{
 		if (User.AnalogDirection != EUINavigation::Invalid && CurrentTime >= User.NextAnalogRepeat)
 		{
-			AttemptNavigation(User.AnalogDirection, User.UserIndex, ENavigationGenesis::Controller, Platform->GetModifierKeys());
+			AttemptNavigation(
+			    User.AnalogDirection, User.UserIndex, ENavigationGenesis::Controller, Platform->GetModifierKeys());
 			User.NextAnalogRepeat = CurrentTime + NavigationConfig->AnalogRepeatRate;
 			User.bAnalogRepeated = true;
 		}
@@ -613,12 +618,14 @@ double FSlateApplication::ComputeIdleTimeout() const
 	return FMath::Max(0.0, Next - CurrentTime);
 }
 
-void FSlateApplication::RegisterActiveTimer(const TSharedRef<SWidget>& Widget, const TSharedRef<FActiveTimerHandle>& Timer)
+void FSlateApplication::RegisterActiveTimer(
+    const TSharedRef<SWidget>& Widget, const TSharedRef<FActiveTimerHandle>& Timer)
 {
-	ActiveTimers.push_back({ Widget.ToSharedPtr(), Timer.ToSharedPtr() });
+	ActiveTimers.push_back({Widget.ToSharedPtr(), Timer.ToSharedPtr()});
 }
 
-void FSlateApplication::UnRegisterActiveTimer(const TSharedRef<SWidget>& Widget, const TSharedRef<FActiveTimerHandle>& Timer)
+void FSlateApplication::UnRegisterActiveTimer(
+    const TSharedRef<SWidget>& Widget, const TSharedRef<FActiveTimerHandle>& Timer)
 {
 	(void)Widget;
 	Timer->bPendingRemoval = true;
@@ -694,7 +701,8 @@ bool FSlateApplication::SetUserFocus(int32 UserIndex, const TSharedPtr<SWidget>&
 	}
 
 	TArray<TWeakPtr<SWidget>> OldPath = User.FocusPath;
-	const TArray<TSharedRef<SWidget>> NewPath = Widget ? GetPathToWidget(ToSharedRef(Widget)) : TArray<TSharedRef<SWidget>>();
+	const TArray<TSharedRef<SWidget>> NewPath =
+	    Widget ? GetPathToWidget(ToSharedRef(Widget)) : TArray<TSharedRef<SWidget>>();
 	User.FocusedWidget = Widget;
 	User.FocusCause = Widget ? Cause : EFocusCause::Cleared;
 	User.FocusPath.clear();
@@ -713,7 +721,8 @@ bool FSlateApplication::SetUserFocus(int32 UserIndex, const TSharedPtr<SWidget>&
 	}
 	for (const TSharedRef<SWidget>& W : NewPath)
 	{
-		const bool bAlreadyTold = std::any_of(OldPath.begin(), OldPath.end(), [&W](const TWeakPtr<SWidget>& O) { return O.lock() == W.ToSharedPtr(); });
+		const bool bAlreadyTold = std::any_of(
+		    OldPath.begin(), OldPath.end(), [&W](const TWeakPtr<SWidget>& O) { return O.lock() == W.ToSharedPtr(); });
 		if (!bAlreadyTold)
 		{
 			W->OnFocusChanging(Old.get(), Widget.get(), Event);
@@ -802,7 +811,8 @@ bool FSlateApplication::NavigateFocus(EUINavigation Direction, int32 UserIndex, 
 	return AttemptNavigation(Direction, UserIndex, Genesis, Platform->GetModifierKeys());
 }
 
-bool FSlateApplication::AttemptNavigation(EUINavigation Direction, int32 UserIndex, ENavigationGenesis Genesis, const FModifierKeysState& Modifiers)
+bool FSlateApplication::AttemptNavigation(
+    EUINavigation Direction, int32 UserIndex, ENavigationGenesis Genesis, const FModifierKeysState& Modifiers)
 {
 	FSlateUser& User = GetUser(UserIndex);
 	const TSharedPtr<SWidget> Focused = User.FocusedWidget.lock();
@@ -854,22 +864,28 @@ bool FSlateApplication::AttemptNavigation(EUINavigation Direction, int32 UserInd
 	return Target && Target != Focused && SetUserFocus(UserIndex, Target, EFocusCause::Navigation);
 }
 
-TSharedPtr<SWidget> FSlateApplication::FindNavigationTarget(const TSharedRef<SWidget>& Boundary, const TSharedPtr<SWidget>& From, EUINavigation Direction, bool bWrap) const
+TSharedPtr<SWidget> FSlateApplication::FindNavigationTarget(
+    const TSharedRef<SWidget>& Boundary, const TSharedPtr<SWidget>& From, EUINavigation Direction, bool bWrap) const
 {
 	TArray<TSharedRef<SWidget>> Candidates;
 	GatherFocusableWidgets(Boundary, Candidates);
 	// The boundary itself (a focusable menu, say) is where we come from, not a target.
-	std::erase_if(Candidates, [&](const TSharedRef<SWidget>& C) { return &C.Get() == &Boundary.Get() && From.get() != &Boundary.Get(); });
+	std::erase_if(Candidates,
+	    [&](const TSharedRef<SWidget>& C) { return &C.Get() == &Boundary.Get() && From.get() != &Boundary.Get(); });
 	if (Candidates.empty())
 	{
 		return nullptr;
 	}
-	const bool bForward = Direction == EUINavigation::Next || Direction == EUINavigation::Down || Direction == EUINavigation::Right;
+	const bool bForward =
+	    Direction == EUINavigation::Next || Direction == EUINavigation::Down || Direction == EUINavigation::Right;
 
 	// No starting point, or starting from a container of the candidates
 	// (e.g. a menu that has focus itself): enter at the first or last.
-	const auto IsInside = [&From](const TSharedRef<SWidget>& C) { return From && From->IsAncestorOf(&C.Get()); };
-	if (!From || std::all_of(Candidates.begin(), Candidates.end(), [&](const TSharedRef<SWidget>& C) { return IsInside(C) || &C.Get() == From.get(); }))
+	const TFunction<bool(const TSharedRef<SWidget>&)> IsInside = [&From](const TSharedRef<SWidget>& C)
+	{ return From && From->IsAncestorOf(&C.Get()); };
+	if (!From || std::all_of(Candidates.begin(), Candidates.end(), [&](const TSharedRef<SWidget>& C) {
+		return IsInside(C) || &C.Get() == From.get();
+	}))
 	{
 		std::erase_if(Candidates, [&](const TSharedRef<SWidget>& C) { return &C.Get() == From.get(); });
 		if (Candidates.empty())
@@ -881,7 +897,8 @@ TSharedPtr<SWidget> FSlateApplication::FindNavigationTarget(const TSharedRef<SWi
 
 	if (Direction == EUINavigation::Next || Direction == EUINavigation::Previous)
 	{
-		const auto It = std::find_if(Candidates.begin(), Candidates.end(), [&](const TSharedRef<SWidget>& C) { return &C.Get() == From.get(); });
+		const TArray<TSharedRef<SWidget>>::const_iterator It = std::find_if(
+		    Candidates.begin(), Candidates.end(), [&](const TSharedRef<SWidget>& C) { return &C.Get() == From.get(); });
 		int32 Index;
 		if (It == Candidates.end())
 		{
@@ -904,8 +921,10 @@ TSharedPtr<SWidget> FSlateApplication::FindNavigationTarget(const TSharedRef<SWi
 	// Directional: the nearest widget past the edge we leave through,
 	// preferring ones that line up with us.
 	const FRect FromRect = From->GetCachedGeometry().GetRenderBoundingRect();
-	const auto Gap = [](float A0, float A1, float B0, float B1) { return B1 < A0 ? A0 - B1 : (B0 > A1 ? B0 - A1 : 0.0f); };
-	const auto Score = [&](const FRect& R, bool bWrapping) -> TOptional<float>
+	const TFunction<float(float, float, float, float)> Gap = [](float A0, float A1, float B0, float B1)
+	{ return B1 < A0 ? A0 - B1 : (B0 > A1 ? B0 - A1 : 0.0f); };
+	const TFunction<TOptional<float>(const FRect&, bool)> Score = [&](const FRect& R,
+	                                                                  bool bWrapping) -> TOptional<float>
 	{
 		float Primary = 0.0f, Secondary = 0.0f;
 		const float TolY = FromRect.Height() * 0.25f;
@@ -913,22 +932,26 @@ TSharedPtr<SWidget> FSlateApplication::FindNavigationTarget(const TSharedRef<SWi
 		switch (Direction)
 		{
 		case EUINavigation::Down:
-			if (!bWrapping && R.Top < FromRect.Bottom - TolY) return {};
+			if (!bWrapping && R.Top < FromRect.Bottom - TolY)
+				return {};
 			Primary = bWrapping ? R.Top : R.Top - FromRect.Bottom;
 			Secondary = Gap(FromRect.Left, FromRect.Right, R.Left, R.Right);
 			break;
 		case EUINavigation::Up:
-			if (!bWrapping && R.Bottom > FromRect.Top + TolY) return {};
+			if (!bWrapping && R.Bottom > FromRect.Top + TolY)
+				return {};
 			Primary = bWrapping ? -R.Bottom : FromRect.Top - R.Bottom;
 			Secondary = Gap(FromRect.Left, FromRect.Right, R.Left, R.Right);
 			break;
 		case EUINavigation::Right:
-			if (!bWrapping && R.Left < FromRect.Right - TolX) return {};
+			if (!bWrapping && R.Left < FromRect.Right - TolX)
+				return {};
 			Primary = bWrapping ? R.Left : R.Left - FromRect.Right;
 			Secondary = Gap(FromRect.Top, FromRect.Bottom, R.Top, R.Bottom);
 			break;
 		case EUINavigation::Left:
-			if (!bWrapping && R.Right > FromRect.Left + TolX) return {};
+			if (!bWrapping && R.Right > FromRect.Left + TolX)
+				return {};
 			Primary = bWrapping ? -R.Right : FromRect.Left - R.Right;
 			Secondary = Gap(FromRect.Top, FromRect.Bottom, R.Top, R.Bottom);
 			break;
@@ -939,7 +962,7 @@ TSharedPtr<SWidget> FSlateApplication::FindNavigationTarget(const TSharedRef<SWi
 		return (bWrapping ? Primary : FMath::Max(Primary, 0.0f)) + Secondary * 2.0f;
 	};
 
-	for (const bool bWrapping : { false, true })
+	for (const bool bWrapping : {false, true})
 	{
 		if (bWrapping && !bWrap)
 		{
@@ -949,7 +972,8 @@ TSharedPtr<SWidget> FSlateApplication::FindNavigationTarget(const TSharedRef<SWi
 		float BestScore = 0.0f;
 		for (const TSharedRef<SWidget>& Candidate : Candidates)
 		{
-			if (&Candidate.Get() == From.get() || Candidate->IsAncestorOf(From.get()) || From->IsAncestorOf(&Candidate.Get()))
+			if (&Candidate.Get() == From.get() || Candidate->IsAncestorOf(From.get()) ||
+			    From->IsAncestorOf(&Candidate.Get()))
 			{
 				continue;
 			}
@@ -979,7 +1003,8 @@ void FSlateApplication::ScrollFocusedIntoView(const TSharedRef<SWidget>& Widget)
 // ---------------------------------------------------------------------------
 // Menus
 
-TSharedRef<IMenu> FSlateApplication::PushMenu(const TSharedRef<SWidget>& ParentWidget, const TSharedRef<SWidget>& Content, FVector2 Position, bool bFocusImmediately)
+TSharedRef<IMenu> FSlateApplication::PushMenu(const TSharedRef<SWidget>& ParentWidget,
+    const TSharedRef<SWidget>& Content, FVector2 Position, bool bFocusImmediately)
 {
 	const TSharedPtr<SWindow> Window = FindWindowForWidget(*ParentWidget);
 	checkf(Window, "PushMenu: the parent widget is not in a window");
@@ -997,7 +1022,7 @@ TSharedRef<IMenu> FSlateApplication::PushMenu(const TSharedRef<SWidget>& ParentW
 	CloseToolTip();
 
 	const TSharedRef<SWidget> Host = SNew(SMenuHost)[Content];
-	auto Menu = MakeShared<FMenu>(*this, Host, ParentWidget, ToSharedRef(Window));
+	TSharedRef<FSlateApplication::FMenu> Menu = MakeShared<FMenu>(*this, Host, ParentWidget, ToSharedRef(Window));
 	Menu->PreviousFocus = GetKeyboardFocusedWidget();
 	MenuStack.push_back(Menu);
 	Window->AddPopup(Host, Position, EPopupLayer::Menu);
@@ -1058,7 +1083,7 @@ void FSlateApplication::DismissMenuAndChildren(const IMenu& Menu)
 		bFocusInside |= Focused && (&M->Host.Get() == Focused.get() || M->Host->IsAncestorOf(Focused.get()));
 	}
 
-	for (auto It = Dismissed.rbegin(); It != Dismissed.rend(); ++It)
+	for (TArray<TSharedRef<FMenu>>::reverse_iterator It = Dismissed.rbegin(); It != Dismissed.rend(); ++It)
 	{
 		const TSharedRef<FMenu>& M = *It;
 		M->bDismissed = true;
@@ -1070,11 +1095,12 @@ void FSlateApplication::DismissMenuAndChildren(const IMenu& Menu)
 	if (bFocusInside)
 	{
 		const TSharedPtr<SWidget> Previous = Dismissed.front()->PreviousFocus.lock();
-		const bool bPreviousUsable = Previous && Previous->IsVisibleInHierarchy() && FindWindowForWidget(*Previous)
-			&& !std::any_of(Dismissed.begin(), Dismissed.end(), [&](const TSharedRef<FMenu>& M) { return M->Host->IsAncestorOf(Previous.get()); });
+		const bool bPreviousUsable = Previous && Previous->IsVisibleInHierarchy() && FindWindowForWidget(*Previous) &&
+		    !std::any_of(Dismissed.begin(), Dismissed.end(),
+		        [&](const TSharedRef<FMenu>& M) { return M->Host->IsAncestorOf(Previous.get()); });
 		SetKeyboardFocus(bPreviousUsable ? Previous : nullptr, EFocusCause::SetDirectly);
 	}
-	for (auto It = Dismissed.rbegin(); It != Dismissed.rend(); ++It)
+	for (TArray<TSharedRef<FMenu>>::reverse_iterator It = Dismissed.rbegin(); It != Dismissed.rend(); ++It)
 	{
 		const TSharedRef<FMenu>& M = *It;
 		M->OnMenuDismissed.Broadcast(TSharedRef<IMenu>(StaticCastSharedPtr<IMenu>(M.ToSharedPtr())));
@@ -1083,7 +1109,7 @@ void FSlateApplication::DismissMenuAndChildren(const IMenu& Menu)
 
 TSharedPtr<IMenu> FSlateApplication::FindMenuContaining(const SWidget& Widget) const
 {
-	for (auto It = MenuStack.rbegin(); It != MenuStack.rend(); ++It)
+	for (TArray<TSharedRef<FMenu>>::const_reverse_iterator It = MenuStack.rbegin(); It != MenuStack.rend(); ++It)
 	{
 		const TSharedRef<FMenu>& Menu = *It;
 		if (&Menu->Host.Get() == &Widget || Menu->Host->IsAncestorOf(&Widget))
@@ -1135,7 +1161,7 @@ void FSlateApplication::UpdateToolTip()
 	}
 
 	TSharedPtr<SWidget> Owner;
-	for (auto It = HoveredPath.rbegin(); It != HoveredPath.rend(); ++It)
+	for (TArray<TWeakPtr<SWidget>>::reverse_iterator It = HoveredPath.rbegin(); It != HoveredPath.rend(); ++It)
 	{
 		if (const TSharedPtr<SWidget> W = It->lock())
 		{

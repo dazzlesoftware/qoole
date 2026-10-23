@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Widgets/SViewport.h"
+#include "Templates/SharedPointer.h"
 
 #include "Styling/SlateBrush.h"
 
@@ -41,16 +42,19 @@ void SViewport::OnPreArrange(const FGeometry& AllottedGeometry)
 	}
 }
 
-int32 SViewport::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SViewport::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	OutDrawElements.AddSolidBox(LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.Tinted(Background));
 	if (const TSharedPtr<ISlateRenderTarget> Target = Client ? Client->GetRenderTarget() : nullptr)
 	{
-		OutDrawElements.AddViewport(LayerId + 1, Geometry.ToPaintGeometry(), Target, bAlphaBlend, InWidgetStyle.ColorAndOpacityTint);
+		OutDrawElements.AddViewport(
+		    LayerId + 1, Geometry.ToPaintGeometry(), Target, bAlphaBlend, InWidgetStyle.ColorAndOpacityTint);
 	}
 	if (HasKeyboardFocus())
 	{
-		OutDrawElements.AddRoundedBox(LayerId + 2, Geometry.ToPaintGeometry(), FColor::Transparent(), 0.0f, InWidgetStyle.Tinted(FSlateColor(EStyleColor::Primary).Resolve()), 1.0f);
+		OutDrawElements.AddRoundedBox(LayerId + 2, Geometry.ToPaintGeometry(), FColor::Transparent(), 0.0f,
+		    InWidgetStyle.Tinted(FSlateColor(EStyleColor::Primary).Resolve()), 1.0f);
 	}
 	return LayerId + 2;
 }
@@ -70,14 +74,38 @@ FReply SViewport::OnMouseButtonDown(const FGeometry& Geometry, const FPointerEve
 	return Reply;
 }
 
-FReply SViewport::OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event) { return Client ? Client->OnMouseButtonUp(Geometry, Event) : FReply::Unhandled(); }
-FReply SViewport::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event) { return Client ? Client->OnMouseButtonDoubleClick(Geometry, Event) : FReply::Unhandled(); }
-FReply SViewport::OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event) { return Client ? Client->OnMouseMove(Geometry, Event) : FReply::Unhandled(); }
-FReply SViewport::OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event) { return Client ? Client->OnMouseWheel(Geometry, Event) : FReply::Unhandled(); }
-FReply SViewport::OnRawMouseMove(FVector2 Delta) { return Client ? Client->OnRawMouseMove(Delta) : FReply::Unhandled(); }
-FReply SViewport::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) { return Client ? Client->OnKeyDown(Geometry, Event) : FReply::Unhandled(); }
-FReply SViewport::OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Event) { return Client ? Client->OnKeyUp(Geometry, Event) : FReply::Unhandled(); }
-FReply SViewport::OnKeyChar(const FGeometry& Geometry, const FCharacterEvent& Event) { return Client ? Client->OnKeyChar(Geometry, Event) : FReply::Unhandled(); }
+FReply SViewport::OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	return Client ? Client->OnMouseButtonUp(Geometry, Event) : FReply::Unhandled();
+}
+FReply SViewport::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	return Client ? Client->OnMouseButtonDoubleClick(Geometry, Event) : FReply::Unhandled();
+}
+FReply SViewport::OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	return Client ? Client->OnMouseMove(Geometry, Event) : FReply::Unhandled();
+}
+FReply SViewport::OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	return Client ? Client->OnMouseWheel(Geometry, Event) : FReply::Unhandled();
+}
+FReply SViewport::OnRawMouseMove(FVector2 Delta)
+{
+	return Client ? Client->OnRawMouseMove(Delta) : FReply::Unhandled();
+}
+FReply SViewport::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
+{
+	return Client ? Client->OnKeyDown(Geometry, Event) : FReply::Unhandled();
+}
+FReply SViewport::OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Event)
+{
+	return Client ? Client->OnKeyUp(Geometry, Event) : FReply::Unhandled();
+}
+FReply SViewport::OnKeyChar(const FGeometry& Geometry, const FCharacterEvent& Event)
+{
+	return Client ? Client->OnKeyChar(Geometry, Event) : FReply::Unhandled();
+}
 
 void SViewport::OnMouseEnter(const FGeometry& Geometry, const FPointerEvent& Event)
 {

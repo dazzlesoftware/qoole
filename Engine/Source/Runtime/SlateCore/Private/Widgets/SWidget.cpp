@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "Widgets/SWidget.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include "Layout/Children.h"
 #include "Widgets/SCompoundWidget.h"
@@ -17,17 +19,22 @@ namespace
 		static TSet<SWidget*> Set;
 		return Set;
 	}
-}
+} // namespace
 
 const char* ToString(EVisibility Visibility)
 {
 	switch (Visibility)
 	{
-	case EVisibility::Visible: return "Visible";
-	case EVisibility::Collapsed: return "Collapsed";
-	case EVisibility::Hidden: return "Hidden";
-	case EVisibility::HitTestInvisible: return "HitTestInvisible";
-	case EVisibility::SelfHitTestInvisible: return "SelfHitTestInvisible";
+	case EVisibility::Visible:
+		return "Visible";
+	case EVisibility::Collapsed:
+		return "Collapsed";
+	case EVisibility::Hidden:
+		return "Hidden";
+	case EVisibility::HitTestInvisible:
+		return "HitTestInvisible";
+	case EVisibility::SelfHitTestInvisible:
+		return "SelfHitTestInvisible";
 	}
 	return "?";
 }
@@ -36,12 +43,18 @@ const char* ToString(EFocusCause Cause)
 {
 	switch (Cause)
 	{
-	case EFocusCause::Mouse: return "Mouse";
-	case EFocusCause::Navigation: return "Navigation";
-	case EFocusCause::SetDirectly: return "SetDirectly";
-	case EFocusCause::Cleared: return "Cleared";
-	case EFocusCause::OtherWidgetLostFocus: return "OtherWidgetLostFocus";
-	case EFocusCause::WindowActivate: return "WindowActivate";
+	case EFocusCause::Mouse:
+		return "Mouse";
+	case EFocusCause::Navigation:
+		return "Navigation";
+	case EFocusCause::SetDirectly:
+		return "SetDirectly";
+	case EFocusCause::Cleared:
+		return "Cleared";
+	case EFocusCause::OtherWidgetLostFocus:
+		return "OtherWidgetLostFocus";
+	case EFocusCause::WindowActivate:
+		return "WindowActivate";
 	}
 	return "?";
 }
@@ -50,13 +63,20 @@ const char* ToString(EUINavigation Navigation)
 {
 	switch (Navigation)
 	{
-	case EUINavigation::Left: return "Left";
-	case EUINavigation::Right: return "Right";
-	case EUINavigation::Up: return "Up";
-	case EUINavigation::Down: return "Down";
-	case EUINavigation::Next: return "Next";
-	case EUINavigation::Previous: return "Previous";
-	case EUINavigation::Invalid: return "Invalid";
+	case EUINavigation::Left:
+		return "Left";
+	case EUINavigation::Right:
+		return "Right";
+	case EUINavigation::Up:
+		return "Up";
+	case EUINavigation::Down:
+		return "Down";
+	case EUINavigation::Next:
+		return "Next";
+	case EUINavigation::Previous:
+		return "Previous";
+	case EUINavigation::Invalid:
+		return "Invalid";
 	}
 	return "?";
 }
@@ -146,7 +166,8 @@ void SWidget::ArrangeTree(const FGeometry& AllottedGeometry)
 
 	AllottedGeometryCache = AllottedGeometry;
 	const TOptional<FTransform2D>& Transform = RenderTransform.Get();
-	CachedGeometry = Transform ? AllottedGeometry.WithRenderTransform(*Transform, RenderTransformPivot) : AllottedGeometry;
+	CachedGeometry =
+	    Transform ? AllottedGeometry.WithRenderTransform(*Transform, RenderTransformPivot) : AllottedGeometry;
 	bNeedsArrange = false;
 	bDescendantNeedsArrange = false;
 	bEverArranged = true;
@@ -166,7 +187,8 @@ void SWidget::ArrangeTree(const FGeometry& AllottedGeometry)
 // ---------------------------------------------------------------------------
 // Paint and hit-testing
 
-int32 SWidget::Paint(const FPaintArgs& Args, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SWidget::Paint(const FPaintArgs& Args, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
+    int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const EVisibility V = GetVisibility();
 	if (!IsPainted(V) || !bEverArranged || RenderOpacity <= 0.0f)
@@ -209,12 +231,14 @@ int32 SWidget::Paint(const FPaintArgs& Args, const FRect& CullingRect, FSlateWin
 	return FMath::Max(MaxLayer, LayerId);
 }
 
-int32 SWidget::PaintArrangedChildren(const FPaintArgs& Args, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SWidget::PaintArrangedChildren(const FPaintArgs& Args, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	int32 MaxLayer = LayerId;
 	for (const FArrangedWidget& Child : ArrangedChildrenCache)
 	{
-		MaxLayer = FMath::Max(MaxLayer, Child.Widget->Paint(Args, CullingRect, OutDrawElements, LayerId, InWidgetStyle));
+		MaxLayer =
+		    FMath::Max(MaxLayer, Child.Widget->Paint(Args, CullingRect, OutDrawElements, LayerId, InWidgetStyle));
 	}
 	return MaxLayer;
 }
@@ -262,7 +286,8 @@ void SWidget::Invalidate(EInvalidateWidgetReason Reason)
 	{
 		return;
 	}
-	const bool bLayout = HasAnyFlags(Reason, EInvalidateWidgetReason::Layout | EInvalidateWidgetReason::Visibility | EInvalidateWidgetReason::ChildOrder);
+	const bool bLayout = HasAnyFlags(Reason,
+	    EInvalidateWidgetReason::Layout | EInvalidateWidgetReason::Visibility | EInvalidateWidgetReason::ChildOrder);
 	if (bLayout)
 	{
 		bNeedsMeasure = true;
@@ -461,7 +486,7 @@ FCursorReply SWidget::OnCursorQuery(const FGeometry& Geometry, const FPointerEve
 TSharedRef<FActiveTimerHandle> SWidget::RegisterActiveTimer(float Period, FWidgetActiveTimerDelegate Delegate)
 {
 	const double Now = FSlateApplicationBase::IsInitialized() ? FSlateApplicationBase::Get().GetTime() : 0.0;
-	auto Handle = MakeShared<FActiveTimerHandle>(Period, std::move(Delegate), Now + Period);
+	TSharedRef<FActiveTimerHandle> Handle = MakeShared<FActiveTimerHandle>(Period, std::move(Delegate), Now + Period);
 	if (FSlateApplicationBase::IsInitialized())
 	{
 		FSlateApplicationBase::Get().RegisterActiveTimer(TSharedRef<SWidget>(shared_from_this()), Handle);
@@ -556,16 +581,18 @@ void SCompoundWidget::OnArrangeChildren(const FGeometry& AllottedGeometry, FArra
 	const FVector2 Desired = Child->GetDesiredSize();
 	const float AvailX = FMath::Max(0.0f, AllottedGeometry.Size.X - Padding.Left - Padding.Right);
 	const float AvailY = FMath::Max(0.0f, AllottedGeometry.Size.Y - Padding.Top - Padding.Bottom);
-	const auto Align = [](float Avail, float Want, int32 Mode) -> FVector2 // (offset, size); Mode 0 fill, 1 start, 2 center, 3 end
+	const TFunction<FVector2(float, float, int32)> Align =
+	    [](float Avail, float Want, int32 Mode) -> FVector2 // (offset, size); Mode 0 fill, 1 start, 2 center, 3 end
 	{
 		const float Size = Mode == 0 ? Avail : FMath::Min(Want, Avail);
 		const float Offset = Mode == 2 ? (Avail - Size) * 0.5f : (Mode == 3 ? Avail - Size : 0.0f);
-		return { Offset, Size };
+		return {Offset, Size};
 	};
 	const FVector2 X = Align(AvailX, Desired.X, static_cast<int32>(ChildSlot.GetHAlign()));
 	const FVector2 Y = Align(AvailY, Desired.Y, static_cast<int32>(ChildSlot.GetVAlign()));
 	ArrangedChildren.AddWidget(Child->GetVisibility(),
-		FArrangedWidget(Child, AllottedGeometry.MakeChild(FVector2(Padding.Left + X.X, Padding.Top + Y.X), FVector2(X.Y, Y.Y))));
+	    FArrangedWidget(
+	        Child, AllottedGeometry.MakeChild(FVector2(Padding.Left + X.X, Padding.Top + Y.X), FVector2(X.Y, Y.Y))));
 }
 
 FWidgetStyle SCompoundWidget::MakeChildStyle(const FWidgetStyle& InWidgetStyle) const
@@ -579,8 +606,8 @@ FWidgetStyle SCompoundWidget::MakeChildStyle(const FWidgetStyle& InWidgetStyle) 
 	return Style;
 }
 
-int32 SCompoundWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SCompoundWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	(void)Geometry;
 	return PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId, MakeChildStyle(InWidgetStyle));
@@ -596,8 +623,15 @@ public:
 	}
 
 protected:
-	FVector2 ComputeDesiredSize(float) const override { return FVector2::Zero(); }
-	int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FSlateWindowElementList&, int32 LayerId, const FWidgetStyle&) const override { return LayerId; }
+	FVector2 ComputeDesiredSize(float) const override
+	{
+		return FVector2::Zero();
+	}
+	int32 OnPaint(const FPaintArgs&, const FGeometry&, const FRect&, FSlateWindowElementList&, int32 LayerId,
+	    const FWidgetStyle&) const override
+	{
+		return LayerId;
+	}
 };
 
 TSharedRef<SWidget> SNullWidget::NullWidget()
@@ -606,14 +640,9 @@ TSharedRef<SWidget> SNullWidget::NullWidget()
 	return Instance;
 }
 
-FSlotBase::FSlotBase()
-	: Widget(SNullWidget::NullWidget())
-{
-}
+FSlotBase::FSlotBase() : Widget(SNullWidget::NullWidget()) {}
 
-FSlotBase::FSlotBase(FSlotBase&& Other) noexcept
-	: Owner(nullptr)
-	, Widget(Other.Widget)
+FSlotBase::FSlotBase(FSlotBase&& Other) noexcept : Owner(nullptr), Widget(Other.Widget)
 {
 	check(!Other.Owner); // only free-standing slots move
 }

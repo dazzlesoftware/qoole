@@ -6,8 +6,11 @@
 
 namespace
 {
-	const FScrollBarStyle& DefaultScrollBarStyle() { return FAppStyle::Get().GetWidgetStyle<FScrollBarStyle>("ScrollBar"); }
-}
+	const FScrollBarStyle& DefaultScrollBarStyle()
+	{
+		return FAppStyle::Get().GetWidgetStyle<FScrollBarStyle>("ScrollBar");
+	}
+} // namespace
 
 // ---------------------------------------------------------------------------
 // SScrollBar
@@ -47,7 +50,7 @@ TPair<float, float> SScrollBar::GetThumb(const FGeometry& Geometry) const
 	const float Length = FMath::Min(Track, FMath::Max(Style->MinThumbLength, Track * ThumbSizeFraction));
 	const float Scrollable = 1.0f - ThumbSizeFraction;
 	const float Start = Scrollable > 0.0f ? (Track - Length) * (OffsetFraction / Scrollable) : 0.0f;
-	return { Start, Length };
+	return {Start, Length};
 }
 
 void SScrollBar::ScrollTo(float NewFraction)
@@ -67,7 +70,10 @@ FReply SScrollBar::OnMouseButtonDown(const FGeometry& Geometry, const FPointerEv
 		return FReply::Unhandled();
 	}
 	const float Position = Along(Geometry.AbsoluteToLocal(Event.GetAbsolutePosition()));
-	const auto [Start, Length] = GetThumb(Geometry);
+	const std::pair<float, float> StartBinding = GetThumb(Geometry);
+	const float& Start = StartBinding.first;
+	const float& Length = StartBinding.second;
+
 	if (Position >= Start && Position < Start + Length)
 	{
 		bDragging = true;
@@ -94,7 +100,10 @@ FReply SScrollBar::OnMouseButtonUp(const FGeometry&, const FPointerEvent& Event)
 FReply SScrollBar::OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event)
 {
 	const float Position = Along(Geometry.AbsoluteToLocal(Event.GetAbsolutePosition()));
-	const auto [Start, Length] = GetThumb(Geometry);
+	const std::pair<float, float> StartBinding = GetThumb(Geometry);
+	const float& Start = StartBinding.first;
+	const float& Length = StartBinding.second;
+
 	if (bDragging)
 	{
 		const float Free = TrackLength(Geometry) - Length;
@@ -123,19 +132,23 @@ void SScrollBar::OnMouseLeave(const FPointerEvent&)
 	}
 }
 
-int32 SScrollBar::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SScrollBar::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FRect&,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	Style->Track.Paint(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), InWidgetStyle.ColorAndOpacityTint);
 	if (!IsNeeded())
 	{
 		return LayerId;
 	}
-	const auto [Start, Length] = GetThumb(Geometry);
+	const std::pair<float, float> StartBinding = GetThumb(Geometry);
+	const float& Start = StartBinding.first;
+	const float& Length = StartBinding.second;
+
 	const FSlateBrush& Thumb = bDragging ? Style->ThumbDragged : (bThumbHovered ? Style->ThumbHovered : Style->Thumb);
 	const float Inset = 2.0f;
 	const FRect Rect = Orientation == EOrientation::Vertical
-		? FRect(Inset, Start, Geometry.Size.X - Inset, Start + Length)
-		: FRect(Start, Inset, Start + Length, Geometry.Size.Y - Inset);
+	    ? FRect(Inset, Start, Geometry.Size.X - Inset, Start + Length)
+	    : FRect(Start, Inset, Start + Length, Geometry.Size.Y - Inset);
 	Thumb.Paint(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(Rect), InWidgetStyle.ColorAndOpacityTint);
 	return LayerId + 1;
 }
@@ -156,9 +169,12 @@ public:
 		Orientation = InOrientation;
 	}
 
-	FChildren* GetChildren() override { return &Children; }
+	FChildren* GetChildren() override
+	{
+		return &Children;
+	}
 
-	TPanelChildren<SScrollBox::FSlot> Children{ this };
+	TPanelChildren<SScrollBox::FSlot> Children{this};
 
 protected:
 	FVector2 ComputeDesiredSize(float) const override
@@ -188,7 +204,8 @@ protected:
 	{
 		const bool bVertical = Orientation == EOrientation::Vertical;
 		const FVector2 Desired = GetDesiredSize();
-		Owner->OnPanelArranged(bVertical ? AllottedGeometry.Size.Y : AllottedGeometry.Size.X, bVertical ? Desired.Y : Desired.X);
+		Owner->OnPanelArranged(
+		    bVertical ? AllottedGeometry.Size.Y : AllottedGeometry.Size.X, bVertical ? Desired.Y : Desired.X);
 	}
 
 	void OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const override
@@ -204,7 +221,8 @@ protected:
 			}
 			const FVector2 Child = Slot.GetWidget()->GetDesiredSize() + Slot.GetPadding().GetDesiredSize();
 			const FVector2 Offset = bVertical ? FVector2(0.0f, Position) : FVector2(Position, 0.0f);
-			const FVector2 Size = bVertical ? FVector2(AllottedGeometry.Size.X, Child.Y) : FVector2(Child.X, AllottedGeometry.Size.Y);
+			const FVector2 Size =
+			    bVertical ? FVector2(AllottedGeometry.Size.X, Child.Y) : FVector2(Child.X, AllottedGeometry.Size.Y);
 			ArrangeSlotChild(AllottedGeometry, ArrangedChildren, Slot, Offset, Size);
 			Position += bVertical ? Child.Y : Child.X;
 		}
@@ -231,20 +249,22 @@ void SScrollBox::Construct(FArguments& Args)
 	Args._Slots.clear();
 
 	SAssignNew(ScrollBar, SScrollBar)
-		.Style(Args._ScrollBarStyle)
-		.Orientation(Orientation)
-		.Visibility(EVisibility::Collapsed)
-		.OnUserScrolled([this](float Fraction) { SetScrollOffset(Fraction * ContentSize); });
+	    .Style(Args._ScrollBarStyle)
+	    .Orientation(Orientation)
+	    .Visibility(EVisibility::Collapsed)
+	    .OnUserScrolled([this](float Fraction) { SetScrollOffset(Fraction * ContentSize); });
 
 	const TSharedRef<SWidget> PanelRef = ToSharedRef(StaticCastSharedPtr<SWidget>(Panel));
 	const TSharedRef<SWidget> BarRef = ToSharedRef(StaticCastSharedPtr<SWidget>(ScrollBar));
 	if (Orientation == EOrientation::Vertical)
 	{
-		ChildSlot[SNew(SHorizontalBox) + SHorizontalBox::Slot().FillWidth(1.0f)[PanelRef] + SHorizontalBox::Slot().AutoWidth()[BarRef]];
+		ChildSlot[SNew(SHorizontalBox) + SHorizontalBox::Slot().FillWidth(1.0f)[PanelRef] +
+		    SHorizontalBox::Slot().AutoWidth()[BarRef]];
 	}
 	else
 	{
-		ChildSlot[SNew(SVerticalBox) + SVerticalBox::Slot().FillHeight(1.0f)[PanelRef] + SVerticalBox::Slot().AutoHeight()[BarRef]];
+		ChildSlot[SNew(SVerticalBox) + SVerticalBox::Slot().FillHeight(1.0f)[PanelRef] +
+		    SVerticalBox::Slot().AutoHeight()[BarRef]];
 	}
 }
 
@@ -383,8 +403,9 @@ void SSplitter::ComputeSizes(float Total, TArray<int32>& Visible, TArray<float>&
 	for (const int32 I : Visible)
 	{
 		const FSlot& Slot = Children[I];
-		const float Size = Slot.Rule == ESizeRule::SizeToContent ? Along(Slot.GetWidget()->GetDesiredSize())
-			: (TotalValue > 0.0f ? Available * Slot.SizeValue / TotalValue : 0.0f);
+		const float Size = Slot.Rule == ESizeRule::SizeToContent
+		    ? Along(Slot.GetWidget()->GetDesiredSize())
+		    : (TotalValue > 0.0f ? Available * Slot.SizeValue / TotalValue : 0.0f);
 		Sizes.push_back(Size);
 	}
 }
@@ -424,9 +445,12 @@ void SSplitter::OnArrangeChildren(const FGeometry& AllottedGeometry, FArrangedCh
 	for (SIZE_T V = 0; V < Visible.size(); ++V)
 	{
 		const TSharedRef<SWidget>& Child = Children[Visible[V]].GetWidget();
-		const FVector2 Offset = Orientation == EOrientation::Horizontal ? FVector2(Position, 0.0f) : FVector2(0.0f, Position);
-		const FVector2 Size = Orientation == EOrientation::Horizontal ? FVector2(Sizes[V], AllottedGeometry.Size.Y) : FVector2(AllottedGeometry.Size.X, Sizes[V]);
-		ArrangedChildren.AddWidget(Child->GetVisibility(), FArrangedWidget(Child, AllottedGeometry.MakeChild(Offset, Size)));
+		const FVector2 Offset =
+		    Orientation == EOrientation::Horizontal ? FVector2(Position, 0.0f) : FVector2(0.0f, Position);
+		const FVector2 Size = Orientation == EOrientation::Horizontal ? FVector2(Sizes[V], AllottedGeometry.Size.Y)
+		                                                              : FVector2(AllottedGeometry.Size.X, Sizes[V]);
+		ArrangedChildren.AddWidget(
+		    Child->GetVisibility(), FArrangedWidget(Child, AllottedGeometry.MakeChild(Offset, Size)));
 		Position += Sizes[V] + Style->HandleSize;
 	}
 }
@@ -516,7 +540,8 @@ FReply SSplitter::OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Ev
 		return FReply::Handled();
 	}
 	const float MaxA = FMath::Max(A.MinSizeValue, Combined - B.MinSizeValue);
-	const float NewA = FMath::Clamp(Along(Local) - Style->HandleSize * 0.5f - Start, FMath::Min(A.MinSizeValue, MaxA), MaxA);
+	const float NewA =
+	    FMath::Clamp(Along(Local) - Style->HandleSize * 0.5f - Start, FMath::Min(A.MinSizeValue, MaxA), MaxA);
 	const float TotalValue = A.SizeValue + B.SizeValue;
 	A.Value(TotalValue * NewA / Combined);
 	B.Value(TotalValue - A.SizeValue);
@@ -536,15 +561,17 @@ void SSplitter::OnMouseLeave(const FPointerEvent&)
 
 FCursorReply SSplitter::OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const
 {
-	if (DraggedHandle != INDEX_NONE || FindHandle(Geometry, Geometry.AbsoluteToLocal(Event.GetAbsolutePosition())) != INDEX_NONE)
+	if (DraggedHandle != INDEX_NONE ||
+	    FindHandle(Geometry, Geometry.AbsoluteToLocal(Event.GetAbsolutePosition())) != INDEX_NONE)
 	{
-		return FCursorReply::Cursor(Orientation == EOrientation::Horizontal ? EMouseCursor::ResizeLeftRight : EMouseCursor::ResizeUpDown);
+		return FCursorReply::Cursor(
+		    Orientation == EOrientation::Horizontal ? EMouseCursor::ResizeLeftRight : EMouseCursor::ResizeUpDown);
 	}
 	return SPanel::OnCursorQuery(Geometry, Event);
 }
 
-int32 SSplitter::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect, FSlateWindowElementList& OutDrawElements,
-	int32 LayerId, const FWidgetStyle& InWidgetStyle) const
+int32 SSplitter::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FRect& CullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle) const
 {
 	const int32 MaxLayer = PaintArrangedChildren(Args, CullingRect, OutDrawElements, LayerId, InWidgetStyle);
 	TArray<int32> Visible;
@@ -554,10 +581,13 @@ int32 SSplitter::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, cons
 	for (SIZE_T V = 0; V + 1 < Visible.size(); ++V)
 	{
 		Position += Sizes[V];
-		const FRect Rect = Orientation == EOrientation::Horizontal ? FRect(Position, 0.0f, Position + Style->HandleSize, Geometry.Size.Y)
-			: FRect(0.0f, Position, Geometry.Size.X, Position + Style->HandleSize);
-		const bool bActive = static_cast<int32>(V) == DraggedHandle || (DraggedHandle == INDEX_NONE && static_cast<int32>(V) == HoveredHandle);
-		(bActive ? Style->HandleHighlight : Style->Handle).Paint(OutDrawElements, MaxLayer + 1, Geometry.ToPaintGeometry(Rect), InWidgetStyle.ColorAndOpacityTint);
+		const FRect Rect = Orientation == EOrientation::Horizontal
+		    ? FRect(Position, 0.0f, Position + Style->HandleSize, Geometry.Size.Y)
+		    : FRect(0.0f, Position, Geometry.Size.X, Position + Style->HandleSize);
+		const bool bActive = static_cast<int32>(V) == DraggedHandle ||
+		    (DraggedHandle == INDEX_NONE && static_cast<int32>(V) == HoveredHandle);
+		(bActive ? Style->HandleHighlight : Style->Handle)
+		    .Paint(OutDrawElements, MaxLayer + 1, Geometry.ToPaintGeometry(Rect), InWidgetStyle.ColorAndOpacityTint);
 		Position += Style->HandleSize;
 	}
 	return MaxLayer + 1;

@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "TestApp.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include "Screenshot.h"
 #include "Services/ConfigStore.h"
@@ -24,14 +26,21 @@ DEFINE_LOG_CATEGORY(LogTestApp, Log);
 class FFileOutputDevice final : public FOutputDevice
 {
 public:
-	explicit FFileOutputDevice(const FString& Path) { File = _wfopen(Path.ToWide().c_str(), L"w"); }
-	~FFileOutputDevice() override { if (File) std::fclose(File); }
+	explicit FFileOutputDevice(const FString& Path)
+	{
+		File = _wfopen(Path.ToWide().c_str(), L"w");
+	}
+	~FFileOutputDevice() override
+	{
+		if (File)
+			std::fclose(File);
+	}
 	void Serialize(const FLogCategory& Category, ELogVerbosity Verbosity, std::string_view Message) override
 	{
 		if (File)
 		{
-			std::fprintf(File, "[%8.3f] %s: %s: %.*s\n", FPlatformTime::Seconds() - Start, Category.Name, ToString(Verbosity),
-				static_cast<int>(Message.size()), Message.data());
+			std::fprintf(File, "[%8.3f] %s: %s: %.*s\n", FPlatformTime::Seconds() - Start, Category.Name,
+			    ToString(Verbosity), static_cast<int>(Message.size()), Message.data());
 			std::fflush(File);
 		}
 	}
@@ -102,14 +111,14 @@ namespace
 		}
 		return false;
 	}
-}
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Script
 
 FTestScript& FTestScript::Do(TFunction<void()> Action, int32 Frames)
 {
-	Steps.push_back(FStep{ PendingFrames + Frames, std::move(Action) });
+	Steps.push_back(FStep{PendingFrames + Frames, std::move(Action)});
 	PendingFrames = 0;
 	return *this;
 }
@@ -138,8 +147,7 @@ FTestScript& FTestScript::Check(const FString& What, TFunction<bool()> Condition
 // ---------------------------------------------------------------------------
 // Setup and shutdown
 
-FTestApp::FTestApp(FTestAppInfo InInfo)
-	: Info(std::move(InInfo))
+FTestApp::FTestApp(FTestAppInfo InInfo) : Info(std::move(InInfo))
 {
 	SelfTest.App = this;
 }
@@ -167,7 +175,8 @@ bool FTestApp::Initialize(const FString& CommandLine)
 		// that would stop the scripted run.
 		_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_DEBUG);
 #endif
-		FileLog = MakeUnique<FFileOutputDevice>(SelfTestDir + FString::Format("{}_{}_log.txt", Info.Name, ToString(Backend)));
+		FileLog =
+		    MakeUnique<FFileOutputDevice>(SelfTestDir + FString::Format("{}_{}_log.txt", Info.Name, ToString(Backend)));
 		FLog::AddDevice(FileLog.get());
 	}
 
@@ -176,7 +185,8 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	{
 		if (const wchar_t* LocalAppData = _wgetenv(L"LOCALAPPDATA"))
 		{
-			const std::filesystem::path Dir = std::filesystem::path(LocalAppData) / L"Genesis" / L"TestApps" / Info.Name.ToWide();
+			const std::filesystem::path Dir =
+			    std::filesystem::path(LocalAppData) / L"Genesis" / L"TestApps" / Info.Name.ToWide();
 			std::error_code Error;
 			if (HasFlag(Args, "-resetlayout"))
 			{
@@ -188,7 +198,7 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	}
 	if (!SettingsDir.IsEmpty())
 	{
-		auto Ini = MakeUnique<FIniConfigStore>(SettingsDir + "Settings.ini");
+		TUniquePtr<FIniConfigStore> Ini = MakeUnique<FIniConfigStore>(SettingsDir + "Settings.ini");
 		Ini->Load();
 		Config = std::move(Ini);
 	}
@@ -206,13 +216,16 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	Platform = CreatePlatformApplication().ToSharedPtr();
 	FRHIDeviceDesc DeviceDesc;
 	DeviceDesc.Backend = Backend;
-	if (HasFlag(Args, "-debug")) DeviceDesc.bDebugLayer = true;
-	if (HasFlag(Args, "-nodebug")) DeviceDesc.bDebugLayer = false;
+	if (HasFlag(Args, "-debug"))
+		DeviceDesc.bDebugLayer = true;
+	if (HasFlag(Args, "-nodebug"))
+		DeviceDesc.bDebugLayer = false;
 	Device = FRHIDevice::Create(DeviceDesc);
 	if (!Device)
 	{
-		const FString Message = FString::Format("Could not create a {} device. See the log for details.", ToString(Backend));
-		UE_LOG(LogTestApp, Error, "{}", Message);
+		const FString Message =
+		    FString::Format("Could not create a {} device. See the log for details.", ToString(Backend));
+		GENESIS_LOG(LogTestApp, Error, "{}", Message);
 		if (SelfTestDir.IsEmpty())
 		{
 			MessageBoxW(nullptr, Message.ToWide().c_str(), Info.Name.ToWide().c_str(), MB_ICONERROR);
@@ -224,7 +237,7 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	Fonts = FStarshipCoreFonts::Load(*FontCache);
 	if (!Fonts.IsValid())
 	{
-		UE_LOG(LogTestApp, Error, "The fonts could not be loaded");
+		GENESIS_LOG(LogTestApp, Error, "The fonts could not be loaded");
 		return false;
 	}
 	const TSharedRef<FSlateStyleSet> Style = FStarshipCoreStyle::Create(Fonts);
@@ -234,7 +247,7 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	Renderer = MakeUnique<FSlateRHIRenderingPolicy>(*Device, *FontCache);
 	if (!Renderer->Initialize())
 	{
-		UE_LOG(LogTestApp, Error, "UI renderer initialization failed");
+		GENESIS_LOG(LogTestApp, Error, "UI renderer initialization failed");
 		return false;
 	}
 	WindowRenderer = MakeUnique<FSlateRHIRenderer>(*Device, *Renderer);
@@ -243,7 +256,8 @@ bool FTestApp::Initialize(const FString& CommandLine)
 	App = FSlateApplication::Create(ToSharedRef(Platform), ToSharedRef(FontCache)).ToSharedPtr();
 	App->SetRenderer(WindowRenderer.get());
 	App->SetApplicationScale(AppScale);
-	App->RegisterInputPreProcessor(TSharedRef<IInputProcessor>(StaticCastSharedPtr<IInputProcessor>(shared_from_this())));
+	App->RegisterInputPreProcessor(
+	    TSharedRef<IInputProcessor>(StaticCastSharedPtr<IInputProcessor>(shared_from_this())));
 	App->OnPreRender.AddLambda([this](float)
 	{
 		const double Now = FPlatformTime::Seconds();
@@ -262,13 +276,13 @@ bool FTestApp::Initialize(const FString& CommandLine)
 		return false;
 	}
 	MainWindow = SNew(SWindow)
-		.Title(FString::Format("{} ({})", Info.Title, ToString(Backend)))
-		.ClientSize(Info.ClientSize)
-		.OnWindowClosed([this](const TSharedRef<SWindow>&) { App->RequestQuit(); });
+	                 .Title(FString::Format("{} ({})", Info.Title, ToString(Backend)))
+	                 .ClientSize(Info.ClientSize)
+	                 .OnWindowClosed([this](const TSharedRef<SWindow>&) { App->RequestQuit(); });
 	App->AddWindow(ToSharedRef(MainWindow));
 	MainWindow->SetContent(MakeContent());
 	OnStarted();
-	UE_LOG(LogTestApp, Display, "{} on {}: {}", Info.Name, ToString(Backend), Device->GetAdapterName());
+	GENESIS_LOG(LogTestApp, Display, "{} on {}: {}", Info.Name, ToString(Backend), Device->GetAdapterName());
 	return true;
 }
 
@@ -311,7 +325,7 @@ void FTestApp::Shutdown()
 {
 	if (!SelfTestDir.IsEmpty())
 	{
-		UE_LOG(LogTestApp, Display, "{}: {} checks, {} failed", Info.Name, Checks, Failures);
+		GENESIS_LOG(LogTestApp, Display, "{}: {} checks, {} failed", Info.Name, Checks, Failures);
 	}
 	if (Device)
 	{
@@ -364,7 +378,7 @@ void FTestApp::SetAppScale(float Scale)
 {
 	AppScale = Scale;
 	App->SetApplicationScale(Scale);
-	UE_LOG(LogTestApp, Display, "App scale {:.2f}", AppScale);
+	GENESIS_LOG(LogTestApp, Display, "App scale {:.2f}", AppScale);
 }
 
 void FTestApp::SimulateDpiChange(float NewScale)
@@ -374,22 +388,24 @@ void FTestApp::SimulateDpiChange(float NewScale)
 	RECT Rect;
 	GetWindowRect(Hwnd, &Rect);
 	const float Ratio = NewScale / MainWindow->GetNativeWindow()->GetDpiScale();
-	RECT Suggested{ Rect.left, Rect.top, Rect.left + FMath::RoundToInt((Rect.right - Rect.left) * Ratio), Rect.top + FMath::RoundToInt((Rect.bottom - Rect.top) * Ratio) };
+	RECT Suggested{Rect.left, Rect.top, Rect.left + FMath::RoundToInt((Rect.right - Rect.left) * Ratio),
+	    Rect.top + FMath::RoundToInt((Rect.bottom - Rect.top) * Ratio)};
 	const WORD Dpi = static_cast<WORD>(FMath::RoundToInt(NewScale * 96.0f));
-	UE_LOG(LogTestApp, Display, "Simulating WM_DPICHANGED to {} dpi", Dpi);
+	GENESIS_LOG(LogTestApp, Display, "Simulating WM_DPICHANGED to {} dpi", Dpi);
 	SendMessageW(Hwnd, WM_DPICHANGED, MAKEWPARAM(Dpi, Dpi), reinterpret_cast<LPARAM>(&Suggested));
 }
 
 float FTestApp::GetNativeDpiScale() const
 {
-	return static_cast<float>(GetDpiForWindow(static_cast<HWND>(MainWindow->GetNativeWindow()->GetNativeHandle()))) / 96.0f;
+	return static_cast<float>(GetDpiForWindow(static_cast<HWND>(MainWindow->GetNativeWindow()->GetNativeHandle()))) /
+	    96.0f;
 }
 
 FString FTestApp::GetStatusLine() const
 {
 	const float Dpi = MainWindow ? MainWindow->GetNativeWindow()->GetDpiScale() : 1.0f;
-	return FString::Format("{} · {} · DPI {:.0f}% · app scale {:.0f}% · {:.0f} fps", ToString(Backend), Device->GetAdapterName(), Dpi * 100.0f,
-		AppScale * 100.0f, FramesPerSecond);
+	return FString::Format("{} · {} · DPI {:.0f}% · app scale {:.0f}% · {:.0f} fps", ToString(Backend),
+	    Device->GetAdapterName(), Dpi * 100.0f, AppScale * 100.0f, FramesPerSecond);
 }
 
 bool FTestApp::HandleKeyDownEvent(FSlateApplication&, const FKeyEvent& Event)
@@ -398,7 +414,7 @@ bool FTestApp::HandleKeyDownEvent(FSlateApplication&, const FKeyEvent& Event)
 	{
 	case EKey::F2:
 	{
-		const float Scales[] = { 1.0f, 1.25f, 1.5f, 2.0f };
+		const float Scales[] = {1.0f, 1.25f, 1.5f, 2.0f};
 		int32 Next = 0;
 		for (int32 I = 0; I < 4; ++I)
 		{
@@ -430,7 +446,7 @@ namespace
 	{
 		return ToSharedRef(Window ? Window->GetNativeWindow() : Main->GetNativeWindow());
 	}
-}
+} // namespace
 
 void FTestApp::MoveMouse(FVector2 Position, const SWindow* Window)
 {
@@ -489,7 +505,8 @@ void FTestApp::SetModifierKeys(bool bShift, bool bControl, bool bAlt)
 {
 	BYTE State[256];
 	GetKeyboardState(State);
-	const auto Set = [&State](int Key, bool bDown) { State[Key] = bDown ? static_cast<BYTE>(0x80) : static_cast<BYTE>(0); };
+	const TFunction<void(int, bool)> Set = [&State](int Key, bool bDown)
+	{ State[Key] = bDown ? static_cast<BYTE>(0x80) : static_cast<BYTE>(0); };
 	Set(VK_SHIFT, bShift);
 	Set(VK_LSHIFT, bShift);
 	Set(VK_CONTROL, bControl);
@@ -514,7 +531,7 @@ FVector2 FTestApp::GetCenter(const SWidget& Widget)
 
 bool FTestApp::PointAtText(std::string_view Text, bool bClick, const SWindow* Window)
 {
-	const auto Match = [Text](STextBlock& Block) { return Block.GetText().View() == Text; };
+	const TFunction<bool(STextBlock&)> Match = [Text](STextBlock& Block) { return Block.GetText().View() == Text; };
 	STextBlock* Found = nullptr;
 	const SWindow* FoundIn = nullptr;
 	for (const TSharedRef<SWindow>& Candidate : TArray<TSharedRef<SWindow>>(App->GetWindows()))
@@ -590,19 +607,20 @@ void FTestApp::Capture(const FString& Name)
 		{
 			DwmFlush();
 		}
-		const FString Path = SelfTestDir + FString::Format("{}_{}_{}_{}.png", Info.Name, ToString(Backend), GetWindowLabel(*Window), Name);
+		const FString Path = SelfTestDir +
+		    FString::Format("{}_{}_{}_{}.png", Info.Name, ToString(Backend), GetWindowLabel(*Window), Name);
 		const bool bOk = CaptureWindowClientToPng(Hwnd, Path);
 		SetWindowPos(Hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 		Expect(bOk, FString::Format("screenshot {}", Path));
-		UE_LOG(LogTestApp, Display, "Screenshot {} ({}x{} px, DPI scale {:.2f}, app scale {:.2f})", Path,
-			Window->GetPixelSize().X, Window->GetPixelSize().Y, Window->GetNativeWindow()->GetDpiScale(), AppScale);
+		GENESIS_LOG(LogTestApp, Display, "Screenshot {} ({}x{} px, DPI scale {:.2f}, app scale {:.2f})", Path,
+		    Window->GetPixelSize().X, Window->GetPixelSize().Y, Window->GetNativeWindow()->GetDpiScale(), AppScale);
 	}
 }
 
 void FTestApp::SetLastEvent(const FString& Event)
 {
 	LastEvent = Event;
-	UE_LOG(LogTestApp, Log, "{}", Event);
+	GENESIS_LOG(LogTestApp, Log, "{}", Event);
 }
 
 bool FTestApp::Expect(bool bCondition, const FString& What)
@@ -610,12 +628,12 @@ bool FTestApp::Expect(bool bCondition, const FString& What)
 	++Checks;
 	if (bCondition)
 	{
-		UE_LOG(LogTestApp, Display, "Check passed: {}", What);
+		GENESIS_LOG(LogTestApp, Display, "Check passed: {}", What);
 	}
 	else
 	{
 		++Failures;
-		UE_LOG(LogTestApp, Error, "Check FAILED: {}", What);
+		GENESIS_LOG(LogTestApp, Error, "Check FAILED: {}", What);
 	}
 	return bCondition;
 }

@@ -15,7 +15,10 @@ struct FArrangedWidget
 	TSharedRef<SWidget> Widget;
 	FGeometry Geometry;
 
-	FArrangedWidget(TSharedRef<SWidget> InWidget, const FGeometry& InGeometry) : Widget(std::move(InWidget)), Geometry(InGeometry) {}
+	FArrangedWidget(TSharedRef<SWidget> InWidget, const FGeometry& InGeometry)
+	    : Widget(std::move(InWidget)), Geometry(InGeometry)
+	{
+	}
 };
 
 class FArrangedChildren
@@ -31,13 +34,34 @@ public:
 		}
 	}
 
-	int32 Num() const { return static_cast<int32>(Widgets.size()); }
-	FArrangedWidget& operator[](int32 Index) { return Widgets[Index]; }
-	const FArrangedWidget& operator[](int32 Index) const { return Widgets[Index]; }
-	auto begin() { return Widgets.begin(); }
-	auto end() { return Widgets.end(); }
-	auto begin() const { return Widgets.begin(); }
-	auto end() const { return Widgets.end(); }
+	int32 Num() const
+	{
+		return static_cast<int32>(Widgets.size());
+	}
+	FArrangedWidget& operator[](int32 Index)
+	{
+		return Widgets[Index];
+	}
+	const FArrangedWidget& operator[](int32 Index) const
+	{
+		return Widgets[Index];
+	}
+	TArray<FArrangedWidget>::iterator begin()
+	{
+		return Widgets.begin();
+	}
+	TArray<FArrangedWidget>::iterator end()
+	{
+		return Widgets.end();
+	}
+	TArray<FArrangedWidget>::const_iterator begin() const
+	{
+		return Widgets.begin();
+	}
+	TArray<FArrangedWidget>::const_iterator end() const
+	{
+		return Widgets.end();
+	}
 
 	TArray<FArrangedWidget> Widgets;
 };

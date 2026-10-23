@@ -1,6 +1,7 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
-#include "Containers/UnrealString.h"
+#include "Containers/String.h"
+#include "Containers/ContainerAliases.h"
 
 #include "Misc/StringFormat.h"
 
@@ -11,15 +12,35 @@ namespace FUtf8
 {
 	char32_t Decode(const char*& Cursor, const char* End)
 	{
-		const auto Byte = [](const char* P) { return static_cast<uint8>(*P); };
+		const TFunction<uint8(const char*)> Byte = [](const char* P) { return static_cast<uint8>(*P); };
 		const uint8 C0 = Byte(Cursor);
 		int32 Extra = 0;
 		char32_t CodePoint = 0;
-		if (C0 < 0x80) { ++Cursor; return C0; }
-		else if ((C0 & 0xE0) == 0xC0) { Extra = 1; CodePoint = C0 & 0x1F; }
-		else if ((C0 & 0xF0) == 0xE0) { Extra = 2; CodePoint = C0 & 0x0F; }
-		else if ((C0 & 0xF8) == 0xF0) { Extra = 3; CodePoint = C0 & 0x07; }
-		else { ++Cursor; return 0xFFFD; }
+		if (C0 < 0x80)
+		{
+			++Cursor;
+			return C0;
+		}
+		else if ((C0 & 0xE0) == 0xC0)
+		{
+			Extra = 1;
+			CodePoint = C0 & 0x1F;
+		}
+		else if ((C0 & 0xF0) == 0xE0)
+		{
+			Extra = 2;
+			CodePoint = C0 & 0x0F;
+		}
+		else if ((C0 & 0xF8) == 0xF0)
+		{
+			Extra = 3;
+			CodePoint = C0 & 0x07;
+		}
+		else
+		{
+			++Cursor;
+			return 0xFFFD;
+		}
 
 		if (End - Cursor <= Extra)
 		{
@@ -78,7 +99,7 @@ namespace FUtf8
 		}
 		return Count;
 	}
-}
+} // namespace FUtf8
 
 FString FString::FromWide(std::wstring_view Text)
 {
@@ -159,7 +180,8 @@ FString FString::ToUpper() const
 	std::u8string Out = Data;
 	for (char8_t& C : Out)
 	{
-		if (C >= u8'a' && C <= u8'z') C = static_cast<char8_t>(C - u8'a' + u8'A');
+		if (C >= u8'a' && C <= u8'z')
+			C = static_cast<char8_t>(C - u8'a' + u8'A');
 	}
 	return FString(std::move(Out));
 }
@@ -169,18 +191,22 @@ FString FString::ToLower() const
 	std::u8string Out = Data;
 	for (char8_t& C : Out)
 	{
-		if (C >= u8'A' && C <= u8'Z') C = static_cast<char8_t>(C - u8'A' + u8'a');
+		if (C >= u8'A' && C <= u8'Z')
+			C = static_cast<char8_t>(C - u8'A' + u8'a');
 	}
 	return FString(std::move(Out));
 }
 
 FString FString::TrimStartAndEnd() const
 {
-	const auto IsSpace = [](char8_t C) { return C == u8' ' || C == u8'\t' || C == u8'\r' || C == u8'\n'; };
+	const TFunction<bool(char8_t)> IsSpace = [](char8_t C)
+	{ return C == u8' ' || C == u8'\t' || C == u8'\r' || C == u8'\n'; };
 	SIZE_T First = 0;
 	SIZE_T Last = Data.size();
-	while (First < Last && IsSpace(Data[First])) ++First;
-	while (Last > First && IsSpace(Data[Last - 1])) --Last;
+	while (First < Last && IsSpace(Data[First]))
+		++First;
+	while (Last > First && IsSpace(Data[Last - 1]))
+		--Last;
 	return FString(std::u8string(Data, First, Last - First));
 }
 
@@ -197,7 +223,8 @@ TArray<FString> FString::ParseIntoArray(std::string_view Delimiter, bool bCullEm
 	while (true)
 	{
 		const SIZE_T Pos = Text.find(Delimiter, Start);
-		const std::string_view Piece = Text.substr(Start, Pos == std::string_view::npos ? std::string_view::npos : Pos - Start);
+		const std::string_view Piece =
+		    Text.substr(Start, Pos == std::string_view::npos ? std::string_view::npos : Pos - Start);
 		if (!Piece.empty() || !bCullEmpty)
 		{
 			Out.emplace_back(Piece);
@@ -241,7 +268,7 @@ namespace
 		}
 		return true;
 	}
-}
+} // namespace
 
 bool FString::Equals(std::string_view Other, ESearchCase Case) const
 {

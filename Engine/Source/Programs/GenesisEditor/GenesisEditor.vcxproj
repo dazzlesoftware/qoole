@@ -39,7 +39,7 @@
     <ClCompile>
       <ConformanceMode>false</ConformanceMode>
       <PreprocessorDefinitions>__MSC__;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Renderer\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Projects\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)ScriptEditorPlugin\Public;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)MaterialEditor\Public;$(GenesisEditorDir)LandscapeEditor\Public;$(GenesisEditorDir)FoliageEditor\Public;$(GenesisEditorDir)LandscapeEditorUtilities\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir);$(ProjectDir)..\TestApps\TestAppHarness;$(GenesisThirdPartyDir)FreeType2\include;$(GenesisThirdPartyDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GenesisRuntimeDir)Geometry\Public;$(GenesisRuntimeDir)Engine\Public;$(GenesisRuntimeDir)Landscape\Public;$(GenesisRuntimeDir)Foliage\Public;$(GenesisRuntimeDir)Renderer\Public;$(GenesisRuntimeDir)Core\Public;$(GenesisRuntimeDir)Projects\Public;$(GenesisRuntimeDir)AssetCore\Public;$(GenesisRuntimeDir)ApplicationCore\Public;$(GenesisRuntimeDir)RHI\Public;$(GenesisRuntimeDir)SlateCore\Public;$(GenesisRuntimeDir)Slate\Public;$(GenesisRuntimeDir)SlateRHIRenderer\Public;$(GenesisEditorDir)ScriptEditorPlugin\Public;$(GenesisEditorDir)MapEditor\Public;$(GenesisEditorDir)MaterialEditor\Public;$(GenesisEditorDir)LandscapeEditor\Public;$(GenesisEditorDir)FoliageEditor\Public;$(GenesisEditorDir)LandscapeEditorUtilities\Public;$(GenesisEditorDir)MapCore\Public\Basic;$(GenesisEditorDir)MapCore\Public\Objects;$(GenesisEditorDir)MapCore\Public\Render;$(GenesisEditorDir)MapCore\Public\Game;$(ProjectDir);$(GenesisThirdPartyDir)FreeType2\include;$(GenesisThirdPartyDir)HarfBuzz\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -50,14 +50,15 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\TestApps\TestAppHarness\Screenshot.cpp" />
     <ClCompile Include="GenesisEditor.cpp" />
+    <ClCompile Include="GenesisEditorMain.cpp" />
     <ClCompile Include="MapEditorPanels.cpp" />
     <ClCompile Include="MapEditorPreferences.cpp" />
     <ClCompile Include="MapEditorShell.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MapEditorShell.h" />
+    <ClInclude Include="GenesisEditorApp.h" />
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="GenesisEditor.manifest" />

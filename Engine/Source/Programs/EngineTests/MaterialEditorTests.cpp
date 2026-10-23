@@ -1,6 +1,8 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 
 #include "TestHelpers.h"
+#include "Containers/ContainerAliases.h"
+#include "Templates/SharedPointer.h"
 
 #include "UITestHelpers.h"
 
@@ -38,150 +40,150 @@ namespace
 
 {
 
-struct FTempFolder
-
-{
-
-	std::filesystem::path Path = std::filesystem::temp_directory_path() / FAssetId::New().ToWide();
-
-	FTempFolder()
+	struct FTempFolder
 
 	{
 
-		std::filesystem::create_directory(Path);
-	}
+		std::filesystem::path Path = std::filesystem::temp_directory_path() / FAssetId::New().ToWide();
 
-	~FTempFolder()
+		FTempFolder()
 
-	{
+		{
 
-		std::error_code E;
+			std::filesystem::create_directory(Path);
+		}
 
-		std::filesystem::remove_all(Path, E);
-	}
+		~FTempFolder()
 
-	FString File(const char* N) const
+		{
 
-	{
+			std::error_code E;
 
-		return FString::FromWide((Path / N).wstring());
-	}
-};
+			std::filesystem::remove_all(Path, E);
+		}
 
-FMaterialAsset ColorGraph(float R, float G, float B)
+		FString File(const char* N) const
 
-{
+		{
 
-	FMaterialAsset M;
+			return FString::FromWide((Path / N).wstring());
+		}
+	};
 
-	M.Graph = FMaterialGraph{};
-
-	auto N = M.Graph->Add(EMaterialExpression::Constant3Vector);
-
-	auto* V = M.Graph->Find(N);
-
-	V->Value[0] = R;
-
-	V->Value[1] = G;
-
-	V->Value[2] = B;
-
-	M.Graph->Outputs[0] = N;
-
-	return M;
-}
-
-TArray<uint8> DrawMaterial(FRHIDevice& D, FMaterialAsset M, bool Textured = false,
-						   const FLoadedMaterialSlot* Resources = nullptr,
-						   std::shared_ptr<FMaterialParameterCollectionInstance> Collection = nullptr)
-
-{
-
-	FString Error;
-
-	FNativeMeshRenderer Renderer(D);
-	if (Collection)
-		Renderer.SetParameterCollectionInstance(Collection);
-
-	auto Asset = std::make_shared<FLoadedMeshAsset>();
-
-	Asset->Data.Mesh = StaticMesh::Find("Cube");
-
-	if (Resources)
-		static_cast<FLoadedMaterialSlot&>(*Asset) = *Resources;
-	Asset->Material = M;
-
-	if (Textured)
+	FMaterialAsset ColorGraph(float R, float G, float B)
 
 	{
 
-		FTextureAsset T;
+		FMaterialAsset M;
 
-		T.Width = T.Height = 1;
+		M.Graph = FMaterialGraph{};
 
-		T.bSRGB = false;
+		uint32 N = M.Graph->Add(EMaterialExpression::Constant3Vector);
 
-		T.Pixels = {0, 0, 255, 255};
+		FMaterialNode* V = M.Graph->Find(N);
 
-		Asset->GraphTextures = {T};
+		V->Value[0] = R;
 
-		Asset->GraphTextureNormals = {false};
+		V->Value[1] = G;
+
+		V->Value[2] = B;
+
+		M.Graph->Outputs[0] = N;
+
+		return M;
 	}
 
-	FNativeMeshDrawList List;
+	TArray<uint8> DrawMaterial(FRHIDevice& D, FMaterialAsset M, bool Textured = false,
+	    const FLoadedMaterialSlot* Resources = nullptr,
+	    std::shared_ptr<FMaterialParameterCollectionInstance> Collection = nullptr)
 
-	Matrix44 T;
+	{
 
-	T.SetTranslation(Vector3d(0, 220, 0));
+		FString Error;
 
-	REQUIRE(List.Append(Asset, T, Error));
+		FNativeMeshRenderer Renderer(D);
+		if (Collection)
+			Renderer.SetParameterCollectionInstance(Collection);
 
-	FRHITextureDesc TD;
+		TSharedPtr<FLoadedMeshAsset> Asset = std::make_shared<FLoadedMeshAsset>();
 
-	TD.Width = TD.Height = 64;
+		Asset->Data.Mesh = StaticMesh::Find("Cube");
 
-	TD.bRenderTarget = true;
+		if (Resources)
+			static_cast<FLoadedMaterialSlot&>(*Asset) = *Resources;
+		Asset->Material = M;
 
-	auto Target = D.CreateTexture(TD);
+		if (Textured)
 
-	TD.Format = EPixelFormat::D32_FLOAT;
+		{
 
-	auto Depth = D.CreateTexture(TD);
+			FTextureAsset T;
 
-	REQUIRE(Target);
+			T.Width = T.Height = 1;
 
-	REQUIRE(Depth);
+			T.bSRGB = false;
 
-	auto& Cmd = D.BeginFrame();
+			T.Pixels = {0, 0, 255, 255};
 
-	auto Frame = Renderer.Prepare(List, Target->GetFormat(), Error);
+			Asset->GraphTextures = {T};
 
-	REQUIRE_MESSAGE(Frame, *Error);
+			Asset->GraphTextureNormals = {false};
+		}
 
-	Cmd.BeginRenderPass(*Target, *Depth, FLinearColor(0, 0, 0, 1), 1.f);
+		FNativeMeshDrawList List;
 
-	FNativeMeshView V;
+		Matrix44 T;
 
-	V.Width = V.Height = 64;
+		T.SetTranslation(Vector3d(0, 220, 0));
 
-	V.ProjectionScale = 64;
+		REQUIRE(List.Append(Asset, T, Error));
 
-	V.bLit = false;
+		FRHITextureDesc TD;
 
-	Renderer.Draw(Cmd, *Frame, V, false);
+		TD.Width = TD.Height = 64;
 
-	Cmd.EndRenderPass();
+		TD.bRenderTarget = true;
 
-	D.EndFrame();
+		TSharedPtr<FRHITexture> Target = D.CreateTexture(TD);
 
-	TArray<uint8> Pixels;
+		TD.Format = EPixelFormat::D32_FLOAT;
 
-	REQUIRE(D.ReadbackTexture(*Target, Pixels));
+		TSharedPtr<FRHITexture> Depth = D.CreateTexture(TD);
 
-	D.WaitIdle();
+		REQUIRE(Target);
 
-	return Pixels;
-}
+		REQUIRE(Depth);
+
+		FRHICommandList& Cmd = D.BeginFrame();
+
+		TUniquePtr<FNativeMeshFrame> Frame = Renderer.Prepare(List, Target->GetFormat(), Error);
+
+		REQUIRE_MESSAGE(Frame, *Error);
+
+		Cmd.BeginRenderPass(*Target, *Depth, FLinearColor(0, 0, 0, 1), 1.f);
+
+		FNativeMeshView V;
+
+		V.Width = V.Height = 64;
+
+		V.ProjectionScale = 64;
+
+		V.bLit = false;
+
+		Renderer.Draw(Cmd, *Frame, V, false);
+
+		Cmd.EndRenderPass();
+
+		D.EndFrame();
+
+		TArray<uint8> Pixels;
+
+		REQUIRE(D.ReadbackTexture(*Target, Pixels));
+
+		D.WaitIdle();
+
+		return Pixels;
+	}
 
 } // namespace
 
@@ -205,27 +207,26 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Green.asset"), Green, Error));
 		FMaterialAsset Parent;
 		Parent.Graph = FMaterialGraph{};
-		auto& G = *Parent.Graph;
-		const auto Sample = G.Add(EMaterialExpression::TextureSampleParameter2D);
+		FMaterialGraph& G = *Parent.Graph;
+		const uint32 Sample = G.Add(EMaterialExpression::TextureSampleParameter2D);
 		G.Find(Sample)->ParameterName = "Albedo";
 		G.Find(Sample)->Texture = {Red.Id, "/Game/Red"};
-		const auto RGB = G.Add(EMaterialExpression::ComponentMask);
+		const uint32 RGB = G.Add(EMaterialExpression::ComponentMask);
 		G.Find(RGB)->Inputs[0] = Sample;
 		G.Outputs[0] = RGB;
-		const auto Roughness = G.Add(EMaterialExpression::ScalarParameter);
+		const uint32 Roughness = G.Add(EMaterialExpression::ScalarParameter);
 		G.Find(Roughness)->ParameterName = "Roughness";
 		G.Outputs[1] = Roughness;
-		const auto Vector = G.Add(EMaterialExpression::VectorParameter);
+		const uint32 Vector = G.Add(EMaterialExpression::VectorParameter);
 		G.Find(Vector)->ParameterName = "Color";
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Parent, Error), *Error);
-		auto Dynamic = FMaterialInstanceDynamic::Create(Parent, Error);
+		TUniquePtr<FMaterialInstanceDynamic> Dynamic = FMaterialInstanceDynamic::Create(Parent, Error);
 		REQUIRE_MESSAGE(Dynamic, *Error);
 		REQUIRE(Dynamic->SetTextureParameterValue("Albedo", {Green.Id, "/Game/Green"}, Error));
 		REQUIRE(Dynamic->SetScalarParameterValue("Roughness", .5f, Error));
 		REQUIRE(Dynamic->SetVectorParameterValue("Color", FLinearColor(.2f, .3f, .4f, 1), Error));
 		CHECK_FALSE(Dynamic->SetScalarParameterValue("Color", 1, Error));
-		CHECK_FALSE(
-			Dynamic->SetScalarParameterValue("Roughness", std::numeric_limits<float>::quiet_NaN(), Error));
+		CHECK_FALSE(Dynamic->SetScalarParameterValue("Roughness", std::numeric_limits<float>::quiet_NaN(), Error));
 		CHECK_FALSE(Dynamic->SetTextureParameterValue("Albedo", {}, Error));
 		CHECK(Dynamic->GetMaterial().Graph->Find(Sample)->Texture.Id == Green.Id);
 		CHECK(Parent.Graph->Find(Sample)->Texture.Id == Red.Id);
@@ -253,14 +254,14 @@ TEST_SUITE("MaterialGraph")
 		FLoadedMaterialSlot R, V;
 		REQUIRE(Loader.LoadMaterialResources(Parent, R, Error));
 		REQUIRE(Loader.LoadMaterialResources(Loaded, V, Error));
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			FRHIDeviceDesc DD;
 			DD.Backend = Backend;
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-			auto D = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> D = FRHIDevice::Create(DD);
 			REQUIRE(D);
-			auto RP = DrawMaterial(*D, Parent, false, &R), GP = DrawMaterial(*D, Loaded, false, &V);
+			TArray<uint8> RP = DrawMaterial(*D, Parent, false, &R), GP = DrawMaterial(*D, Loaded, false, &V);
 			const int Pixel = (32 * 64 + 32) * 4;
 			CHECK(RP[Pixel] > 200);
 			CHECK(RP[Pixel + 1] < 5);
@@ -277,7 +278,7 @@ TEST_SUITE("MaterialGraph")
 		FUITestApp App;
 		FMaterialAsset Parent;
 		Parent.Graph = FMaterialGraph{};
-		const auto Id = Parent.Graph->Add(EMaterialExpression::ScalarParameter);
+		const uint32 Id = Parent.Graph->Add(EMaterialExpression::ScalarParameter);
 		Parent.Graph->Find(Id)->ParameterName = "Tint";
 		Parent.Graph->Find(Id)->Value[0] = .5f;
 		Parent.Graph->Outputs[0] = Id;
@@ -285,21 +286,21 @@ TEST_SUITE("MaterialGraph")
 		FAssetPackage Base;
 		REQUIRE(FRenderAssetCodec::EncodeMaterial(Parent, Base, Error));
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Base.asset"), Base, Error));
-		const auto Registry = MakeShared<FAssetRegistry>();
+		const TSharedRef<FAssetRegistry> Registry = MakeShared<FAssetRegistry>();
 		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 		REQUIRE(Registry->Scan());
-		const auto Browser =
-			SNew(SContentBrowser)
-				.Registry(Registry)
-				.Roots(TArray<FContentBrowserRoot>{{"Content", FString::FromWide(Temp.Path.wstring())}})
-				.InitialPath(FString::FromWide(Temp.Path.wstring()));
+		const TSharedRef<SContentBrowser> Browser =
+		    SNew(SContentBrowser)
+		        .Registry(Registry)
+		        .Roots(TArray<FContentBrowserRoot>{{"Content", FString::FromWide(Temp.Path.wstring())}})
+		        .InitialPath(FString::FromWide(Temp.Path.wstring()));
 		App.AddWindow(Browser);
 		App.Tick();
 		Browser->SetSelectedPath(Temp.File("Base.asset"));
-		const auto File = Browser->CreateMaterialInstance();
+		const FString File = Browser->CreateMaterialInstance();
 		REQUIRE_FALSE(File.IsEmpty());
 		CHECK(Browser->GetAssetType(File) == EContentAssetType::Material);
-		const auto* Data = Registry->FindByFile(File);
+		const FAssetData* Data = Registry->FindByFile(File);
 		REQUIRE(Data);
 		FMaterialEditorArgs Args;
 		Args.Registry = Registry;
@@ -307,29 +308,32 @@ TEST_SUITE("MaterialGraph")
 		Args.Name = "Instance QA";
 		int Saved = 0;
 		Args.OnSaved = FSimpleDelegate::CreateLambda([&] { ++Saved; });
-		const auto Window = FMaterialEditor::Open(Args, Error);
+		const TSharedPtr<SWindow> Window = FMaterialEditor::Open(Args, Error);
 		REQUIRE_MESSAGE(Window, *Error);
 		App.Tick();
-		const auto Click = [&](const FString& Text) {
-			std::function<SWidget*(SWidget&)> Find = [&](SWidget& W) -> SWidget* {
-				if (auto* T = dynamic_cast<STextBlock*>(&W); T && T->GetText() == Text)
+		const TFunction<void(const FString&)> Click = [&](const FString& Text)
+		{
+			std::function<SWidget*(SWidget&)> Find = [&](SWidget& W) -> SWidget*
+			{
+				if (STextBlock* T = dynamic_cast<STextBlock*>(&W); T && T->GetText() == Text)
 					return T;
-				for (const auto& Child : W.GetArrangedChildren())
-					if (auto* Result = Find(Child.Widget.Get()))
+				for (const FArrangedWidget& Child : W.GetArrangedChildren())
+					if (SWidget* Result = Find(Child.Widget.Get()))
 						return Result;
 				return nullptr;
 			};
-			auto* Widget = Find(*Window);
+			SWidget* Widget = Find(*Window);
 			REQUIRE_MESSAGE(Widget, *Text);
 			App.ClickWidget(*Widget);
 			App.Tick();
 		};
 		Click("Override");
 		SSpinBox<float>* Scalar = nullptr;
-		std::function<void(SWidget&)> FindSpin = [&](SWidget& W) {
-			if (auto* V = dynamic_cast<SSpinBox<float>*>(&W))
+		std::function<void(SWidget&)> FindSpin = [&](SWidget& W)
+		{
+			if (SSpinBox<float>* V = dynamic_cast<SSpinBox<float>*>(&W))
 				Scalar = V;
-			for (const auto& C : W.GetArrangedChildren())
+			for (const FArrangedWidget& C : W.GetArrangedChildren())
 				FindSpin(C.Widget.Get());
 		};
 		FindSpin(*Window);
@@ -368,7 +372,7 @@ TEST_SUITE("MaterialGraph")
 		FString Error;
 		FMaterialAsset Parent;
 		Parent.Graph = FMaterialGraph{};
-		auto P = Parent.Graph->Add(EMaterialExpression::ScalarParameter);
+		uint32 P = Parent.Graph->Add(EMaterialExpression::ScalarParameter);
 		Parent.Graph->Find(P)->ParameterName = "Tint";
 		Parent.Graph->Outputs[0] = P;
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Parent, Error), *Error);
@@ -390,12 +394,11 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 		REQUIRE(Registry.Scan());
 		FMaterialAsset Loaded;
-		REQUIRE_MESSAGE(FRenderAssetLoader(Registry).LoadMaterial({Second.Id, "/Game/Second"}, Loaded, Error),
-						*Error);
+		REQUIRE_MESSAGE(FRenderAssetLoader(Registry).LoadMaterial({Second.Id, "/Game/Second"}, Loaded, Error), *Error);
 		CHECK(Loaded.Graph->Find(P)->Value[0] == .75f);
 		CHECK(Loaded.GraphDXIL == Parent.GraphDXIL);
 		CHECK(Loaded.CookedGraphSource == Parent.CookedGraphSource);
-		auto Previous = Loaded;
+		FMaterialAsset Previous = Loaded;
 		Instance.Parameters[0].Name = "Missing";
 		CHECK_FALSE(FMaterialInstance::Resolve(Parent, Instance, Loaded, Error));
 		CHECK(Loaded.Graph->Find(P)->Value[0] == .75f);
@@ -413,32 +416,32 @@ TEST_SUITE("MaterialGraph")
 	{
 		FMaterialAsset M;
 		M.Graph = FMaterialGraph{};
-		auto& G = *M.Graph;
-		auto Parameter = G.Add(EMaterialExpression::VectorParameter);
+		FMaterialGraph& G = *M.Graph;
+		uint32 Parameter = G.Add(EMaterialExpression::VectorParameter);
 		G.Find(Parameter)->Value[0] = 1;
-		auto RGB = G.Add(EMaterialExpression::ComponentMask);
+		uint32 RGB = G.Add(EMaterialExpression::ComponentMask);
 		G.Find(RGB)->Inputs[0] = Parameter;
 		G.Outputs[0] = RGB;
-		auto Scalar = G.Add(EMaterialExpression::ScalarParameter);
+		uint32 Scalar = G.Add(EMaterialExpression::ScalarParameter);
 		G.Find(Scalar)->Value[0] = .6f;
 		G.Outputs[1] = Scalar;
 		FString Error;
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(M, Error), *Error);
-		auto Green = M;
+		FMaterialAsset Green = M;
 		Green.Graph->Find(Parameter)->Value[0] = 0;
 		Green.Graph->Find(Parameter)->Value[1] = 1;
 		FMaterialGraphProgram Program;
 		REQUIRE(FMaterialGraphCompiler::Compile(*Green.Graph, Program, Error));
 		CHECK(Program.PixelShaderSource == M.CookedGraphSource);
 		CHECK(Program.Parameters.size() == 2);
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			FRHIDeviceDesc DD;
 			DD.Backend = Backend;
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-			auto D = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> D = FRHIDevice::Create(DD);
 			REQUIRE(D);
-			auto R = DrawMaterial(*D, M), V = DrawMaterial(*D, Green);
+			TArray<uint8> R = DrawMaterial(*D, M), V = DrawMaterial(*D, Green);
 			const int P = (32 * 64 + 32) * 4;
 			CHECK(R[P] > 200);
 			CHECK(R[P + 1] < 5);
@@ -451,31 +454,30 @@ TEST_SUITE("MaterialGraph")
 	{
 		for (int I = int(EMaterialExpression::Reroute); I < int(EMaterialExpression::Count); ++I)
 		{
-			auto Type = static_cast<EMaterialExpression>(I);
+			EMaterialExpression Type = static_cast<EMaterialExpression>(I);
 			if (Type == EMaterialExpression::Comment || Type == EMaterialExpression::ScalarParameter ||
-				Type == EMaterialExpression::VectorParameter ||
-				Type == EMaterialExpression::TextureSampleParameter2D ||
-				Type == EMaterialExpression::MaterialFunctionCall ||
-				Type == EMaterialExpression::ScalarCollectionParameter ||
-				Type == EMaterialExpression::VectorCollectionParameter ||
-				Type == EMaterialExpression::MakeMaterialAttributes ||
-				Type == EMaterialExpression::BreakMaterialAttributes ||
-				Type == EMaterialExpression::BlendMaterialAttributes)
+			    Type == EMaterialExpression::VectorParameter || Type == EMaterialExpression::TextureSampleParameter2D ||
+			    Type == EMaterialExpression::MaterialFunctionCall ||
+			    Type == EMaterialExpression::ScalarCollectionParameter ||
+			    Type == EMaterialExpression::VectorCollectionParameter ||
+			    Type == EMaterialExpression::MakeMaterialAttributes ||
+			    Type == EMaterialExpression::BreakMaterialAttributes ||
+			    Type == EMaterialExpression::BlendMaterialAttributes)
 				continue;
 			FMaterialAsset M;
 			M.Graph = FMaterialGraph{};
-			auto& G = *M.Graph;
-			auto N = G.Add(Type);
+			FMaterialGraph& G = *M.Graph;
+			uint32 N = G.Add(Type);
 			int Width = 1;
 			if (Type == EMaterialExpression::Rotator)
 			{
-				auto UV = G.Add(EMaterialExpression::TextureCoordinate);
+				uint32 UV = G.Add(EMaterialExpression::TextureCoordinate);
 				G.Find(N)->Inputs[0] = UV;
 				Width = 2;
 			}
 			if (Type == EMaterialExpression::CrossProduct)
 			{
-				auto V = G.Add(EMaterialExpression::Constant3Vector);
+				uint32 V = G.Add(EMaterialExpression::Constant3Vector);
 				G.Find(N)->Inputs[0] = V;
 				G.Find(N)->Inputs[1] = V;
 				Width = 3;
@@ -484,20 +486,20 @@ TEST_SUITE("MaterialGraph")
 				Width = 2;
 			if (Width == 2)
 			{
-				auto Append = G.Add(EMaterialExpression::AppendVector);
+				uint32 Append = G.Add(EMaterialExpression::AppendVector);
 				G.Find(Append)->Inputs[0] = N;
 				G.Outputs[0] = Append;
 			}
 			else
 				G.Outputs[Width == 3 ? 0 : 1] = N;
 			FString Error;
-			REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(M, Error), MaterialExpressionName(Type),
-							": ", *Error);
+			REQUIRE_MESSAGE(
+			    FMaterialEditingLibrary::CompileMaterial(M, Error), MaterialExpressionName(Type), ": ", *Error);
 			CHECK_FALSE(M.GraphDXIL.empty());
 			CHECK_FALSE(M.GraphSPIRV.empty());
 			FMaterialGraphProgram Before, After;
 			REQUIRE(FMaterialGraphCompiler::Compile(G, Before, Error));
-			auto Comment = G.Add(EMaterialExpression::Comment);
+			uint32 Comment = G.Add(EMaterialExpression::Comment);
 			G.Find(Comment)->Description = "Editor-only annotation";
 			G.Find(N)->Description = "Node annotation";
 			REQUIRE(FMaterialGraphCompiler::Compile(G, After, Error));
@@ -510,21 +512,21 @@ TEST_SUITE("MaterialGraph")
 	TEST_CASE("Clipboard preserves internal wires and atomically rejects invalid data")
 	{
 		FUITestApp App;
-		auto M = std::make_shared<FMaterialAsset>();
+		TSharedPtr<FMaterialAsset> M = std::make_shared<FMaterialAsset>();
 		M->Graph = FMaterialGraph{};
-		auto A = M->Graph->Add(EMaterialExpression::Constant);
-		auto B = M->Graph->Add(EMaterialExpression::Multiply);
+		uint32 A = M->Graph->Add(EMaterialExpression::Constant);
+		uint32 B = M->Graph->Add(EMaterialExpression::Multiply);
 		M->Graph->Find(B)->Inputs[0] = A;
 		M->Graph->Outputs[1] = B;
-		const auto Canvas = SNew(SMaterialGraph).Material(M);
+		const TSharedRef<SMaterialGraph> Canvas = SNew(SMaterialGraph).Material(M);
 		App.AddWindow(Canvas, FVector2(1000, 700));
 		App.Tick();
 		Canvas->SetNodeSelection({A, B});
-		const auto Clipboard = Canvas->CopySelection();
+		const FString Clipboard = Canvas->CopySelection();
 		FString Error;
 		REQUIRE_MESSAGE(Canvas->PasteNodes(Clipboard, FVector2(600, 300), Error), *Error);
 		REQUIRE(Canvas->GetSelectedNodes().size() == 2);
-		auto NewA = Canvas->GetSelectedNodes()[0], NewB = Canvas->GetSelectedNodes()[1];
+		unsigned int NewA = Canvas->GetSelectedNodes()[0], NewB = Canvas->GetSelectedNodes()[1];
 		CHECK(NewA != A);
 		CHECK(NewB != B);
 		CHECK(M->Graph->Find(NewB)->Inputs[0] == NewA);
@@ -539,12 +541,13 @@ TEST_SUITE("MaterialGraph")
 	TEST_CASE("Background compiler publishes only the latest requested revision")
 	{
 		FMaterialCompilationManager Compiler;
-		auto M = ColorGraph(1, 0, 0);
+		FMaterialAsset M = ColorGraph(1, 0, 0);
 		Compiler.Submit(M, 1);
 		Compiler.Submit(ColorGraph(0, 1, 0), 2);
 		Compiler.Submit(M, 3);
 		TOptional<FMaterialCompilationResult> Result;
-		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+		const std::chrono::steady_clock::time_point Deadline =
+		    std::chrono::steady_clock::now() + std::chrono::seconds(20);
 		while (std::chrono::steady_clock::now() < Deadline)
 		{
 			Result = Compiler.TakeCompleted();
@@ -563,19 +566,19 @@ TEST_SUITE("MaterialGraph")
 
 	{
 
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 
 			FRHIDeviceDesc DD;
 			DD.Backend = Backend;
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-			auto Device = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(DD);
 
 			if (!Device && Backend == ERHIBackend::Vulkan)
 				continue;
 			REQUIRE(Device);
 
-			auto Resource = std::make_shared<int>(42);
+			TSharedPtr<int> Resource = std::make_shared<int>(42);
 			std::weak_ptr<int> Weak = Resource;
 
 			Device->BeginFrame();
@@ -589,7 +592,7 @@ TEST_SUITE("MaterialGraph")
 			FRHITextureDesc TD;
 			TD.Width = TD.Height = 1;
 			TD.InitialData = &White;
-			auto Texture = Device->CreateTexture(TD);
+			TSharedPtr<FRHITexture> Texture = Device->CreateTexture(TD);
 			REQUIRE(Texture);
 
 			Device->WaitIdle();
@@ -607,38 +610,37 @@ TEST_SUITE("MaterialGraph")
 
 		FString Error;
 
-		auto M = ColorGraph(.1f, .2f, .3f);
-		auto& G = *M.Graph;
+		FMaterialAsset M = ColorGraph(.1f, .2f, .3f);
+		FMaterialGraph& G = *M.Graph;
 
-		auto A = G.Add(EMaterialExpression::Constant);
+		uint32 A = G.Add(EMaterialExpression::Constant);
 		G.Find(A)->Value[0] = .4f;
 
-		for (auto E : {EMaterialExpression::Add, EMaterialExpression::Subtract, EMaterialExpression::Multiply,
-					   EMaterialExpression::Divide, EMaterialExpression::Lerp, EMaterialExpression::OneMinus,
-					   EMaterialExpression::Clamp})
+		for (EMaterialExpression E : {EMaterialExpression::Add, EMaterialExpression::Subtract,
+		         EMaterialExpression::Multiply, EMaterialExpression::Divide, EMaterialExpression::Lerp,
+		         EMaterialExpression::OneMinus, EMaterialExpression::Clamp})
 		{
 
-			auto B = G.Add(E);
+			uint32 B = G.Add(E);
 			G.Find(B)->Inputs[0] = A;
 			A = B;
 		}
 
 		G.Outputs[1] = A;
 
-		auto UV = G.Add(EMaterialExpression::TextureCoordinate),
-			 Scale = G.Add(EMaterialExpression::Constant2Vector);
+		uint32 UV = G.Add(EMaterialExpression::TextureCoordinate), Scale = G.Add(EMaterialExpression::Constant2Vector);
 		G.Find(Scale)->Value[0] = 2;
 		G.Find(Scale)->Value[1] = 3;
 
-		auto Multiply = G.Add(EMaterialExpression::Multiply);
+		uint32 Multiply = G.Add(EMaterialExpression::Multiply);
 		G.Find(Multiply)->Inputs[0] = UV;
 		G.Find(Multiply)->Inputs[1] = Scale;
 
-		auto Texture = G.Add(EMaterialExpression::TextureSample);
+		uint32 Texture = G.Add(EMaterialExpression::TextureSample);
 		G.Find(Texture)->Texture = {FAssetId::New(), "/Game/Texture"};
 		G.Find(Texture)->Inputs[0] = Multiply;
 
-		auto Mask = G.Add(EMaterialExpression::ComponentMask);
+		uint32 Mask = G.Add(EMaterialExpression::ComponentMask);
 		G.Find(Mask)->Inputs[0] = Texture;
 		G.Outputs[0] = Mask;
 
@@ -652,9 +654,9 @@ TEST_SUITE("MaterialGraph")
 
 	{
 
-		auto M = ColorGraph(.1f, .2f, .3f);
+		FMaterialAsset M = ColorGraph(.1f, .2f, .3f);
 
-		auto& G = *M.Graph;
+		FMaterialGraph& G = *M.Graph;
 
 		FString Error;
 
@@ -662,7 +664,7 @@ TEST_SUITE("MaterialGraph")
 
 		REQUIRE(FMaterialGraphCompiler::Compile(G, P, Error));
 
-		auto Source = P.PixelShaderSource;
+		FString Source = P.PixelShaderSource;
 
 		G.Nodes[0].X = 250;
 
@@ -672,7 +674,7 @@ TEST_SUITE("MaterialGraph")
 
 		CHECK(P.PixelShaderSource == Source);
 
-		auto A = G.Add(EMaterialExpression::Multiply);
+		uint32 A = G.Add(EMaterialExpression::Multiply);
 
 		G.Find(A)->Inputs[0] = G.Outputs[0];
 
@@ -721,7 +723,7 @@ TEST_SUITE("MaterialGraph")
 
 		FString Error;
 
-		auto M = ColorGraph(.1f, .8f, .2f);
+		FMaterialAsset M = ColorGraph(.1f, .8f, .2f);
 
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(M, Error), *Error);
 
@@ -733,7 +735,7 @@ TEST_SUITE("MaterialGraph")
 
 		P.Id = FAssetId::New();
 
-		const auto Id = P.Id;
+		const FString Id = P.Id;
 
 		REQUIRE(FRenderAssetCodec::EncodeMaterial(M, P, Error));
 
@@ -751,7 +753,7 @@ TEST_SUITE("MaterialGraph")
 
 		CHECK(Back.GraphDXIL == M.GraphDXIL);
 
-		const auto Before = P;
+		const FAssetPackage Before = P;
 
 		M.Graph->Nodes[0].Value[0] = .9f;
 
@@ -759,7 +761,7 @@ TEST_SUITE("MaterialGraph")
 
 		CHECK(P.Bulk == Before.Bulk);
 
-		auto Bad = P;
+		FAssetPackage Bad = P;
 
 		Bad.Exports["Graph"]["Outputs"][0] = 999;
 
@@ -857,8 +859,7 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(Registry.Scan());
 
 		FLoadedMeshAsset Loaded;
-		REQUIRE_MESSAGE(FRenderAssetLoader(Registry).LoadMesh({MeshPackage.Id, "/Game/Mesh"}, Loaded, Error),
-						*Error);
+		REQUIRE_MESSAGE(FRenderAssetLoader(Registry).LoadMesh({MeshPackage.Id, "/Game/Mesh"}, Loaded, Error), *Error);
 
 		REQUIRE(Loaded.Material);
 		REQUIRE(Loaded.Material->Graph);
@@ -874,17 +875,17 @@ TEST_SUITE("MaterialGraph")
 
 		FUITestApp App(1.5f);
 
-		auto M = std::make_shared<FMaterialAsset>(ColorGraph(.2f, .3f, .4f));
+		TSharedPtr<FMaterialAsset> M = std::make_shared<FMaterialAsset>(ColorGraph(.2f, .3f, .4f));
 
-		const auto Canvas = SNew(SMaterialGraph).Material(M);
+		const TSharedRef<SMaterialGraph> Canvas = SNew(SMaterialGraph).Material(M);
 
-		const auto W = App.AddWindow(Canvas, FVector2(900, 500));
+		const TSharedRef<SWindow> W = App.AddWindow(Canvas, FVector2(900, 500));
 
 		App.Tick();
 
-		auto Scalar = Canvas->AddNode(EMaterialExpression::Constant, FVector2(300, 150));
+		uint32 Scalar = Canvas->AddNode(EMaterialExpression::Constant, FVector2(300, 150));
 
-		const auto From = Canvas->GetPinPosition(Scalar, 0, true), To = Canvas->GetPinPosition(0, 1, false);
+		const FVector2 From = Canvas->GetPinPosition(Scalar, 0, true), To = Canvas->GetPinPosition(0, 1, false);
 
 		App.MouseDown(W, From);
 
@@ -929,19 +930,19 @@ TEST_SUITE("MaterialGraph")
 
 		FString Error;
 
-		auto Red = ColorGraph(1, 0, 0), Green = ColorGraph(0, 1, 0);
+		FMaterialAsset Red = ColorGraph(1, 0, 0), Green = ColorGraph(0, 1, 0);
 
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Red, Error), *Error);
 
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Green, Error), *Error);
 
-		auto Blue = ColorGraph(0, 0, 0);
+		FMaterialAsset Blue = ColorGraph(0, 0, 0);
 
-		auto T = Blue.Graph->Add(EMaterialExpression::TextureSample);
+		uint32 T = Blue.Graph->Add(EMaterialExpression::TextureSample);
 
 		Blue.Graph->Find(T)->Texture = {FAssetId::New(), "/Game/Texture"};
 
-		auto RGB = Blue.Graph->Add(EMaterialExpression::ComponentMask);
+		uint32 RGB = Blue.Graph->Add(EMaterialExpression::ComponentMask);
 
 		Blue.Graph->Find(RGB)->Inputs[0] = T;
 
@@ -949,7 +950,7 @@ TEST_SUITE("MaterialGraph")
 
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Blue, Error), *Error);
 
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 
 		{
 
@@ -959,7 +960,7 @@ TEST_SUITE("MaterialGraph")
 
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
 
-			auto D = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> D = FRHIDevice::Create(DD);
 
 			if (!D && Backend == ERHIBackend::Vulkan)
 
@@ -972,7 +973,7 @@ TEST_SUITE("MaterialGraph")
 
 			REQUIRE(D);
 
-			auto R = DrawMaterial(*D, Red), G = DrawMaterial(*D, Green);
+			TArray<uint8> R = DrawMaterial(*D, Red), G = DrawMaterial(*D, Green);
 
 			const int P = (32 * 64 + 32) * 4;
 
@@ -984,7 +985,7 @@ TEST_SUITE("MaterialGraph")
 
 			CHECK(G[P + 1] > 200);
 
-			auto B = DrawMaterial(*D, Blue, true);
+			TArray<uint8> B = DrawMaterial(*D, Blue, true);
 
 			CHECK(B[P] < 5);
 
@@ -1002,13 +1003,13 @@ TEST_SUITE("MaterialGraph")
 
 		FUITestApp App;
 
-		auto M = std::make_shared<FMaterialAsset>();
+		TSharedPtr<FMaterialAsset> M = std::make_shared<FMaterialAsset>();
 
 		M->Graph = FMaterialEditingLibrary::CreateGraph(*M);
 
-		const auto Canvas = SNew(SMaterialGraph).Material(M);
+		const TSharedRef<SMaterialGraph> Canvas = SNew(SMaterialGraph).Material(M);
 
-		const auto W = App.AddWindow(Canvas, FVector2(1280, 720));
+		const TSharedRef<SWindow> W = App.AddWindow(Canvas, FVector2(1280, 720));
 
 		App.Tick();
 
@@ -1018,7 +1019,7 @@ TEST_SUITE("MaterialGraph")
 
 		DD.bSoftwareAdapter = true;
 
-		auto D = FRHIDevice::Create(DD);
+		TUniquePtr<FRHIDevice> D = FRHIDevice::Create(DD);
 
 		REQUIRE(D);
 
@@ -1026,9 +1027,9 @@ TEST_SUITE("MaterialGraph")
 
 		REQUIRE(Renderer.Initialize());
 
-		auto Target = Renderer.CreateRenderTarget(1280, 720);
+		TSharedRef<FSlateRenderTargetRHI> Target = Renderer.CreateRenderTarget(1280, 720);
 
-		auto& Cmd = D->BeginFrame();
+		FRHICommandList& Cmd = D->BeginFrame();
 
 		Renderer.BeginFrame();
 
@@ -1042,7 +1043,8 @@ TEST_SUITE("MaterialGraph")
 
 		CHECK(Pixels.size() == 1280 * 720 * 4);
 
-		auto Dir = std::filesystem::path(FPaths::ExecutableDir().ToWide()) / "../../Saved/MaterialGraph";
+		std::filesystem::path Dir =
+		    std::filesystem::path(FPaths::ExecutableDir().ToWide()) / "../../Saved/MaterialGraph";
 
 		std::filesystem::create_directories(Dir);
 
@@ -1058,14 +1060,14 @@ TEST_SUITE("MaterialGraph")
 		FMaterialEditingLibrary::ClearShaderCache();
 		FMaterialAsset Material;
 		Material.Graph = FMaterialGraph{};
-		auto& G = *Material.Graph;
-		const auto Red = G.Add(EMaterialExpression::Constant3Vector),
-				   Green = G.Add(EMaterialExpression::Constant3Vector),
-				   Blue = G.Add(EMaterialExpression::Constant3Vector);
+		FMaterialGraph& G = *Material.Graph;
+		const uint32 Red = G.Add(EMaterialExpression::Constant3Vector),
+		             Green = G.Add(EMaterialExpression::Constant3Vector),
+		             Blue = G.Add(EMaterialExpression::Constant3Vector);
 		G.Find(Red)->Value[0] = 1;
 		G.Find(Green)->Value[1] = 1;
 		G.Find(Blue)->Value[2] = 1;
-		const auto Static = G.Add(EMaterialExpression::StaticSwitchParameter);
+		const uint32 Static = G.Add(EMaterialExpression::StaticSwitchParameter);
 		G.Find(Static)->ParameterName = "UseRed";
 		G.Find(Static)->Inputs[0] = Red;
 		G.Find(Static)->Inputs[1] = Green;
@@ -1073,44 +1075,44 @@ TEST_SUITE("MaterialGraph")
 		G.Outputs[0] = Static;
 		FString Error;
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Material, Error), *Error);
-		const auto RedShader = Material.GraphDXIL;
-		auto GreenMaterial = Material;
+		const TArray<uint8> RedShader = Material.GraphDXIL;
+		FMaterialAsset GreenMaterial = Material;
 		GreenMaterial.Graph->Find(Static)->Value[2] = 0;
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(GreenMaterial, Error));
 		CHECK(GreenMaterial.GraphDXIL != RedShader);
-		auto Again = GreenMaterial;
+		FMaterialAsset Again = GreenMaterial;
 		Again.Graph->Find(Static)->Value[2] = 1;
-		const auto Hits = FMaterialEditingLibrary::GetShaderCacheStats().Hits;
+		const uint64 Hits = FMaterialEditingLibrary::GetShaderCacheStats().Hits;
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Again, Error));
 		CHECK(Again.GraphDXIL == RedShader);
 		CHECK(FMaterialEditingLibrary::GetShaderCacheStats().Hits == Hits + 1);
-		const auto Quality = G.Add(EMaterialExpression::QualitySwitch);
+		const uint32 Quality = G.Add(EMaterialExpression::QualitySwitch);
 		G.Find(Quality)->Inputs[0] = Red;
 		G.Find(Quality)->Inputs[1] = Green;
 		G.Find(Quality)->Inputs[2] = Blue;
 		G.Outputs[0] = Quality;
-		auto Low = Material;
+		FMaterialAsset Low = Material;
 		Low.Graph->QualityLevel = 0;
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Low, Error));
-		auto High = Material;
+		FMaterialAsset High = Material;
 		High.Graph->QualityLevel = 2;
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(High, Error));
 		CHECK(Low.GraphDXIL != High.GraphDXIL);
-		const auto Platform = G.Add(EMaterialExpression::PlatformSwitch);
+		const uint32 Platform = G.Add(EMaterialExpression::PlatformSwitch);
 		G.Find(Platform)->Inputs[0] = Red;
 		G.Find(Platform)->Inputs[1] = Green;
 		G.Outputs[0] = Platform;
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Material, Error), *Error);
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			FRHIDeviceDesc DD;
 			DD.Backend = Backend;
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-			auto Device = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(DD);
 			REQUIRE(Device);
-			auto R = DrawMaterial(*Device, Again), V = DrawMaterial(*Device, GreenMaterial),
-				 L = DrawMaterial(*Device, Low), H = DrawMaterial(*Device, High),
-				 P = DrawMaterial(*Device, Material);
+			TArray<uint8> R = DrawMaterial(*Device, Again), V = DrawMaterial(*Device, GreenMaterial),
+			              L = DrawMaterial(*Device, Low), H = DrawMaterial(*Device, High),
+			              P = DrawMaterial(*Device, Material);
 			const int Center = (32 * 64 + 32) * 4;
 			CHECK(R[Center] > 200);
 			CHECK(R[Center + 1] < 5);
@@ -1126,11 +1128,11 @@ TEST_SUITE("MaterialGraph")
 		FMaterialAsset Loaded;
 		REQUIRE(FRenderAssetCodec::DecodeMaterial(Package, Loaded, Error));
 		CHECK(Loaded.Graph->QualityLevel == 2);
-		auto Canvas = SNew(SMaterialGraph).Material(std::make_shared<FMaterialAsset>(Loaded));
+		TSharedRef<SMaterialGraph> Canvas = SNew(SMaterialGraph).Material(std::make_shared<FMaterialAsset>(Loaded));
 		Canvas->SetQualityLevel(0);
 		Canvas->Undo();
 		Canvas->Redo();
-		auto Bad = *Material.Graph;
+		FMaterialGraph Bad = *Material.Graph;
 		Bad.Find(Static)->Value[2] = 0.5f;
 		FMaterialGraphProgram Program;
 		CHECK_FALSE(FMaterialGraphCompiler::Compile(Bad, Program, Error));
@@ -1146,10 +1148,10 @@ TEST_SUITE("MaterialGraph")
 		FString Error;
 		FMaterialGraph Function;
 		Function.bFunction = true;
-		const auto Input = Function.Add(EMaterialExpression::FunctionInput);
-		const auto Multiplier = Function.Add(EMaterialExpression::Constant);
+		const uint32 Input = Function.Add(EMaterialExpression::FunctionInput);
+		const uint32 Multiplier = Function.Add(EMaterialExpression::Constant);
 		Function.Find(Multiplier)->Value[0] = 2;
-		const auto Product = Function.Add(EMaterialExpression::Multiply);
+		const uint32 Product = Function.Add(EMaterialExpression::Multiply);
 		Function.Find(Product)->Inputs[0] = Input;
 		Function.Find(Product)->Inputs[1] = Multiplier;
 		Function.Outputs[0] = Product;
@@ -1161,10 +1163,10 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(Registry.Scan());
 		FMaterialAsset Material;
 		Material.Graph = FMaterialGraph{};
-		auto& G = *Material.Graph;
-		const auto Value = G.Add(EMaterialExpression::Constant);
+		FMaterialGraph& G = *Material.Graph;
+		const uint32 Value = G.Add(EMaterialExpression::Constant);
 		G.Find(Value)->Value[0] = .2f;
-		const auto Call = G.Add(EMaterialExpression::MaterialFunctionCall);
+		const uint32 Call = G.Add(EMaterialExpression::MaterialFunctionCall);
 		G.Find(Call)->Function = {"", "/Game/Double"};
 		G.Find(Call)->Inputs[0] = Value;
 		G.Outputs[0] = Call;
@@ -1177,24 +1179,24 @@ TEST_SUITE("MaterialGraph")
 		FAssetPackage Cooked;
 		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, Cooked, Error));
 		CHECK(std::find(Cooked.Dependencies.begin(), Cooked.Dependencies.end(), "/Game/Double") !=
-			  Cooked.Dependencies.end());
+		    Cooked.Dependencies.end());
 		FMaterialAsset Loaded;
 		REQUIRE_MESSAGE(FRenderAssetCodec::DecodeMaterial(Cooked, Loaded, Error), *Error);
 		CHECK(Loaded.Graph->Functions.size() == 1);
 		FMaterialAsset Flat;
 		Flat.Graph = FMaterialGraph{};
-		const auto C = Flat.Graph->Add(EMaterialExpression::Constant);
+		const uint32 C = Flat.Graph->Add(EMaterialExpression::Constant);
 		Flat.Graph->Find(C)->Value[0] = .4f;
 		Flat.Graph->Outputs[0] = C;
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Flat, Error));
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			FRHIDeviceDesc DD;
 			DD.Backend = Backend;
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-			auto Device = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(DD);
 			REQUIRE(Device);
-			const auto A = DrawMaterial(*Device, Loaded), B = DrawMaterial(*Device, Flat);
+			const TArray<uint8> A = DrawMaterial(*Device, Loaded), B = DrawMaterial(*Device, Flat);
 			CHECK(A == B);
 		}
 		REQUIRE(FMaterialFunctionCodec::Refresh(G, Registry, Changed, Error));
@@ -1207,20 +1209,20 @@ TEST_SUITE("MaterialGraph")
 		CHECK(Changed);
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
 		CHECK(Material.GraphDXIL != Loaded.GraphDXIL);
-		auto Before = FMaterialGraphCompiler::Encode(G);
-		auto Bad = G;
+		FJsonValue Before = FMaterialGraphCompiler::Encode(G);
+		FMaterialGraph Bad = G;
 		Bad.Find(Call)->Function.Id = FAssetId::New();
 		CHECK_FALSE(FMaterialFunctionCodec::Refresh(Bad, Registry, Changed, Error));
 		CHECK(Bad.Functions.size() == G.Functions.size());
 		CHECK_FALSE(FMaterialFunctionCodec::Refresh(G, Registry, Changed, Error, Definition.Id));
 		CHECK(Error.Contains("recursion"));
 		CHECK(FMaterialGraphCompiler::Encode(G) == Before);
-		auto Wrong = G;
+		FMaterialGraph Wrong = G;
 		Wrong.Find(Value)->Expression = EMaterialExpression::Constant3Vector;
 		FMaterialGraphProgram Program;
 		CHECK_FALSE(FMaterialGraphCompiler::Compile(Wrong, Program, Error));
 		CHECK(Error.Contains("Function input type"));
-		auto Default = G;
+		FMaterialGraph Default = G;
 		Default.Find(Call)->Inputs[0] = 0;
 		REQUIRE(FMaterialGraphCompiler::Compile(Default, Program, Error));
 	}
@@ -1229,27 +1231,27 @@ TEST_SUITE("MaterialGraph")
 		FTempFolder Temp;
 		FString Error;
 		FUITestApp App;
-		const auto Registry = MakeShared<FAssetRegistry>();
+		const TSharedRef<FAssetRegistry> Registry = MakeShared<FAssetRegistry>();
 		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 		REQUIRE(Registry->Scan());
-		const auto Browser =
-			SNew(SContentBrowser)
-				.Registry(Registry)
-				.Roots(TArray<FContentBrowserRoot>{{"Content", FString::FromWide(Temp.Path.wstring())}})
-				.InitialPath(FString::FromWide(Temp.Path.wstring()));
+		const TSharedRef<SContentBrowser> Browser =
+		    SNew(SContentBrowser)
+		        .Registry(Registry)
+		        .Roots(TArray<FContentBrowserRoot>{{"Content", FString::FromWide(Temp.Path.wstring())}})
+		        .InitialPath(FString::FromWide(Temp.Path.wstring()));
 		App.AddWindow(Browser);
 		App.Tick();
-		const auto File = Browser->CreateMaterialFunction();
+		const FString File = Browser->CreateMaterialFunction();
 		REQUIRE(!File.IsEmpty());
 		CHECK(Browser->GetAssetType(File) == EContentAssetType::MaterialFunction);
-		const auto* Asset = Registry->FindByFile(File);
+		const FAssetData* Asset = Registry->FindByFile(File);
 		REQUIRE(Asset);
 		CHECK(Asset->Metadata.Schema == "Genesis.MaterialFunction");
 		FMaterialEditorArgs Args;
 		Args.Registry = Registry;
 		Args.Material = Asset->GetReference();
 		Args.Name = "Reusable";
-		auto Window = FMaterialEditor::Open(Args, Error);
+		TSharedPtr<SWindow> Window = FMaterialEditor::Open(Args, Error);
 		REQUIRE_MESSAGE(Window, *Error);
 		App.Tick();
 		CHECK(Window->GetTitle().Contains("Material Function"));
@@ -1270,14 +1272,14 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(Registry.Scan());
 		FMaterialAsset Material;
 		Material.Graph = FMaterialGraph{};
-		auto& G = *Material.Graph;
-		const auto Color = G.Add(EMaterialExpression::VectorCollectionParameter);
+		FMaterialGraph& G = *Material.Graph;
+		const uint32 Color = G.Add(EMaterialExpression::VectorCollectionParameter);
 		G.Find(Color)->Collection = {Package.Id, "/Game/Shared"};
 		G.Find(Color)->ParameterName = "Color";
-		const auto Mask = G.Add(EMaterialExpression::ComponentMask);
+		const uint32 Mask = G.Add(EMaterialExpression::ComponentMask);
 		G.Find(Mask)->Inputs[0] = Color;
 		G.Outputs[0] = Mask;
-		const auto Roughness = G.Add(EMaterialExpression::ScalarCollectionParameter);
+		const uint32 Roughness = G.Add(EMaterialExpression::ScalarCollectionParameter);
 		G.Find(Roughness)->Collection = {Package.Id, "/Game/Shared"};
 		G.Find(Roughness)->ParameterName = "Roughness";
 		G.Outputs[1] = Roughness;
@@ -1288,24 +1290,25 @@ TEST_SUITE("MaterialGraph")
 		FAssetPackage MaterialPackage;
 		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, MaterialPackage, Error));
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Material.asset"), MaterialPackage, Error));
-		CHECK(std::find(MaterialPackage.Dependencies.begin(), MaterialPackage.Dependencies.end(),
-						"/Game/Shared") != MaterialPackage.Dependencies.end());
-		auto Instance = std::make_shared<FMaterialParameterCollectionInstance>(
-			FAssetReference{Package.Id, "/Game/Shared"}, Collection);
-		const auto Shader = Material.GraphDXIL;
+		CHECK(std::find(MaterialPackage.Dependencies.begin(), MaterialPackage.Dependencies.end(), "/Game/Shared") !=
+		    MaterialPackage.Dependencies.end());
+		TSharedPtr<FMaterialParameterCollectionInstance> Instance = FMaterialParameterCollectionInstance::Create(
+		    FAssetReference{Package.Id, "/Game/Shared"}, Collection, Error);
+		REQUIRE(Instance);
+		const TArray<uint8> Shader = Material.GraphDXIL;
 		const float Green[4] = {0, 1, 0, 1};
 		const float Red[4] = {1, 0, 0, 1};
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			FRHIDeviceDesc DD;
 			DD.Backend = Backend;
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-			auto Device = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(DD);
 			REQUIRE(Device);
 			REQUIRE(Instance->SetVector("Color", Red, Error));
-			auto R = DrawMaterial(*Device, Material, false, nullptr, Instance);
+			TArray<uint8> R = DrawMaterial(*Device, Material, false, nullptr, Instance);
 			REQUIRE(Instance->SetVector("Color", Green, Error));
-			auto V = DrawMaterial(*Device, Material, false, nullptr, Instance);
+			TArray<uint8> V = DrawMaterial(*Device, Material, false, nullptr, Instance);
 			const int Center = (32 * 64 + 32) * 4;
 			CHECK(R[Center] > 200);
 			CHECK(R[Center + 1] < 5);
@@ -1321,20 +1324,18 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Shared.asset"), Package, Error));
 		REQUIRE(Registry.Scan());
 		FMaterialAsset Reloaded;
-		REQUIRE(FRenderAssetLoader(Registry).LoadMaterial({MaterialPackage.Id, "/Game/Material"}, Reloaded,
-														  Error));
+		REQUIRE(FRenderAssetLoader(Registry).LoadMaterial({MaterialPackage.Id, "/Game/Material"}, Reloaded, Error));
 		CHECK(Reloaded.Graph->Find(Color)->Value[2] == 1);
 		CHECK(Reloaded.GraphDXIL == Shader);
 		CHECK(Reloaded.CookedGraphSource == Material.CookedGraphSource);
-		auto Bad = Collection;
+		FMaterialParameterCollection Bad = Collection;
 		Bad.Parameters.push_back(Bad.Parameters[0]);
 		CHECK_FALSE(FMaterialParameterCollectionCodec::Encode(Bad, Package, Error));
 		Collection.Parameters[0].Width = 1;
 		REQUIRE(FMaterialParameterCollectionCodec::Encode(Collection, Package, Error));
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Shared.asset"), Package, Error));
 		REQUIRE(Registry.Scan());
-		CHECK_FALSE(FRenderAssetLoader(Registry).LoadMaterial({MaterialPackage.Id, "/Game/Material"},
-															  Reloaded, Error));
+		CHECK_FALSE(FRenderAssetLoader(Registry).LoadMaterial({MaterialPackage.Id, "/Game/Material"}, Reloaded, Error));
 		CHECK(Reloaded.Graph->Find(Color)->Value[2] == 1);
 	}
 	TEST_CASE("Collection editor creates shared assets and supports history and persistence")
@@ -1342,37 +1343,39 @@ TEST_SUITE("MaterialGraph")
 		FTempFolder Temp;
 		FString Error;
 		FUITestApp App;
-		const auto Registry = MakeShared<FAssetRegistry>();
+		const TSharedRef<FAssetRegistry> Registry = MakeShared<FAssetRegistry>();
 		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 		REQUIRE(Registry->Scan());
-		const auto Browser =
-			SNew(SContentBrowser)
-				.Registry(Registry)
-				.Roots(TArray<FContentBrowserRoot>{{"Content", FString::FromWide(Temp.Path.wstring())}})
-				.InitialPath(FString::FromWide(Temp.Path.wstring()));
+		const TSharedRef<SContentBrowser> Browser =
+		    SNew(SContentBrowser)
+		        .Registry(Registry)
+		        .Roots(TArray<FContentBrowserRoot>{{"Content", FString::FromWide(Temp.Path.wstring())}})
+		        .InitialPath(FString::FromWide(Temp.Path.wstring()));
 		App.AddWindow(Browser);
 		App.Tick();
-		const auto File = Browser->CreateMaterialParameterCollection();
+		const FString File = Browser->CreateMaterialParameterCollection();
 		REQUIRE(!File.IsEmpty());
-		const auto* Asset = Registry->FindByFile(File);
+		const FAssetData* Asset = Registry->FindByFile(File);
 		REQUIRE(Asset);
 		FMaterialEditorArgs Args;
 		Args.Registry = Registry;
 		Args.Material = Asset->GetReference();
 		Args.Name = "Shared";
-		auto Window = FMaterialEditor::Open(Args, Error);
+		TSharedPtr<SWindow> Window = FMaterialEditor::Open(Args, Error);
 		REQUIRE(Window);
 		App.Tick();
-		const auto Click = [&](const FString& Text) {
-			std::function<SWidget*(SWidget&)> Find = [&](SWidget& W) -> SWidget* {
-				if (auto* T = dynamic_cast<STextBlock*>(&W); T && T->GetText() == Text)
+		const TFunction<void(const FString&)> Click = [&](const FString& Text)
+		{
+			std::function<SWidget*(SWidget&)> Find = [&](SWidget& W) -> SWidget*
+			{
+				if (STextBlock* T = dynamic_cast<STextBlock*>(&W); T && T->GetText() == Text)
 					return T;
-				for (const auto& C : W.GetArrangedChildren())
-					if (auto* R = Find(C.Widget.Get()))
+				for (const FArrangedWidget& C : W.GetArrangedChildren())
+					if (SWidget* R = Find(C.Widget.Get()))
 						return R;
 				return nullptr;
 			};
-			auto* Widget = Find(*Window);
+			SWidget* Widget = Find(*Window);
 			REQUIRE_MESSAGE(Widget, *Text);
 			App.ClickWidget(*Widget);
 			App.Tick();
@@ -1400,17 +1403,17 @@ TEST_SUITE("MaterialGraph")
 		FString Error;
 		FMaterialAsset Parent;
 		Parent.Graph = FMaterialGraph{};
-		auto& G = *Parent.Graph;
-		const auto Red = G.Add(EMaterialExpression::Constant3Vector),
-				   Green = G.Add(EMaterialExpression::Constant3Vector);
+		FMaterialGraph& G = *Parent.Graph;
+		const uint32 Red = G.Add(EMaterialExpression::Constant3Vector),
+		             Green = G.Add(EMaterialExpression::Constant3Vector);
 		G.Find(Red)->Value[0] = 1;
 		G.Find(Green)->Value[1] = 1;
-		const auto Switch = G.Add(EMaterialExpression::StaticSwitchParameter);
+		const uint32 Switch = G.Add(EMaterialExpression::StaticSwitchParameter);
 		G.Find(Switch)->ParameterName = "UseRed";
 		G.Find(Switch)->Value[2] = 1;
 		G.Find(Switch)->Inputs[0] = Red;
 		G.Find(Switch)->Inputs[1] = Green;
-		const auto Quality = G.Add(EMaterialExpression::QualitySwitch);
+		const uint32 Quality = G.Add(EMaterialExpression::QualitySwitch);
 		G.Find(Quality)->Inputs[0] = Red;
 		G.Find(Quality)->Inputs[1] = Green;
 		G.Find(Quality)->Inputs[2] = Switch;
@@ -1435,21 +1438,21 @@ TEST_SUITE("MaterialGraph")
 		FMaterialAsset Resolved;
 		REQUIRE(FMaterialInstance::Resolve(Parent, Decoded, Resolved, Error));
 		CHECK(Resolved.CookedGraphSource != Parent.CookedGraphSource);
-		auto Low = Instance;
+		FMaterialInstanceAsset Low = Instance;
 		Low.bOverrideQuality = true;
 		Low.QualityLevel = 0;
 		REQUIRE(FMaterialEditingLibrary::CompileMaterialInstance(Parent, Low, Error));
 		FMaterialAsset LowMaterial;
 		REQUIRE(FMaterialInstance::Resolve(Parent, Low, LowMaterial, Error));
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			FRHIDeviceDesc DD;
 			DD.Backend = Backend;
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-			auto Device = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(DD);
 			REQUIRE(Device);
-			const auto R = DrawMaterial(*Device, Parent), V = DrawMaterial(*Device, Resolved),
-					   L = DrawMaterial(*Device, LowMaterial);
+			const TArray<uint8> R = DrawMaterial(*Device, Parent), V = DrawMaterial(*Device, Resolved),
+			                    L = DrawMaterial(*Device, LowMaterial);
 			const int Center = (32 * 64 + 32) * 4;
 			CHECK(R[Center] > 200);
 			CHECK(V[Center + 1] > 200);
@@ -1467,12 +1470,11 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(Registry.Scan());
 		int32 Updated = 0;
 		REQUIRE_MESSAGE(
-			FMaterialEditingLibrary::RecompileDependents(Registry, {Base.Id, "/Game/Base"}, Updated, Error),
-			*Error);
+		    FMaterialEditingLibrary::RecompileDependents(Registry, {Base.Id, "/Game/Base"}, Updated, Error), *Error);
 		CHECK(Updated == 1);
 		REQUIRE(FRenderAssetLoader(Registry).LoadMaterial({Package.Id, "/Game/Instance"}, Resolved, Error));
 		CHECK(Resolved.Graph->Find(Green)->Value[1] == .5f);
-		auto Invalid = Instance;
+		FMaterialInstanceAsset Invalid = Instance;
 		Invalid.StaticPermutation = Parent;
 		CHECK_FALSE(FRenderAssetCodec::EncodeMaterialInstance(Invalid, Package, Error));
 	}
@@ -1482,21 +1484,22 @@ TEST_SUITE("MaterialGraph")
 		for (float DPI : {1.f, 1.5f})
 		{
 			FUITestApp App(DPI);
-			auto Material = std::make_shared<FMaterialAsset>();
+			TSharedPtr<FMaterialAsset> Material = std::make_shared<FMaterialAsset>();
 			Material->Graph = FMaterialGraph{};
-			auto& G = *Material->Graph;
-			const auto A = G.Add(EMaterialExpression::Constant, 0, 0),
-					   B = G.Add(EMaterialExpression::Constant, 300, 0),
-					   C = G.Add(EMaterialExpression::Multiply, 600, 0);
+			FMaterialGraph& G = *Material->Graph;
+			const uint32 A = G.Add(EMaterialExpression::Constant, 0, 0),
+			             B = G.Add(EMaterialExpression::Constant, 300, 0),
+			             C = G.Add(EMaterialExpression::Multiply, 600, 0);
 			G.Find(C)->Inputs[0] = A;
 			G.Find(C)->Inputs[1] = B;
 			G.Outputs[0] = C;
-			const auto Canvas = SNew(SMaterialGraph).Material(Material);
-			const auto Window = App.AddWindow(Canvas, FVector2(1400, 800));
+			const TSharedRef<SMaterialGraph> Canvas = SNew(SMaterialGraph).Material(Material);
+			const TSharedRef<SWindow> Window = App.AddWindow(Canvas, FVector2(1400, 800));
 			App.Tick();
 			Canvas->FrameAll();
 			App.Tick();
-			auto Body = [&](uint32 Id) { return Canvas->GetPinPosition(Id, 0, true) - FVector2(60, 15); };
+			TFunction<FVector2(uint32)> Body = [&](uint32 Id)
+			{ return Canvas->GetPinPosition(Id, 0, true) - FVector2(60, 15); };
 			App.Click(Window, Body(A));
 			App.Tick();
 			App.SetModifiers(false, true);
@@ -1504,8 +1507,8 @@ TEST_SUITE("MaterialGraph")
 			App.Tick();
 			App.SetModifiers(false, false);
 			REQUIRE(Canvas->GetSelectedNodes().size() == 2);
-			const auto AX = G.Find(A)->X, BX = G.Find(B)->X;
-			auto Start = Body(A);
+			const float AX = G.Find(A)->X, BX = G.Find(B)->X;
+			FVector2 Start = Body(A);
 			App.MouseDown(Window, Start);
 			App.Tick();
 			App.MouseMove(Window, Start + FVector2(48, 32));
@@ -1526,7 +1529,7 @@ TEST_SUITE("MaterialGraph")
 			App.Tick();
 			App.SetModifiers(false, false);
 			CHECK(G.Find(C)->Inputs[0] == 0);
-			const auto From = Canvas->GetPinPosition(A, 0, true), To = Canvas->GetPinPosition(C, 0, false);
+			const FVector2 From = Canvas->GetPinPosition(A, 0, true), To = Canvas->GetPinPosition(C, 0, false);
 			App.MouseDown(Window, From);
 			App.Tick();
 			App.MouseMove(Window, To);
@@ -1554,7 +1557,7 @@ TEST_SUITE("MaterialGraph")
 		FTempFolder Temp;
 		FString Error;
 		FUITestApp App;
-		const auto Registry = MakeShared<FAssetRegistry>();
+		const TSharedRef<FAssetRegistry> Registry = MakeShared<FAssetRegistry>();
 		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 		FMaterialGraph Function;
 		Function.bFunction = true;
@@ -1568,33 +1571,31 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(FMaterialParameterCollectionCodec::Encode(Collection, CP, Error));
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Collection.asset"), CP, Error));
 		REQUIRE(Registry->Scan());
-		auto Material = std::make_shared<FMaterialAsset>();
+		TSharedPtr<FMaterialAsset> Material = std::make_shared<FMaterialAsset>();
 		Material->Graph = FMaterialGraph{};
-		const auto Canvas = SNew(SMaterialGraph).Material(Material).Registry(Registry);
+		const TSharedRef<SMaterialGraph> Canvas = SNew(SMaterialGraph).Material(Material).Registry(Registry);
 		App.AddWindow(Canvas);
 		App.Tick();
 		REQUIRE_MESSAGE(
-			Canvas->DropAsset({P.Id, "/Game/Function"}, "Genesis.MaterialFunction", FVector2(0, 0), Error),
-			*Error);
-		const auto Call = Canvas->GetSelectedNode();
+		    Canvas->DropAsset({P.Id, "/Game/Function"}, "Genesis.MaterialFunction", FVector2(0, 0), Error), *Error);
+		const uint32 Call = Canvas->GetSelectedNode();
 		Canvas->SetNodeSelection({Call});
-		const auto Clipboard = Canvas->CopySelection();
-		auto Other = std::make_shared<FMaterialAsset>();
+		const FString Clipboard = Canvas->CopySelection();
+		TSharedPtr<FMaterialAsset> Other = std::make_shared<FMaterialAsset>();
 		Other->Graph = FMaterialGraph{};
-		const auto Destination = SNew(SMaterialGraph).Material(Other).Registry(Registry);
+		const TSharedRef<SMaterialGraph> Destination = SNew(SMaterialGraph).Material(Other).Registry(Registry);
 		REQUIRE_MESSAGE(Destination->PasteNodes(Clipboard, FVector2(100, 100), Error), *Error);
 		CHECK(Other->Graph->Functions.size() == 1);
 		CHECK(Other->Graph->Nodes[0].Function.Id == P.Id);
-		REQUIRE(Canvas->DropAsset({CP.Id, "/Game/Collection"}, "Genesis.MaterialParameterCollection",
-								  FVector2(200, 0), Error));
+		REQUIRE(Canvas->DropAsset(
+		    {CP.Id, "/Game/Collection"}, "Genesis.MaterialParameterCollection", FVector2(200, 0), Error));
 		CHECK(Material->Graph->Nodes.size() == 2);
 		Canvas->Undo();
 		CHECK(Material->Graph->Nodes.size() == 1);
 		Canvas->Redo();
 		CHECK(Material->Graph->Nodes.size() == 2);
-		const auto Before = FMaterialGraphCompiler::Encode(*Material->Graph);
-		CHECK_FALSE(
-			Canvas->DropAsset({FAssetId::New(), "/Game/Function"}, "Genesis.MaterialFunction", {}, Error));
+		const FJsonValue Before = FMaterialGraphCompiler::Encode(*Material->Graph);
+		CHECK_FALSE(Canvas->DropAsset({FAssetId::New(), "/Game/Function"}, "Genesis.MaterialFunction", {}, Error));
 		CHECK(FMaterialGraphCompiler::Encode(*Material->Graph) == Before);
 	}
 
@@ -1603,13 +1604,13 @@ TEST_SUITE("MaterialGraph")
 		FTempFolder Temp;
 		FString Error;
 		FUITestApp App;
-		auto Initial = ColorGraph(.1f, .2f, .3f);
+		FMaterialAsset Initial = ColorGraph(.1f, .2f, .3f);
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Initial, Error));
 		FAssetPackage Package;
 		REQUIRE(FRenderAssetCodec::EncodeMaterial(Initial, Package, Error));
-		const auto File = Temp.File("Editing.asset");
+		const FString File = Temp.File("Editing.asset");
 		REQUIRE(FAssetPackageStore::Save(File, Package, Error));
-		const auto Registry = MakeShared<FAssetRegistry>();
+		const TSharedRef<FAssetRegistry> Registry = MakeShared<FAssetRegistry>();
 		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 		REQUIRE(Registry->Scan());
 		FMaterialEditorArgs Args;
@@ -1618,25 +1619,27 @@ TEST_SUITE("MaterialGraph")
 		Args.Name = "Revision workflow";
 		int Saves = 0;
 		Args.OnSaved = FSimpleDelegate::CreateLambda([&] { ++Saves; });
-		const auto Window = FMaterialEditor::Open(Args, Error);
+		const TSharedPtr<SWindow> Window = FMaterialEditor::Open(Args, Error);
 		REQUIRE(Window);
 		App.Tick();
-		std::function<SWidget*(SWidget&, const FString&)> FindText = [&](SWidget& W,
-																		 const FString& Text) -> SWidget* {
-			if (auto* T = dynamic_cast<STextBlock*>(&W); T && T->GetText() == Text)
+		std::function<SWidget*(SWidget&, const FString&)> FindText = [&](SWidget& W, const FString& Text) -> SWidget*
+		{
+			if (STextBlock* T = dynamic_cast<STextBlock*>(&W); T && T->GetText() == Text)
 				return T;
-			for (const auto& C : W.GetArrangedChildren())
-				if (auto* R = FindText(C.Widget.Get(), Text))
+			for (const FArrangedWidget& C : W.GetArrangedChildren())
+				if (SWidget* R = FindText(C.Widget.Get(), Text))
 					return R;
 			return nullptr;
 		};
-		const auto Click = [&](const FString& Text) {
-			auto* W = FindText(*Window, Text);
+		const TFunction<void(const FString&)> Click = [&](const FString& Text)
+		{
+			SWidget* W = FindText(*Window, Text);
 			REQUIRE_MESSAGE(W, *Text);
 			App.ClickWidget(*W);
 			App.Tick();
 		};
-		const auto Wait = [&](auto Predicate) {
+		const TFunction<void(const TFunction<bool()>&)> Wait = [&](const TFunction<bool()>& Predicate)
+		{
 			for (int I = 0; I < 300 && !Predicate(); ++I)
 			{
 				App.Tick();
@@ -1646,10 +1649,11 @@ TEST_SUITE("MaterialGraph")
 		};
 		Wait([&] { return FindText(*Window, "Compiled for DirectX 12 and Vulkan") != nullptr; });
 		SMaterialGraph* Canvas = nullptr;
-		std::function<void(SWidget&)> FindCanvas = [&](SWidget& W) {
-			if (auto* C = dynamic_cast<SMaterialGraph*>(&W))
+		std::function<void(SWidget&)> FindCanvas = [&](SWidget& W)
+		{
+			if (SMaterialGraph* C = dynamic_cast<SMaterialGraph*>(&W))
 				Canvas = C;
-			for (const auto& C : W.GetArrangedChildren())
+			for (const FArrangedWidget& C : W.GetArrangedChildren())
 				FindCanvas(C.Widget.Get());
 		};
 		FindCanvas(*Window);
@@ -1661,7 +1665,7 @@ TEST_SUITE("MaterialGraph")
 		Click("Save");
 		Wait([&] { return Saves == 1; });
 		Saves = 0;
-		Canvas->EditNode([](auto& N) { N.Value[0] = std::numeric_limits<float>::quiet_NaN(); });
+		Canvas->EditNode([](FMaterialNode& N) { N.Value[0] = std::numeric_limits<float>::quiet_NaN(); });
 		Click("Save");
 		CHECK(Saves == 0);
 		FAssetPackage Read;
@@ -1669,18 +1673,18 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(FAssetPackageStore::Load(File, Read, Error));
 		REQUIRE(FRenderAssetCodec::DecodeMaterial(Read, Material, Error));
 		CHECK(Material.Graph->Find(1)->Value[0] == .1f);
-		Canvas->EditNode([](auto& N) { N.Value[0] = .4f; });
+		Canvas->EditNode([](FMaterialNode& N) { N.Value[0] = .4f; });
 		Click("Compile / Preview");
 		Click("Save");
-		Canvas->EditNode([](auto& N) { N.Value[0] = .6f; });
+		Canvas->EditNode([](FMaterialNode& N) { N.Value[0] = .6f; });
 		Wait([&] { return Saves == 1; });
 		REQUIRE(FAssetPackageStore::Load(File, Read, Error));
 		REQUIRE(FRenderAssetCodec::DecodeMaterial(Read, Material, Error));
 		CHECK(Material.Graph->Find(1)->Value[0] == .6f);
 		Click("Live Preview: On");
-		Canvas->EditNode([](auto& N) { N.Value[0] = .7f; });
+		Canvas->EditNode([](FMaterialNode& N) { N.Value[0] = .7f; });
 		Click("Save");
-		Canvas->EditNode([](auto& N) { N.Value[0] = .8f; });
+		Canvas->EditNode([](FMaterialNode& N) { N.Value[0] = .8f; });
 		Wait([&] { return Saves == 2; });
 		REQUIRE(FAssetPackageStore::Load(File, Read, Error));
 		REQUIRE(FRenderAssetCodec::DecodeMaterial(Read, Material, Error));
@@ -1704,9 +1708,9 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(Registry.Scan());
 		FMaterialAsset Material;
 		Material.Graph = FMaterialGraph{};
-		const auto C = Material.Graph->Add(EMaterialExpression::Constant);
+		const uint32 C = Material.Graph->Add(EMaterialExpression::Constant);
 		Material.Graph->Find(C)->Value[0] = .2f;
-		const auto F = Material.Graph->Add(EMaterialExpression::MaterialFunctionCall);
+		const uint32 F = Material.Graph->Add(EMaterialExpression::MaterialFunctionCall);
 		Material.Graph->Find(F)->Inputs[0] = C;
 		Material.Graph->Find(F)->Function = {Source.Id, "/Game/Function"};
 		Material.Graph->Outputs[0] = F;
@@ -1716,7 +1720,7 @@ TEST_SUITE("MaterialGraph")
 		FAssetPackage Target;
 		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, Target, Error));
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Target.asset"), Target, Error));
-		auto Unrelated = ColorGraph(1, 0, 0);
+		FMaterialAsset Unrelated = ColorGraph(1, 0, 0);
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Unrelated, Error));
 		FAssetPackage Other;
 		REQUIRE(FRenderAssetCodec::EncodeMaterial(Unrelated, Other, Error));
@@ -1728,8 +1732,7 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Function.asset"), Source, Error));
 		REQUIRE(Registry.Scan());
 		int32 Updated = 0;
-		REQUIRE(FMaterialEditingLibrary::RecompileDependents(Registry, {Source.Id, "/Game/Function"}, Updated,
-															 Error));
+		REQUIRE(FMaterialEditingLibrary::RecompileDependents(Registry, {Source.Id, "/Game/Function"}, Updated, Error));
 		CHECK(Updated == 1);
 		FString Still;
 		REQUIRE(FFile::ReadAllText(Temp.File("Unrelated.asset"), Still));
@@ -1740,8 +1743,8 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(FMaterialFunctionCodec::Encode(Function, Source, Error));
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Function.asset"), Source, Error));
 		REQUIRE(Registry.Scan());
-		CHECK_FALSE(FMaterialEditingLibrary::RecompileDependents(Registry, {Source.Id, "/Game/Function"},
-																 Updated, Error));
+		CHECK_FALSE(
+		    FMaterialEditingLibrary::RecompileDependents(Registry, {Source.Id, "/Game/Function"}, Updated, Error));
 		CHECK(Updated == 0);
 		CHECK(Error.Contains("type mismatch"));
 		REQUIRE(FFile::ReadAllText(Temp.File("Target.asset"), Still));
@@ -1778,7 +1781,7 @@ TEST_SUITE("MaterialGraph")
 		Material.Graph->Find(Material.Graph->Outputs[0])->Function = {B.Id, "/Game/Outer"};
 		REQUIRE(FMaterialFunctionCodec::Refresh(*Material.Graph, Registry, Changed, Error));
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
-		const auto OldSource = Material.CookedGraphSource;
+		const FString OldSource = Material.CookedGraphSource;
 		FAssetPackage P;
 		REQUIRE(FRenderAssetCodec::EncodeMaterial(Material, P, Error));
 		REQUIRE(FAssetPackageStore::Save(Temp.File("Material.asset"), P, Error));
@@ -1788,16 +1791,15 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(Registry.Scan());
 		int32 Count = 0;
 		REQUIRE_MESSAGE(
-			FMaterialEditingLibrary::RecompileDependents(Registry, {A.Id, "/Game/Inner"}, Count, Error),
-			*Error);
+		    FMaterialEditingLibrary::RecompileDependents(Registry, {A.Id, "/Game/Inner"}, Count, Error), *Error);
 		CHECK(Count == 2);
 		REQUIRE(FRenderAssetLoader(Registry).LoadMaterial({P.Id, "/Game/Material"}, Material, Error));
 		CHECK(Material.CookedGraphSource != OldSource);
-		auto Recursive = Inner;
+		FMaterialGraph Recursive = Inner;
 		Recursive.Nodes.clear();
 		Recursive.Outputs[0] = Recursive.Add(EMaterialExpression::MaterialFunctionCall);
 		Recursive.Find(Recursive.Outputs[0])->Function = {B.Id, "/Game/Outer"};
-		const auto Before = FMaterialGraphCompiler::Encode(Recursive);
+		const FJsonValue Before = FMaterialGraphCompiler::Encode(Recursive);
 		CHECK_FALSE(FMaterialFunctionCodec::Refresh(Recursive, Registry, Changed, Error, A.Id));
 		CHECK(Error.Contains("recursion"));
 		CHECK(FMaterialGraphCompiler::Encode(Recursive) == Before);
@@ -1806,14 +1808,14 @@ TEST_SUITE("MaterialGraph")
 	{
 		FTempFolder Temp;
 		FString Error;
-		auto Material = ColorGraph(1, 1, 1);
-		const auto P = Material.Graph->Add(EMaterialExpression::ScalarParameter);
+		FMaterialAsset Material = ColorGraph(1, 1, 1);
+		const uint32 P = Material.Graph->Add(EMaterialExpression::ScalarParameter);
 		Material.Graph->Find(P)->ParameterName = "Roughness";
 		Material.Graph->Find(P)->ParameterGroup = "Surface";
 		Material.Graph->Outputs[1] = P;
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
-		const auto Shader = Material.GraphDXIL;
-		const auto Source = Material.CookedGraphSource;
+		const TArray<uint8> Shader = Material.GraphDXIL;
+		const FString Source = Material.CookedGraphSource;
 		Material.Graph->Find(P)->ParameterGroup = "Surface Controls";
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Material, Error));
 		CHECK(Material.GraphDXIL == Shader);
@@ -1825,19 +1827,19 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(FRenderAssetCodec::DecodeMaterial(Package, Loaded, Error));
 		CHECK(Loaded.Graph->Find(P)->ParameterGroup == "Surface Controls");
 		FUITestApp App;
-		const auto Registry = MakeShared<FAssetRegistry>();
+		const TSharedRef<FAssetRegistry> Registry = MakeShared<FAssetRegistry>();
 		REQUIRE(Registry->SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
 		REQUIRE(Registry->Scan());
 		FMaterialEditorArgs Args;
 		Args.Registry = Registry;
 		Args.Material = {Package.Id, "/Game/Grouped"};
 		Args.Name = "Grouped";
-		auto First = FMaterialEditor::Open(Args, Error), Second = FMaterialEditor::Open(Args, Error);
+		TSharedPtr<SWindow> First = FMaterialEditor::Open(Args, Error), Second = FMaterialEditor::Open(Args, Error);
 		REQUIRE(First);
 		CHECK(First == Second);
 		First->RequestClose();
 		App.Tick();
-		auto Reopened = FMaterialEditor::Open(Args, Error);
+		TSharedPtr<SWindow> Reopened = FMaterialEditor::Open(Args, Error);
 		REQUIRE(Reopened);
 		CHECK(Reopened != First);
 		Reopened->RequestClose();
@@ -1847,43 +1849,43 @@ TEST_SUITE("MaterialGraph")
 	{
 		FMaterialAsset Material;
 		Material.Graph = FMaterialGraph{};
-		auto& G = *Material.Graph;
+		FMaterialGraph& G = *Material.Graph;
 		G.bUseMaterialAttributes = true;
-		const auto Red = G.Add(EMaterialExpression::Constant3Vector),
-				   Blue = G.Add(EMaterialExpression::Constant3Vector);
+		const uint32 Red = G.Add(EMaterialExpression::Constant3Vector),
+		             Blue = G.Add(EMaterialExpression::Constant3Vector);
 		G.Find(Red)->Value[0] = 1;
 		G.Find(Blue)->Value[2] = 1;
-		const auto A = G.Add(EMaterialExpression::MakeMaterialAttributes),
-				   B = G.Add(EMaterialExpression::MakeMaterialAttributes);
+		const uint32 A = G.Add(EMaterialExpression::MakeMaterialAttributes),
+		             B = G.Add(EMaterialExpression::MakeMaterialAttributes);
 		G.Find(A)->Inputs[0] = Red;
 		G.Find(B)->Inputs[0] = Blue;
-		const auto Blend = G.Add(EMaterialExpression::BlendMaterialAttributes);
+		const uint32 Blend = G.Add(EMaterialExpression::BlendMaterialAttributes);
 		G.Find(Blend)->Inputs[0] = A;
 		G.Find(Blend)->Inputs[1] = B;
 		G.Find(Blend)->Value[2] = .25f;
 		FMaterialGraph Function;
 		Function.bFunction = true;
-		const auto Input = Function.Add(EMaterialExpression::FunctionInput);
+		const uint32 Input = Function.Add(EMaterialExpression::FunctionInput);
 		Function.Find(Input)->Mask = 8;
 		Function.Outputs[0] = Input;
 		FAssetReference Ref{FAssetId::New(), "/Game/Layer"};
 		G.Functions.push_back({Ref, std::make_shared<const FMaterialGraph>(Function)});
-		const auto Call = G.Add(EMaterialExpression::MaterialFunctionCall);
+		const uint32 Call = G.Add(EMaterialExpression::MaterialFunctionCall);
 		G.Find(Call)->Function = Ref;
 		G.Find(Call)->Inputs[0] = Blend;
 		G.Outputs[0] = Call;
 		FString Error;
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(Material, Error), *Error);
-		auto Flat = ColorGraph(.75f, 0, .25f);
+		FMaterialAsset Flat = ColorGraph(.75f, 0, .25f);
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Flat, Error));
-		for (auto Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
+		for (ERHIBackend Backend : {ERHIBackend::D3D12, ERHIBackend::Vulkan})
 		{
 			FRHIDeviceDesc DD;
 			DD.Backend = Backend;
 			DD.bSoftwareAdapter = Backend == ERHIBackend::D3D12;
-			auto Device = FRHIDevice::Create(DD);
+			TUniquePtr<FRHIDevice> Device = FRHIDevice::Create(DD);
 			REQUIRE(Device);
-			const auto Actual = DrawMaterial(*Device, Material), Expected = DrawMaterial(*Device, Flat);
+			const TArray<uint8> Actual = DrawMaterial(*Device, Material), Expected = DrawMaterial(*Device, Flat);
 			CHECK(Actual == Expected);
 		}
 		FAssetPackage Package;
@@ -1892,21 +1894,21 @@ TEST_SUITE("MaterialGraph")
 		REQUIRE(FRenderAssetCodec::DecodeMaterial(Package, Loaded, Error));
 		CHECK(Loaded.Graph->bUseMaterialAttributes);
 		CHECK(Loaded.Graph->Find(Call)->Function.Id == Ref.Id);
-		auto Broken = G;
+		FMaterialGraph Broken = G;
 		Broken.Find(Call)->Inputs[0] = Red;
 		FMaterialGraphProgram Program;
 		CHECK_FALSE(FMaterialGraphCompiler::Compile(Broken, Program, Error));
 		CHECK(Error.Contains("Function input type mismatch"));
 		CHECK(Error.Contains(FString::Format("Node {}:", Call).View()));
-		auto Break = Material;
+		FMaterialAsset Break = Material;
 		Break.Graph->bUseMaterialAttributes = false;
-		const auto Field = Break.Graph->Add(EMaterialExpression::BreakMaterialAttributes);
+		const uint32 Field = Break.Graph->Add(EMaterialExpression::BreakMaterialAttributes);
 		Break.Graph->Find(Field)->Inputs[0] = Call;
 		Break.Graph->Find(Field)->Mask = 0;
 		Break.Graph->Outputs[0] = Field;
 		REQUIRE(FMaterialEditingLibrary::CompileMaterial(Break, Error));
-		auto View = std::make_shared<FMaterialAsset>(Material);
-		const auto Canvas = SNew(SMaterialGraph).Material(View);
+		TSharedPtr<FMaterialAsset> View = std::make_shared<FMaterialAsset>(Material);
+		const TSharedRef<SMaterialGraph> Canvas = SNew(SMaterialGraph).Material(View);
 		Canvas->SetUseMaterialAttributes(false);
 		CHECK_FALSE(View->Graph->bUseMaterialAttributes);
 		Canvas->Undo();
@@ -1919,19 +1921,19 @@ TEST_SUITE("MaterialGraph")
 	{
 		FMaterialGraph Function;
 		Function.bFunction = true;
-		const auto Input = Function.Add(EMaterialExpression::FunctionInput);
+		const uint32 Input = Function.Add(EMaterialExpression::FunctionInput);
 		Function.Find(Input)->InputIndex = 7;
 		Function.Find(Input)->ParameterName = "Layer Color";
 		Function.Find(Input)->Mask = 3;
 		Function.Outputs[0] = Input;
 		FAssetReference Ref{FAssetId::New(), "/Game/Function"};
-		auto Material = std::make_shared<FMaterialAsset>();
+		TSharedPtr<FMaterialAsset> Material = std::make_shared<FMaterialAsset>();
 		Material->Graph = FMaterialGraph{};
-		auto& G = *Material->Graph;
+		FMaterialGraph& G = *Material->Graph;
 		G.Functions.push_back({Ref, std::make_shared<const FMaterialGraph>(Function)});
-		const auto Color = G.Add(EMaterialExpression::Constant3Vector);
+		const uint32 Color = G.Add(EMaterialExpression::Constant3Vector);
 		G.Find(Color)->Value[1] = 1;
-		const auto Call = G.Add(EMaterialExpression::MaterialFunctionCall);
+		const uint32 Call = G.Add(EMaterialExpression::MaterialFunctionCall);
 		G.Find(Call)->Function = Ref;
 		G.Find(Call)->Inputs[7] = Color;
 		G.Outputs[0] = Call;
@@ -1941,12 +1943,12 @@ TEST_SUITE("MaterialGraph")
 		CHECK(MaterialNodeInputName(G, *G.Find(Call), 7) == "Layer Color");
 		FString Error;
 		REQUIRE_MESSAGE(FMaterialEditingLibrary::CompileMaterial(*Material, Error), *Error);
-		auto Bad = G;
+		FMaterialGraph Bad = G;
 		Bad.Find(Call)->Inputs[0] = Color;
 		FMaterialGraphProgram Program;
 		CHECK_FALSE(FMaterialGraphCompiler::Compile(Bad, Program, Error));
 		CHECK(Error.Contains("undeclared input"));
-		const auto Canvas = SNew(SMaterialGraph).Material(Material);
+		const TSharedRef<SMaterialGraph> Canvas = SNew(SMaterialGraph).Material(Material);
 		Canvas->SetMaterialSettings(EMaterialBlendMode::Masked, .6f);
 		CHECK(Material->BlendMode == EMaterialBlendMode::Masked);
 		CHECK(Material->OpacityMaskClip == .6f);
@@ -1957,4 +1959,104 @@ TEST_SUITE("MaterialGraph")
 		CHECK(Material->BlendMode == EMaterialBlendMode::Masked);
 		CHECK(Material->OpacityMaskClip == .6f);
 	}
+}
+
+TEST_CASE("Graph validation returns explicit errors and restores recursive codec budgets" *
+    doctest::test_suite("MaterialGraph"))
+{
+	FString Error;
+	FMaterialGraph Valid;
+	Valid.Outputs[0] = Valid.Add(EMaterialExpression::Constant3Vector);
+	FJsonValue Json;
+	REQUIRE(FMaterialGraphCompiler::Encode(Valid, Json, Error));
+	const FJsonValue Original = Json;
+	FMaterialGraph Invalid = Valid;
+	SUBCASE("Missing embedded graph")
+	{
+		Invalid.Functions.push_back({{FAssetId::New(), "/Game/Missing"}, {}});
+	}
+	SUBCASE("Node budget")
+	{
+		Invalid.Nodes.resize(FMaterialGraphCompiler::MaxNodes + 1);
+	}
+	SUBCASE("Recursive snapshot depth")
+	{
+		for (int Depth = 0; Depth < 17; ++Depth)
+		{
+			FMaterialGraph Parent;
+			Parent.Functions.push_back(
+			    {{FAssetId::New(), "/Game/Deep"}, std::make_shared<const FMaterialGraph>(std::move(Invalid))});
+			Invalid = std::move(Parent);
+		}
+	}
+	SUBCASE("Embedded graph budget")
+	{
+		for (int Index = 0; Index < 65; ++Index)
+		{
+			Invalid.Functions.push_back(
+			    {{FAssetId::New(), "/Game/Many"}, std::make_shared<const FMaterialGraph>(Valid)});
+		}
+	}
+	CHECK_FALSE(FMaterialGraphCompiler::Encode(Invalid, Json, Error));
+	CHECK_FALSE(Error.IsEmpty());
+	CHECK(Json == Original);
+	CHECK(FMaterialGraphCompiler::Encode(Invalid).GetType() == EJsonType::Null);
+	REQUIRE(FMaterialGraphCompiler::Encode(Valid, Json, Error));
+	CHECK(Error.IsEmpty());
+	FMaterialGraph Decoded = Valid;
+	FJsonValue Bad = Json;
+	Bad["Nodes"][0]["Value"][0] = "invalid";
+	CHECK_FALSE(FMaterialGraphCompiler::Decode(Bad, Decoded, Error));
+	CHECK_FALSE(Error.IsEmpty());
+	CHECK(FMaterialGraphCompiler::Encode(Decoded) == Original);
+	REQUIRE(FMaterialGraphCompiler::Decode(Json, Decoded, Error));
+	CHECK(Error.IsEmpty());
+	FMaterialGraph Broken;
+	const uint32 Add = Broken.Add(EMaterialExpression::Add);
+	const uint32 Constant = Broken.Add(EMaterialExpression::Constant);
+	Broken.Find(Add)->Inputs[0] = 999;
+	Broken.Find(Add)->Inputs[1] = Constant;
+	Broken.Outputs[0] = Add;
+	FMaterialGraphProgram Program;
+	Program.PixelShaderSource = "preserved";
+	CHECK_FALSE(FMaterialGraphCompiler::Compile(Broken, Program, Error));
+	CHECK(Error.StartsWith("Node 999:"));
+	CHECK(Program.PixelShaderSource == "preserved");
+}
+
+TEST_CASE("Collection construction and failed dependency refresh return errors atomically" *
+    doctest::test_suite("MaterialGraph"))
+{
+	FTempFolder Temp;
+	FString Error;
+	FMaterialParameterCollection Collection;
+	Collection.Parameters = {{"Value", 1, {.75f, 0, 0, 0}}};
+	CHECK_FALSE(FMaterialParameterCollectionInstance::Create({"invalid", "/Game/Shared"}, Collection, Error));
+	CHECK_FALSE(Error.IsEmpty());
+	CHECK_FALSE(FMaterialParameterCollectionInstance::Create({{}, "/Game/Shared"}, Collection, Error));
+	CHECK_FALSE(Error.IsEmpty());
+	FMaterialParameterCollection Invalid = Collection;
+	Invalid.Parameters.push_back(Invalid.Parameters[0]);
+	CHECK_FALSE(FMaterialParameterCollectionInstance::Create({FAssetId::New(), "/Game/Shared"}, Invalid, Error));
+	FAssetPackage Package;
+	REQUIRE(FMaterialParameterCollectionCodec::Encode(Collection, Package, Error));
+	REQUIRE(FAssetPackageStore::Save(Temp.File("Shared.asset"), Package, Error));
+	REQUIRE(FMaterialParameterCollectionInstance::Create({Package.Id, "/Game/Shared"}, Collection, Error));
+	CHECK(Error.IsEmpty());
+	FAssetRegistry Registry;
+	REQUIRE(Registry.SetMounts({{"/Game", FString::FromWide(Temp.Path.wstring())}}, Error));
+	REQUIRE(Registry.Scan());
+	FMaterialGraph Graph;
+	for (const char* Name : {"Value", "Missing"})
+	{
+		const uint32 Id = Graph.Add(EMaterialExpression::ScalarCollectionParameter);
+		Graph.Find(Id)->Collection = {Package.Id, "/Game/Shared"};
+		Graph.Find(Id)->ParameterName = Name;
+	}
+	const FJsonValue Before = FMaterialGraphCompiler::Encode(Graph);
+	bool Changed = false;
+	CHECK_FALSE(FMaterialParameterCollectionCodec::Refresh(Graph, Registry, Changed, Error));
+	CHECK_FALSE(Error.IsEmpty());
+	CHECK_FALSE(Changed);
+	CHECK(FMaterialGraphCompiler::Encode(Graph) == Before);
 }

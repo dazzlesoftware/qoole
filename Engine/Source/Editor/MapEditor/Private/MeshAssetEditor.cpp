@@ -1,73 +1,76 @@
 // Copyright (C) Dazzle Software, LLC. Licensed under the GNU GPL v2 or later.
 #include "MeshAssetEditor.h"
+#include "Templates/SharedPointer.h"
+#include "Internationalization/TextLocalization.h"
+#include "Misc/ValidationContext.h"
 #include "MapAssetImport.h"
 #include "HAL/File.h"
 #include "Geometry/StaticMesh.h"
 #undef Min
 #undef Max
 #include <filesystem>
-#include <stdexcept>
 
 namespace
 {
-bool LoadSlot(const FAssetReference& Ref, const FAssetRegistry& Registry, FLoadedMaterialSlot& Out, FString& Error)
-{
-	if (Ref.IsNull())
+	bool LoadSlot(const FAssetReference& Ref, const FAssetRegistry& Registry, FLoadedMaterialSlot& Out, FString& Error)
 	{
-		Out = {};
+		if (Ref.IsNull())
+		{
+			Out = {};
+			Error.Empty();
+			return true;
+		}
+		FRenderAssetLoader Loader(Registry);
+		FLoadedMaterialSlot Slot;
+		FMaterialAsset M;
+		if (!Loader.LoadMaterial(Ref, M, Error))
+			return false;
+		if (!Loader.LoadMaterialResources(M, Slot, Error))
+			return false;
+		Out = std::move(Slot);
 		Error.Empty();
 		return true;
 	}
-	FRenderAssetLoader Loader(Registry);
-	FLoadedMaterialSlot Slot;
-	FMaterialAsset M;
-	if (!Loader.LoadMaterial(Ref, M, Error))
-		return false;
-	if(!Loader.LoadMaterialResources(M,Slot,Error)) return false;
-	Out = std::move(Slot);
-	Error.Empty();
-	return true;
-}
 } // namespace
-TUniquePtr<FMeshAssetEditSession> FMeshAssetEditSession::Open(const FAssetRegistry& Registry,
-															  const FAssetReference& Ref, FString& Error)
+TUniquePtr<FMeshAssetEditSession> FMeshAssetEditSession::Open(
+    const FAssetRegistry& Registry, const FAssetReference& Ref, FString& Error)
 {
-	const auto* Data = Registry.Resolve(Ref, Error, "Genesis.StaticMesh");
+	const FAssetData* Data = Registry.Resolve(Ref, Error, "Genesis.StaticMesh");
 	if (!Data)
 		return {};
-	auto Session = MakeUnique<FMeshAssetEditSession>();
+	TUniquePtr<FMeshAssetEditSession> Session = MakeUnique<FMeshAssetEditSession>();
 	Session->Target = Data->FilePath;
 	Session->Reference = Data->GetReference();
 	FAssetPackage P;
 	FString After;
 	if (!FFile::ReadAllText(Session->Target, Session->Manifest) ||
-		!FAssetPackageStore::Load(Session->Target, P, Error) ||
-		!FRenderAssetCodec::DecodeMesh(P, Session->Draft, Error))
+	    !FAssetPackageStore::Load(Session->Target, P, Error) ||
+	    !FRenderAssetCodec::DecodeMesh(P, Session->Draft, Error))
 	{
 		if (Error.IsEmpty())
-			Error = "Cannot read mesh asset.";
+			Error = GENESIS_TEXT("Cannot read mesh asset.");
 		return {};
 	}
 	if (P.Id != Session->Reference.Id)
 	{
-		Error = "Mesh asset identity changed; refresh content.";
+		Error = GENESIS_TEXT("Mesh asset identity changed; refresh content.");
 		return {};
 	}
 	if (!FFile::ReadAllText(Session->Target, After) || After != Session->Manifest)
 	{
-		Error = "Mesh changed while opening; try again.";
+		Error = GENESIS_TEXT("Mesh changed while opening; try again.");
 		return {};
 	}
 	Session->SourceFile = FMapAssetImport::GetMeshImportSource(P, Session->Target);
 	Error.Empty();
 	return Session;
 }
-bool FMeshAssetEditSession::SetMaterial(int32 Slot, const FAssetReference& Ref, const FAssetRegistry& Registry,
-										FString& Error)
+bool FMeshAssetEditSession::SetMaterial(
+    int32 Slot, const FAssetReference& Ref, const FAssetRegistry& Registry, FString& Error)
 {
 	if (Slot < 0 || Slot >= Draft.GetNumMaterials())
 	{
-		Error = "Material slot outside mesh.";
+		Error = GENESIS_TEXT("Material slot outside mesh.");
 		return false;
 	}
 	FLoadedMaterialSlot Loaded;
@@ -90,7 +93,8 @@ bool FMeshAssetEditSession::BuildPreview(const FAssetRegistry& Registry, FLoaded
 	Preview.AdditionalSlots.resize(Draft.AdditionalMaterials.size());
 	for (int I = 0; I < Draft.GetNumMaterials(); ++I)
 	{
-		auto& Slot = I == 0 ? static_cast<FLoadedMaterialSlot&>(Preview) : Preview.AdditionalSlots[I - 1];
+		FLoadedMaterialSlot& Slot =
+		    I == 0 ? static_cast<FLoadedMaterialSlot&>(Preview) : Preview.AdditionalSlots[I - 1];
 		if (!LoadSlot(Draft.GetMaterial(I), Registry, Slot, Error))
 			return false;
 	}
@@ -103,83 +107,93 @@ bool FMeshAssetEditSession::Reimport(const FString& File, FString& Error)
 	FStaticMeshAsset Imported;
 	if (!FMapAssetImport::ReadObj(File, Imported, Error))
 		return false;
-	try
+	FValidationContext Validation(Error);
+
+	FStaticMeshAsset Updated = Draft;
+	Updated.MaterialSlotNames.resize(Draft.GetNumMaterials());
+	TArray<uint32> Remap;
+	for (int I = 0; I < Imported.GetNumMaterials(); ++I)
 	{
-		auto Updated = Draft;
-		Updated.MaterialSlotNames.resize(Draft.GetNumMaterials());
-		TArray<uint32> Remap;
-		for (int I = 0; I < Imported.GetNumMaterials(); ++I)
-		{
-			const auto Name =
-				I < static_cast<int>(Imported.MaterialSlotNames.size()) ? Imported.MaterialSlotNames[I] : FString();
-			int Match = -1;
-			if (!Name.IsEmpty())
-				for (size_t J = 0; J < Updated.MaterialSlotNames.size(); ++J)
-					if (Updated.MaterialSlotNames[J] == Name)
+		const FString Name =
+		    I < static_cast<int>(Imported.MaterialSlotNames.size()) ? Imported.MaterialSlotNames[I] : FString();
+		int Match = -1;
+		if (!Name.IsEmpty())
+			for (size_t J = 0; J < Updated.MaterialSlotNames.size(); ++J)
+				if (Updated.MaterialSlotNames[J] == Name)
+				{
+					if (Match != -1)
 					{
-						if (Match != -1)
-							throw std::runtime_error("Duplicate existing slot names prevent safe reimport.");
-						Match = static_cast<int>(J);
+						Validation.Fail(GENESIS_TEXT("Duplicate existing slot names prevent safe reimport."));
+						return false;
 					}
-			// Unnamed meshes can adopt the incoming groups on their first reimport.
-			if (Match < 0 && I < Draft.GetNumMaterials() && Updated.MaterialSlotNames[I].IsEmpty())
-			{
-				Match = I;
-				Updated.MaterialSlotNames[I] = Name;
-			}
-			if (Match < 0)
-			{
-				if (Updated.GetNumMaterials() >= 64)
-					throw std::runtime_error("Reimport would exceed 64 retained material slots.");
-				Match = Updated.GetNumMaterials();
-				Updated.AdditionalMaterials.push_back({});
-				Updated.MaterialSlotNames.push_back(Name);
-			}
-			Remap.push_back(static_cast<uint32>(Match));
-		}
-		const auto& M = *Imported.Mesh;
-		auto Geometry = std::make_shared<StaticMesh>(M.GetName());
-		for (int I = 0; I < M.GetNumVertices(); ++I)
-			Geometry->AddVertex(M.GetVertex(I));
-		for (const auto& T : M.GetTriangles())
+					Match = static_cast<int>(J);
+				}
+		// Unnamed meshes can adopt the incoming groups on their first reimport.
+		if (Match < 0 && I < Draft.GetNumMaterials() && Updated.MaterialSlotNames[I].IsEmpty())
 		{
-			Geometry->AddTriangle(T.v[0], T.v[1], T.v[2], T.norm[0], T.norm[1], T.norm[2]);
-			const int I = static_cast<int>(Geometry->GetTriangles().size()) - 1;
-			Geometry->SetTriangleUVs(I, T.uv);
-			Geometry->SetTriangleMaterial(I, Remap.at(T.MaterialSlot));
+			Match = I;
+			Updated.MaterialSlotNames[I] = Name;
 		}
-		for (const auto& E : M.GetEdgeList())
-			Geometry->AddEdge(E.start, E.end);
-		Geometry->SetVertexColors(M.GetVertexColors());
-		Geometry->Finish();
-		Updated.Mesh = std::move(Geometry);
-		const auto Full = std::filesystem::absolute(std::filesystem::path(File.ToWide())).lexically_normal();
-		Draft = std::move(Updated);
-		SourceFile = FString::FromWide(Full.wstring());
-		bDirty = true;
-		Error.Empty();
-		return true;
+		if (Match < 0)
+		{
+			if (Updated.GetNumMaterials() >= 64)
+			{
+				Validation.Fail(GENESIS_TEXT("Reimport would exceed 64 retained material slots."));
+				return false;
+			}
+			Match = Updated.GetNumMaterials();
+			Updated.AdditionalMaterials.push_back({});
+			Updated.MaterialSlotNames.push_back(Name);
+		}
+		Remap.push_back(static_cast<uint32>(Match));
 	}
-	catch (const std::exception& E)
+	const StaticMesh& M = *Imported.Mesh;
+	TSharedPtr<StaticMesh> Geometry = std::make_shared<StaticMesh>(M.GetName());
+	for (int I = 0; I < M.GetNumVertices(); ++I)
+		Geometry->AddVertex(M.GetVertex(I));
+	for (const StaticMesh::Triangle& T : M.GetTriangles())
 	{
-		Error = E.what();
+		Geometry->AddTriangle(T.v[0], T.v[1], T.v[2], T.norm[0], T.norm[1], T.norm[2]);
+		const int I = static_cast<int>(Geometry->GetTriangles().size()) - 1;
+		Geometry->SetTriangleUVs(I, T.uv);
+		if (!Validation.Check(T.MaterialSlot < Remap.size(), GENESIS_TEXT("Invalid imported material slot.")))
+		{
+			return false;
+		}
+		Geometry->SetTriangleMaterial(I, Remap[T.MaterialSlot]);
+	}
+	for (const StaticMesh::Edge& E : M.GetEdgeList())
+		Geometry->AddEdge(E.start, E.end);
+	Geometry->SetVertexColors(M.GetVertexColors());
+	Geometry->Finish();
+	Updated.Mesh = std::move(Geometry);
+	std::error_code PathError;
+	const std::filesystem::path Full =
+	    std::filesystem::absolute(std::filesystem::path(File.ToWide()), PathError).lexically_normal();
+	if (!Validation.Check(!PathError, GENESIS_TEXT("Cannot resolve mesh source path.")))
+	{
 		return false;
 	}
+	Draft = std::move(Updated);
+	SourceFile = FString::FromWide(Full.wstring());
+	bDirty = true;
+	Error.Empty();
+	return true;
 }
 bool FMeshAssetEditSession::Save(const FAssetRegistry& Registry, FString& Error)
 {
-	const auto* Data = Registry.Resolve(Reference, Error, "Genesis.StaticMesh");
+	const FAssetData* Data = Registry.Resolve(Reference, Error, "Genesis.StaticMesh");
 	if (!Data)
 		return false;
 	if (Data->FilePath != Target)
 	{
-		Error = "Mesh moved while editing; reopen it before saving.";
+		Error = GENESIS_TEXT("Mesh moved while editing; reopen it before saving.");
 		return false;
 	}
 	FString Current;
 	if (!FFile::ReadAllText(Target, Current) || Current != Manifest)
 	{
-		Error = "Mesh changed on disk; reopen it before saving this draft.";
+		Error = GENESIS_TEXT("Mesh changed on disk; reopen it before saving this draft.");
 		return false;
 	}
 	FLoadedMeshAsset Preview;
@@ -195,7 +209,7 @@ bool FMeshAssetEditSession::Save(const FAssetRegistry& Registry, FString& Error)
 		return false;
 	if (!FFile::ReadAllText(Target, Manifest))
 	{
-		Error = "Mesh saved, but its manifest could not be reread; reopen it.";
+		Error = GENESIS_TEXT("Mesh saved, but its manifest could not be reread; reopen it.");
 		return false;
 	}
 	bDirty = false;
