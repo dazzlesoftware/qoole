@@ -1,0 +1,20 @@
+{
+	"Magic": "GenesisPackage",
+	"FormatVersion": 1,
+	"Id": "0756795f-f4c1-40a1-ad5c-df617bccf053",
+	"Generation": "86b11d29-e640-4e2c-99e6-f97b99684fd9",
+	"Kind": "Asset",
+	"Schema": "Genesis.Material",
+	"SchemaVersion": 3,
+	"Dependencies": [],
+	"Exports": {
+		"File": "Material2.86b11d29-e640-4e2c-99e6-f97b99684fd9.gexp",
+		"Size": 178,
+		"Checksum": "6a3d9910b76bfe86"
+	},
+	"Bulk": {
+		"File": "Material2.86b11d29-e640-4e2c-99e6-f97b99684fd9.gbulk",
+		"Size": 0,
+		"Checksum": "cbf29ce484222325"
+	}
+}
