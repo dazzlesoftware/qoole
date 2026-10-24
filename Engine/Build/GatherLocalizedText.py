@@ -15,6 +15,8 @@ PATTERNS = [
     re.compile(r'\b(?:Add|AddCommand|AddSubMenu)\(\s*' + STRING + r'\s*,\s*(' + STRING + r')\s*,\s*(' + STRING + ')'),
     re.compile(r'\b(?:SpinRow(?:<[^>]+>)?|PointSpin|SplineSpin|SplineCheck|Number|Check)\(\s*(' + STRING + r')\s*,\s*(' + STRING + ')'),
     re.compile(r'\bPanelHeader\(\s*(' + STRING + ')'),
+    # Formatted startup failures in the game host.
+    re.compile(r'\bFail\(\s*(' + STRING + r')\s*,'),
     re.compile(r'\.Show\(\s*EMessageType::\w+\s*,\s*EMessageButtons::\w+\s*,\s*(' + STRING + r')(?:\s*,\s*(' + STRING + '))?'),
 
 ]
@@ -22,7 +24,7 @@ PATTERNS = [
 def gather():
     messages = set()
     for group in ('Runtime', 'Editor', 'Programs/GenesisEditor', 'Programs/GenesisGridServer',
-                  'Programs/WorldCompositionDemo'):
+                  'Programs/WorldCompositionDemo', 'Programs/GenesisGame'):
         for path in (ROOT / 'Source' / group).rglob('*'):
             if path.suffix not in ('.h', '.cpp'):
                 continue

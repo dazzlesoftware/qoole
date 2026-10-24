@@ -7,6 +7,7 @@ Each has Public/ and Private/ directories and a .vcxproj target in Genesis.slnx.
 | --- | --- | --- |
 | Runtime/Landscape | Heightfields, paint weights, terrain components, splines and generated spline meshes | Core, Geometry |
 | Runtime/Foliage | Foliage types, instances and instance transforms | Core, Geometry |
+| Runtime/GameViewport | The game view shared by GenesisGame and Play-in-Editor: drawing streamed regions from the player, game input and the HUD ([GameRuntime.md](GameRuntime.md)) | Engine, Renderer, Slate, SlateRHIRenderer |
 | Editor/LandscapeEditor | Sculpt, paint, terrain creation/import workflows, spline interaction, overlays and the Landscape panel | MapEditor, Landscape, LandscapeEditorUtilities |
 | Editor/FoliageEditor | Foliage paint, erase, single placement, the Foliage panel and type settings | MapEditor, Foliage |
 | Editor/WorldBrowser | World composition editing: the region grid, details, registration, region creation through a host callback, undo and saving | Engine, Slate, EditorFramework |

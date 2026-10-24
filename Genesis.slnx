@@ -16,6 +16,7 @@
     <Project Path="Engine/Source/Runtime/SlateCore/SlateCore.vcxproj" Id="6f3297e3-299e-599b-a2fe-946001e4faf7" />
     <Project Path="Engine/Source/Runtime/Slate/Slate.vcxproj" Id="3f5319a7-a0bc-4053-83e8-316d4ffd074a" />
     <Project Path="Engine/Source/Runtime/SlateRHIRenderer/SlateRHIRenderer.vcxproj" Id="436bbd32-cc21-56e4-94f1-b731dd66653a" />
+    <Project Path="Engine/Source/Runtime/GameViewport/GameViewport.vcxproj" Id="e2146fef-c80d-416f-9d92-eba9e833bec3" />
   </Folder>
   <Folder Name="/Editor/">
     <Project Path="Engine/Source/Editor/ScriptEditorPlugin/ScriptEditorPlugin.vcxproj" Id="a1b70f21-53e2-41e8-9592-210df1deda25" />
@@ -39,11 +40,13 @@
     <Project Path="Engine/Source/Programs/GenesisGridServer/GenesisGridServer.vcxproj" Id="8d65774d-9f38-4d34-a0d4-60b5b06e102e" />
     <Project Path="Engine/Source/Programs/WorldCompositionDemo/WorldCompositionDemo.vcxproj" Id="5b2e9c31-6f0a-4d7b-9e25-3c8a1f4d6b70" />
     <Project Path="Engine/Source/Programs/GenesisEditor/GenesisEditor.vcxproj" Id="08da9a96-81ca-4fc1-a617-1170789bf886" />
+    <Project Path="Engine/Source/Programs/GenesisGame/GenesisGame.vcxproj" Id="2e155928-a5dc-44f7-825b-c79345e1d346" />
     <Project Path="Engine/Source/Programs/EngineTests/EngineTests.vcxproj" Id="c087b070-3f95-5e50-af08-72ade3bf9d0a" />
     <Project Path="Engine/Source/Programs/GenesisTests/GenesisTests.vcxproj" Id="bbc47c09-d18a-47f5-9486-7c1db20ceb88" />
   </Folder>
   <Folder Name="/Programs/TestApps/">
     <Project Path="Engine/Source/Programs/TestApps/GenesisEditorTest/GenesisEditorTest.vcxproj" Id="dc1e6e72-b19d-487e-9f33-daaf63d96317" />
+    <Project Path="Engine/Source/Programs/TestApps/GenesisGameTest/GenesisGameTest.vcxproj" Id="c8deb7d4-e235-4d9d-a311-22b3ed055d45" />
     <Project Path="Engine/Source/Programs/TestApps/TestAppHarness/TestAppHarness.vcxproj" Id="9d3e5a41-7c2b-4f6e-a1d8-3b5c7e9f0a12" />
     <Project Path="Engine/Source/Programs/TestApps/UIRenderTest/UIRenderTest.vcxproj" Id="6cb829c8-a4b9-41d6-acf1-c669b7804411" />
     <Project Path="Engine/Source/Programs/TestApps/UIButtonsTest/UIButtonsTest.vcxproj" Id="1a26a887-09ce-4922-b02a-92f875c4cea0" />
