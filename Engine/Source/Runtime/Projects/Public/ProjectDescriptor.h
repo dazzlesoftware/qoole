@@ -52,6 +52,10 @@ class FProjectContext
 	// Authoring modules may reference shared sources outside the project folder.
 	bool ResolveScriptModule(const FString& Name, bool bRuntime, FString& File, FString& Error) const;
 	bool LoadScriptModule(const FString& Name, TArray<uint8>& Payload, FString& Error) const;
+	// The startup world (a level or a world composition) the game and editor
+	// open: validates the /Game path, rewrites the descriptor (keeping its other
+	// fields) and keeps the old descriptor when writing fails. Empty clears it.
+	bool SetDefaultMap(const FString& Package, FString& Error);
 	// The application owns project lifetime; tools can query its context.
 	static const FProjectContext* GetActive();
 	static void SetActive(TOptional<FProjectContext> Project);

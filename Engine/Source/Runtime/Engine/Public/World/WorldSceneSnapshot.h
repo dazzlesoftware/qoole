@@ -37,5 +37,5 @@ class FWorldSceneSnapshot
   private:
 	FWorld Scene;
 	TArray<FWorldSceneItem> Items;
-	int32 MetadataComponents = 0; // worldspawn metadata has no renderable payload
+	int32 MetadataComponents = 0; // point entities (worldspawn, player starts) have no renderable payload
 };

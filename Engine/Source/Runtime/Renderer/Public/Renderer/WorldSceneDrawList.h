@@ -14,4 +14,9 @@ struct FWorldSceneDrawList
 	// Builds a new list atomically, with view-space culling and runtime payloads.
 	bool Build(const FWorldSceneSnapshot&, const Matrix44& WorldToView, const FSceneViewVolume&,
 			   const FProjectedSceneView&, float terrainDetailPixels, FString& Error);
+	// Adds another scene, placed in the world by SceneToWorld (a streamed
+	// region's transform), to the list. On failure the list is unchanged.
+	bool Append(const FWorldSceneSnapshot&, const Matrix44& SceneToWorld, const Matrix44& WorldToView,
+				const FSceneViewVolume&, const FProjectedSceneView&, float terrainDetailPixels, FString& Error);
+	void Reset();
 };

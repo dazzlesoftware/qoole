@@ -45,7 +45,8 @@ bool FWorldSceneSnapshot::Load(
 		for (const FActorComponent& C : Actor.Components)
 		{
 			const FJsonValue& Data = C.Properties.Get("Data");
-			if (C.Type == "Genesis.LegacyEntity" && Data.Get("Class").AsString() == "worldspawn")
+			// Point entities (worldspawn, player starts, lights) are gameplay data, not drawn.
+			if (C.Type == "Genesis.LegacyEntity")
 			{
 				++Out.MetadataComponents;
 				continue;

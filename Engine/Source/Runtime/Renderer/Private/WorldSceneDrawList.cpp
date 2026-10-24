@@ -35,8 +35,26 @@ namespace
 		return Volume.BoundBox(Corners) >= 0;
 	}
 } // namespace
+void FWorldSceneDrawList::Reset()
+{
+	*this = FWorldSceneDrawList();
+}
+
 bool FWorldSceneDrawList::Build(const FWorldSceneSnapshot& Scene, const Matrix44& WorldToView,
     const FSceneViewVolume& Volume, const FProjectedSceneView& View, float Detail, FString& Error)
+{
+	Matrix44 Identity;
+	Identity.SetIdentity();
+	FWorldSceneDrawList Fresh;
+	if (!Fresh.Append(Scene, Identity, WorldToView, Volume, View, Detail, Error))
+		return false;
+	*this = std::move(Fresh);
+	return true;
+}
+
+bool FWorldSceneDrawList::Append(const FWorldSceneSnapshot& Scene, const Matrix44& SceneToWorld,
+    const Matrix44& WorldToView, const FSceneViewVolume& Volume, const FProjectedSceneView& View, float Detail,
+    FString& Error)
 {
 	if (!Volume.IsValid() || !Volume.Perspective || !View.Width || !View.Height ||
 	    !std::isfinite(View.ProjectionScale) || View.ProjectionScale <= 0)
@@ -46,7 +64,7 @@ bool FWorldSceneDrawList::Build(const FWorldSceneSnapshot& Scene, const Matrix44
 	}
 	for (int R = 0; R < 4; R++)
 		for (int C = 0; C < 4; C++)
-			if (!std::isfinite(WorldToView.GetMatrix(R, C)))
+			if (!std::isfinite(WorldToView.GetMatrix(R, C)) || !std::isfinite(SceneToWorld.GetMatrix(R, C)))
 			{
 				Error = GENESIS_TEXT("Non-finite view transform.");
 				return false;
@@ -57,9 +75,12 @@ bool FWorldSceneDrawList::Build(const FWorldSceneSnapshot& Scene, const Matrix44
 		Error = GENESIS_TEXT("View transform must be affine.");
 		return false;
 	}
+	// The scene is built on its own, then merged, so a failure leaves this list intact.
 	FWorldSceneDrawList Out;
-	for (const FWorldSceneItem& Item : Scene.GetItems())
+	for (const FWorldSceneItem& SceneItem : Scene.GetItems())
 	{
+		FWorldSceneItem Item = SceneItem;
+		Item.ToWorld.Multiply(SceneToWorld, SceneItem.ToWorld);
 		Matrix44 ToView;
 		ToView.Multiply(WorldToView, Item.ToWorld);
 		if (Item.Mesh && !Item.Mesh->Data.Mesh)
@@ -94,7 +115,21 @@ bool FWorldSceneDrawList::Build(const FWorldSceneSnapshot& Scene, const Matrix44
 			Out.FoliageInstances +=
 			    BuildFoliageDrawList(*Item.Plants, ToView, BoundScale(Item.ToWorld), Volume, Out.Instances);
 	}
-	*this = std::move(Out);
+	const uint32 MeshVertexBase = static_cast<uint32>(Meshes.Vertices.size());
+	for (FNativeMeshBatch& Batch : Out.Meshes.Batches)
+		Batch.FirstVertex += MeshVertexBase;
+	Meshes.Vertices.insert(Meshes.Vertices.end(), Out.Meshes.Vertices.begin(), Out.Meshes.Vertices.end());
+	Meshes.Batches.insert(Meshes.Batches.end(), Out.Meshes.Batches.begin(), Out.Meshes.Batches.end());
+	const uint32 VertexBase = static_cast<uint32>(Vertices.size());
+	for (FProjectedTriangleBatch& Batch : Out.Batches)
+		Batch.FirstVertex += VertexBase;
+	Vertices.insert(Vertices.end(), Out.Vertices.begin(), Out.Vertices.end());
+	Batches.insert(Batches.end(), Out.Batches.begin(), Out.Batches.end());
+	Instances.insert(
+	    Instances.end(), std::make_move_iterator(Out.Instances.begin()), std::make_move_iterator(Out.Instances.end()));
+	TerrainComponents += Out.TerrainComponents;
+	TerrainTriangles += Out.TerrainTriangles;
+	FoliageInstances += Out.FoliageInstances;
 	Error.Empty();
 	return true;
 }

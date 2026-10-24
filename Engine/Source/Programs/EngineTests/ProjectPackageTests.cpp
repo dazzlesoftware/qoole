@@ -76,6 +76,34 @@ TEST_SUITE("ProjectsPackages")
 		FProjectContext::SetActive({});
 	}
 
+	TEST_CASE("The startup world is rewritten in the descriptor and invalid paths keep the old one")
+	{
+		const FString Path = Scratch("Startup.gproject");
+		FString Error;
+		TOptional<FProjectContext> Project = FProjectContext::Create(Path, "Startup", Error);
+		REQUIRE_MESSAGE(Project, *Error);
+		FString Text;
+		REQUIRE(FFile::ReadAllText(Path, Text));
+		TOptional<FJsonValue> Json = FJsonValue::Parse(Text.View());
+		REQUIRE(Json);
+		(*Json)["FutureField"] = "kept";
+		REQUIRE(FFile::WriteAllText(Path, Json->ToString()));
+		Project = FProjectContext::Open(Path, Error);
+		REQUIRE(Project);
+		REQUIRE_MESSAGE(Project->SetDefaultMap("/Game/Worlds/WorldDemo", Error), *Error);
+		CHECK(Project->GetDescriptor().DefaultMap == "/Game/Worlds/WorldDemo");
+		CHECK_FALSE(Project->SetDefaultMap("Worlds/NotAPackage", Error));
+		CHECK(Project->GetDescriptor().DefaultMap == "/Game/Worlds/WorldDemo");
+		CHECK_FALSE(std::filesystem::exists((Path + ".tmp").ToWide()));
+		const TOptional<FProjectContext> Back = FProjectContext::Open(Path, Error);
+		REQUIRE(Back);
+		CHECK(Back->GetDescriptor().DefaultMap == "/Game/Worlds/WorldDemo");
+		REQUIRE(FFile::ReadAllText(Path, Text));
+		CHECK(Text.View().find("FutureField") != std::string_view::npos);
+		REQUIRE(Project->SetDefaultMap("", Error));
+		CHECK(FProjectContext::Open(Path, Error)->GetDescriptor().DefaultMap.IsEmpty());
+	}
+
 	TEST_CASE("Native package generations retain identity and round trip exports and bulk")
 	{
 		const FString Path = Scratch("Terrain.gmap");

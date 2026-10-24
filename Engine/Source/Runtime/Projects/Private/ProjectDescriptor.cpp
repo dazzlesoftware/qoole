@@ -259,6 +259,38 @@ TOptional<FProjectContext> FProjectContext::Create(const FString& Path, const FS
 	return Open(Path, Error);
 }
 
+bool FProjectContext::SetDefaultMap(const FString& Package, FString& Error)
+{
+	FProjectDescriptor Next = Descriptor;
+	Next.DefaultMap = Package;
+	const TOptional<FProjectDescriptor> Checked = FProjectDescriptor::FromJson(Next.ToJson(), Error);
+	if (!Checked)
+		return false;
+	const std::filesystem::path File(FilePath.ToWide());
+	const std::filesystem::path Temporary = File.wstring() + L".tmp";
+	FILE* Out = _wfopen(Temporary.c_str(), L"wb");
+	if (!Out)
+	{
+		Error = GENESIS_TEXT("Cannot write project descriptor.");
+		return false;
+	}
+	const FString Text = Checked->ToJson().ToString();
+	const bool Written = std::fwrite(*Text, 1, Text.Len(), Out) == static_cast<size_t>(Text.Len());
+	const bool Closed = std::fclose(Out) == 0;
+	std::error_code EC;
+	if (Written && Closed)
+		std::filesystem::rename(Temporary, File, EC);
+	if (!Written || !Closed || EC)
+	{
+		std::filesystem::remove(Temporary, EC);
+		Error = GENESIS_TEXT("Cannot write project descriptor.");
+		return false;
+	}
+	Descriptor = *Checked;
+	Error.Empty();
+	return true;
+}
+
 FString FProjectContext::GetRootDir() const
 {
 	return StringPath(std::filesystem::path(FilePath.ToWide()).parent_path());
