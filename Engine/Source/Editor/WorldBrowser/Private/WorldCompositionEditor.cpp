@@ -51,6 +51,11 @@ namespace
 			                 "unsaved level"),
 			    [this] { PreviewWorld(); });
 			Button(GENESIS_TEXT("Save"), GENESIS_TEXT("Save the region registry"), [this] { Save(); });
+			Button(
+			    GENESIS_TEXT("Play"), GENESIS_TEXT("Save, then walk this world in a game window"), [this] { Play(); });
+			Button(GENESIS_TEXT("Set as Startup World"),
+			    GENESIS_TEXT("Make this world the one the project's game and editor open first"),
+			    [this] { SetStartupWorld(); });
 			Toolbar->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(GENESIS_TEXT("  Cell size "))];
 			Toolbar->AddSlot().AutoWidth()[SNew(SSpinBox<float>)
 			        .MinValue(static_cast<float>(WorldCompositionLimits::MinCellSize))
@@ -133,6 +138,30 @@ namespace
 			Changed(FTextLocalization::Format(
 			    "Created {}; save to keep its registration.", Session->GetComposition().FindTile(TileId)->Name));
 			Args.OnSaved.ExecuteIfBound(); // the new map file is now in the content browser
+		}
+		void Play()
+		{
+			if (!Args.OnPlayWorld.IsBound())
+			{
+				SetStatus(GENESIS_TEXT("This editor host cannot play worlds."));
+				return;
+			}
+			if (Session->IsDirty())
+				Save();
+			if (Session->IsDirty())
+				return; // Save reported why it failed
+			Args.OnPlayWorld.Execute(Args.Composition);
+			SetStatus(GENESIS_TEXT("Started the game on this world."));
+		}
+		void SetStartupWorld()
+		{
+			FString Error;
+			if (!Args.OnSetStartupWorld.IsBound())
+				SetStatus(GENESIS_TEXT("This editor host cannot change the startup world."));
+			else if (Args.OnSetStartupWorld.Execute(Args.Composition, Error))
+				SetStatus(GENESIS_TEXT("This world is now the project's startup world."));
+			else
+				SetStatus(Error);
 		}
 		void PreviewWorld()
 		{

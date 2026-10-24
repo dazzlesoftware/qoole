@@ -331,8 +331,17 @@ bool FMapEditorApp::Initialize(const TArray<FString>& Args)
 			FString File, Error;
 			if (Project->ResolvePackage(Project->GetDescriptor().DefaultMap, true, File, Error))
 			{
-				Shell->OpenMap(File);
-				bOpened = true;
+				// A world composition opens its region editor; a level opens in the viewports.
+				FAssetPackageMetadata Metadata;
+				if (FAssetPackageStore::ReadMetadata(File, Metadata, Error) &&
+				    Metadata.Schema == "Genesis.WorldComposition")
+					Shell->OpenWorldComposition({Metadata.Id, Project->GetDescriptor().DefaultMap},
+					    FString::FromWide(std::filesystem::path(File.ToWide()).stem().wstring()));
+				else
+				{
+					Shell->OpenMap(File);
+					bOpened = true;
+				}
 			}
 		}
 	}

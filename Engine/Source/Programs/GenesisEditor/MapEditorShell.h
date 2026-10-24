@@ -19,6 +19,10 @@
 #include "Framework/Docking/TabManager.h"
 #include "RHI.h"
 #include "MapDocument.h"
+
+class FGameInstance;
+class FGameViewportClient;
+class SViewport;
 #include "MapViewportClient.h"
 #include "MapFoliageMode.h"
 #include "MapLandscapeMode.h"
@@ -80,6 +84,22 @@ public:
 	bool OpenMap(const FString& Path);
 	bool SaveMap(const FString& Path);
 	bool ExportMap(const FString& Path);
+	// Starts GenesisGame on a /Game world (a level or a world composition) of the active project.
+	bool PlayInGame(const FString& WorldPackage);
+	// Extra arguments for the standalone game (the automation adds -playtest).
+	TArray<FString> StandaloneArguments;
+	// Play-in-Editor: the game in the viewport tab, as Unreal's PIE. Playing the
+	// current level uses its state in memory, saved or not; Composition plays a
+	// world composition. Stop (or Esc with the mouse free) returns to editing.
+	bool PlayInViewport(const FAssetReference* Composition = nullptr);
+	void StopPlaying();
+	bool IsPlaying() const;
+	FGameInstance* GetPlayInstance() const { return PlayGame.get(); }
+	TSharedPtr<FGameViewportClient> GetPlayViewport() const { return PlayViewport; }
+	// Makes a /Game world the active project's startup world.
+	bool SetStartupWorld(const FString& WorldPackage, FString& Error);
+	// The world registry editor (Window > World Composition).
+	void OpenWorldComposition(const FAssetReference& Composition, const FString& Name);
 
 	FMapDocument* GetDocument() const { return Document.get(); }
 	FMapViewSettings& GetViewSettings() { return ViewSettings; }
@@ -138,7 +158,7 @@ public:
 	struct FCommandSet
 	{
 		TSharedPtr<FUICommandInfo> NewMap, OpenMap, SaveMap, SaveMapAs, ExportMap, Exit;
-		TSharedPtr<FUICommandInfo> NewProject, OpenProject;
+		TSharedPtr<FUICommandInfo> NewProject, OpenProject, SetStartupWorld, Play, StopPlay, PlayStandalone;
 		TSharedPtr<FUICommandInfo> Undo, Redo, Cut, Copy, Paste, Duplicate, Delete, SelectAll, SelectNone;
 		TSharedPtr<FUICommandInfo> FrameSelection, ResetViews, ShowGrid, SnapToGrid, GridSmaller, GridLarger, SolidView;
 		TSharedPtr<FUICommandInfo> BrushWeaker, BrushStronger;
@@ -193,7 +213,6 @@ private:
 	void RefreshPlaceables();
 	void OnAssetActivated(const FContentBrowserItem& Item);
 	void OpenMaterialAsset(const FContentBrowserItem& Item);
-	void OpenWorldComposition(const FAssetReference& Composition, const FString& Name);
 	// Makes /Game/Worlds/World (World2, ...) in the active project and opens it.
 	void NewWorldComposition();
 	// The project is chosen at startup, so switching restarts the editor with
@@ -206,6 +225,17 @@ private:
 
 	FHost Host;
 	TWeakPtr<SWindow> MainWindow;
+	TWeakPtr<SDockTab> ViewportTab;
+	TUniquePtr<FGameInstance> PlayGame;
+	TSharedPtr<FGameViewportClient> PlayViewport;
+	TSharedPtr<SViewport> PlayViewportWidget;
+	double PlayLastFrame = 0, PlayFpsTime = 0;
+	int32 PlayFrames = 0;
+	float PlayFramesPerSecond = 0;
+	// Esc and F10 stop on the next frame, outside the game view's own key handling.
+	bool bStopPlayRequested = false;
+	// The identity an unsaved level plays under, kept so quick saves load across plays.
+	FString PlayLevelId;
 	TSharedPtr<FTabManager> TabManager;
 	TSharedPtr<FUICommandList> Commands;
 	TSharedPtr<SWidget> DockArea;

@@ -211,8 +211,10 @@ TSharedRef<SDockTab> FMapEditorShell::MakeViewportTab()
 			PlaceActors->NoteRecent(Item);
 		}
 	})];
+	ViewportTab = Tab.ToSharedPtr();
 	Tab->SetOnTabClosed(FOnTabClosed::CreateLambda([this](const TSharedRef<SDockTab>&)
 	{
+		StopPlaying();
 		// Reopened, the tab shows the same panes in the same layout.
 		if (ViewportLayout)
 		{
@@ -1202,6 +1204,15 @@ void FMapEditorShell::OpenWorldComposition(const FAssetReference& Composition, c
 		Log(FTextLocalization::Format(
 		    "World preview: {} landscapes from {} regions (unsaved; open a region to edit it)", Landscapes,
 		    Regions.size()));
+	});
+	// The region editor's Play plays the world in the level viewport.
+	Args.OnPlayWorld = TDelegate<void(const FAssetReference&)>::CreateLambda(
+	    [this](const FAssetReference& World) { PlayInViewport(&World); });
+	Args.OnSetStartupWorld = TDelegate<bool(const FAssetReference&, FString&)>::CreateLambda(
+	    [this](const FAssetReference& World, FString& Error)
+	{
+		const FAssetData* Data = AssetRegistry ? AssetRegistry->Resolve(World, Error) : nullptr;
+		return Data && SetStartupWorld(Data->PackagePath, Error);
 	});
 	FString Error;
 	if (!FWorldCompositionEditor::Open(Args, Error))

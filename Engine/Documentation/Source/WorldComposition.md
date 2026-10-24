@@ -224,6 +224,14 @@ unusable. On a development workstation, run it against local content only.
 Hosting a grid for other people belongs on the server environment, not a
 workstation.
 
+## Playing a world
+
+`GenesisGame` plays a world composition, or a single level, with a walking
+player. It streams the regions, rebases the origin as the player travels, and
+saves games by region ID and local position. Use **Play** in the region editor
+or the main toolbar, and **Set as Startup World** to make a world the
+project's startup world. See [GameRuntime.md](GameRuntime.md).
+
 ## Toward region servers
 
 The registry already carries what a multi-server world needs: permanent tile
@@ -239,8 +247,9 @@ callers. Still to come:
 - Player handoff across tile boundaries.
 - Ownership and access rules.
 - Matching landscape heights along shared edges.
-- Origin rebasing. Tile transforms use single-precision vectors, so content
-  far from the world origin loses precision.
+- Origin rebasing for streamed tiles outside the game. The game rebases its
+  render origin (see [GameRuntime.md](GameRuntime.md)), but
+  `FWorldCompositionStreaming` transforms are still single precision.
 - Asynchronous loading. Streaming is currently synchronous, bounded by the
   per-update load budget.
 

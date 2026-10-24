@@ -4,6 +4,8 @@
 #include "Templates/SharedPointer.h"
 #include "Screenshot.h"
 #include "World/WorldComposition.h"
+#include "GameFramework/GameInstance.h"
+#include "GameViewportClient.h"
 #include <filesystem>
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
@@ -91,6 +93,12 @@ private:
 	Object* TestSphere = nullptr;
 	Object* TestPyramid = nullptr;
 	FString WorldCompositionFile, WorldRegionFile;
+	// Play-in-Editor and the standalone game launched from the editor.
+	FWorldLocation PlayStart;
+	double PlayStartedAt = 0;
+	FString StandaloneReport;
+	int32 PlayAgainStep = 0;
+	bool bPlayAgainCaptured = false, bPlayAgainStopped = false;
 	// -openworld=<package>: check an existing world (the demo) instead of creating one.
 	FString OpenWorldPackage;
 	size_t WorldTileCount = 0;
@@ -1642,6 +1650,19 @@ void FGenesisEditorTestApp::TickSelfTest()
 		if (WorldTileCount > 0)
 			Capture("world_preview");
 		break;
+	case 463:
+	{
+		// The region editor makes an existing world the project's startup world.
+		const TSharedPtr<SWindow> Window = FindWorldCompositionWindow();
+		if (!Window || OpenWorldPackage.IsEmpty())
+			break;
+		const bool bClicked = PointAtText(GENESIS_TEXT("Set as Startup World").View(), true, Window);
+		const FProjectContext* Project = FProjectContext::GetActive();
+		Report(bClicked && Project && Project->GetDescriptor().DefaultMap == OpenWorldPackage
+		        ? "world composition set as the project's startup world"
+		        : "FAILED: Set as Startup World");
+		break;
+	}
 	case 464:
 		if (const TSharedPtr<SWindow> Window = FindWorldCompositionWindow())
 			App->RequestDestroyWindow(ToSharedRef(Window));
@@ -1660,7 +1681,7 @@ void FGenesisEditorTestApp::TickSelfTest()
 		// Menus open as the newest windows.
 		if (WorldTileCount > 0)
 			for (TArray<TSharedRef<SWindow>>::const_reverse_iterator It = App->GetWindows().rbegin();
-			     It != App->GetWindows().rend(); ++It)
+			    It != App->GetWindows().rend(); ++It)
 				if (PointAtText(GENESIS_TEXT("World Composition").View(), true, It->ToSharedPtr()))
 					break;
 		break;
@@ -1676,7 +1697,7 @@ void FGenesisEditorTestApp::TickSelfTest()
 		bool bClicked = false;
 		if (World)
 			for (TArray<TSharedRef<SWindow>>::const_reverse_iterator It = App->GetWindows().rbegin();
-			     It != App->GetWindows().rend() && !bClicked; ++It)
+			    It != App->GetWindows().rend() && !bClicked; ++It)
 				bClicked = PointAtText(World->PackagePath.View(), true, It->ToSharedPtr());
 		Report(bClicked && FindWorldCompositionWindow() ? "world composition opened from Window > World Composition"
 		                                                : "FAILED: Window > World Composition did not open the world");
@@ -1696,7 +1717,199 @@ void FGenesisEditorTestApp::TickSelfTest()
 		if (WorldTileCount > 0)
 			Capture("menu_file");
 		break;
+	case 495:
+		App->DismissAllMenus();
+		break;
 	case 496:
+	{
+		// Play-in-Editor on the current level (the unsaved world preview) from the toolbar.
+		if (WorldTileCount == 0)
+			break;
+		const bool bClicked = PointAtText(GENESIS_TEXT("Play").View(), true);
+		FGameInstance* Game = Shell->GetPlayInstance();
+		Report(bClicked && Shell->IsPlaying() && Game && !Game->GetWorld().IsComposition()
+		        ? "Play started Play-in-Editor on the current level in the viewport"
+		        : "FAILED: Play did not start Play-in-Editor");
+		if (Game)
+		{
+			PlayStart = Game->Player.Location;
+			Game->Player.bFlying = true;
+			Game->Player.Pitch = -20;
+			Game->Input.Forward = 1;
+			Game->Input.bRun = true;
+		}
+		PlayStartedAt = FPlatformTime::Seconds();
+		break;
+	}
+	case 497:
+	{
+		FGameInstance* Game = Shell->GetPlayInstance();
+		if (Game && FPlatformTime::Seconds() - PlayStartedAt < 1.0)
+		{
+			--SelfTestFrame;
+			break;
+		}
+		if (!Game)
+			break;
+		Game->Input = {};
+		double X0 = 0, Y0 = 0, Z0 = 0, X1 = 0, Y1 = 0, Z1 = 0;
+		Game->GetWorld().ToAbsolute(PlayStart, X0, Y0, Z0);
+		Game->GetWorld().ToAbsolute(Game->Player.Location, X1, Y1, Z1);
+		const TSharedPtr<FGameViewportClient> View = Shell->GetPlayViewport();
+		Report(std::abs(X1 - X0) + std::abs(Y1 - Y0) > 500 && View && View->GetFramesDrawn() > 10 &&
+		            View->GetLastError().IsEmpty()
+		        ? "Play-in-Editor flew over the level and drew it"
+		        : "FAILED: Play-in-Editor did not move or draw");
+		Capture("pie_level");
+		break;
+	}
+	case 499:
+		// Esc with the mouse free returns to editing, through the game view's own key handling.
+		App->OnKeyDown(EKey::Escape, 0, false);
+		App->OnKeyUp(EKey::Escape, 0, false);
+		break;
+	case 501:
+		if (WorldTileCount == 0)
+			break;
+		Report(!Shell->IsPlaying() && Shell->GetViewportLayout() && Shell->GetViewportLayout()->GetParentWidget()
+		        ? "Esc stopped Play-in-Editor and restored the level viewports"
+		        : "FAILED: Esc did not stop Play-in-Editor");
+		break;
+	case 503:
+	{
+		// Play-in-Editor on the world composition, as the region editor's Play does.
+		const FAssetData* World =
+		    WorldTileCount ? Shell->GetAssetRegistry()->FindByFile(WorldCompositionFile) : nullptr;
+		if (!World)
+			break;
+		const FAssetReference Reference = World->GetReference();
+		const bool bPlaying = Shell->PlayInViewport(&Reference);
+		FGameInstance* Game = Shell->GetPlayInstance();
+		TArray<FGameRegion> Loaded;
+		if (Game)
+			Game->GetWorld().GetLoadedRegions(Loaded);
+		Report(bPlaying && Game && Game->GetWorld().IsComposition() && !Loaded.empty()
+		        ? "Play-in-Editor streamed the world composition's regions"
+		        : "FAILED: Play-in-Editor on the world composition");
+		PlayStartedAt = FPlatformTime::Seconds();
+		break;
+	}
+	case 504:
+		if (Shell->IsPlaying() && FPlatformTime::Seconds() - PlayStartedAt < 1.0)
+		{
+			--SelfTestFrame;
+			break;
+		}
+		if (Shell->IsPlaying())
+			Capture("pie_world");
+		break;
+	case 505:
+		if (!Shell->IsPlaying())
+			break;
+		PointAtText(GENESIS_TEXT("Stop").View(), true);
+		Report(!Shell->IsPlaying() ? "Stop returned to editing" : "FAILED: Stop did not end Play-in-Editor");
+		break;
+	case 506:
+	{
+		// Play, click to look around, Esc to release the mouse, Esc to stop, then
+		// Play again, a frame apart as a user would.
+		if (!Shell->GetDocument())
+			break;
+		const TSharedPtr<FGameViewportClient> Game = Shell->GetPlayViewport();
+		const TSharedPtr<SViewport> Widget = Game ? Game->GetViewport() : nullptr;
+		const TSharedRef<IPlatformWindow> Native = ToSharedRef(MainWindow->GetNativeWindow());
+		switch (PlayAgainStep++)
+		{
+		case 0:
+			// A new, unsaved level with a landscape and a player start, as a user builds one.
+			Shell->NewMap(Shell->GetDocument()->GetGameSet());
+			Shell->SetMode(EMapEditorMode::Landscape);
+			Shell->GetLandscapeMode().CreateLandscape(Vector3d(0.0f, 0.0f, 0.0f));
+			Shell->SetMode(EMapEditorMode::Selection);
+			Shell->GetDocument()->AddEntity("info_player_start", Vector3d(0.0f, 0.0f, 64.0f));
+			PointAtText(GENESIS_TEXT("Play").View(), true);
+			break;
+		case 1:
+			if (Widget)
+			{
+				const FGeometry& Geometry = Widget->GetCachedGeometry();
+				const FVector2 Center = Geometry.LocalToAbsolute(Geometry.GetLocalSize() * 0.5f);
+				App->OnMouseMove(Native, Center);
+				App->OnMouseDown(Native, EMouseButton::Left, Center);
+				App->OnMouseUp(Native, EMouseButton::Left, Center);
+			}
+			break;
+		case 2:
+			bPlayAgainCaptured = Game && Game->IsMouseCaptured();
+			[[fallthrough]];
+		case 3:
+			App->OnKeyDown(EKey::Escape, 0, false);
+			App->OnKeyUp(EKey::Escape, 0, false);
+			break;
+		case 4:
+			bPlayAgainStopped = !Shell->IsPlaying();
+			PointAtText(GENESIS_TEXT("Play").View(), true);
+			break;
+		default:
+			GENESIS_LOG(LogGenesisEditor, Display, "Play again: captured {}, stopped {}, playing {}, ticks {}",
+			    bPlayAgainCaptured, bPlayAgainStopped, Shell->IsPlaying(),
+			    Shell->GetPlayInstance() ? Shell->GetPlayInstance()->GetTicks() : 0);
+			Report(bPlayAgainCaptured && bPlayAgainStopped && Shell->IsPlaying() && Game && Game->GetFramesDrawn() > 0
+			        ? "Play started again after looking around and stopping with Esc"
+			        : "FAILED: Play did not start again after stopping");
+			Shell->StopPlaying();
+			break;
+		}
+		if (PlayAgainStep <= 5)
+			--SelfTestFrame;
+		break;
+	}
+	case 507:
+	{
+		// The standalone game from the toolbar, reporting back what it played.
+		const FProjectContext* Project = FProjectContext::GetActive();
+		const FAssetData* World =
+		    WorldTileCount ? Shell->GetAssetRegistry()->FindByFile(WorldCompositionFile) : nullptr;
+		if (!Project || !World)
+			break;
+		FString Error;
+		if (Project->GetDescriptor().DefaultMap.IsEmpty())
+			Shell->SetStartupWorld(World->PackagePath, Error);
+		// A new, unchanged level plays the startup world without asking to save.
+		Shell->NewMap(Shell->GetDocument()->GetGameSet());
+		StandaloneReport = SelfTestDir + FString::Format("{}_standalone_report.json", ToString(Backend));
+		std::error_code RemoveError;
+		std::filesystem::remove(std::filesystem::path(StandaloneReport.ToWide()), RemoveError);
+		Shell->StandaloneArguments = {"-playtest=" + StandaloneReport};
+		const bool bClicked = PointAtText(GENESIS_TEXT("Standalone Game").View(), true);
+		Report(bClicked ? "Standalone Game clicked" : "FAILED: no Standalone Game button");
+		PlayStartedAt = FPlatformTime::Seconds();
+		break;
+	}
+	case 508:
+	{
+		if (StandaloneReport.IsEmpty())
+			break;
+		const bool bWritten = std::filesystem::exists(std::filesystem::path(StandaloneReport.ToWide()));
+		if (!bWritten && FPlatformTime::Seconds() - PlayStartedAt < 45.0)
+		{
+			--SelfTestFrame; // the game plays for a few seconds, then reports
+			break;
+		}
+		Shell->StandaloneArguments.clear();
+		FString Text;
+		TOptional<FJsonValue> Json;
+		if (bWritten && FFile::ReadAllText(StandaloneReport, Text))
+			Json = FJsonValue::Parse(Text.View());
+		const FProjectContext* Project = FProjectContext::GetActive();
+		const bool bGood = Json && Project && Json->Get("World").AsString() == Project->GetDescriptor().DefaultMap &&
+		    Json->Get("FramesDrawn").AsNumber() > 0 && Json->Get("RegionsLoaded").AsNumber() >= 1 &&
+		    Json->Get("Error").AsString().IsEmpty();
+		Report(bGood ? "the standalone game started from the editor played and drew the startup world"
+		             : "FAILED: no report from the standalone game");
+		break;
+	}
+	case 510:
 		GENESIS_LOG(LogGenesisEditor, Display, "GenesisEditorTest: {} checks, {} failed", Checks, Failures);
 		App->RequestQuit();
 		break;

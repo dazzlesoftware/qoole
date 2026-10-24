@@ -81,6 +81,7 @@ public:
 
 	const FString& GetPath() const { return Path; }        // empty until saved
 	FString GetDisplayName() const;                        // file name, or "Untitled"
+	const FString& GetPackageId() const { return PackageId; } // empty until saved as a package
 	bool IsModified() const { return SavedVersion != Version; }
 	const FMapGameSet& GetGameSet() const { return GameSet; }
 

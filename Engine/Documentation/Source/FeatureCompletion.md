@@ -64,6 +64,10 @@ Coverage and acceptance are tracked in [ScriptingAPICoverage.md](ScriptingAPICov
 - [x] Editor tools for registering and arranging regions (Editor/WorldBrowser).
 - [x] Grid server registering region files (Regions/*.ini) on the world map, with OpenSim's region flags (Programs/GenesisGridServer).
 - [x] Demo world of eight regions with different heightmaps, terrain thumbnails and Preview World in the editor.
+- [x] Game runtime: startup world (level or world composition), region-relative positions with origin rebasing, saved games, per-region state and a walking player (Programs/GenesisGame, [GameRuntime.md](GameRuntime.md)).
+- [x] Editor Play (standalone game) and Set as Startup World.
+- [x] In-viewport Play-in-Editor, sharing FGameInstance and FGameViewportClient with the standalone game.
+- [ ] Background region loading and mesh collision.
 - [ ] Region servers and network registration, boundary handoff, ownership/access and edge matching.
 
 Design and limits are in [WorldComposition.md](WorldComposition.md).

@@ -16,6 +16,11 @@
 #include "MapCoreHeaders.h"
 #include "Misc/App.h"
 #include "HAL/PlatformMisc.h"
+#include "GameFramework/GameInstance.h"
+#include "GameViewportClient.h"
+#include "AssetPackage.h"
+#include "MapPackage.h"
+#include "Widgets/SViewport.h"
 #include "Serialization/Json.h"
 #include "Services/FileDialogs.h"
 #include "Services/MessageDialog.h"
@@ -283,6 +288,7 @@ void FMapEditorShell::SaveEditorSettings() const
 void FMapEditorShell::SetDocument(TUniquePtr<FMapDocument> NewDocument)
 {
 	FSlateApplication::Get().DismissAllMenus();
+	PlayLevelId.Empty();
 	if (TSharedPtr<SLandscapeEditorPanel> Panel = LandscapePanel.lock())
 		Panel->EndInteraction();
 	if (TSharedPtr<SFoliageEditorPanel> Panel = FoliagePanel.lock())
@@ -353,6 +359,147 @@ void FMapEditorShell::UpdateTitle()
 	Window->SetTitle(FTextLocalization::Format("{}{} - {}Genesis Editor", Document->GetDisplayName(),
 	    Document->IsModified() ? " *" : "",
 	    FProjectContext::GetActive() ? FProjectContext::GetActive()->GetDescriptor().Name + " - " : FString()));
+}
+
+bool FMapEditorShell::PlayInGame(const FString& WorldPackage)
+{
+	const FProjectContext* Project = FProjectContext::GetActive();
+	if (!Project)
+		return false;
+	const FString Game = FString::FromWide(
+	    (std::filesystem::path(FPlatformProcess::ExecutablePath().ToWide()).parent_path() / L"GenesisGame.exe")
+	        .wstring());
+	TArray<FString> Arguments = {"-project=" + Project->GetFilePath(), "-world=" + WorldPackage};
+	Arguments.insert(Arguments.end(), StandaloneArguments.begin(), StandaloneArguments.end());
+	if (Host.Device)
+		Arguments.push_back(Host.Device->GetBackend() == ERHIBackend::Vulkan ? "-vulkan" : "-d3d12");
+	FString Error;
+	if (!FPlatformProcess::CreateProc(Game, Arguments, Error))
+	{
+		FServices::GetMessageDialog().Show(EMessageType::Error, EMessageButtons::Ok, Error);
+		return false;
+	}
+	Log(FTextLocalization::Format("Playing {}", WorldPackage));
+	return true;
+}
+
+bool FMapEditorShell::IsPlaying() const
+{
+	return PlayGame != nullptr;
+}
+
+bool FMapEditorShell::PlayInViewport(const FAssetReference* Composition)
+{
+	if (IsPlaying())
+		return false;
+	const TSharedPtr<SDockTab> Tab = ViewportTab.lock();
+	FString Error;
+	if (!Tab)
+		Error = GENESIS_TEXT("Open the Viewport tab (Window > Viewport) to play in the editor.");
+	else if (!AssetRegistry || !Host.Device || !Host.Renderer || !Host.WindowRenderer)
+		Error = GENESIS_TEXT("Play-in-Editor needs an open project and a graphics device.");
+	if (!Error.IsEmpty())
+	{
+		Log(FTextLocalization::Format("Could not play: {}", Error));
+		FServices::GetMessageDialog().Show(EMessageType::Error, EMessageButtons::Ok, Error);
+		return false;
+	}
+	const FProjectContext* Project = FProjectContext::GetActive();
+	const std::filesystem::path Saved = Project ? std::filesystem::path(Project->GetSavedDir().ToWide())
+	                                            : std::filesystem::temp_directory_path() / L"GenesisEditor";
+	const FString SaveFile = FString::FromWide((Saved / L"PlayInEditor" / L"QuickSave.json").wstring());
+	if (Composition)
+		PlayGame = FGameInstance::Open(AssetRegistry, *Composition, SaveFile, Error);
+	else if (Document)
+	{
+		// A copy of the level as it is in memory, saved or not, as Unreal's PIE
+		// duplicates the editor world. Nothing is written to disk.
+		if (!Document->GetPackageId().IsEmpty())
+			PlayLevelId = Document->GetPackageId();
+		else if (PlayLevelId.IsEmpty())
+			PlayLevelId = FAssetId::New();
+		FAssetPackage Level;
+		if (FMapPackage::Build(Document->GetRoot(), PlayLevelId, Level, Error))
+			PlayGame = FGameInstance::OpenLevel(AssetRegistry, Level, Document->GetDisplayName(), SaveFile, Error);
+	}
+	if (!PlayGame)
+	{
+		Log(FTextLocalization::Format("Could not play: {}", Error));
+		FServices::GetMessageDialog().Show(
+		    EMessageType::Error, EMessageButtons::Ok, FTextLocalization::Format("Could not play: {}", Error));
+		return false;
+	}
+	bStopPlayRequested = false;
+	PlayViewport = std::make_shared<FGameViewportClient>(*Host.Device, *Host.Renderer, *PlayGame);
+	PlayViewport->OnEscape = FSimpleDelegate::CreateLambda([this] { bStopPlayRequested = true; });
+	PlayViewport->OnQuit = PlayViewport->OnEscape;
+	Host.WindowRenderer->AddViewportClient(ToSharedRef(PlayViewport));
+	const TSharedRef<SWidget> View = FGameViewportClient::MakeGameView(ToSharedRef(PlayViewport), [this]
+	{
+		return PlayGame ? PlayGame->GetHudText(PlayFramesPerSecond) +
+		        GENESIS_TEXT("\nClick to look around. WASD move, Shift run, Space jump, F fly, Q/E "
+		                     "down/up, F5 save, F9 load. Esc (mouse free) or Stop returns to editing.")
+		                : FString();
+	}, PlayViewportWidget);
+	PlayLastFrame = PlayFpsTime = FPlatformTime::Seconds();
+	PlayFrames = 0;
+	// The game advances once a frame while its view is shown.
+	View->RegisterActiveTimer(0.0f, [this](double, float) -> EActiveTimerReturn
+	{
+		if (bStopPlayRequested)
+			StopPlaying();
+		if (!PlayGame)
+			return EActiveTimerReturn::Stop;
+		const double Now = FPlatformTime::Seconds();
+		const float Delta = std::min(static_cast<float>(Now - PlayLastFrame), 0.1f);
+		PlayLastFrame = Now;
+		++PlayFrames;
+		if (Now - PlayFpsTime >= 0.5)
+		{
+			PlayFramesPerSecond = static_cast<float>(PlayFrames / (Now - PlayFpsTime));
+			PlayFrames = 0;
+			PlayFpsTime = Now;
+		}
+		PlayGame->Tick(Delta);
+		return EActiveTimerReturn::Continue;
+	});
+	Tab->SetContent(View);
+	FSlateApplication::Get().SetKeyboardFocus(PlayViewportWidget);
+	Log(FTextLocalization::Format("Playing {} in the viewport", PlayGame->GetWorldName()));
+	return true;
+}
+
+void FMapEditorShell::StopPlaying()
+{
+	if (!IsPlaying())
+		return;
+	if (const TSharedPtr<SDockTab> Tab = ViewportTab.lock(); Tab && ViewportLayout)
+		Tab->SetContent(ToSharedRef(ViewportLayout));
+	if (PlayViewport && PlayViewport->IsMouseCaptured())
+		PlayViewport->ReleaseMouse();
+	PlayViewportWidget.reset();
+	PlayViewport.reset();
+	PlayGame.reset();
+	bStopPlayRequested = false;
+	// Editing resumes with the keyboard in the level viewports, so shortcuts such as Alt+P work.
+	if (ViewportLayout)
+		FSlateApplication::Get().SetKeyboardFocus(ViewportLayout);
+	Log(GENESIS_TEXT("Stopped playing"));
+}
+
+bool FMapEditorShell::SetStartupWorld(const FString& WorldPackage, FString& Error)
+{
+	const FProjectContext* Active = FProjectContext::GetActive();
+	if (!Active)
+	{
+		Error = GENESIS_TEXT("Open a project to set its startup world.");
+		return false;
+	}
+	FProjectContext Project = *Active;
+	if (!Project.SetDefaultMap(WorldPackage, Error))
+		return false;
+	FProjectContext::SetActive(std::move(Project));
+	return true;
 }
 
 void FMapEditorShell::SwitchProject(const FString& Option)
@@ -848,6 +995,13 @@ void FMapEditorShell::RegisterCommands()
 	Cmd.Exit = Add("Exit", "Exit", "Close the editor");
 	Cmd.NewProject = Add("NewProject", "New Project...", "Create a project and restart the editor on it");
 	Cmd.OpenProject = Add("OpenProject", "Open Project...", "Restart the editor on another .gproject");
+	Cmd.SetStartupWorld = Add("SetStartupWorld", "Set as Startup World",
+	    "Make the current level the world the project's game and editor open first");
+	Cmd.Play = Add("Play", "Play", "Play the current level (or the project's startup world) in the viewport", T::Button,
+	    FInputChord(EKey::P, M::Alt));
+	Cmd.StopPlay = Add("StopPlay", "Stop", "Stop playing and return to editing");
+	Cmd.PlayStandalone = Add("PlayStandalone", "Standalone Game",
+	    "Play the current level (or the project's startup world) in a separate game window");
 
 	Cmd.Undo = Add("Undo", "Undo", "Undo the last change", T::Button, FInputChord(EKey::Z, M::Control));
 	Cmd.Redo = Add("Redo", "Redo", "Redo the change undone last", T::Button, FInputChord(EKey::Y, M::Control));
@@ -973,6 +1127,48 @@ void FMapEditorShell::RegisterCommands()
 		else
 			OpenMap(Path);
 	});
+	// The current level as a /Game package, when it is saved in the active project.
+	const TFunction<FString()> CurrentLevelPackage = [this]() -> FString
+	{
+		if (!Document || Document->GetPath().IsEmpty() || !AssetRegistry)
+			return {};
+		const FAssetData* Level = AssetRegistry->FindByFile(Document->GetPath());
+		return Level && Level->Metadata.Schema == "Genesis.World" ? Level->PackagePath : FString();
+	};
+	List.MapAction(ToSharedRef(Cmd.Play), [this] { PlayInViewport(); }, [this] { return !IsPlaying() && Document; });
+	List.MapAction(ToSharedRef(Cmd.StopPlay), [this] { StopPlaying(); }, [this] { return IsPlaying(); });
+	List.MapAction(ToSharedRef(Cmd.PlayStandalone), [this, CurrentLevelPackage]
+	{
+		const FProjectContext* Project = FProjectContext::GetActive();
+		if (!Project)
+		{
+			Log(GENESIS_TEXT("Open a project to play its worlds."));
+			return;
+		}
+		if (!ConfirmDiscard())
+			return;
+		FString World = CurrentLevelPackage();
+		if (World.IsEmpty())
+			World = Project->GetDescriptor().DefaultMap;
+		if (World.IsEmpty())
+		{
+			FServices::GetMessageDialog().Show(EMessageType::Info, EMessageButtons::Ok,
+			    GENESIS_TEXT("Save the level in the project's Content folder, or set a startup world, to play it."));
+			return;
+		}
+		PlayInGame(World);
+	});
+	List.MapAction(ToSharedRef(Cmd.SetStartupWorld), [this, CurrentLevelPackage]
+	{
+		const FString Level = CurrentLevelPackage();
+		FString Error;
+		if (Level.IsEmpty())
+			Log(GENESIS_TEXT("Save the level in the project's Content folder first."));
+		else if (SetStartupWorld(Level, Error))
+			Log(FTextLocalization::Format("{} is now the startup world.", Level));
+		else
+			Log(Error);
+	}, [CurrentLevelPackage] { return FProjectContext::GetActive() && !CurrentLevelPackage().IsEmpty(); });
 	List.MapAction(ToSharedRef(Cmd.OpenProject), [this]
 	{
 		if (!ConfirmDiscard())
@@ -1328,6 +1524,7 @@ void FMapEditorShell::RegisterMenus()
 	FMenuSection& ProjectSection = File.AddSection("Project");
 	ProjectSection.AddCommand(Cmd.NewProject);
 	ProjectSection.AddCommand(Cmd.OpenProject);
+	ProjectSection.AddCommand(Cmd.SetStartupWorld);
 	FMenuSection& Save = File.AddSection("Save");
 	Save.AddCommand(Cmd.SaveMap);
 	Save.AddCommand(Cmd.SaveMapAs);
@@ -1557,6 +1754,10 @@ void FMapEditorShell::RegisterMenus()
 	FMenuSection& History = Bars.AddSection("History");
 	History.AddCommand(Cmd.Undo);
 	History.AddCommand(Cmd.Redo);
+	FMenuSection& PlaySection = Bars.AddSection("Play");
+	PlaySection.AddCommand(Cmd.Play);
+	PlaySection.AddCommand(Cmd.StopPlay);
+	PlaySection.AddCommand(Cmd.PlayStandalone);
 }
 
 // ----- About -----

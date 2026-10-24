@@ -565,9 +565,18 @@ namespace
 
 bool FMapPackage::Save(const FString& Path, Object& Root, FString& Id, FString& Error, bool bPrefab)
 {
+	FAssetPackage Package;
+	if (!Build(Root, Id, Package, Error, bPrefab) || !FAssetPackageStore::Save(Path, Package, Error))
+		return false;
+	Id = Package.Id;
+	return true;
+}
+
+bool FMapPackage::Build(Object& Root, const FString& Id, FAssetPackage& Package, FString& Error, bool bPrefab)
+{
 	FValidationContext Validation(Error);
 
-	FAssetPackage Package;
+	Package = {};
 	Package.Id = Id;
 	Package.Kind = bPrefab ? EAssetPackageKind::Asset : EAssetPackageKind::Map;
 	Package.Schema = bPrefab ? "Genesis.Prefab" : "Genesis.World";
@@ -588,9 +597,6 @@ bool FMapPackage::Save(const FString& Path, Object& Root, FString& Id, FString& 
 	Package.Exports["Scene"] = World.ToJson();
 	TSet<std::string> Seen;
 	std::erase_if(Package.Dependencies, [&](const FString& Path) { return !Seen.insert(Path.ToStdString()).second; });
-	if (!FAssetPackageStore::Save(Path, Package, Error))
-		return false;
-	Id = Package.Id;
 	return true;
 }
 

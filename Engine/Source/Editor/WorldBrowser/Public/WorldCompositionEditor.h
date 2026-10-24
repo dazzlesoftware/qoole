@@ -23,6 +23,10 @@ struct FWorldCompositionEditorArgs
 	TDelegate<void(const FAssetData&)> OnOpenRegion;
 	// Shows every region's level together, each at its place on the grid.
 	TDelegate<void(const TArray<FWorldPreviewRegion>&)> OnPreviewWorld;
+	// Plays this world in the game (as saved).
+	TDelegate<void(const FAssetReference&)> OnPlayWorld;
+	// Makes this world the project's startup world.
+	TDelegate<bool(const FAssetReference&, FString&)> OnSetStartupWorld;
 	FSimpleDelegate OnSaved;
 	TDelegate<void(const FString&)> OnLog;
 };
